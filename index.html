@@ -2151,7 +2151,14 @@ function _handleCurseData(data) {
 
 
 // ── CURSE FILTER STATE ───────────────────────────────
-let _curseFilter = 'all';  // 'all' | 'cursed' | 'lscg'
+let _curseFilter  = 'all';  // 'all' | 'cursed' | 'lscg'
+let _curseEntryMap = {};    // rowId → dbKey, for safe onclick
+
+function toggleCacheFilter() {
+  const el = document.getElementById('fc-cache');
+  if (el) el.classList.toggle('on');
+  renderCurseTab();
+}
 
 function setCurseFilter(f) {
   _curseFilter = f;
@@ -2188,12 +2195,12 @@ function renderCurseTab() {
   // ── Apply filters ──
   const searchTerm = (document.getElementById('curseSearch')?.value || '').toLowerCase();
   const slotFilter = document.getElementById('slotFilter')?.value || '';
-  const cacheOnly  = document.getElementById('fc-cache')?.checked ?? false;
+  const cacheOnly  = document.getElementById('fc-cache')?.classList.contains('on') ?? false;
 
   let entries = Object.values(CURSE_DB);
-  if (_curseFilter === 'cursed') entries = entries.filter(e => e.IstCursed);
-  if (_curseFilter === 'lscg')   entries = entries.filter(e => e.IstLSCGCurse);
-  if (cacheOnly)   entries = entries.filter(e => e.IstLSCGCurse && e.LSCGAusCache);
+  if (_curseFilter === 'cursed') entries = entries.filter(e => !!e.IstCursed);
+  if (_curseFilter === 'lscg')   entries = entries.filter(e => !!e.IstLSCGCurse);
+  if (cacheOnly)   entries = entries.filter(e => !!e.IstLSCGCurse);
   if (slotFilter)  entries = entries.filter(e => e.Gruppe === slotFilter);
   if (searchTerm)  entries = entries.filter(e =>
     e.CraftName?.toLowerCase().includes(searchTerm) ||
@@ -2283,10 +2290,11 @@ function renderCurseTab() {
         '</td>'+
         '<td class="lscg-col">'+lscgText+'</td>'+
         '<td class="comment-col"><textarea class="curse-comment-input" placeholder="Notiz..." '+
-          'onchange="saveCurseComment(\'' + dbKey.replace(/'/g,"\'") + '\',this.value)">'+escHtml(comment)+'</textarea></td>'+
+          'data-rowid="' + rowId + '" onchange="saveCurseCommentById(this.dataset.rowid,this.value)">'+escHtml(comment)+'</textarea></td>'+
         '<td class="actions">'+
-          '<button class="curse-apply-btn" onclick="wearCurse('+JSON.stringify(dbKey)+',null)" title="Auf mich anwenden">👤</button>'+
-          (_selectedMemberNum ? '<button class="curse-apply-btn other" onclick="wearCurse('+JSON.stringify(dbKey)+','+_selectedMemberNum+')" title="Auf #'+_selectedMemberNum+'">👥 #'+_selectedMemberNum+'</button>' : '')+
+          (function(){ _curseEntryMap[rowId] = dbKey; return ''; })()+
+          '<button class="curse-apply-btn" onclick="wearCurseById(\'' + rowId + '\',null)" title="Auf mich anwenden">👤</button>'+
+          (_selectedMemberNum ? '<button class="curse-apply-btn other" onclick="wearCurseById(\'' + rowId + '\','+_selectedMemberNum+')" title="Auf #'+_selectedMemberNum+'">👥 #'+_selectedMemberNum+'</button>' : '')+
         '</td>';
 
       tbody.appendChild(tr);
@@ -2343,10 +2351,21 @@ function toggleCurseDetail(detId, rowId) {
   if (open && block) block.classList.add('open');
 }
 
+function saveCurseCommentById(rowId, val) {
+  const key = _curseEntryMap[rowId];
+  if (key) saveCurseComment(key, val);
+}
+
 function saveCurseComment(key, val) {
   if (val.trim()) CURSE_COMMENTS[key] = val.trim();
   else delete CURSE_COMMENTS[key];
   _saveCurseComments();
+}
+
+function wearCurseById(rowId, targetNum) {
+  const key = _curseEntryMap[rowId];
+  if (!key) { showStatus('❌ Eintrag nicht gefunden (ID: ' + rowId + ')', 'error'); return; }
+  wearCurse(key, targetNum);
 }
 
 function wearCurse(dbKey, targetNum) {
@@ -2808,9 +2827,7 @@ function selectRoomMember(num) {
     <span class="filter-chip"    id="fc-cursed"   onclick="setCurseFilter('cursed')"  >🔮 Cursed</span>
     <span class="filter-chip"    id="fc-lscg"     onclick="setCurseFilter('lscg')"   >🧿 LSCG</span>
     <div class="filter-sep"></div>
-    <label class="filter-chip" id="fc-cache-wrap" title="Nur LSCG-Einträge aus dem Live-Cache">
-      <input type="checkbox" id="fc-cache" style="accent-color:var(--green);width:11px;height:11px" onchange="renderCurseTab()"> Im Cache
-    </label>
+    <span class="filter-chip" id="fc-cache" onclick="toggleCacheFilter()" title="Nur Einträge mit LSCG-Daten anzeigen">💾 Im Cache</span>
     <div class="filter-sep"></div>
     <div class="slot-filter-wrap">
       <select class="slot-select" id="slotFilter" onchange="renderCurseTab()">
