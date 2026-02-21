@@ -323,6 +323,133 @@ textarea.outfit-code{width:100%;min-height:200px;background:var(--bg4);border:1p
 .outfit-chip.self .onum { color: #4ade80; }
 
 .room-chip.grace { opacity: 0.55; border-style: dashed; }
+
+/* ─────────────────── TABS ─────────────────── */
+.tab-nav{
+  display:flex;gap:0;background:#070710;
+  border-bottom:2px solid var(--border);position:sticky;top:0;z-index:99;
+}
+.tab-btn{
+  padding:9px 18px;font-size:.78rem;font-weight:600;border:none;
+  background:none;color:var(--text3);cursor:pointer;border-bottom:2px solid transparent;
+  margin-bottom:-2px;transition:all .15s;white-space:nowrap;letter-spacing:.02em;
+}
+.tab-btn:hover{color:var(--text2);background:rgba(255,255,255,.03)}
+.tab-btn.active{color:var(--pl);border-bottom-color:var(--purple)}
+.tab-pane{display:none}
+.tab-pane.active{display:block}
+
+/* ─────────────── OUTFIT TAB (inline) ──────── */
+.outfit-tab-layout{
+  display:grid;grid-template-columns:1fr 380px;
+  min-height:calc(100vh - 90px);
+}
+.outfit-left{padding:16px;overflow-y:auto;max-height:calc(100vh - 90px)}
+.outfit-right{
+  background:var(--bg2);border-left:1px solid var(--border);
+  padding:16px;overflow-y:auto;max-height:calc(100vh - 90px)
+}
+.outfit-code-live{
+  width:100%;height:260px;background:#07071a;border:1px solid var(--border);
+  border-radius:6px;color:#86efac;font-family:Consolas,monospace;font-size:.67rem;
+  padding:10px;resize:vertical;line-height:1.6
+}
+.outfit-empty-hint{
+  color:var(--text3);font-size:.83rem;text-align:center;
+  padding:40px 20px;border:1px dashed var(--border);border-radius:8px;
+}
+.profile-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px;margin-top:10px}
+.section-hdr2{
+  font-size:.7rem;color:var(--text2);text-transform:uppercase;letter-spacing:1px;
+  padding-bottom:6px;border-bottom:1px solid var(--border);margin-bottom:10px;
+  display:flex;align-items:center;justify-content:space-between;
+}
+
+/* ─────────────── CURSE TAB ─────────────────── */
+.curse-topbar{
+  display:flex;align-items:center;gap:8px;padding:10px 16px;
+  background:var(--bg2);border-bottom:1px solid var(--border);flex-wrap:wrap;
+}
+.curse-stats{display:flex;gap:6px;flex-wrap:wrap;flex:1}
+.curse-stat{
+  background:var(--bg3);border:1px solid var(--border);border-radius:5px;
+  padding:3px 10px;font-size:.7rem;white-space:nowrap;
+}
+.curse-stat span{font-weight:700}
+.curse-body{padding:14px;overflow-y:auto;max-height:calc(100vh - 130px)}
+
+/* Owner-Gruppe */
+.curse-owner-block{margin-bottom:12px;border:1px solid var(--border);border-radius:8px;overflow:hidden}
+.curse-owner-hdr{
+  display:flex;align-items:center;gap:8px;padding:8px 12px;
+  background:var(--bg2);cursor:pointer;user-select:none;
+}
+.curse-owner-hdr:hover{background:var(--bg3)}
+.curse-owner-name{font-size:.82rem;font-weight:600;color:var(--text);flex:1}
+.curse-owner-num{font-size:.65rem;color:var(--text3);font-family:Consolas,monospace}
+.curse-owner-count{
+  font-size:.65rem;background:var(--pd);color:var(--pl);
+  padding:1px 6px;border-radius:3px;
+}
+.curse-owner-chevron{color:var(--text3);font-size:.7rem;transition:transform .15s}
+.curse-owner-block.open .curse-owner-chevron{transform:rotate(90deg)}
+.curse-rows{display:none}
+.curse-owner-block.open .curse-rows{display:table;width:100%;border-collapse:collapse}
+
+/* Curse Zeilen */
+.curse-row{border-top:1px solid var(--border)}
+.curse-row td{padding:6px 10px;font-size:.74rem;vertical-align:top}
+.curse-row:hover{background:rgba(124,58,237,.05)}
+.curse-row.lscg{background:rgba(30,60,20,.25)}
+.curse-row td.cn{color:var(--text);font-weight:600;min-width:120px}
+.curse-row td.item{color:var(--text2);font-family:Consolas,monospace;font-size:.68rem}
+.curse-row td.grp{color:var(--text3);font-size:.65rem;font-family:Consolas,monospace}
+.curse-row td.badges{white-space:nowrap}
+.curse-row td.lscg-col{color:var(--green);font-size:.65rem}
+.curse-row td.comment-col{min-width:160px}
+.curse-comment-input{
+  width:100%;background:#070712;border:1px solid var(--border);
+  border-radius:4px;color:var(--text2);padding:3px 6px;font-size:.71rem;
+  resize:none;height:32px;
+}
+.curse-comment-input:focus{outline:none;border-color:var(--purple)}
+.curse-row td.actions{white-space:nowrap}
+.curse-apply-btn{
+  padding:3px 9px;border:none;border-radius:4px;font-size:.68rem;cursor:pointer;
+  background:var(--gd);color:var(--green);margin-right:3px;
+}
+.curse-apply-btn:hover{background:#065f46}
+.curse-apply-btn.other{background:var(--pd);color:var(--pl)}
+.curse-apply-btn.other:hover{background:var(--purple)}
+
+/* Sub-Zeile (Details ausgeklappt) */
+.curse-detail-row{background:#07071a;display:none}
+.curse-owner-block.open .curse-detail-row.open{display:table-row}
+.curse-detail-cell{padding:8px 12px 10px;font-size:.68rem;color:var(--text2)}
+.curse-detail-grid{
+  display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:5px;margin-top:5px
+}
+.curse-detail-field{background:var(--bg3);border:1px solid var(--border);border-radius:4px;padding:4px 8px}
+.curse-detail-label{font-size:.6rem;color:var(--text3);font-family:Consolas,monospace;margin-bottom:2px}
+.curse-detail-val{color:var(--text);font-family:Consolas,monospace;font-size:.7rem}
+.curse-detail-badge{
+  display:inline-block;padding:1px 6px;border-radius:3px;font-size:.62rem;
+  background:var(--bd);color:var(--blue);margin-right:2px;margin-top:1px;
+}
+.curse-detail-badge.lscg{background:#0a2010;color:var(--green)}
+.curse-detail-badge.cursed{background:var(--pd);color:var(--pl)}
+
+/* Toggle expand arrow on row */
+.cursor-detail-toggle{
+  cursor:pointer;color:var(--text3);font-size:.7rem;margin-right:4px;
+  transition:transform .15s;display:inline-block;
+}
+.curse-row.expanded .cursor-detail-toggle{transform:rotate(90deg)}
+
+.curse-empty{
+  text-align:center;padding:48px;color:var(--text3);font-size:.88rem;
+}
+
 </style>
 </head>
 <body>
@@ -336,8 +463,6 @@ textarea.outfit-code{width:100%;min-height:200px;background:var(--bg4);border:1p
   <span class="tbadge" id="cacheInfo">Kein Cache</span>
   <button class="btn btn-green" id="loadCacheBtn" onclick="loadCacheFromBC()">⚡ Aus Spiel laden</button>
   <button class="btn btn-primary" id="reconnectBtn" onclick="manualReconnect()" title="Verbindung neu versuchen">🔄 Verbinden</button>
-  <button class="btn btn-orange hidden" id="outfitBtn" onclick="openOutfit()">👗 Outfit Builder</button>
-  <button class="btn btn-primary hidden" id="profileBtn" onclick="openProfiles()">📁 Profile</button>
   <button class="btn btn-red hidden" id="clearBtn" onclick="clearCache()">🗑️ Löschen</button>
   <div id="statusMsg" class="status-msg hidden"></div>
 </div>
@@ -351,6 +476,16 @@ textarea.outfit-code{width:100%;min-height:200px;background:var(--bg4);border:1p
   <button class="room-refresh-btn" id="roomRefreshBtn" onclick="scanRoom()" title="Raum neu scannen">🔄</button>
 </div>
 
+
+<!-- TAB NAVIGATION -->
+<div class="tab-nav">
+  <button class="tab-btn active" id="tab-items-btn"  onclick="switchTab('items')">🔧 Item Manager</button>
+  <button class="tab-btn"        id="tab-outfit-btn" onclick="switchTab('outfit')">👗 Outfit &amp; Profile</button>
+  <button class="tab-btn"        id="tab-curse-btn"  onclick="switchTab('curse')">🔮 Craft &amp; Curse</button>
+</div>
+
+<!-- TAB 1: ITEM MANAGER -->
+<div id="tab-items" class="tab-pane active">
 <!-- LAYOUT -->
 <div class="layout">
   <div class="sidebar">
@@ -582,35 +717,60 @@ textarea.outfit-code{width:100%;min-height:200px;background:var(--bg4);border:1p
   </div>
 </div>
 
-<!-- ── OUTFIT MODAL ── -->
-<div class="modal-overlay hidden" id="outfitOverlay">
-  <div class="modal">
-    <div class="modal-head">
-      <h2>👗 Outfit Builder</h2>
-      <button class="btn btn-red" onclick="closeOutfit()">✕ Schließen</button>
-    </div>
-    <div class="modal-body">
-      <div class="outfit-target-bar">
+</div><!-- /tab-items -->
+
+<!-- ── TAB 2: OUTFIT & PROFILE ── -->
+<div id="tab-outfit" class="tab-pane">
+  <div class="outfit-tab-layout">
+
+    <!-- LEFT: Item list + profiles -->
+    <div class="outfit-left">
+      <div class="outfit-target-bar" style="margin-bottom:12px">
         <span class="outfit-target-label">🎯 Ziel:</span>
         <div class="outfit-member-chips" id="outfitMemberChips">
           <span style="color:var(--text3);font-size:.72rem">– Raum noch nicht geladen –</span>
         </div>
       </div>
-      <div id="outfitList"><p style="color:var(--text3);font-size:.8rem">Noch keine Items. Konfiguriere Items und klicke "Zum Outfit hinzufügen".</p></div>
-      <div class="btn-row" style="margin-top:10px">
-        <button class="btn btn-green" onclick="generateOutfitCode()" style="flex:1">⚡ Outfit-Code generieren</button>
-        <button class="btn btn-red" onclick="clearOutfit()">🗑️ Leeren</button>
+
+      <div class="section-hdr2">
+        <span>👗 Outfit Items</span>
+        <button class="btn btn-red" style="font-size:.65rem;padding:3px 8px" onclick="clearOutfit()">🗑️ Leeren</button>
       </div>
-      <div id="outfitCodeWrap" class="hidden" style="margin-top:10px">
-        <textarea class="outfit-code" id="outfitCode" readonly></textarea>
-        <div class="btn-row" style="gap:6px">
-          <button class="btn btn-green" onclick="executeOutfitCode()" style="flex:1">▶ Outfit direkt ausführen</button>
-          <button class="btn-copy" onclick="copyOutfitCode()" style="min-width:130px">📋 Kopieren</button>
+      <div id="outfitList">
+        <div class="outfit-empty-hint">Noch keine Items.<br>Konfiguriere ein Item im <strong>Item Manager</strong> und klicke <strong>„👗 Outfit"</strong>.</div>
+      </div>
+
+      <!-- PROFILES -->
+      <div style="margin-top:20px">
+        <div class="section-hdr2">
+          <span>📁 Profile</span>
+          <div style="display:flex;gap:6px;align-items:center">
+            <input class="profile-name-input" id="profileNameInput" placeholder="Profilname..." maxlength="40" style="font-size:.72rem;padding:3px 7px">
+            <button class="btn btn-green" style="font-size:.68rem;padding:4px 9px" onclick="saveProfile()">💾 Speichern</button>
+          </div>
         </div>
+        <div id="profileListEl" class="profile-grid">
+          <p style="color:var(--text3);font-size:.8rem;grid-column:1/-1">Noch keine Profile.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT: Live code -->
+    <div class="outfit-right">
+      <div class="section-hdr2" style="margin-bottom:8px">
+        <span>💻 Generierter Code</span>
+        <span id="outfitAutoStatus" style="font-size:.62rem;color:var(--text3)">– kein Outfit –</span>
+      </div>
+      <textarea class="outfit-code-live" id="outfitCode" readonly
+        placeholder="Code erscheint automatisch wenn du Items hinzufügst..."></textarea>
+      <div class="btn-row" style="margin-top:8px">
+        <button class="btn btn-green" id="execOutfitBtn" onclick="executeOutfitCode()" style="flex:1;font-size:.8rem">▶ Ausführen</button>
+        <button class="btn-copy" onclick="copyOutfitCode()" style="margin-top:0;min-width:120px">📋 Kopieren</button>
       </div>
     </div>
   </div>
 </div>
+<!-- /tab-outfit -->
 
 <script>
 // ══════════════════════════════════════════════════════
@@ -1611,9 +1771,9 @@ function copyCode() {
 // ══════════════════════════════════════════════════════
 //  OUTFIT BUILDER
 // ══════════════════════════════════════════════════════
-function openOutfit()  { document.getElementById('outfitOverlay').classList.remove('hidden'); renderOutfitList(); renderOutfitMemberChips(); }
-function closeOutfit() { document.getElementById('outfitOverlay').classList.add('hidden'); }
-function clearOutfit() { OUTFIT = []; renderOutfitList(); document.getElementById('outfitCodeWrap').classList.add('hidden'); }
+function openOutfit()  { switchTab('outfit'); }
+function closeOutfit() { switchTab('items'); }
+function clearOutfit() { OUTFIT = []; renderOutfitList(); _autoOutfitCode(); }
 
 function addToOutfit() {
   if (!CURRENT) return;
@@ -1675,8 +1835,10 @@ function addToOutfit() {
     label: `${asset} (${group})`,
   });
 
-  openOutfit();
+  switchTab(\'outfit\');
+  _autoOutfitCode();
 }
+
 
 function renderOutfitList() {
   const list = document.getElementById('outfitList');
@@ -1702,12 +1864,13 @@ function renderOutfitList() {
   });
 }
 
-function removeOutfitItem(i) { OUTFIT.splice(i,1); renderOutfitList(); document.getElementById('outfitCodeWrap').classList.add('hidden'); }
+function removeOutfitItem(i) { OUTFIT.splice(i,1); renderOutfitList(); _autoOutfitCode(); }
 function moveOutfitItem(i, d) {
   const j = i + d;
   if (j < 0 || j >= OUTFIT.length) return;
   [OUTFIT[i], OUTFIT[j]] = [OUTFIT[j], OUTFIT[i]];
   renderOutfitList();
+  _autoOutfitCode();
 }
 
 function generateOutfitCode() {
@@ -1743,7 +1906,6 @@ function generateOutfitCode() {
   if (isOther && memberNum) code += '}\n';
 
   document.getElementById('outfitCode').value = code;
-  document.getElementById('outfitCodeWrap').classList.remove('hidden');
 }
 
 function copyOutfitCode() {
@@ -1755,11 +1917,8 @@ function copyOutfitCode() {
 // ══════════════════════════════════════════════════════
 //  OUTFIT-PROFILE
 // ══════════════════════════════════════════════════════
-function openProfiles()  {
-  renderProfileList();
-  document.getElementById('profileOverlay').classList.remove('hidden');
-}
-function closeProfiles() { document.getElementById('profileOverlay').classList.add('hidden'); }
+function openProfiles()  { switchTab('outfit'); renderProfileList(); }
+function closeProfiles() { switchTab('outfit'); }
 
 function saveProfile() {
   if (!OUTFIT.length) { alert('Erst Outfit-Items hinzufügen!'); return; }
@@ -1808,8 +1967,9 @@ function loadProfile(name) {
   }
 
   OUTFIT = restored;
-  closeProfiles();
-  openOutfit();
+  switchTab('outfit');
+  renderOutfitList();
+  _autoOutfitCode();
 }
 
 function deleteProfile(name) {
@@ -1867,6 +2027,297 @@ function deleteProfileByIdx(idx) {
       }
     } catch {}
   }
+})();
+
+
+// ══════════════════════════════════════════════════════
+//  TABS
+// ══════════════════════════════════════════════════════
+let _activeTab = 'items';
+function switchTab(tab) {
+  _activeTab = tab;
+  ['items','outfit','curse'].forEach(t => {
+    document.getElementById('tab-'+t)?.classList.toggle('active', t===tab);
+    document.getElementById('tab-'+t+'-btn')?.classList.toggle('active', t===tab);
+  });
+  if (tab === 'outfit') { renderOutfitList(); renderOutfitMemberChips(); _autoOutfitCode(); }
+  if (tab === 'curse')  { renderCurseTab(); }
+}
+
+// ── addToOutfit patched: auto-switch + auto-code ──────
+// (original addToOutfit is below, we override it here)
+const _origAddToOutfit = window.addToOutfit;
+
+// ══════════════════════════════════════════════════════
+//  OUTFIT AUTO-CODE
+// ══════════════════════════════════════════════════════
+function _autoOutfitCode() {
+  if (!OUTFIT.length) {
+    document.getElementById('outfitCode').value = '';
+    document.getElementById('outfitAutoStatus').textContent = '– kein Outfit –';
+    return;
+  }
+  generateOutfitCode();
+  document.getElementById('outfitAutoStatus').textContent =
+    OUTFIT.length + ' Items · ' + (_outfitTargetNum ? 'Spieler #'+_outfitTargetNum : 'Player');
+}
+
+// ══════════════════════════════════════════════════════
+//  CURSE STATE
+// ══════════════════════════════════════════════════════
+let CURSE_DB    = {};   // key → entry (from CurseScanner.database)
+let CURSE_LSCG  = {};   // key → entry (from CurseScanner.lscgTable)
+let CURSE_CACHE_LSCG = {}; // from lscgCache
+
+// Comments: persisted in localStorage
+let CURSE_COMMENTS = {};
+try { CURSE_COMMENTS = JSON.parse(localStorage.getItem('BC_CURSE_COMMENTS_v1') || '{}'); } catch {}
+
+function _saveCurseComments() {
+  try { localStorage.setItem('BC_CURSE_COMMENTS_v1', JSON.stringify(CURSE_COMMENTS)); } catch {}
+}
+
+// ── Scan ─────────────────────────────────────────────
+function curseScan() {
+  const statusEl = document.getElementById('csScanStatus');
+  statusEl.textContent = '⏳ Scanne...';
+  bcSend({ type: 'SCAN_CURSES' });
+}
+
+// ── Handle SCAN_RESULT ────────────────────────────────
+// called from postMessage handler
+function _handleCurseData(data) {
+  if (data.err) { showStatus('❌ Curse-Scan: ' + data.err, 'error'); return; }
+  CURSE_DB         = data.database    ?? {};
+  CURSE_LSCG       = data.lscgTable   ?? {};
+  CURSE_CACHE_LSCG = data.lscgCache   ?? {};
+  _updateCurseStats();
+  if (_activeTab === 'curse') renderCurseTab();
+  const total = Object.keys(CURSE_DB).length;
+  document.getElementById('csScanStatus').textContent = '✅ ' + total + ' Crafts';
+  showStatus('✅ Curse-Scan: ' + total + ' Crafts', 'success');
+  // persist
+  try { localStorage.setItem('BC_CURSE_DB_v1', JSON.stringify({database:CURSE_DB,lscgTable:CURSE_LSCG,lscgCache:CURSE_CACHE_LSCG})); } catch {}
+}
+
+function _updateCurseStats() {
+  const entries = Object.values(CURSE_DB);
+  document.getElementById('csStat-total').textContent  = entries.length;
+  document.getElementById('csStat-cursed').textContent = entries.filter(e=>e.IstCursed).length;
+  document.getElementById('csStat-lscg').textContent   = Object.keys(CURSE_LSCG).length;
+  document.getElementById('csStat-cache').textContent  = Object.keys(CURSE_CACHE_LSCG).length;
+}
+
+// ── Render Curse Tab ──────────────────────────────────
+function renderCurseTab() {
+  const body   = document.getElementById('curseBody');
+  const empty  = document.getElementById('curseEmpty');
+  const entries = Object.values(CURSE_DB);
+
+  if (!entries.length) {
+    empty.style.display = '';
+    body.querySelectorAll('.curse-owner-block').forEach(b => b.remove());
+    return;
+  }
+  empty.style.display = 'none';
+
+  // Group by owner
+  const byOwner = {};
+  entries.forEach((e, idx) => {
+    const key = e.Besitzer?.Nummer + ':' + e.Besitzer?.Name;
+    if (!byOwner[key]) byOwner[key] = { name: e.Besitzer?.Name, num: e.Besitzer?.Nummer, items: [] };
+    byOwner[key].items.push({ ...e, _idx: idx });
+  });
+
+  // Remove existing owner blocks and rebuild
+  body.querySelectorAll('.curse-owner-block').forEach(b => b.remove());
+
+  Object.entries(byOwner).forEach(([ownerKey, owner]) => {
+    const blockId = 'co_' + owner.num;
+    const wasOpen = document.getElementById(blockId)?.classList.contains('open');
+
+    const block = document.createElement('div');
+    block.className = 'curse-owner-block' + (wasOpen ? ' open' : '');
+    block.id = blockId;
+
+    const lscgCount = owner.items.filter(i => i.IstLSCGCurse).length;
+    const cursedCount = owner.items.filter(i => i.IstCursed).length;
+
+    block.innerHTML =
+      '<div class="curse-owner-hdr" onclick="toggleCurseOwner(\'' + blockId + '\')">'+
+        '<span class="curse-owner-name">'+escHtml(owner.name)+'</span>'+
+        '<span class="curse-owner-num">#'+owner.num+'</span>'+
+        (lscgCount ? '<span class="curse-owner-count" style="background:var(--gd);color:var(--green)">🧿 '+lscgCount+'</span>' : '')+
+        (cursedCount ? '<span class="curse-owner-count">🔮 '+cursedCount+'</span>' : '')+
+        '<span class="curse-owner-count" style="background:var(--bg3);color:var(--text2)">'+owner.items.length+'</span>'+
+        '<span class="curse-owner-chevron">▶</span>'+
+      '</div>'+
+      '<table class="curse-rows"><thead><tr style="background:var(--bg3)">'+
+        '<th style="padding:4px 10px;font-size:.63rem;color:var(--text3);text-align:left;font-weight:500">Name</th>'+
+        '<th style="padding:4px 10px;font-size:.63rem;color:var(--text3);text-align:left;font-weight:500">Item</th>'+
+        '<th style="padding:4px 10px;font-size:.63rem;color:var(--text3);text-align:left;font-weight:500">Gruppe</th>'+
+        '<th style="padding:4px 10px;font-size:.63rem;color:var(--text3);text-align:left;font-weight:500">Flags</th>'+
+        '<th style="padding:4px 10px;font-size:.63rem;color:var(--text3);text-align:left;font-weight:500">LSCG</th>'+
+        '<th style="padding:4px 10px;font-size:.63rem;color:var(--text3);text-align:left;font-weight:500;min-width:160px">Kommentar</th>'+
+        '<th style="padding:4px 10px;font-size:.63rem;color:var(--text3);text-align:left;font-weight:500">Aktionen</th>'+
+      '</tr></thead><tbody id="cb_'+owner.num+'"></tbody></table>';
+
+    body.appendChild(block);
+
+    const tbody = document.getElementById('cb_' + owner.num);
+    owner.items.forEach((entry, rowIdx) => {
+      const dbKey = entry.Besitzer.Nummer + ':' + entry.ItemName + ':' + entry.CraftName;
+      const rowId = 'cr_' + owner.num + '_' + rowIdx;
+      const detId = 'cd_' + owner.num + '_' + rowIdx;
+      const comment = CURSE_COMMENTS[dbKey] || '';
+      const isLSCG  = entry.IstLSCGCurse;
+      const isCursed = entry.IstCursed;
+
+      const tr = document.createElement('tr');
+      tr.className = 'curse-row' + (isLSCG ? ' lscg' : '');
+      tr.id = rowId;
+
+      const lscgText = isLSCG
+        ? (entry.LSCGAusCache ? '💾 ' : '✅ ') + escHtml(entry.LSCG?.Name || '?')
+        : '–';
+
+      tr.innerHTML =
+        '<td class="cn"><span class="cursor-detail-toggle" onclick="toggleCurseDetail(\'' + detId + '\',\'' + rowId + '\')">▶</span>'+escHtml(entry.CraftName)+'</td>'+
+        '<td class="item">'+escHtml(entry.ItemName)+'</td>'+
+        '<td class="grp">'+escHtml(entry.Gruppe)+'</td>'+
+        '<td class="badges">'+
+          (isCursed ? '<span class="curse-detail-badge cursed">🔮</span>' : '')+
+          (entry.Private ? '<span class="curse-detail-badge">🔒</span>' : '')+
+          (entry.Property ? '<span class="curse-detail-badge">'+escHtml(entry.Property)+'</span>' : '')+
+        '</td>'+
+        '<td class="lscg-col">'+lscgText+'</td>'+
+        '<td class="comment-col"><textarea class="curse-comment-input" placeholder="Notiz..." '+
+          'onchange="saveCurseComment(\'' + dbKey.replace(/'/g,"\'") + '\',this.value)">'+escHtml(comment)+'</textarea></td>'+
+        '<td class="actions">'+
+          '<button class="curse-apply-btn" onclick="wearCurse('+entry._idx+',null)" title="Auf mich anwenden">👤</button>'+
+          (_selectedMemberNum ? '<button class="curse-apply-btn other" onclick="wearCurse('+entry._idx+','+_selectedMemberNum+')" title="Auf #'+_selectedMemberNum+'">👥 #'+_selectedMemberNum+'</button>' : '')+
+        '</td>';
+
+      tbody.appendChild(tr);
+
+      // Detail row
+      const lscgEntry = entry.LSCG;
+      const detailFields = [
+        ['Beschreibung', entry.Description || '–'],
+        ['Farbe', entry.Farbe || '–'],
+        ['Property', entry.Property || '–'],
+        ['Private', entry.Private ? 'Ja' : 'Nein'],
+        ['Zuletzt', entry.ZuletztGesehen],
+        ...(isLSCG ? [
+          ['LSCG Name', lscgEntry?.Name || '–'],
+          ['Outfit Key', lscgEntry?.OutfitKey || '–'],
+          ['Speed', lscgEntry?.Speed ?? '–'],
+          ['Enabled', lscgEntry?.Enabled ? 'Ja' : 'Nein'],
+          ['Inexhaustable', lscgEntry?.Inexhaustable ? 'Ja' : 'Nein'],
+          ['Aus Cache', entry.LSCGAusCache ? 'Ja 💾' : 'Nein ✅'],
+        ] : []),
+      ];
+
+      const detTr = document.createElement('tr');
+      detTr.className = 'curse-detail-row';
+      detTr.id = detId;
+      detTr.innerHTML =
+        '<td class="curse-detail-cell" colspan="7">'+
+        '<div style="font-size:.63rem;color:var(--text3);margin-bottom:4px">Details für '+escHtml(entry.CraftName)+'</div>'+
+        '<div class="curse-detail-grid">'+
+        detailFields.map(([label, val]) =>
+          '<div class="curse-detail-field">'+
+          '<div class="curse-detail-label">'+label+'</div>'+
+          '<div class="curse-detail-val">'+escHtml(String(val))+'</div>'+
+          '</div>'
+        ).join('')+
+        '</div></td>';
+      tbody.appendChild(detTr);
+    });
+  });
+}
+
+function toggleCurseOwner(id) {
+  document.getElementById(id)?.classList.toggle('open');
+}
+
+function toggleCurseDetail(detId, rowId) {
+  const det = document.getElementById(detId);
+  const row = document.getElementById(rowId);
+  if (!det || !row) return;
+  const open = det.classList.toggle('open');
+  row.classList.toggle('expanded', open);
+  // Make sure owner block stays open
+  const block = det.closest('.curse-owner-block');
+  if (open && block) block.classList.add('open');
+}
+
+function saveCurseComment(key, val) {
+  if (val.trim()) CURSE_COMMENTS[key] = val.trim();
+  else delete CURSE_COMMENTS[key];
+  _saveCurseComments();
+}
+
+function wearCurse(idx, targetNum) {
+  if (!_connected) { showStatus('❌ Nicht verbunden', 'error'); return; }
+  bcSend({ type: 'WEAR_CURSE', idx, targetNum });
+  showStatus('⏳ Curse wird angelegt...', 'info');
+}
+
+// ── Export / Import ───────────────────────────────────
+function curseExport() {
+  if (!Object.keys(CURSE_DB).length) { showStatus('❌ Nichts zum Exportieren', 'error'); return; }
+  const payload = {
+    _meta: { exportedAt: new Date().toISOString(), version: 1 },
+    database: CURSE_DB,
+    lscgTable: CURSE_LSCG,
+    lscgCache: CURSE_CACHE_LSCG,
+    comments: CURSE_COMMENTS,
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], {type:'application/json'});
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url; a.download = 'CurseScanner_' + new Date().toISOString().slice(0,10) + '.json';
+  a.click(); URL.revokeObjectURL(url);
+  showStatus('✅ Export gespeichert', 'success');
+}
+
+function curseImport() {
+  const inp = document.createElement('input');
+  inp.type = 'file'; inp.accept = '.json';
+  inp.onchange = e => {
+    const r = new FileReader();
+    r.onload = ev => {
+      try {
+        const d = JSON.parse(ev.target.result);
+        CURSE_DB   = d.database  ?? d;
+        CURSE_LSCG = d.lscgTable ?? {};
+        CURSE_CACHE_LSCG = d.lscgCache ?? {};
+        if (d.comments) Object.assign(CURSE_COMMENTS, d.comments);
+        _saveCurseComments();
+        _updateCurseStats();
+        if (_activeTab === 'curse') renderCurseTab();
+        showStatus('✅ Import: ' + Object.keys(CURSE_DB).length + ' Crafts', 'success');
+      } catch (err) { showStatus('❌ Import fehlgeschlagen: ' + err.message, 'error'); }
+    };
+    r.readAsText(e.target.files[0]);
+  };
+  inp.click();
+}
+
+// ── Load curse DB from localStorage on startup ────────
+(function() {
+  try {
+    const s = localStorage.getItem('BC_CURSE_DB_v1');
+    if (s) {
+      const d = JSON.parse(s);
+      CURSE_DB         = d.database  ?? {};
+      CURSE_LSCG       = d.lscgTable ?? {};
+      CURSE_CACHE_LSCG = d.lscgCache ?? {};
+      _updateCurseStats();
+      console.log('[BCK-Popup] Curse DB geladen: ' + Object.keys(CURSE_DB).length + ' Crafts');
+    }
+  } catch {}
 })();
 
 // ══════════════════════════════════════════════════════
@@ -1978,6 +2429,18 @@ window.addEventListener('message', function(ev) {
     case 'EXEC_ERR':
       console.error('[BCK-Popup] EXEC_ERR:', ev.data.msg);
       showStatus('\u274c Fehler: ' + ev.data.msg, 'error');
+      break;
+
+    case 'CURSE_DATA':
+      _handleCurseData(ev.data);
+      break;
+
+    case 'WEAR_CURSE_OK':
+      showStatus('\u2705 ' + (ev.data.msg || 'Curse angelegt!'), 'success');
+      break;
+
+    case 'WEAR_CURSE_ERR':
+      showStatus('\u274c Curse-Fehler: ' + ev.data.msg, 'error');
       break;
   }
 });
@@ -2174,10 +2637,9 @@ function setOutfitTarget(num) {
   _outfitTargetNum = num;
   renderOutfitMemberChips();
   // Code neu generieren falls bereits vorhanden
-  if (!document.getElementById('outfitCodeWrap').classList.contains('hidden')) {
-    generateOutfitCode();
-  }
+  _autoOutfitCode();
   console.log('[BCK-Popup] Outfit-Ziel:', num === null ? 'selbst (Player)' : '#' + num);
+  _autoOutfitCode();
 }
 
 function escHtml(s) {
@@ -2231,6 +2693,30 @@ function selectRoomMember(num) {
 })();
 </script>
 
+
+
+<!-- ── TAB 3: CRAFT & CURSE ── -->
+<div id="tab-curse" class="tab-pane">
+  <div class="curse-topbar">
+    <button class="btn btn-green" onclick="curseScan()">🔍 Scannen</button>
+    <button class="btn btn-primary" onclick="curseExport()">⬇️ Export</button>
+    <button class="btn btn-primary" onclick="curseImport()">⬆️ Import</button>
+    <div class="curse-stats">
+      <div class="curse-stat">Crafts: <span id="csStat-total">0</span></div>
+      <div class="curse-stat">🔮 Cursed: <span id="csStat-cursed">0</span></div>
+      <div class="curse-stat">🧿 LSCG: <span id="csStat-lscg">0</span></div>
+      <div class="curse-stat">💾 Cache: <span id="csStat-cache">0</span></div>
+    </div>
+    <span id="csScanStatus" style="font-size:.7rem;color:var(--text3)"></span>
+  </div>
+  <div class="curse-body" id="curseBody">
+    <div class="curse-empty" id="curseEmpty">
+      <div style="font-size:2rem;margin-bottom:8px">🔮</div>
+      Noch kein Scan. Klicke <strong>Scannen</strong> um alle Crafts zu laden.
+    </div>
+  </div>
+</div>
+<!-- /tab-curse -->
 
 <!-- ── PROFILE MODAL ── -->
 <div class="modal-overlay hidden" id="profileOverlay">

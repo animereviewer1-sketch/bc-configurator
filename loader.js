@@ -380,6 +380,156 @@
   return cache;
   }
 
+
+  // ══════════════════════════════════════════════════════
+  //  CURSE SCANNER (eingebettet)
+  // ══════════════════════════════════════════════════════
+
+window.CurseScanner = (() => {
+  let database = {};
+  let lscgTable = {};
+  const lscgCache = {};
+
+  function _cacheLSCG(memberNumber, curseObj) {
+    if (!curseObj?.Name) return;
+    const key = memberNumber + ':' + curseObj.Name.toLowerCase();
+    if (!lscgCache[key]) console.log('💾 LSCG Cache: #' + memberNumber + ' → "' + curseObj.Name + '"');
+    lscgCache[key] = { ...curseObj, _cachedAt: new Date().toLocaleTimeString() };
+  }
+
+  let _hookInstalled = false;
+  function installLSCGHook() {
+    if (_hookInstalled) return;
+    const _origRefresh = window.CharacterRefresh;
+    if (typeof _origRefresh === 'function') {
+      window.CharacterRefresh = function(C, ...args) {
+        _snapshotLSCG(C);
+        return _origRefresh(C, ...args);
+      };
+    }
+    setInterval(() => {
+      [Player, ...(ChatRoomCharacter ?? [])].forEach(_snapshotLSCG);
+    }, 10000);
+    _hookInstalled = true;
+    console.log('✅ LSCG-Hook installiert');
+  }
+
+  function _snapshotLSCG(C) {
+    const items = C?.LSCG?.CursedItemModule?.CursedItems;
+    if (!Array.isArray(items) || items.length === 0) return;
+    items.forEach(ci => _cacheLSCG(C.MemberNumber, ci));
+  }
+
+  function holeLSCGCurse(C, craftName) {
+    const live = (C.LSCG?.CursedItemModule?.CursedItems ?? [])
+      .find(ci => ci.Name?.toLowerCase() === craftName?.toLowerCase());
+    if (live) { _cacheLSCG(C.MemberNumber, live); return live; }
+    return lscgCache[C.MemberNumber + ':' + (craftName?.toLowerCase())] ?? null;
+  }
+
+  function findeGruppe(itemName) {
+    const gruppen = [
+      'ItemHandheld','ItemMisc','ItemAddon','ItemHands','ItemArms','ItemLegs','ItemFeet',
+      'ItemNeck','ItemHead','ItemMouth','ItemEyes','ItemEars','ItemNose','ItemTorso',
+      'ItemTorso2','ItemPelvis','ItemVulva','ItemVulvaPiercings','ItemButt','ItemNipples',
+      'ItemNipplesPiercings','ItemBoots','ItemHood','ItemDevices','ItemNeckAccessories',
+      'ItemNeckRestraints','ItemMouthAccessory','Cloth','ClothLower','ClothAccessory',
+      'Shoes','Hat','Gloves','Socks','Bracelet','Mask','Decals','Bra','Panties',
+      'Corset','SocksRight'
+    ];
+    for (const g of gruppen) {
+      if (typeof AssetGet === 'function' && AssetGet('Female3DCG', g, itemName)) return g;
+    }
+    return null;
+  }
+
+  function isCursed(craft) {
+    const terms = ['cursed','enchanted'];
+    const name = (craft.Name ?? '').toLowerCase();
+    const desc = (craft.Description ?? '').toLowerCase();
+    return terms.some(b => name.includes(b) || desc.includes(b));
+  }
+
+  function scan() {
+    const spieler = [Player, ...(ChatRoomCharacter ?? [])];
+    let neuDB = 0, aktualisiert = 0, neuLSCG = 0;
+    spieler.forEach(C => {
+      _snapshotLSCG(C);
+      (C.Crafting ?? []).forEach(craft => {
+        if (!craft?.Item) return;
+        const gruppe = findeGruppe(craft.Item);
+        const key    = C.MemberNumber + ':' + craft.Item + ':' + craft.Name;
+        const istNeu = !database[key];
+        const lscg   = holeLSCGCurse(C, craft.Name);
+        const cursed = isCursed(craft);
+        const eintrag = {
+          CraftName:      craft.Name ?? craft.Item,
+          Description:    craft.Description ?? '',
+          ItemName:       craft.Item,
+          Gruppe:         gruppe ?? 'UNBEKANNT',
+          Farbe:          craft.Color ?? '#ffffff',
+          Property:       craft.Property ?? '',
+          Private:        craft.Private ?? false,
+          IstCursed:      cursed,
+          IstLSCGCurse:   lscg !== null,
+          Besitzer:       { Name: C.Name, Nummer: C.MemberNumber },
+          ZuletztGesehen: new Date().toLocaleTimeString(),
+          Craft:          { ...craft, MemberName: C.Name, MemberNumber: C.MemberNumber },
+          LSCG:           lscg,
+          LSCGAusCache:   lscg !== null && !(C.LSCG?.CursedItemModule?.CursedItems ?? [])
+                            .some(ci => ci.Name?.toLowerCase() === craft.Name?.toLowerCase()),
+        };
+        if (istNeu) neuDB++; else aktualisiert++;
+        database[key] = eintrag;
+        if (lscg !== null) {
+          const lscgKey = C.MemberNumber + ':' + craft.Name;
+          if (!lscgTable[lscgKey]) neuLSCG++;
+          lscgTable[lscgKey] = {
+            CraftName: eintrag.CraftName, ItemName: eintrag.ItemName,
+            Gruppe: eintrag.Gruppe, Crafter: C.Name, CrafterNummer: C.MemberNumber,
+            IstCursed: cursed, LSCGName: lscg.Name, OutfitKey: lscg.OutfitKey,
+            Speed: lscg.Speed, Enabled: lscg.Enabled, Inexhaustable: lscg.Inexhaustable,
+            AusCache: eintrag.LSCGAusCache, ZuletztGesehen: new Date().toLocaleTimeString(),
+          };
+        }
+      });
+    });
+    return { database, lscgTable, lscgCache, neuDB, aktualisiert, neuLSCG };
+  }
+
+  function _finde(indexOderName) {
+    const entries = Object.values(database);
+    if (typeof indexOderName === 'number') return entries[indexOderName];
+    return entries.find(e =>
+      e.CraftName.toLowerCase().includes(String(indexOderName).toLowerCase()) ||
+      e.ItemName.toLowerCase().includes(String(indexOderName).toLowerCase())
+    );
+  }
+
+  function wear(indexOderName, target) {
+    target = target ?? Player;
+    const entry = _finde(indexOderName);
+    if (!entry) return { err: '"' + indexOderName + '" nicht gefunden' };
+    if (entry.Gruppe === 'UNBEKANNT') return { err: 'Gruppe unbekannt für ' + entry.ItemName };
+    InventoryWear(target, entry.ItemName, entry.Gruppe,
+      entry.Farbe, 0, Player.MemberNumber, entry.Craft);
+    CharacterRefresh(target);
+    ChatRoomCharacterUpdate(target);
+    return { ok: true, msg: '"' + entry.CraftName + '" → ' + target.Name };
+  }
+
+  function wearOn(indexOderName, memberNumber) {
+    const TARGET = ChatRoomCharacter.find(c => c.MemberNumber === memberNumber);
+    if (!TARGET) return { err: '#' + memberNumber + ' nicht im Raum' };
+    return wear(indexOderName, TARGET);
+  }
+
+  installLSCGHook();
+
+  return { scan, wear, wearOn, database, lscgTable, lscgCache };
+})();
+
+
   // ── PostMessage Listener ───────────────────────────────
   if (!window.__BCK_LISTENER__) {
     window.__BCK_LISTENER__ = true;
@@ -438,6 +588,45 @@
             src.postMessage({ app: APP, type: 'EXEC_ERR', msg: ex.message }, '*');
           }
           break;
+
+        case 'SCAN_CURSES': {
+          BCK.info('SCAN_CURSES');
+          try {
+            const result = window.CurseScanner.scan();
+            src.postMessage({
+              app: APP, type: 'CURSE_DATA',
+              database:  result.database,
+              lscgTable: result.lscgTable,
+              lscgCache: result.lscgCache,
+            }, '*');
+            BCK.ok('CURSE_DATA gesendet: ' + Object.keys(result.database).length + ' Crafts');
+          } catch (ex) {
+            BCK.err('SCAN_CURSES Fehler:', ex.message);
+            src.postMessage({ app: APP, type: 'CURSE_DATA', err: ex.message }, '*');
+          }
+          break;
+        }
+
+        case 'WEAR_CURSE': {
+          BCK.info('WEAR_CURSE idx=' + ev.data.idx + ' target=' + ev.data.targetNum);
+          try {
+            let result;
+            if (ev.data.targetNum != null) {
+              result = window.CurseScanner.wearOn(ev.data.idx, ev.data.targetNum);
+            } else {
+              result = window.CurseScanner.wear(ev.data.idx);
+            }
+            if (result?.err) {
+              src.postMessage({ app: APP, type: 'WEAR_CURSE_ERR', msg: result.err }, '*');
+            } else {
+              src.postMessage({ app: APP, type: 'WEAR_CURSE_OK', msg: result?.msg }, '*');
+            }
+          } catch (ex) {
+            BCK.err('WEAR_CURSE Fehler:', ex.message);
+            src.postMessage({ app: APP, type: 'WEAR_CURSE_ERR', msg: ex.message }, '*');
+          }
+          break;
+        }
       }
     });
 
