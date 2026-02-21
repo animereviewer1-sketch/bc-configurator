@@ -258,6 +258,7 @@ textarea.outfit-code{width:100%;min-height:200px;background:var(--bg4);border:1p
   <span class="tbadge" id="playerInfo" style="display:none"></span>
   <span class="tbadge" id="cacheInfo">Kein Cache</span>
   <button class="btn btn-green" id="loadCacheBtn" onclick="loadCacheFromBC()">⚡ Aus Spiel laden</button>
+  <button class="btn btn-primary" id="reconnectBtn" onclick="manualReconnect()" title="Verbindung neu versuchen">🔄 Verbinden</button>
   <button class="btn btn-orange hidden" id="outfitBtn" onclick="openOutfit()">👗 Outfit Builder</button>
   <button class="btn btn-primary hidden" id="profileBtn" onclick="openProfiles()">📁 Profile</button>
   <button class="btn btn-red hidden" id="clearBtn" onclick="clearCache()">🗑️ Löschen</button>
@@ -1861,13 +1862,37 @@ try {
 // ══════════════════════════════════════════════════════
 const APP = 'BCKonfigurator';
 
-function bcSend(msg) {
-  if (!window.opener || window.opener.closed) {
-    showStatus('❌ BC-Fenster nicht verfügbar – Bookmarklet nochmal klicken', 'error');
+// ── Ping-Retry: versucht alle 3s bis PONG empfangen ─────────────
+let _pingInterval = null;
+let _connected = false;
+
+function startPingRetry() {
+  if (_pingInterval) clearInterval(_pingInterval);
+  _pingInterval = setInterval(function() {
+    if (_connected) { clearInterval(_pingInterval); _pingInterval = null; return; }
+    bcSend({ type: 'PING' }, true);
+  }, 3000);
+}
+
+function bcSend(msg, silent) {
+  try {
+    if (!window.opener || window.opener.closed) {
+      if (!silent) showStatus('❌ BC-Fenster nicht verfügbar – Bookmarklet nochmal klicken', 'error');
+      return false;
+    }
+    window.opener.postMessage({ app: APP, ...msg }, '*');
+    return true;
+  } catch(e) {
+    if (!silent) showStatus('❌ postMessage fehlgeschlagen: ' + e.message, 'error');
     return false;
   }
-  window.opener.postMessage({ app: APP, ...msg }, '*');
-  return true;
+}
+
+function manualReconnect() {
+  _connected = false;
+  showStatus('⏳ Verbinde…', 'info');
+  bcSend({ type: 'PING' });
+  startPingRetry();
 }
 
 window.addEventListener('message', function (ev) {
@@ -1875,6 +1900,8 @@ window.addEventListener('message', function (ev) {
 
   switch (ev.data.type) {
     case 'PONG': {
+      _connected = true;
+      if (_pingInterval) { clearInterval(_pingInterval); _pingInterval = null; }
       document.getElementById('connStatus').textContent = '🟢 Verbunden';
       document.getElementById('connStatus').style.color = 'var(--green)';
       document.getElementById('connectHint')?.classList.add('hidden');
@@ -2008,8 +2035,9 @@ function copyOutfitCode() {
       }
     }
   } catch {}
-  // Ping BC
-  setTimeout(() => bcSend({ type: 'PING' }), 800);
+  // Ping BC (immediate + retry every 3s)
+  bcSend({ type: 'PING' }, true);
+  startPingRetry();
 })();
 
 //  SIDEBAR & FAVORITES
