@@ -450,6 +450,47 @@ textarea.outfit-code{width:100%;min-height:200px;background:var(--bg4);border:1p
   text-align:center;padding:48px;color:var(--text3);font-size:.88rem;
 }
 
+
+/* ── CURSE FILTER BAR ── */
+.curse-filter-bar{
+  display:flex;align-items:center;gap:8px;padding:8px 14px;
+  background:var(--bg3);border-bottom:1px solid var(--border);flex-wrap:wrap;
+}
+.curse-search{
+  background:#070712;border:1px solid var(--border2);border-radius:5px;
+  color:var(--text);padding:4px 10px;font-size:.75rem;width:200px;
+}
+.curse-search:focus{outline:none;border-color:var(--purple)}
+.filter-chip{
+  display:inline-flex;align-items:center;gap:4px;padding:3px 9px;
+  border-radius:4px;border:1px solid var(--border2);background:var(--bg2);
+  color:var(--text3);font-size:.7rem;cursor:pointer;user-select:none;
+  transition:all .12s;white-space:nowrap;
+}
+.filter-chip:hover{border-color:var(--purple);color:var(--pl)}
+.filter-chip.on{border-color:var(--purple);background:var(--pd);color:var(--pl)}
+.filter-chip.on.green{border-color:var(--gd);background:#0a2010;color:var(--green)}
+.filter-chip.on.yellow{border-color:var(--yd);background:#1a1000;color:var(--yellow)}
+.filter-sep{width:1px;height:16px;background:var(--border2);flex-shrink:0}
+
+/* Slot filter dropdown */
+.slot-filter-wrap{position:relative}
+.slot-select{
+  background:#070712;border:1px solid var(--border2);border-radius:5px;
+  color:var(--text2);padding:3px 8px;font-size:.7rem;cursor:pointer;
+}
+.slot-select:focus{outline:none;border-color:var(--purple)}
+
+/* ── OUTFIT SEARCH ── */
+.outfit-search-row{
+  display:flex;gap:6px;margin-bottom:10px;align-items:center;
+}
+.outfit-search{
+  flex:1;background:#070712;border:1px solid var(--border2);border-radius:5px;
+  color:var(--text);padding:4px 10px;font-size:.75rem;
+}
+.outfit-search:focus{outline:none;border-color:var(--purple)}
+
 </style>
 </head>
 <body>
@@ -736,6 +777,9 @@ textarea.outfit-code{width:100%;min-height:200px;background:var(--bg4);border:1p
         <span>👗 Outfit Items</span>
         <button class="btn btn-red" style="font-size:.65rem;padding:3px 8px" onclick="clearOutfit()">🗑️ Leeren</button>
       </div>
+      <div class="outfit-search-row">
+        <input class="outfit-search" id="outfitItemSearch" placeholder="🔍 Item suchen..." oninput="renderOutfitList()">
+      </div>
       <div id="outfitList">
         <div class="outfit-empty-hint">Noch keine Items.<br>Konfiguriere ein Item im <strong>Item Manager</strong> und klicke <strong>„👗 Outfit"</strong>.</div>
       </div>
@@ -743,7 +787,7 @@ textarea.outfit-code{width:100%;min-height:200px;background:var(--bg4);border:1p
       <!-- PROFILES -->
       <div style="margin-top:20px">
         <div class="section-hdr2">
-          <span>📁 Profile</span>
+          <div style="display:flex;align-items:center;gap:6px"><span>📁 Profile</span><input class="outfit-search" id="profileSearch" placeholder="🔍 Profil suchen..." oninput="renderProfileList()" style="width:150px;font-size:.69rem;padding:3px 8px"></div>
           <div style="display:flex;gap:6px;align-items:center">
             <input class="profile-name-input" id="profileNameInput" placeholder="Profilname..." maxlength="40" style="font-size:.72rem;padding:3px 7px">
             <button class="btn btn-green" style="font-size:.68rem;padding:4px 9px" onclick="saveProfile()">💾 Speichern</button>
@@ -1847,13 +1891,14 @@ function renderOutfitList() {
     return;
   }
   list.innerHTML = '';
-  OUTFIT.forEach((item, i) => {
+  visItems.forEach(item => {
+    const i = item._origIdx;
     const row = document.createElement('div');
     row.className = 'outfit-item-row';
     row.innerHTML = `
       <div style="flex:1">
         <div class="outfit-item-name">${item.asset}</div>
-        <div class="outfit-item-group">${item.group}${item.lock ? ' | 🔒 '+item.lock : ''}${Object.keys(item.tr).length ? ' | '+item.typeStr : ''}</div>
+        <div class="outfit-item-group">${item.group}${item.lock ? ' | 🔒 '+item.lock : ''}${Object.keys(item.tr||{}).length ? ' | '+item.typeStr : ''}</div>
       </div>
       <div style="display:flex;gap:5px;align-items:center">
         <button class="btn btn-primary" style="padding:3px 8px;font-size:.68rem" onclick="moveOutfitItem(${i},-1)">↑</button>
@@ -1981,7 +2026,8 @@ function deleteProfile(name) {
 
 function renderProfileList() {
   const el = document.getElementById('profileListEl');
-  const keys = Object.keys(PROFILES);
+  const q = (document.getElementById('profileSearch')?.value || '').toLowerCase();
+  const keys = Object.keys(PROFILES).filter(k => !q || k.toLowerCase().includes(q));
   if (!keys.length) {
     el.innerHTML = '<p style="color:var(--text3);font-size:.8rem">Noch keine Profile gespeichert.</p>';
     return;
@@ -2081,7 +2127,9 @@ function _saveCurseComments() {
 function curseScan() {
   const statusEl = document.getElementById('csScanStatus');
   statusEl.textContent = '⏳ Scanne...';
+  // Gleichzeitig Cache-Scan auslösen
   bcSend({ type: 'SCAN_CURSES' });
+  bcSend({ type: 'GET_CACHE' });
 }
 
 // ── Handle SCAN_RESULT ────────────────────────────────
@@ -2092,12 +2140,35 @@ function _handleCurseData(data) {
   CURSE_LSCG       = data.lscgTable   ?? {};
   CURSE_CACHE_LSCG = data.lscgCache   ?? {};
   _updateCurseStats();
+  _populateSlotFilter();
   if (_activeTab === 'curse') renderCurseTab();
   const total = Object.keys(CURSE_DB).length;
   document.getElementById('csScanStatus').textContent = '✅ ' + total + ' Crafts';
   showStatus('✅ Curse-Scan: ' + total + ' Crafts', 'success');
   // persist
   try { localStorage.setItem('BC_CURSE_DB_v1', JSON.stringify({database:CURSE_DB,lscgTable:CURSE_LSCG,lscgCache:CURSE_CACHE_LSCG})); } catch {}
+}
+
+
+// ── CURSE FILTER STATE ───────────────────────────────
+let _curseFilter = 'all';  // 'all' | 'cursed' | 'lscg'
+
+function setCurseFilter(f) {
+  _curseFilter = f;
+  ['all','cursed','lscg'].forEach(k => {
+    const el = document.getElementById('fc-' + k);
+    if (el) el.classList.toggle('on', k === f);
+  });
+  renderCurseTab();
+}
+
+function _populateSlotFilter() {
+  const sel = document.getElementById('slotFilter');
+  if (!sel) return;
+  const current = sel.value;
+  const slots = [...new Set(Object.values(CURSE_DB).map(e => e.Gruppe).filter(Boolean))].sort();
+  sel.innerHTML = '<option value="">Alle Slots</option>' +
+    slots.map(s => '<option value="' + s + '"' + (s === current ? ' selected' : '') + '>' + s + '</option>').join('');
 }
 
 function _updateCurseStats() {
@@ -2112,10 +2183,30 @@ function _updateCurseStats() {
 function renderCurseTab() {
   const body   = document.getElementById('curseBody');
   const empty  = document.getElementById('curseEmpty');
-  const entries = Object.values(CURSE_DB);
+  if (!body) return;
+
+  // ── Apply filters ──
+  const searchTerm = (document.getElementById('curseSearch')?.value || '').toLowerCase();
+  const slotFilter = document.getElementById('slotFilter')?.value || '';
+  const cacheOnly  = document.getElementById('fc-cache')?.checked ?? false;
+
+  let entries = Object.values(CURSE_DB);
+  if (_curseFilter === 'cursed') entries = entries.filter(e => e.IstCursed);
+  if (_curseFilter === 'lscg')   entries = entries.filter(e => e.IstLSCGCurse);
+  if (cacheOnly)   entries = entries.filter(e => e.IstLSCGCurse && e.LSCGAusCache);
+  if (slotFilter)  entries = entries.filter(e => e.Gruppe === slotFilter);
+  if (searchTerm)  entries = entries.filter(e =>
+    e.CraftName?.toLowerCase().includes(searchTerm) ||
+    e.ItemName?.toLowerCase().includes(searchTerm)  ||
+    e.Gruppe?.toLowerCase().includes(searchTerm)    ||
+    e.Besitzer?.Name?.toLowerCase().includes(searchTerm)
+  );
 
   if (!entries.length) {
     empty.style.display = '';
+    empty.querySelector ? (empty.innerHTML = Object.keys(CURSE_DB).length
+      ? '<div style="font-size:1.5rem;margin-bottom:8px">🔍</div>Keine Treffer für die gewählten Filter.'
+      : '<div style="font-size:2rem;margin-bottom:8px">🔮</div>Noch kein Scan. Klicke <strong>Scannen</strong>.') : null;
     body.querySelectorAll('.curse-owner-block').forEach(b => b.remove());
     return;
   }
@@ -2708,6 +2799,24 @@ function selectRoomMember(num) {
       <div class="curse-stat">💾 Cache: <span id="csStat-cache">0</span></div>
     </div>
     <span id="csScanStatus" style="font-size:.7rem;color:var(--text3)"></span>
+  </div>
+  <!-- Filter bar -->
+  <div class="curse-filter-bar" id="curseFilterBar">
+    <input class="curse-search" id="curseSearch" placeholder="🔍 Name, Item, Gruppe..." oninput="renderCurseTab()">
+    <div class="filter-sep"></div>
+    <span class="filter-chip on" id="fc-all"      onclick="setCurseFilter('all')"     >Alle</span>
+    <span class="filter-chip"    id="fc-cursed"   onclick="setCurseFilter('cursed')"  >🔮 Cursed</span>
+    <span class="filter-chip"    id="fc-lscg"     onclick="setCurseFilter('lscg')"   >🧿 LSCG</span>
+    <div class="filter-sep"></div>
+    <label class="filter-chip" id="fc-cache-wrap" title="Nur LSCG-Einträge aus dem Live-Cache">
+      <input type="checkbox" id="fc-cache" style="accent-color:var(--green);width:11px;height:11px" onchange="renderCurseTab()"> Im Cache
+    </label>
+    <div class="filter-sep"></div>
+    <div class="slot-filter-wrap">
+      <select class="slot-select" id="slotFilter" onchange="renderCurseTab()">
+        <option value="">Alle Slots</option>
+      </select>
+    </div>
   </div>
   <div class="curse-body" id="curseBody">
     <div class="curse-empty" id="curseEmpty">
