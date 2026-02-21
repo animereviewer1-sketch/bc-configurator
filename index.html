@@ -521,6 +521,28 @@ textarea.outfit-code{width:100%;min-height:200px;background:var(--bg4);border:1p
 </div>
 
 <script>
+
+// ══════════════════════════════════════════════════════
+//  🪵 DEBUG LOGGER (Popup-Seite)
+// ══════════════════════════════════════════════════════
+const BCK_LOG = (function() {
+  const PREFIX = '[BCK-Popup]';
+  const COLORS = { info:'#93c5fd', ok:'#6ee7b7', warn:'#fbbf24', err:'#fca5a5', msg:'#c4b5fd' };
+  function _log(level, ...args) {
+    const color = COLORS[level] || '#e2e8f0';
+    console.log('%c' + PREFIX + ' [' + level.toUpperCase() + ']', 'color:' + color + ';font-weight:bold', ...args);
+  }
+  return {
+    info:  (...a) => _log('info',  ...a),
+    ok:    (...a) => _log('ok',    ...a),
+    warn:  (...a) => _log('warn',  ...a),
+    err:   (...a) => _log('err',   ...a),
+    msg:   (...a) => _log('msg',   ...a),
+  };
+})();
+
+BCK_LOG.info('Script geladen ✅', 'window.opener vorhanden:', !!window.opener);
+
 // ══════════════════════════════════════════════════════
 //  STATE
 // ══════════════════════════════════════════════════════
@@ -1812,51 +1834,6 @@ function deleteProfileByIdx(idx) {
 
 
   <script>
-
-// ══════════════════════════════════════════════════════
-//  STATE
-// ══════════════════════════════════════════════════════
-let CACHE   = {};
-let CURRENT = null;
-
-let dimMode      = {};
-let dimSelected  = {};
-let dimSubProps  = {};
-let globalPropVals = {};
-let colorIsDefault = {};  // i → true wenn "Default" aktiv
-
-let FAVORITES = new Set();
-let OUTFIT    = [];
-
-let tightnessOn  = false;
-let tightnessVal = 0;
-
-// ── Vibrating state ──────────────────────────────────
-let vibratingMode      = 'Off';
-let vibratingIntensity = -1;
-let vibratingTR        = 0;
-let vibratingEffects   = new Set();
-
-// ── Direct options (BallGag) ─────────────────────────
-let classicOptionSel = 0;
-
-// ── Baseline / Punishment ────────────────────────────
-let baselinePropVals = {};
-
-// ── Outfit Profiles ──────────────────────────────────
-let PROFILES = {};
-try { PROFILES = JSON.parse(localStorage.getItem('BC_PROFILES_v11') || '{}'); } catch {}
-
-
-// ── Init ─────────────────────────────────────────────
-try {
-  const fav = localStorage.getItem('BC_FAVORITES_v9');
-  if (fav) FAVORITES = new Set(JSON.parse(fav));
-} catch {}
-
-// ══════════════════════════════════════════════════════
-//  CACHE
-// ══════════════════════════════════════════════════════
 // ══════════════════════════════════════════════════════
 //  POSTMESSAGE KOMMUNIKATION MIT BC
 // ══════════════════════════════════════════════════════
@@ -1867,22 +1844,31 @@ let _pingInterval = null;
 let _connected = false;
 
 function startPingRetry() {
+  BCK_LOG.info('startPingRetry() – startet 3s-Schleife');
   if (_pingInterval) clearInterval(_pingInterval);
+  let _retryCount = 0;
   _pingInterval = setInterval(function() {
-    if (_connected) { clearInterval(_pingInterval); _pingInterval = null; return; }
+    if (_connected) { clearInterval(_pingInterval); _pingInterval = null; BCK_LOG.ok('Ping-Retry gestoppt (verbunden)'); return; }
+    _retryCount++;
+    BCK_LOG.info('Ping-Retry #' + _retryCount + ' | opener=' + !!window.opener + ' | closed=' + window.opener?.closed);
     bcSend({ type: 'PING' }, true);
   }, 3000);
 }
 
 function bcSend(msg, silent) {
   try {
-    if (!window.opener || window.opener.closed) {
+    const hasOpener = !!window.opener;
+    const openerClosed = window.opener?.closed;
+    if (!hasOpener || openerClosed) {
+      BCK_LOG.err('bcSend FAIL: opener=' + hasOpener + ', closed=' + openerClosed, msg.type);
       if (!silent) showStatus('❌ BC-Fenster nicht verfügbar – Bookmarklet nochmal klicken', 'error');
       return false;
     }
+    if (!silent || msg.type !== 'PING') BCK_LOG.info('bcSend →', msg.type, msg);
     window.opener.postMessage({ app: APP, ...msg }, '*');
     return true;
   } catch(e) {
+    BCK_LOG.err('bcSend EXCEPTION:', e.message, msg);
     if (!silent) showStatus('❌ postMessage fehlgeschlagen: ' + e.message, 'error');
     return false;
   }
@@ -1900,6 +1886,7 @@ window.addEventListener('message', function (ev) {
 
   switch (ev.data.type) {
     case 'PONG': {
+      BCK_LOG.ok('PONG empfangen → Verbunden! ✅');
       _connected = true;
       if (_pingInterval) { clearInterval(_pingInterval); _pingInterval = null; }
       document.getElementById('connStatus').textContent = '🟢 Verbunden';
@@ -1909,6 +1896,7 @@ window.addEventListener('message', function (ev) {
     }
 
     case 'CACHE_DATA': {
+      BCK_LOG.msg('CACHE_DATA empfangen', 'err=' + ev.data.err, 'keys=' + Object.keys(ev.data.cache ?? {}).length);
       document.getElementById('loadingSpinner').classList.add('hidden');
       document.getElementById('loadCacheBtn').disabled = false;
       if (ev.data.err) { showStatus('❌ ' + ev.data.err, 'error'); return; }
@@ -1947,21 +1935,27 @@ window.addEventListener('message', function (ev) {
       break;
 
     case 'EXEC_OK':
+      BCK_LOG.ok('EXEC_OK ✅');
       showStatus('✅ Ausgeführt!', 'success');
       break;
 
     case 'EXEC_ERR':
+      BCK_LOG.err('EXEC_ERR ❌', ev.data.msg);
       showStatus('❌ Fehler: ' + ev.data.msg, 'error');
       break;
   }
 });
 
 function loadCacheFromBC() {
+  BCK_LOG.info('loadCacheFromBC() aufgerufen');
+  BCK_LOG.info('window.opener vorhanden:', !!window.opener, '| geschlossen:', window.opener?.closed);
   const btn = document.getElementById('loadCacheBtn');
   btn.disabled = true;
   document.getElementById('loadingSpinner').classList.remove('hidden');
   showStatus('⏳ Verbinde mit Spiel…', 'info');
-  if (!bcSend({ type: 'GET_CACHE' })) {
+  const sent = bcSend({ type: 'GET_CACHE' });
+  BCK_LOG.info('GET_CACHE gesendet:', sent);
+  if (!sent) {
     document.getElementById('loadingSpinner').classList.add('hidden');
     btn.disabled = false;
   }
@@ -2036,7 +2030,10 @@ function copyOutfitCode() {
     }
   } catch {}
   // Ping BC (immediate + retry every 3s)
-  bcSend({ type: 'PING' }, true);
+  BCK_LOG.info('Auto-Init: sende ersten PING');
+  BCK_LOG.info('window.opener:', !!window.opener, '| URL:', window.location.href);
+  const firstPing = bcSend({ type: 'PING' }, true);
+  BCK_LOG.info('Erster PING gesendet:', firstPing);
   startPingRetry();
 })();
 

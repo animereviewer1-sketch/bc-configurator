@@ -4,6 +4,23 @@
 (function () {
   'use strict';
 
+// ── 🪵 DEBUG LOGGER (BC-Seite) ─────────────────────────────────────
+  const BCK = (function() {
+    const P = '[BCK-BC]';
+    const C = { info:'#93c5fd', ok:'#6ee7b7', warn:'#fbbf24', err:'#fca5a5', msg:'#c4b5fd' };
+    function _l(lv, ...a) {
+      console.log('%c' + P + ' [' + lv.toUpperCase() + ']', 'color:' + C[lv] + ';font-weight:bold', ...a);
+    }
+    return { info:(...a)=>_l('info',...a), ok:(...a)=>_l('ok',...a),
+             warn:(...a)=>_l('warn',...a), err:(...a)=>_l('err',...a), msg:(...a)=>_l('msg',...a) };
+  })();
+
+  BCK.info('Loader gestartet ✅');
+  BCK.info('Asset vorhanden:', typeof Asset !== "undefined", '| Länge:', typeof Asset !== "undefined" ? Asset.length : 'N/A');
+  BCK.info('AssetFemale3DCGExtended:', typeof AssetFemale3DCGExtended !== "undefined");
+  BCK.info('Listener bereits aktiv:', !!window.__BCK_LISTENER__);
+  BCK.info('Popup-Referenz vorhanden:', !!window.__BCK_WIN__, '| geschlossen:', window.__BCK_WIN__?.closed);
+
   const APP      = 'BCKonfigurator';
   const POPUP_W  = 1380;
   const POPUP_H  = 900;
@@ -255,7 +272,9 @@
   const extFemale = typeof AssetFemale3DCGExtended !== "undefined" ? AssetFemale3DCGExtended : {};
   const extMale   = typeof AssetMale3DCGExtended   !== "undefined" ? AssetMale3DCGExtended   : {};
 
+  BCK.info('buildBCCache() gestartet | Asset-Länge:', Array.isArray(Asset) ? Asset.length : 'KEIN ARRAY');
   if (!Array.isArray(Asset) || Asset.length === 0) {
+    BCK.err('Asset-Array fehlt oder leer! Asset-Typ:', typeof Asset);
     console.error("❌ Asset-Array nicht gefunden!");
     return;
   }
@@ -358,6 +377,7 @@
     };
     total++;
   }
+  BCK.ok('buildBCCache() fertig: ' + total + ' Items | ' + modularCnt + ' modular | ' + vibratingCnt + ' vibrating | ' + classicOptCnt + ' classic');
   return cache;
   }
 
@@ -368,16 +388,27 @@
     window.addEventListener('message', function (ev) {
       if (!ev.data || ev.data.app !== APP) return;
       const src = ev.source;
+      BCK.msg('postMessage empfangen ←', ev.data.type, '| origin:', ev.origin);
 
       switch (ev.data.type) {
         case 'PING':
+          BCK.info('PING empfangen → sende PONG');
           src.postMessage({ app: APP, type: 'PONG' }, '*');
           break;
 
         case 'GET_CACHE': {
+          BCK.info('GET_CACHE empfangen – baue Cache...');
           let cache = {}, err = null;
-          try { cache = buildBCCache(); }
-          catch (ex) { err = ex.message; }
+          try {
+            cache = buildBCCache();
+            const groupCount = Object.keys(cache).length;
+            const itemCount = Object.values(cache).reduce((n,g)=>n+Object.keys(g).length,0);
+            BCK.ok('Cache gebaut: ' + groupCount + ' Gruppen, ' + itemCount + ' Items');
+          } catch (ex) {
+            err = ex.message;
+            BCK.err('buildBCCache() FEHLER:', ex.message, ex.stack ?? '');
+          }
+          BCK.info('Sende CACHE_DATA → Popup | err:', err ?? 'keiner');
           src.postMessage({ app: APP, type: 'CACHE_DATA', cache, err }, '*');
           break;
         }
@@ -397,11 +428,14 @@
         }
 
         case 'EXEC':
+          BCK.info('EXEC empfangen | code-Länge:', ev.data.code?.length ?? 0, 'chars');
           try {
             // eslint-disable-next-line no-new-func
             new Function(ev.data.code)();
+            BCK.ok('EXEC erfolgreich ✅');
             src.postMessage({ app: APP, type: 'EXEC_OK' }, '*');
           } catch (ex) {
+            BCK.err('EXEC FEHLER ❌:', ex.message);
             src.postMessage({ app: APP, type: 'EXEC_ERR', msg: ex.message }, '*');
           }
           break;
@@ -428,10 +462,12 @@
   );
 
   if (!win) {
+    BCK.err('Popup blockiert! Popup-Blocker aktiv?');
     alert('❌ Popup blockiert!\nBitte Popup-Blocker für diese Seite deaktivieren und nochmal klicken.');
     return;
   }
 
   window.__BCK_WIN__ = win;
+  BCK.ok('Popup geöffnet ✅ | URL: ' + POPUP_URL);
   console.log('[BC-Konfigurator] Popup geöffnet ✅');
 })();
