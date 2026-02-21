@@ -321,6 +321,8 @@ textarea.outfit-code{width:100%;min-height:200px;background:var(--bg4);border:1p
 .outfit-chip.sel-out { border-color: var(--purple); color: var(--pl); background: var(--pd); }
 .outfit-chip .onum   { font-size: .6rem; color: var(--text3); font-family: Consolas,monospace; }
 .outfit-chip.self .onum { color: #4ade80; }
+
+.room-chip.grace { opacity: 0.55; border-style: dashed; }
 </style>
 </head>
 <body>
@@ -2039,9 +2041,15 @@ function executeOutfitCode() {
 //  RAUM-SCANNER
 // ══════════════════════════════════════════════════════
 let _roomScanInterval = null;
-let _myMemberNumber   = null;
-let _selectedMemberNum = null;  // aktuell im Raum-Panel ausgewählter Spieler
-let _outfitTargetNum   = null;  // Ziel im Outfit-Builder (null = self)
+let _myMemberNumber    = null;
+let _selectedMemberNum = null;  // Konfigurator-Ziel
+let _outfitTargetNum   = null;  // Outfit-Ziel (null = selbst)
+let _lastRoomMembers   = [];    // letzter bekannter Raum-Snapshot
+
+// Grace-Period: Spieler muss GRACE_NEEDED aufeinanderfolgende Scans fehlen
+// bevor er als "verlassen" gilt. BC leert ChatRoomCharacter kurz beim Sync.
+const GRACE_NEEDED = 3;
+const _missCount   = {};  // memberNum → aufeinanderfolgende Fehlscans
 
 function scanRoom() {
   if (!_connected) return;
@@ -2054,72 +2062,93 @@ function startRoomScan() {
   if (_roomScanInterval) clearInterval(_roomScanInterval);
   _roomScanInterval = setInterval(function() {
     if (_connected) scanRoom();
-  }, 8000);   // alle 8 Sekunden
-  console.log('[BCK-Popup] Raum-Scanner gestartet (alle 8s)');
+  }, 5000);
+  console.log('[BCK-Popup] Raum-Scanner gestartet (alle 5s)');
 }
 
 function stopRoomScan() {
   if (_roomScanInterval) { clearInterval(_roomScanInterval); _roomScanInterval = null; }
 }
 
-// Letzter bekannter Raum-Snapshot
-let _lastRoomMembers = [];  // [{num, name}, ...]
-
 function renderRoomMembers(data) {
   const container = document.getElementById('roomMembers');
-  const btn = document.getElementById('roomRefreshBtn');
+  const btn       = document.getElementById('roomRefreshBtn');
   if (!container) return;
   if (btn) { btn.textContent = '🔄'; btn.classList.remove('room-scanning'); }
 
   _myMemberNumber = data.memberNumber;
   const freshMembers = data.members ?? [];
+  const freshNums    = new Set(freshMembers.map(m => m.num));
 
-  // ── Persistenz: prüfe ob bisher ausgewählte Spieler noch da sind ──────────
-  const freshNums = new Set(freshMembers.map(m => m.num));
+  // ── Grace-Period-Logik ────────────────────────────────────────────────────
+  // Frische Spieler: Miss-Zähler auf 0 zurücksetzen
+  for (const m of freshMembers) _missCount[m.num] = 0;
 
-  // Mergeliste: frische Daten speichern
-  _lastRoomMembers = freshMembers;
+  // Vermisste Spieler: Zähler hochzählen, erst nach GRACE_NEEDED resetten
+  const tracked = new Set([
+    ...(_selectedMemberNum ? [_selectedMemberNum] : []),
+    ...(_outfitTargetNum   ? [_outfitTargetNum]   : []),
+  ]);
+  for (const num of tracked) {
+    if (!freshNums.has(num)) {
+      _missCount[num] = (_missCount[num] || 0) + 1;
+      console.log('[BCK-Popup] Spieler #' + num + ' fehlt im Scan (' + _missCount[num] + '/' + GRACE_NEEDED + ')');
+    }
+  }
 
-  // Haupt-Ziel (Konfigurator): wenn ausgewählter Spieler nicht mehr da → reset
-  if (_selectedMemberNum && !freshNums.has(_selectedMemberNum)) {
-    console.log('[BCK-Popup] Spieler #' + _selectedMemberNum + ' hat Raum verlassen → reset');
+  // Konfigurator-Ziel zurücksetzen wenn GRACE_NEEDED überschritten
+  if (_selectedMemberNum && (_missCount[_selectedMemberNum] || 0) >= GRACE_NEEDED) {
+    console.log('[BCK-Popup] Spieler #' + _selectedMemberNum + ' hat Raum verlassen → reset Konfig-Ziel');
+    delete _missCount[_selectedMemberNum];
     _selectedMemberNum = null;
     const modeEl = document.getElementById('targetMode');
     if (modeEl) { modeEl.value = 'self'; onTargetChange(); }
   }
 
-  // Outfit-Ziel: wenn ausgewählter Spieler nicht mehr da → reset
-  if (_outfitTargetNum && !freshNums.has(_outfitTargetNum)) {
+  // Outfit-Ziel zurücksetzen wenn GRACE_NEEDED überschritten
+  if (_outfitTargetNum && (_missCount[_outfitTargetNum] || 0) >= GRACE_NEEDED) {
     console.log('[BCK-Popup] Outfit-Ziel #' + _outfitTargetNum + ' hat Raum verlassen → reset');
+    delete _missCount[_outfitTargetNum];
     _outfitTargetNum = null;
   }
 
+  // ── Snapshot: frische Daten PLUS bekannte aber kurz fehlende speichern ────
+  // Spieler die noch innerhalb der Grace-Period sind trotzdem in der Liste lassen
+  const graceMembers = _lastRoomMembers.filter(m =>
+    !freshNums.has(m.num) &&
+    m.num !== _myMemberNumber &&
+    (_missCount[m.num] || 0) < GRACE_NEEDED
+  );
+  _lastRoomMembers = [...freshMembers, ...graceMembers];
+
   // ── Raum-Panel rendern ────────────────────────────────────────────────────
-  if (!freshMembers.length) {
+  const displayList = _lastRoomMembers;
+  if (!displayList.length) {
     container.innerHTML = '<span class="room-empty">– Niemand im Raum –</span>';
   } else {
-    container.innerHTML = freshMembers.map(m => {
-      const isSelf = m.num === data.memberNumber;
-      const isSel  = m.num === _selectedMemberNum;
-      const cls    = 'room-chip' + (isSelf ? ' self' : '') + (isSel && !isSelf ? ' selected' : '');
-      const click  = isSelf ? '' : 'onclick="selectRoomMember(' + m.num + ')"';
-      return '<span class="' + cls + '" ' + click + ' title="' + (isSelf ? 'Du selbst' : 'Als Ziel setzen') + '">'
-        + (isSelf ? '👤' : '👥') + ' ' + escHtml(m.name)
+    container.innerHTML = displayList.map(m => {
+      const isSelf  = m.num === _myMemberNumber;
+      const isSel   = m.num === _selectedMemberNum;
+      const inGrace = !freshNums.has(m.num) && !isSelf;
+      const cls = 'room-chip' + (isSelf ? ' self' : '') + (isSel ? ' selected' : '') + (inGrace ? ' grace' : '');
+      const click = isSelf ? '' : 'onclick="selectRoomMember(' + m.num + ')"';
+      const title = isSelf ? 'Du selbst' : (inGrace ? 'Sync... (kurz nicht sichtbar)' : 'Als Ziel setzen');
+      return '<span class="' + cls + '" ' + click + ' title="' + title + '">'
+        + (isSelf ? '👤' : (inGrace ? '⏳' : '👥')) + ' ' + escHtml(m.name)
         + ' <span class="room-num">#' + m.num + '</span></span>';
     }).join('');
   }
 
-  // ── Konfigurator-Dropdown aktualisieren (Auswahl behalten wenn noch da) ──
+  // ── Konfigurator-Dropdown aktualisieren ───────────────────────────────────
   const sel = document.getElementById('targetMember');
   if (sel) {
-    const others = freshMembers.filter(m => m.num !== data.memberNumber);
+    const others = _lastRoomMembers.filter(m => m.num !== _myMemberNumber);
     sel.innerHTML = '<option value="">– Auswählen –</option>' +
       others.map(m => '<option value="' + m.num + '"' + (m.num === _selectedMemberNum ? ' selected' : '') + '>' + escHtml(m.name) + ' #' + m.num + '</option>').join('');
-    // Wert explizit setzen damit generate() den richtigen Wert liest
-    if (_selectedMemberNum && freshNums.has(_selectedMemberNum)) sel.value = _selectedMemberNum;
+    if (_selectedMemberNum) sel.value = _selectedMemberNum;
   }
 
-  // ── Outfit-Modal-Chips aktualisieren ──────────────────────────────────────
+  // ── Outfit-Chips aktualisieren ────────────────────────────────────────────
   renderOutfitMemberChips();
 }
 
