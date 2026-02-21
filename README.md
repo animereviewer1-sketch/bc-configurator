@@ -1,137 +1,45 @@
-# BC Universal Configurator Bookmarklet v13
+# BC Konfigurator
 
-Ein leistungsstarkes Bookmarklet für Bondage Club, das Item-Konfiguration und Outfit-Erstellung mit direkter Code-Ausführung ermöglicht.
+Ein Bondage Club Outfit-Konfigurator als GitHub Pages App.
+Wird per Bookmarklet gestartet und kommuniziert direkt mit dem Spiel.
 
-## ✨ Features
+## Setup
 
-- 🎯 **Automatische Spieler-Erkennung**: Findet alle Spieler im aktuellen Raum
-- ⚡ **Direkte Code-Ausführung**: Kein Kopieren/Einfügen mehr nötig
-- 👥 **Zielauswahl**: Wende Items auf dich selbst oder andere Spieler an
-- 🎨 **Vollständige Item-Konfiguration**: Farben, Module, Optionen, Schlösser
-- 📦 **Outfit-Management**: Erstelle komplexe Outfits mit mehreren Items
-- 🪟 **Separates Fenster**: Übersichtliche UI in eigenem Fenster
+### 1. GitHub Pages aktivieren
+1. Dieses Repository forken oder neu erstellen
+2. `loader.js` öffnen → `GITHUB_USERNAME` durch deinen GitHub-Benutzernamen ersetzen
+3. Settings → Pages → Branch: `main` / `root`
+4. Warten bis Pages aktiv ist (`https://DEINNAME.github.io/bc-konfigurator/`)
 
-## 📦 Installation
+### 2. Bookmarklet erstellen
+Ersetze `GITHUB_USERNAME` in der URL unten, dann als Browser-Lesezeichen speichern:
 
-### Methode 1: GitHub Pages (Empfohlen)
+```
+javascript:(function(){let s=document.createElement('script');s.src='https://GITHUB_USERNAME.github.io/bc-konfigurator/loader.js?_='+Date.now();document.head.appendChild(s);})();
+```
 
-1. Besuche: `https://DEIN-GITHUB-USERNAME.github.io/bc-universal-configurator/`
-2. Ziehe den Bookmarklet-Button in deine Lesezeichen-Leiste
-3. Fertig!
+**Tipp:** Den Code oben in die Adressleiste eines neuen Lesezeichens einfügen (kein `http://` davor).
 
-### Methode 2: Manuelle Installation
+### 3. Verwenden
+1. Bondage Club öffnen und einloggen
+2. Bookmarklet klicken → Popup öffnet sich
+3. **„⚡ Aus Spiel laden"** klicken → alle Items werden direkt aus dem Spiel gelesen
+4. Item auswählen, konfigurieren
+5. **„▶ Direkt ausführen"** → Befehl wird sofort im Spiel ausgeführt
 
-1. Erstelle ein neues Lesezeichen in deinem Browser
-2. Kopiere den Inhalt aus `bookmarklet.txt`
-3. Füge es als URL des Lesezeichens ein
-4. Speichern!
+## Funktionen
 
-## 🚀 Verwendung
+- 🔗 **Direkte BC-Integration** – kein Kopieren/Einfügen nötig
+- ⚡ **Live-Ausführung** – Befehle werden direkt ins Spiel geschickt
+- 🧩 **Modular Archetype** – ModularChastityBelt, FuturisticPanelGag etc.
+- 🔊 **Vibrating Archetype** – VibratingEgg, FuturisticVibrator etc.
+- 🎛️ **Classic Options** – BallGag, HarnessBallGag etc.
+- 🎨 **Farb-Editor** – echte Asset-Farben oder eigene Wahl
+- 🔒 **Alle Schlösser** inkl. Timer, Kombi, Passwort, BCX
+- 👗 **Outfit Builder** – mehrere Items auf einmal anlegen
+- 📁 **Profile** – Outfits speichern und laden
 
-1. Öffne Bondage Club und gehe in einen Raum
-2. Klicke auf das Bookmarklet in deiner Lesezeichen-Leiste
-3. Ein neues Fenster öffnet sich mit dem Konfigurator
-4. Wähle ein Ziel (Spieler im Raum)
-5. Wähle Items aus der Sidebar
-6. Konfiguriere und füge sie zum Outfit hinzu
-7. Klicke auf "Code generieren & ausführen"
-8. Der Code wird automatisch im Spiel ausgeführt!
+## Datenschutz
 
-## 🎯 Funktionen im Detail
-
-### Zielauswahl
-- **Du**: Wendet Items auf deinen eigenen Charakter an
-- **Andere Spieler**: Wendet Items auf andere Spieler im Raum an (wenn erlaubt)
-- **Automatische Erkennung**: Spieler werden automatisch aus dem Raum geladen
-- **Aktualisieren**: Klicke auf "🔄 Aktualisieren" um die Spielerliste zu erneuern
-
-### Item-Konfiguration
-- **Archetype-Unterstützung**: Modular, Vibrating, Classic
-- **Farbauswahl**: Mehrschichtige Farbkonfiguration
-- **Module & Optionen**: Vollständige Konfiguration aller Item-Eigenschaften
-- **Schlösser**: Verschiedene Schlosstypen mit Parametern
-
-### Outfit-Erstellung
-- **Multi-Target**: Ein Outfit kann Items für mehrere Spieler enthalten
-- **Übersichtlich**: Zeigt Ziel für jedes Item an
-- **Bearbeiten**: Items können jederzeit entfernt werden
-- **Direkte Ausführung**: Kein manuelles Kopieren mehr nötig
-
-## 🔧 Technische Details
-
-- **Cache-Generierung**: Scannt alle BC Items beim Start (~500KB Cache)
-- **Popup-Kommunikation**: Verwendet `postMessage` für sichere Kommunikation
-- **Code-Ausführung**: Führt Code im BC-Kontext aus (eval in BC-Fenster)
-- **Spieler-API**: Greift auf `ChatRoomCharacter` zu
-
-## ⚠️ Wichtige Hinweise
-
-1. **Popup-Blocker**: Stelle sicher, dass Popups für BC erlaubt sind
-2. **Berechtigungen**: Du kannst nur auf Spieler zugreifen, die dir Berechtigungen gegeben haben
-3. **Sicherheit**: Der Code wird in deinem eigenen BC-Kontext ausgeführt
-4. **Updates**: Cache wird bei jedem Start neu generiert
-
-## 🐛 Fehlerbehebung
-
-**Popup öffnet sich nicht:**
-- Überprüfe Popup-Blocker-Einstellungen
-- Erlaube Popups für die BC-Domain
-
-**Spieler werden nicht gefunden:**
-- Stelle sicher, dass du in einem Raum bist
-- Klicke auf "🔄 Aktualisieren"
-- Lade BC neu falls nötig
-
-**Code wird nicht ausgeführt:**
-- Überprüfe die Browser-Konsole (F12) auf Fehler
-- Stelle sicher, dass BC vollständig geladen ist
-- Versuche es mit einem einfacheren Outfit
-
-**Items erscheinen nicht:**
-- Überprüfe deine Berechtigungen für den Zielspieler
-- Stelle sicher, dass die Items für den Body-Typ verfügbar sind
-- Prüfe ob Items durch andere Items blockiert werden
-
-## 📝 Changelog
-
-### v13 (2024)
-- ✅ Kombiniert Dump-Script + UI
-- ✅ Automatische Spieler-Erkennung
-- ✅ Direkte Code-Ausführung
-- ✅ Zielauswahl bei jedem Item
-- ✅ Separates Konfigurator-Fenster
-- ✅ Echtzeit-Kommunikation zwischen Fenstern
-
-### v12
-- Outfit-Profile
-- Verbesserte Farbauswahl
-- LSCG-Unterstützung
-
-### v11
-- Vollständiger Cache mit allen Item-Eigenschaften
-- Modular/Vibrating/Classic Archetype-Unterstützung
-
-## 📄 Lizenz
-
-Dieses Projekt ist Open Source. Nutze es frei für deine Zwecke.
-
-## 🤝 Beitragen
-
-Gefunden einen Bug? Hast eine Idee für ein Feature?
-- Öffne ein Issue auf GitHub
-- Erstelle einen Pull Request
-- Teile deine Erfahrungen!
-
-## ⚡ Support
-
-Bei Fragen oder Problemen:
-1. Überprüfe die Fehlerbehebung oben
-2. Schau in die Browser-Konsole (F12)
-3. Öffne ein Issue auf GitHub mit Details:
-   - Browser & Version
-   - Fehlermeldung
-   - Schritte zum Reproduzieren
-
----
-
-**Viel Spaß beim Konfigurieren! 🎮**
+Alle Daten bleiben lokal (localStorage). Es werden keine Daten an externe Server gesendet.
+Die Kommunikation erfolgt ausschließlich via `window.postMessage` zwischen BC-Tab und Popup.
