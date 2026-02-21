@@ -246,7 +246,61 @@ textarea.outfit-code{width:100%;min-height:200px;background:var(--bg4);border:1p
 }
 #connectHint h2 { color: var(--text1); }
 
-  </style>
+  
+/* ── RAUM-SPIELER PANEL ── */
+.room-panel {
+  background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+  padding: 6px 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 0.73rem;
+  min-height: 32px;
+}
+.room-label {
+  color: var(--text3);
+  flex-shrink: 0;
+  font-size: 0.68rem;
+  white-space: nowrap;
+}
+.room-members {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  flex: 1;
+}
+.room-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--bg3);
+  border: 1px solid var(--border2);
+  border-radius: 4px;
+  padding: 2px 7px;
+  cursor: pointer;
+  transition: border-color 0.12s, background 0.12s;
+  font-size: 0.72rem;
+  color: var(--text2);
+  white-space: nowrap;
+  user-select: none;
+}
+.room-chip:hover { border-color: var(--purple); color: var(--pl); background: var(--pd); }
+.room-chip.self { border-color: var(--gd); color: var(--green); background: #0a2010; cursor: default; }
+.room-chip.selected { border-color: var(--purple); color: var(--pl); background: var(--pd); }
+.room-num { font-size: 0.6rem; color: var(--text3); font-family: Consolas, monospace; }
+.room-chip.self .room-num { color: #4ade80; }
+.room-refresh-btn {
+  background: none; border: 1px solid var(--border2); border-radius: 4px;
+  color: var(--text3); font-size: 0.68rem; padding: 2px 7px; cursor: pointer;
+  flex-shrink: 0; transition: border-color 0.12s, color 0.12s;
+}
+.room-refresh-btn:hover { border-color: var(--purple); color: var(--pl); }
+.room-empty { color: var(--text3); font-style: italic; font-size: 0.7rem; }
+@keyframes roomPulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+.room-scanning { animation: roomPulse 1s infinite; }
+</style>
 </head>
 <body>
 
@@ -258,10 +312,20 @@ textarea.outfit-code{width:100%;min-height:200px;background:var(--bg4);border:1p
   <span class="tbadge" id="playerInfo" style="display:none"></span>
   <span class="tbadge" id="cacheInfo">Kein Cache</span>
   <button class="btn btn-green" id="loadCacheBtn" onclick="loadCacheFromBC()">⚡ Aus Spiel laden</button>
+  <button class="btn btn-primary" id="reconnectBtn" onclick="manualReconnect()" title="Verbindung neu versuchen">🔄 Verbinden</button>
   <button class="btn btn-orange hidden" id="outfitBtn" onclick="openOutfit()">👗 Outfit Builder</button>
   <button class="btn btn-primary hidden" id="profileBtn" onclick="openProfiles()">📁 Profile</button>
   <button class="btn btn-red hidden" id="clearBtn" onclick="clearCache()">🗑️ Löschen</button>
   <div id="statusMsg" class="status-msg hidden"></div>
+</div>
+
+<!-- RAUM-SPIELER -->
+<div class="room-panel" id="roomPanel">
+  <span class="room-label">👥 Im Raum:</span>
+  <div class="room-members" id="roomMembers">
+    <span class="room-empty" id="roomEmpty">– noch nicht verbunden –</span>
+  </div>
+  <button class="room-refresh-btn" id="roomRefreshBtn" onclick="scanRoom()" title="Raum neu scannen">🔄</button>
 </div>
 
 <!-- LAYOUT -->
@@ -1797,6 +1861,9 @@ function startPingRetry() {
 
 function manualReconnect() {
   _connected = false;
+  stopRoomScan();
+  document.getElementById('connStatus').textContent = '\U0001f534 Nicht verbunden';
+  document.getElementById('connStatus').style.color = 'var(--red)';
   console.log('[BCK-Popup] manualReconnect()');
   bcSend({ type: 'PING' });
   startPingRetry();
@@ -1828,11 +1895,16 @@ window.addEventListener('message', function(ev) {
 
     case 'PONG':
       console.log('[BCK-Popup] PONG \u2705 Verbunden!');
-      _connected = true;
-      if (_pingInterval) { clearInterval(_pingInterval); _pingInterval = null; }
-      document.getElementById('connStatus').textContent = '\U0001f7e2 Verbunden';
-      document.getElementById('connStatus').style.color = 'var(--green)';
-      document.getElementById('connectHint')?.classList.add('hidden');
+      if (!_connected) {
+        _connected = true;
+        if (_pingInterval) { clearInterval(_pingInterval); _pingInterval = null; }
+        document.getElementById('connStatus').textContent = '\U0001f7e2 Verbunden';
+        document.getElementById('connStatus').style.color = 'var(--green)';
+        document.getElementById('connectHint')?.classList.add('hidden');
+        // Sofort Raum scannen + Interval starten
+        bcSend({ type: 'GET_PLAYER' }, true);
+        startRoomScan();
+      }
       break;
 
     case 'CACHE_DATA':
@@ -1861,14 +1933,9 @@ window.addEventListener('message', function(ev) {
       if (!ev.data.err) {
         const _pi = document.getElementById('playerInfo');
         if (_pi) { _pi.textContent = '\U0001f464 ' + ev.data.name + ' #' + ev.data.memberNumber; _pi.style.display = ''; }
-        const _sel = document.getElementById('targetMember');
-        if (_sel && ev.data.members?.length) {
-          const _others = ev.data.members.filter(m => m.num !== ev.data.memberNumber);
-          if (_others.length) {
-            _sel.innerHTML = '<option value="">\u2013 Ausw\u00e4hlen \u2013</option>' +
-              _others.map(m => '<option value="' + m.num + '">' + m.name + ' #' + m.num + '</option>').join('');
-          }
-        }
+        renderRoomMembers(ev.data);
+      } else {
+        console.warn('[BCK-Popup] PLAYER_DATA Fehler:', ev.data.err);
       }
       break;
 
@@ -1927,11 +1994,7 @@ function executeCode() {
   bcSend({ type: 'EXEC', code });
 }
 
-function copyCode() {
-  const ta = document.getElementById('codeOut');
-  ta.select(); document.execCommand('copy');
-  showStatus('\U0001f4cb Code kopiert!', 'info');
-}
+// copyCode: see above
 
 function executeOutfitCode() {
   const code = document.getElementById('outfitCode').value.trim();
@@ -1940,10 +2003,88 @@ function executeOutfitCode() {
   bcSend({ type: 'EXEC', code });
 }
 
-function copyOutfitCode() {
-  const ta = document.getElementById('outfitCode');
-  ta.select(); document.execCommand('copy');
-  showStatus('\U0001f4cb Outfit-Code kopiert!', 'info');
+// copyOutfitCode: see above
+
+
+// ══════════════════════════════════════════════════════
+//  RAUM-SCANNER
+// ══════════════════════════════════════════════════════
+let _roomScanInterval = null;
+let _myMemberNumber   = null;
+let _selectedMemberNum = null;  // aktuell im Raum-Panel ausgewählter Spieler
+
+function scanRoom() {
+  if (!_connected) return;
+  const btn = document.getElementById('roomRefreshBtn');
+  if (btn) { btn.textContent = '⏳'; btn.classList.add('room-scanning'); }
+  bcSend({ type: 'GET_PLAYER' }, true);
+}
+
+function startRoomScan() {
+  if (_roomScanInterval) clearInterval(_roomScanInterval);
+  _roomScanInterval = setInterval(function() {
+    if (_connected) scanRoom();
+  }, 8000);   // alle 8 Sekunden
+  console.log('[BCK-Popup] Raum-Scanner gestartet (alle 8s)');
+}
+
+function stopRoomScan() {
+  if (_roomScanInterval) { clearInterval(_roomScanInterval); _roomScanInterval = null; }
+}
+
+function renderRoomMembers(data) {
+  const container = document.getElementById('roomMembers');
+  const btn = document.getElementById('roomRefreshBtn');
+  if (!container) return;
+  if (btn) { btn.textContent = '🔄'; btn.classList.remove('room-scanning'); }
+
+  _myMemberNumber = data.memberNumber;
+  const members   = data.members ?? [];
+
+  if (!members.length) {
+    container.innerHTML = '<span class="room-empty">– Niemand im Raum –</span>';
+    return;
+  }
+
+  container.innerHTML = members.map(m => {
+    const isSelf = m.num === data.memberNumber;
+    const isSel  = m.num === _selectedMemberNum;
+    const cls    = 'room-chip' + (isSelf ? ' self' : '') + (isSel && !isSelf ? ' selected' : '');
+    const click  = isSelf ? '' : `onclick="selectRoomMember(${m.num})"`;
+    return `<span class="${cls}" ${click} title="${isSelf ? 'Du selbst' : 'Als Ziel setzen'}">
+      ${isSelf ? '👤' : '👥'} ${escHtml(m.name)}
+      <span class="room-num">#${m.num}</span>
+    </span>`;
+  }).join('');
+
+  // Target-Dropdown synchronisieren
+  const sel = document.getElementById('targetMember');
+  if (sel) {
+    const others = members.filter(m => m.num !== data.memberNumber);
+    sel.innerHTML = '<option value="">– Auswählen –</option>' +
+      others.map(m => `<option value="${m.num}" ${m.num === _selectedMemberNum ? 'selected' : ''}>${escHtml(m.name)} #${m.num}</option>`).join('');
+  }
+}
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function selectRoomMember(num) {
+  _selectedMemberNum = num;
+  // Ziel-Dropdown auf "Anderer Spieler" setzen
+  const modeEl = document.getElementById('targetMode');
+  if (modeEl) { modeEl.value = 'other'; onTargetChange(); }
+  const sel = document.getElementById('targetMember');
+  if (sel) { sel.value = num; }
+  const direct = document.getElementById('targetMemberDirect');
+  if (direct) { direct.value = num; }
+  // Chips neu rendern (selected-Klasse)
+  document.querySelectorAll('.room-chip').forEach(chip => {
+    chip.classList.toggle('selected', parseInt(chip.querySelector('.room-num')?.textContent?.replace('#','')) === num);
+  });
+  if (typeof generate === 'function') generate();
+  console.log('[BCK-Popup] Ziel gesetzt: #' + num);
 }
 
 // ── Auto-load + initial PING ──────────────────────────
