@@ -7,15 +7,15 @@ Wird per Bookmarklet gestartet und kommuniziert direkt mit dem Spiel.
 
 ### 1. GitHub Pages aktivieren
 1. Dieses Repository forken oder neu erstellen
-2. `loader.js` öffnen → `GITHUB_USERNAME` durch deinen GitHub-Benutzernamen ersetzen
+2. `loader.js` öffnen → `animereviewer1-sketch` durch deinen GitHub-Benutzernamen ersetzen
 3. Settings → Pages → Branch: `main` / `root`
-4. Warten bis Pages aktiv ist (`https://DEINNAME.github.io/bc-konfigurator/`)
+4. Warten bis Pages aktiv ist (`https://animereviewer1-sketch.github.io/bc-configurator/`)
 
 ### 2. Bookmarklet erstellen
-Ersetze `GITHUB_USERNAME` in der URL unten, dann als Browser-Lesezeichen speichern:
+Ersetze `animereviewer1-sketch` in der URL unten, dann als Browser-Lesezeichen speichern:
 
 ```
-javascript:(function(){let s=document.createElement('script');s.src='https://GITHUB_USERNAME.github.io/bc-konfigurator/loader.js?_='+Date.now();document.head.appendChild(s);})();
+javascript:(function(){let s=document.createElement('script');s.src='https://animereviewer1-sketch.github.io/bc-configurator/loader.js?_='+Date.now();document.head.appendChild(s);})();
 ```
 
 **Tipp:** Den Code oben in die Adressleiste eines neuen Lesezeichens einfügen (kein `http://` davor).

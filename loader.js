@@ -7,7 +7,7 @@
   const APP      = 'BCKonfigurator';
   const POPUP_W  = 1380;
   const POPUP_H  = 900;
-  const POPUP_URL = 'https://GITHUB_USERNAME.github.io/bc-konfigurator/';
+  const POPUP_URL = 'https://animereviewer1-sketch.github.io/bc-configurator/';
 
   // ── Cache-Builder ─────────────────────────────────────
   function buildBCCache() {
