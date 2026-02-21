@@ -300,6 +300,27 @@ textarea.outfit-code{width:100%;min-height:200px;background:var(--bg4);border:1p
 .room-empty { color: var(--text3); font-style: italic; font-size: 0.7rem; }
 @keyframes roomPulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
 .room-scanning { animation: roomPulse 1s infinite; }
+
+/* ── OUTFIT TARGET ── */
+.outfit-target-bar {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 10px;
+  padding: 8px 10px; background: var(--bg3); border: 1px solid var(--border);
+  border-radius: 7px; flex-wrap: wrap;
+}
+.outfit-target-label { font-size: .72rem; color: var(--text2); flex-shrink: 0; }
+.outfit-member-chips { display: flex; flex-wrap: wrap; gap: 5px; flex: 1; }
+.outfit-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 3px 9px; border-radius: 4px; cursor: pointer;
+  font-size: .75rem; border: 1px solid var(--border2);
+  background: var(--bg2); color: var(--text2);
+  transition: all .12s; user-select: none;
+}
+.outfit-chip:hover   { border-color: var(--purple); color: var(--pl); background: var(--pd); }
+.outfit-chip.self    { border-color: var(--gd); color: var(--green); background: #0a2010; }
+.outfit-chip.sel-out { border-color: var(--purple); color: var(--pl); background: var(--pd); }
+.outfit-chip .onum   { font-size: .6rem; color: var(--text3); font-family: Consolas,monospace; }
+.outfit-chip.self .onum { color: #4ade80; }
 </style>
 </head>
 <body>
@@ -567,6 +588,12 @@ textarea.outfit-code{width:100%;min-height:200px;background:var(--bg4);border:1p
       <button class="btn btn-red" onclick="closeOutfit()">✕ Schließen</button>
     </div>
     <div class="modal-body">
+      <div class="outfit-target-bar">
+        <span class="outfit-target-label">🎯 Ziel:</span>
+        <div class="outfit-member-chips" id="outfitMemberChips">
+          <span style="color:var(--text3);font-size:.72rem">– Raum noch nicht geladen –</span>
+        </div>
+      </div>
       <div id="outfitList"><p style="color:var(--text3);font-size:.8rem">Noch keine Items. Konfiguriere Items und klicke "Zum Outfit hinzufügen".</p></div>
       <div class="btn-row" style="margin-top:10px">
         <button class="btn btn-green" onclick="generateOutfitCode()" style="flex:1">⚡ Outfit-Code generieren</button>
@@ -1582,7 +1609,7 @@ function copyCode() {
 // ══════════════════════════════════════════════════════
 //  OUTFIT BUILDER
 // ══════════════════════════════════════════════════════
-function openOutfit()  { document.getElementById('outfitOverlay').classList.remove('hidden'); renderOutfitList(); }
+function openOutfit()  { document.getElementById('outfitOverlay').classList.remove('hidden'); renderOutfitList(); renderOutfitMemberChips(); }
 function closeOutfit() { document.getElementById('outfitOverlay').classList.add('hidden'); }
 function clearOutfit() { OUTFIT = []; renderOutfitList(); document.getElementById('outfitCodeWrap').classList.add('hidden'); }
 
@@ -1683,33 +1710,35 @@ function moveOutfitItem(i, d) {
 
 function generateOutfitCode() {
   if (!OUTFIT.length) return;
-  const isOther   = OUTFIT[0].isOther;
-  const memberNum = OUTFIT[0].memberNum;
+  // Outfit-Ziel hat Vorrang; Fallback auf altes OUTFIT[0]-Ziel für Rückwärtskompatibilität
+  const isOther   = _outfitTargetNum !== null;
+  const memberNum = _outfitTargetNum ?? 0;
 
-  let code = `// ═══════════════════════════════════════════\n//  OUTFIT – ${OUTFIT.length} Items\n// ═══════════════════════════════════════════\n`;
+  let count = OUTFIT.length;
+  let code = '// ═══════════════════════════════════════════\n//  OUTFIT – ' + count + ' Items';
+  if (isOther) code += ' → Spieler #' + memberNum;
+  code += '\n// ═══════════════════════════════════════════\n';
 
-  // TARGET einmalig deklarieren
   if (isOther && memberNum) {
-    code += `const TARGET = ChatRoomCharacter.find(c => c.MemberNumber === ${memberNum});\nif (!TARGET) { console.error("❌ Spieler #${memberNum} nicht im Raum!"); } else {\n\n`;
+    code += 'const TARGET = ChatRoomCharacter.find(c => c.MemberNumber === ' + memberNum + ');\n'
+          + 'if (!TARGET) { console.error("❌ Spieler #' + memberNum + ' nicht im Raum!"); } else {\n\n';
   } else {
-    code += `const TARGET = Player;\n\n`;
+    code += 'const TARGET = Player;\n\n';
   }
 
-  // Jedes Item mit Delay-Staffelung (600ms Abstand)
   OUTFIT.forEach((item, i) => {
-    code += `// ── ${i+1}. ${item.asset} (${item.group}) ──\n`;
-    code += buildItemInner({ ...item, delayOffset: 600 + i * 700 });
+    code += '// ── ' + (i+1) + '. ' + item.asset + ' (' + item.group + ') ──\n';
+    code += buildItemInner({ ...item, isOther, memberNum, delayOffset: 600 + i * 700 });
     code += '\n\n';
   });
 
-  // Sync am Ende
   const syncLine = (isOther && memberNum)
-    ? `ChatRoomCharacterUpdate(TARGET);`
-    : `ServerPlayerAppearanceSync(); ChatRoomCharacterUpdate(TARGET);`;
+    ? 'ChatRoomCharacterUpdate(TARGET);'
+    : 'ServerPlayerAppearanceSync(); ChatRoomCharacterUpdate(TARGET);';
   const finalDelay = 600 + OUTFIT.length * 700 + 200;
-  code += `setTimeout(() => { ${syncLine} console.log("✅ Outfit fertig!"); }, ${finalDelay});\n`;
+  code += 'setTimeout(function() { ' + syncLine + ' console.log("✅ Outfit fertig!"); }, ' + finalDelay + ');\n';
 
-  if (isOther && memberNum) code += `}\n`;
+  if (isOther && memberNum) code += '}\n';
 
   document.getElementById('outfitCode').value = code;
   document.getElementById('outfitCodeWrap').classList.remove('hidden');
@@ -2012,6 +2041,7 @@ function executeOutfitCode() {
 let _roomScanInterval = null;
 let _myMemberNumber   = null;
 let _selectedMemberNum = null;  // aktuell im Raum-Panel ausgewählter Spieler
+let _outfitTargetNum   = null;  // Ziel im Outfit-Builder (null = self)
 
 function scanRoom() {
   if (!_connected) return;
@@ -2032,6 +2062,9 @@ function stopRoomScan() {
   if (_roomScanInterval) { clearInterval(_roomScanInterval); _roomScanInterval = null; }
 }
 
+// Letzter bekannter Raum-Snapshot
+let _lastRoomMembers = [];  // [{num, name}, ...]
+
 function renderRoomMembers(data) {
   const container = document.getElementById('roomMembers');
   const btn = document.getElementById('roomRefreshBtn');
@@ -2039,31 +2072,83 @@ function renderRoomMembers(data) {
   if (btn) { btn.textContent = '🔄'; btn.classList.remove('room-scanning'); }
 
   _myMemberNumber = data.memberNumber;
-  const members   = data.members ?? [];
+  const freshMembers = data.members ?? [];
 
-  if (!members.length) {
-    container.innerHTML = '<span class="room-empty">– Niemand im Raum –</span>';
-    return;
+  // ── Persistenz: prüfe ob bisher ausgewählte Spieler noch da sind ──────────
+  const freshNums = new Set(freshMembers.map(m => m.num));
+
+  // Mergeliste: frische Daten speichern
+  _lastRoomMembers = freshMembers;
+
+  // Haupt-Ziel (Konfigurator): wenn ausgewählter Spieler nicht mehr da → reset
+  if (_selectedMemberNum && !freshNums.has(_selectedMemberNum)) {
+    console.log('[BCK-Popup] Spieler #' + _selectedMemberNum + ' hat Raum verlassen → reset');
+    _selectedMemberNum = null;
+    const modeEl = document.getElementById('targetMode');
+    if (modeEl) { modeEl.value = 'self'; onTargetChange(); }
   }
 
-  container.innerHTML = members.map(m => {
-    const isSelf = m.num === data.memberNumber;
-    const isSel  = m.num === _selectedMemberNum;
-    const cls    = 'room-chip' + (isSelf ? ' self' : '') + (isSel && !isSelf ? ' selected' : '');
-    const click  = isSelf ? '' : `onclick="selectRoomMember(${m.num})"`;
-    return `<span class="${cls}" ${click} title="${isSelf ? 'Du selbst' : 'Als Ziel setzen'}">
-      ${isSelf ? '👤' : '👥'} ${escHtml(m.name)}
-      <span class="room-num">#${m.num}</span>
-    </span>`;
-  }).join('');
+  // Outfit-Ziel: wenn ausgewählter Spieler nicht mehr da → reset
+  if (_outfitTargetNum && !freshNums.has(_outfitTargetNum)) {
+    console.log('[BCK-Popup] Outfit-Ziel #' + _outfitTargetNum + ' hat Raum verlassen → reset');
+    _outfitTargetNum = null;
+  }
 
-  // Target-Dropdown synchronisieren
+  // ── Raum-Panel rendern ────────────────────────────────────────────────────
+  if (!freshMembers.length) {
+    container.innerHTML = '<span class="room-empty">– Niemand im Raum –</span>';
+  } else {
+    container.innerHTML = freshMembers.map(m => {
+      const isSelf = m.num === data.memberNumber;
+      const isSel  = m.num === _selectedMemberNum;
+      const cls    = 'room-chip' + (isSelf ? ' self' : '') + (isSel && !isSelf ? ' selected' : '');
+      const click  = isSelf ? '' : 'onclick="selectRoomMember(' + m.num + ')"';
+      return '<span class="' + cls + '" ' + click + ' title="' + (isSelf ? 'Du selbst' : 'Als Ziel setzen') + '">'
+        + (isSelf ? '👤' : '👥') + ' ' + escHtml(m.name)
+        + ' <span class="room-num">#' + m.num + '</span></span>';
+    }).join('');
+  }
+
+  // ── Konfigurator-Dropdown aktualisieren (Auswahl behalten wenn noch da) ──
   const sel = document.getElementById('targetMember');
   if (sel) {
-    const others = members.filter(m => m.num !== data.memberNumber);
+    const others = freshMembers.filter(m => m.num !== data.memberNumber);
     sel.innerHTML = '<option value="">– Auswählen –</option>' +
-      others.map(m => `<option value="${m.num}" ${m.num === _selectedMemberNum ? 'selected' : ''}>${escHtml(m.name)} #${m.num}</option>`).join('');
+      others.map(m => '<option value="' + m.num + '"' + (m.num === _selectedMemberNum ? ' selected' : '') + '>' + escHtml(m.name) + ' #' + m.num + '</option>').join('');
+    // Wert explizit setzen damit generate() den richtigen Wert liest
+    if (_selectedMemberNum && freshNums.has(_selectedMemberNum)) sel.value = _selectedMemberNum;
   }
+
+  // ── Outfit-Modal-Chips aktualisieren ──────────────────────────────────────
+  renderOutfitMemberChips();
+}
+
+function renderOutfitMemberChips() {
+  const el = document.getElementById('outfitMemberChips');
+  if (!el) return;
+  const members = _lastRoomMembers;
+  if (!members.length) {
+    el.innerHTML = '<span style="color:var(--text3);font-size:.72rem">– Niemand im Raum –</span>';
+    return;
+  }
+  el.innerHTML = members.map(m => {
+    const isSelf = m.num === _myMemberNumber;
+    const isSel  = isSelf ? _outfitTargetNum === null : m.num === _outfitTargetNum;
+    const cls    = 'outfit-chip' + (isSelf ? ' self' : '') + (isSel ? ' sel-out' : '');
+    return '<span class="' + cls + '" onclick="setOutfitTarget(' + (isSelf ? 'null' : m.num) + ')">'
+      + (isSelf ? '👤' : '👥') + ' ' + escHtml(m.name)
+      + ' <span class="onum">#' + m.num + '</span></span>';
+  }).join('');
+}
+
+function setOutfitTarget(num) {
+  _outfitTargetNum = num;
+  renderOutfitMemberChips();
+  // Code neu generieren falls bereits vorhanden
+  if (!document.getElementById('outfitCodeWrap').classList.contains('hidden')) {
+    generateOutfitCode();
+  }
+  console.log('[BCK-Popup] Outfit-Ziel:', num === null ? 'selbst (Player)' : '#' + num);
 }
 
 function escHtml(s) {
