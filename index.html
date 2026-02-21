@@ -2194,8 +2194,8 @@ function renderCurseTab() {
         '<td class="comment-col"><textarea class="curse-comment-input" placeholder="Notiz..." '+
           'onchange="saveCurseComment(\'' + dbKey.replace(/'/g,"\'") + '\',this.value)">'+escHtml(comment)+'</textarea></td>'+
         '<td class="actions">'+
-          '<button class="curse-apply-btn" onclick="wearCurse('+entry._idx+',null)" title="Auf mich anwenden">👤</button>'+
-          (_selectedMemberNum ? '<button class="curse-apply-btn other" onclick="wearCurse('+entry._idx+','+_selectedMemberNum+')" title="Auf #'+_selectedMemberNum+'">👥 #'+_selectedMemberNum+'</button>' : '')+
+          '<button class="curse-apply-btn" onclick="wearCurse('+JSON.stringify(dbKey)+',null)" title="Auf mich anwenden">👤</button>'+
+          (_selectedMemberNum ? '<button class="curse-apply-btn other" onclick="wearCurse('+JSON.stringify(dbKey)+','+_selectedMemberNum+')" title="Auf #'+_selectedMemberNum+'">👥 #'+_selectedMemberNum+'</button>' : '')+
         '</td>';
 
       tbody.appendChild(tr);
@@ -2258,9 +2258,9 @@ function saveCurseComment(key, val) {
   _saveCurseComments();
 }
 
-function wearCurse(idx, targetNum) {
+function wearCurse(dbKey, targetNum) {
   if (!_connected) { showStatus('❌ Nicht verbunden', 'error'); return; }
-  bcSend({ type: 'WEAR_CURSE', idx, targetNum });
+  bcSend({ type: 'WEAR_CURSE', dbKey, targetNum });
   showStatus('⏳ Curse wird angelegt...', 'info');
 }
 

@@ -500,6 +500,9 @@ window.CurseScanner = (() => {
   function _finde(indexOderName) {
     const entries = Object.values(database);
     if (typeof indexOderName === 'number') return entries[indexOderName];
+    // Exact dbKey lookup: "memberNum:itemName:craftName"
+    if (database[indexOderName]) return database[indexOderName];
+    // Fallback: name search
     return entries.find(e =>
       e.CraftName.toLowerCase().includes(String(indexOderName).toLowerCase()) ||
       e.ItemName.toLowerCase().includes(String(indexOderName).toLowerCase())
@@ -608,13 +611,13 @@ window.CurseScanner = (() => {
         }
 
         case 'WEAR_CURSE': {
-          BCK.info('WEAR_CURSE idx=' + ev.data.idx + ' target=' + ev.data.targetNum);
+          BCK.info('WEAR_CURSE key=' + ev.data.dbKey + ' target=' + ev.data.targetNum);
           try {
             let result;
             if (ev.data.targetNum != null) {
-              result = window.CurseScanner.wearOn(ev.data.idx, ev.data.targetNum);
+              result = window.CurseScanner.wearOn(ev.data.dbKey, ev.data.targetNum);
             } else {
-              result = window.CurseScanner.wear(ev.data.idx);
+              result = window.CurseScanner.wear(ev.data.dbKey);
             }
             if (result?.err) {
               src.postMessage({ app: APP, type: 'WEAR_CURSE_ERR', msg: result.err }, '*');
