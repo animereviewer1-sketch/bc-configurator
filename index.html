@@ -258,7 +258,6 @@ textarea.outfit-code{width:100%;min-height:200px;background:var(--bg4);border:1p
   <span class="tbadge" id="playerInfo" style="display:none"></span>
   <span class="tbadge" id="cacheInfo">Kein Cache</span>
   <button class="btn btn-green" id="loadCacheBtn" onclick="loadCacheFromBC()">⚡ Aus Spiel laden</button>
-  <button class="btn btn-primary" id="reconnectBtn" onclick="manualReconnect()" title="Verbindung neu versuchen">🔄 Verbinden</button>
   <button class="btn btn-orange hidden" id="outfitBtn" onclick="openOutfit()">👗 Outfit Builder</button>
   <button class="btn btn-primary hidden" id="profileBtn" onclick="openProfiles()">📁 Profile</button>
   <button class="btn btn-red hidden" id="clearBtn" onclick="clearCache()">🗑️ Löschen</button>
@@ -521,28 +520,6 @@ textarea.outfit-code{width:100%;min-height:200px;background:var(--bg4);border:1p
 </div>
 
 <script>
-
-// ══════════════════════════════════════════════════════
-//  🪵 DEBUG LOGGER (Popup-Seite)
-// ══════════════════════════════════════════════════════
-const BCK_LOG = (function() {
-  const PREFIX = '[BCK-Popup]';
-  const COLORS = { info:'#93c5fd', ok:'#6ee7b7', warn:'#fbbf24', err:'#fca5a5', msg:'#c4b5fd' };
-  function _log(level, ...args) {
-    const color = COLORS[level] || '#e2e8f0';
-    console.log('%c' + PREFIX + ' [' + level.toUpperCase() + ']', 'color:' + color + ';font-weight:bold', ...args);
-  }
-  return {
-    info:  (...a) => _log('info',  ...a),
-    ok:    (...a) => _log('ok',    ...a),
-    warn:  (...a) => _log('warn',  ...a),
-    err:   (...a) => _log('err',   ...a),
-    msg:   (...a) => _log('msg',   ...a),
-  };
-})();
-
-BCK_LOG.info('Script geladen ✅', 'window.opener vorhanden:', !!window.opener);
-
 // ══════════════════════════════════════════════════════
 //  STATE
 // ══════════════════════════════════════════════════════
@@ -622,15 +599,9 @@ function loadCache() {
   }
 }
 
-// clearCache: defined below in BC comms block
+// clearCache defined in BC comms block
 
-// Auto-load
-(function() {
-  try {
-    const s = localStorage.getItem('BC_CACHE_v11') ?? localStorage.getItem('BC_CACHE_v11');
-    if (s) { document.getElementById('importArea').value = s; loadCache(); }
-  } catch {}
-})();
+// [auto-load moved to BC comms block below]
 
 // ══════════════════════════════════════════════════════
 //  SIDEBAR & FAVORITES
@@ -1536,7 +1507,13 @@ function buildItemCode({ group, asset, cfg, colors, tr, trStr, typeStr, propCode
 // ══════════════════════════════════════════════════════
 //  COPY
 // ══════════════════════════════════════════════════════
-// copyCode: defined below
+function copyCode() {
+  const ta = document.getElementById('codeOut');
+  ta.select(); document.execCommand('copy');
+  const btn = document.getElementById('copyBtn');
+  btn.textContent = '✅ Kopiert!'; btn.classList.add('copied');
+  setTimeout(()=>{ btn.textContent='📋 Code kopieren'; btn.classList.remove('copied'); }, 2000);
+}
 
 // ══════════════════════════════════════════════════════
 //  OUTFIT BUILDER
@@ -1674,7 +1651,11 @@ function generateOutfitCode() {
   document.getElementById('outfitCodeWrap').classList.remove('hidden');
 }
 
-// copyOutfitCode: defined below
+function copyOutfitCode() {
+  const ta = document.getElementById('outfitCode');
+  ta.select(); document.execCommand('copy');
+  alert('✅ Outfit-Code kopiert!');
+}
 
 // ══════════════════════════════════════════════════════
 //  OUTFIT-PROFILE
@@ -1793,7 +1774,208 @@ function deleteProfileByIdx(idx) {
   }
 })();
 
+// ══════════════════════════════════════════════════════
+//  POSTMESSAGE KOMMUNIKATION MIT BC
+// ══════════════════════════════════════════════════════
+const APP = 'BCKonfigurator';
+
+// ── Ping-Retry ────────────────────────────────────────
+let _pingInterval = null;
+let _connected    = false;
+
+function startPingRetry() {
+  if (_pingInterval) clearInterval(_pingInterval);
+  let n = 0;
+  _pingInterval = setInterval(function() {
+    if (_connected) { clearInterval(_pingInterval); _pingInterval = null; return; }
+    n++;
+    const ok = !!window.opener && !window.opener.closed;
+    console.log('[BCK-Popup] Ping-Retry #' + n + ' | opener=' + ok);
+    if (ok) window.opener.postMessage({ app: APP, type: 'PING' }, '*');
+  }, 3000);
+}
+
+function manualReconnect() {
+  _connected = false;
+  console.log('[BCK-Popup] manualReconnect()');
+  bcSend({ type: 'PING' });
+  startPingRetry();
+}
+
+function bcSend(msg, silent) {
+  try {
+    const ok = !!window.opener && !window.opener.closed;
+    if (!ok) {
+      console.warn('[BCK-Popup] bcSend FAIL – kein opener', msg.type);
+      if (!silent) showStatus('\u274c BC-Fenster nicht verf\u00fcgbar \u2013 Bookmarklet nochmal klicken', 'error');
+      return false;
+    }
+    if (!silent || msg.type !== 'PING') console.log('[BCK-Popup] bcSend \u2192', msg.type);
+    window.opener.postMessage({ app: APP, ...msg }, '*');
+    return true;
+  } catch(e) {
+    console.error('[BCK-Popup] bcSend Exception:', e.message);
+    if (!silent) showStatus('\u274c postMessage Fehler: ' + e.message, 'error');
+    return false;
+  }
+}
+
+window.addEventListener('message', function(ev) {
+  if (!ev.data || ev.data.app !== APP) return;
+  console.log('[BCK-Popup] \u2190 message:', ev.data.type);
+
+  switch (ev.data.type) {
+
+    case 'PONG':
+      console.log('[BCK-Popup] PONG \u2705 Verbunden!');
+      _connected = true;
+      if (_pingInterval) { clearInterval(_pingInterval); _pingInterval = null; }
+      document.getElementById('connStatus').textContent = '\U0001f7e2 Verbunden';
+      document.getElementById('connStatus').style.color = 'var(--green)';
+      document.getElementById('connectHint')?.classList.add('hidden');
+      break;
+
+    case 'CACHE_DATA':
+      console.log('[BCK-Popup] CACHE_DATA err=' + ev.data.err, 'groups=' + Object.keys(ev.data.cache ?? {}).length);
+      document.getElementById('loadingSpinner').classList.add('hidden');
+      document.getElementById('loadCacheBtn').disabled = false;
+      if (ev.data.err) { showStatus('\u274c ' + ev.data.err, 'error'); return; }
+      const _data  = ev.data.cache ?? {};
+      const _items = Object.values(_data).reduce((s,g) => s + Object.keys(g).length, 0);
+      if (_items === 0) { showStatus('\u274c Kein Cache erhalten \u2013 Bist du im Spiel?', 'error'); return; }
+      CACHE = _data;
+      try { localStorage.setItem('BC_CACHE_v12', JSON.stringify(_data)); } catch {}
+      const _mc = Object.values(_data).flatMap(g => Object.values(g)).filter(i => i.archetype === 'modular').length;
+      document.getElementById('cacheInfo').textContent = '\u2705 ' + _items + ' Items \u00b7 ' + Object.keys(_data).length + ' Gruppen \u00b7 \U0001f9e9 ' + _mc + ' modular';
+      document.getElementById('clearBtn').classList.remove('hidden');
+      document.getElementById('outfitBtn').classList.remove('hidden');
+      document.getElementById('profileBtn').classList.remove('hidden');
+      document.getElementById('connectHint')?.classList.add('hidden');
+      renderGroups();
+      showEmpty();
+      showStatus('\u2705 ' + _items + ' Items geladen!', 'success');
+      bcSend({ type: 'GET_PLAYER' });
+      break;
+
+    case 'PLAYER_DATA':
+      if (!ev.data.err) {
+        const _pi = document.getElementById('playerInfo');
+        if (_pi) { _pi.textContent = '\U0001f464 ' + ev.data.name + ' #' + ev.data.memberNumber; _pi.style.display = ''; }
+        const _sel = document.getElementById('targetMember');
+        if (_sel && ev.data.members?.length) {
+          const _others = ev.data.members.filter(m => m.num !== ev.data.memberNumber);
+          if (_others.length) {
+            _sel.innerHTML = '<option value="">\u2013 Ausw\u00e4hlen \u2013</option>' +
+              _others.map(m => '<option value="' + m.num + '">' + m.name + ' #' + m.num + '</option>').join('');
+          }
+        }
+      }
+      break;
+
+    case 'EXEC_OK':
+      console.log('[BCK-Popup] EXEC_OK \u2705');
+      showStatus('\u2705 Ausgef\u00fchrt!', 'success');
+      break;
+
+    case 'EXEC_ERR':
+      console.error('[BCK-Popup] EXEC_ERR:', ev.data.msg);
+      showStatus('\u274c Fehler: ' + ev.data.msg, 'error');
+      break;
+  }
+});
+
+function loadCacheFromBC() {
+  console.log('[BCK-Popup] loadCacheFromBC() | opener=' + !!window.opener + ' closed=' + window.opener?.closed);
+  const btn = document.getElementById('loadCacheBtn');
+  btn.disabled = true;
+  document.getElementById('loadingSpinner').classList.remove('hidden');
+  showStatus('\u23f3 Verbinde mit Spiel\u2026', 'info');
+  if (!bcSend({ type: 'GET_CACHE' })) {
+    document.getElementById('loadingSpinner').classList.add('hidden');
+    btn.disabled = false;
+  }
+}
+
+function clearCache() {
+  if (!confirm('Cache l\u00f6schen?')) return;
+  CACHE = {};
+  try { localStorage.removeItem('BC_CACHE_v12'); } catch {}
+  document.getElementById('cacheInfo').textContent = 'Kein Cache';
+  document.getElementById('clearBtn').classList.add('hidden');
+  document.getElementById('outfitBtn').classList.add('hidden');
+  document.getElementById('profileBtn')?.classList.add('hidden');
+  document.getElementById('connectHint')?.classList.remove('hidden');
+  document.getElementById('groupsList').innerHTML = '';
+  showEmpty();
+}
+
+function showStatus(msg, type) {
+  type = type || 'info';
+  const el = document.getElementById('statusMsg');
+  if (!el) return;
+  el.textContent = msg;
+  el.className = 'status-msg status-' + type;
+  el.classList.remove('hidden');
+  clearTimeout(el._t);
+  el._t = setTimeout(function() { el.classList.add('hidden'); }, 4000);
+}
+
+function executeCode() {
+  const code = document.getElementById('codeOut').value.trim();
+  if (!code) return;
+  showStatus('\u23f3 Wird ausgef\u00fchrt\u2026', 'info');
+  bcSend({ type: 'EXEC', code });
+}
+
+function copyCode() {
+  const ta = document.getElementById('codeOut');
+  ta.select(); document.execCommand('copy');
+  showStatus('\U0001f4cb Code kopiert!', 'info');
+}
+
+function executeOutfitCode() {
+  const code = document.getElementById('outfitCode').value.trim();
+  if (!code) return;
+  showStatus('\u23f3 Outfit wird ausgef\u00fchrt\u2026', 'info');
+  bcSend({ type: 'EXEC', code });
+}
+
+function copyOutfitCode() {
+  const ta = document.getElementById('outfitCode');
+  ta.select(); document.execCommand('copy');
+  showStatus('\U0001f4cb Outfit-Code kopiert!', 'info');
+}
+
+// ── Auto-load + initial PING ──────────────────────────
+(function() {
+  console.log('[BCK-Popup] Auto-Init | opener=' + !!window.opener);
+  try {
+    const s = localStorage.getItem('BC_CACHE_v12');
+    if (s) {
+      CACHE = JSON.parse(s);
+      const items = Object.values(CACHE).reduce((n,g) => n + Object.keys(g).length, 0);
+      if (items > 0) {
+        const mc = Object.values(CACHE).flatMap(g => Object.values(g)).filter(i => i.archetype === 'modular').length;
+        document.getElementById('cacheInfo').textContent = '\u2705 ' + items + ' Items (lokal gecacht) \u00b7 \U0001f9e9 ' + mc + ' modular';
+        document.getElementById('clearBtn').classList.remove('hidden');
+        document.getElementById('outfitBtn').classList.remove('hidden');
+        document.getElementById('profileBtn').classList.remove('hidden');
+        document.getElementById('connectHint')?.classList.add('hidden');
+        renderGroups(); showEmpty();
+        console.log('[BCK-Popup] Cache aus localStorage: ' + items + ' Items');
+      }
+    }
+  } catch(e) { console.warn('[BCK-Popup] localStorage Fehler:', e.message); }
+
+  // Sofortiger PING + Retry-Schleife
+  if (window.opener && !window.opener.closed) {
+    console.log('[BCK-Popup] Sende ersten PING...');
+    window.opener.postMessage({ app: APP, type: 'PING' }, '*');
+  }
+  startPingRetry();
+})();
 </script>
+
 
 <!-- ── PROFILE MODAL ── -->
 <div class="modal-overlay hidden" id="profileOverlay">
@@ -1813,212 +1995,6 @@ function deleteProfileByIdx(idx) {
 </div>
 
 
-  <script>
-// ══════════════════════════════════════════════════════
-//  POSTMESSAGE KOMMUNIKATION MIT BC
-// ══════════════════════════════════════════════════════
-const APP = 'BCKonfigurator';
-
-// ── Ping-Retry: versucht alle 3s bis PONG empfangen ─────────────
-let _pingInterval = null;
-let _connected = false;
-
-function startPingRetry() {
-  BCK_LOG.info('startPingRetry() – startet 3s-Schleife');
-  if (_pingInterval) clearInterval(_pingInterval);
-  let _retryCount = 0;
-  _pingInterval = setInterval(function() {
-    if (_connected) { clearInterval(_pingInterval); _pingInterval = null; BCK_LOG.ok('Ping-Retry gestoppt (verbunden)'); return; }
-    _retryCount++;
-    BCK_LOG.info('Ping-Retry #' + _retryCount + ' | opener=' + !!window.opener + ' | closed=' + window.opener?.closed);
-    bcSend({ type: 'PING' }, true);
-  }, 3000);
-}
-
-function bcSend(msg, silent) {
-  try {
-    const hasOpener = !!window.opener;
-    const openerClosed = window.opener?.closed;
-    if (!hasOpener || openerClosed) {
-      BCK_LOG.err('bcSend FAIL: opener=' + hasOpener + ', closed=' + openerClosed, msg.type);
-      if (!silent) showStatus('❌ BC-Fenster nicht verfügbar – Bookmarklet nochmal klicken', 'error');
-      return false;
-    }
-    if (!silent || msg.type !== 'PING') BCK_LOG.info('bcSend →', msg.type, msg);
-    window.opener.postMessage({ app: APP, ...msg }, '*');
-    return true;
-  } catch(e) {
-    BCK_LOG.err('bcSend EXCEPTION:', e.message, msg);
-    if (!silent) showStatus('❌ postMessage fehlgeschlagen: ' + e.message, 'error');
-    return false;
-  }
-}
-
-function manualReconnect() {
-  _connected = false;
-  showStatus('⏳ Verbinde…', 'info');
-  bcSend({ type: 'PING' });
-  startPingRetry();
-}
-
-window.addEventListener('message', function (ev) {
-  if (!ev.data || ev.data.app !== APP) return;
-
-  switch (ev.data.type) {
-    case 'PONG': {
-      BCK_LOG.ok('PONG empfangen → Verbunden! ✅');
-      _connected = true;
-      if (_pingInterval) { clearInterval(_pingInterval); _pingInterval = null; }
-      document.getElementById('connStatus').textContent = '🟢 Verbunden';
-      document.getElementById('connStatus').style.color = 'var(--green)';
-      document.getElementById('connectHint')?.classList.add('hidden');
-      break;
-    }
-
-    case 'CACHE_DATA': {
-      BCK_LOG.msg('CACHE_DATA empfangen', 'err=' + ev.data.err, 'keys=' + Object.keys(ev.data.cache ?? {}).length);
-      document.getElementById('loadingSpinner').classList.add('hidden');
-      document.getElementById('loadCacheBtn').disabled = false;
-      if (ev.data.err) { showStatus('❌ ' + ev.data.err, 'error'); return; }
-      const data  = ev.data.cache ?? {};
-      const items = Object.values(data).reduce((s,g) => s + Object.keys(g).length, 0);
-      if (items === 0) { showStatus('❌ Kein Cache erhalten – Bist du im Spiel?', 'error'); return; }
-      CACHE = data;
-      try { localStorage.setItem('BC_CACHE_v12', JSON.stringify(data)); } catch {}
-      const modCount = Object.values(data).flatMap(g => Object.values(g)).filter(i => i.archetype === 'modular').length;
-      document.getElementById('cacheInfo').textContent =
-        `✅ ${items} Items · ${Object.keys(data).length} Gruppen · 🧩 ${modCount} modular`;
-      document.getElementById('clearBtn').classList.remove('hidden');
-      document.getElementById('outfitBtn').classList.remove('hidden');
-      document.getElementById('profileBtn').classList.remove('hidden');
-      document.getElementById('connectHint')?.classList.add('hidden');
-      renderGroups();
-      showEmpty();
-      showStatus(`✅ ${items} Items geladen!`, 'success');
-      bcSend({ type: 'GET_PLAYER' });
-      break;
-    }
-
-    case 'PLAYER_DATA':
-      if (!ev.data.err) {
-        const pi = document.getElementById('playerInfo');
-        if (pi) { pi.textContent = `👤 ${ev.data.name} #${ev.data.memberNumber}`; pi.style.display = ''; }
-        const sel = document.getElementById('targetMember');
-        if (sel && ev.data.members?.length) {
-          const others = ev.data.members.filter(m => m.num !== ev.data.memberNumber);
-          if (others.length) {
-            sel.innerHTML = '<option value="">– Auswählen –</option>' +
-              others.map(m => `<option value="${m.num}">${m.name} #${m.num}</option>`).join('');
-          }
-        }
-      }
-      break;
-
-    case 'EXEC_OK':
-      BCK_LOG.ok('EXEC_OK ✅');
-      showStatus('✅ Ausgeführt!', 'success');
-      break;
-
-    case 'EXEC_ERR':
-      BCK_LOG.err('EXEC_ERR ❌', ev.data.msg);
-      showStatus('❌ Fehler: ' + ev.data.msg, 'error');
-      break;
-  }
-});
-
-function loadCacheFromBC() {
-  BCK_LOG.info('loadCacheFromBC() aufgerufen');
-  BCK_LOG.info('window.opener vorhanden:', !!window.opener, '| geschlossen:', window.opener?.closed);
-  const btn = document.getElementById('loadCacheBtn');
-  btn.disabled = true;
-  document.getElementById('loadingSpinner').classList.remove('hidden');
-  showStatus('⏳ Verbinde mit Spiel…', 'info');
-  const sent = bcSend({ type: 'GET_CACHE' });
-  BCK_LOG.info('GET_CACHE gesendet:', sent);
-  if (!sent) {
-    document.getElementById('loadingSpinner').classList.add('hidden');
-    btn.disabled = false;
-  }
-}
-
-function clearCache() {
-  if (!confirm('Cache löschen?')) return;
-  CACHE = {};
-  try { localStorage.removeItem('BC_CACHE_v12'); } catch {}
-  document.getElementById('cacheInfo').textContent = 'Kein Cache';
-  document.getElementById('clearBtn').classList.add('hidden');
-  document.getElementById('outfitBtn').classList.add('hidden');
-  document.getElementById('profileBtn')?.classList.add('hidden');
-  document.getElementById('connectHint')?.classList.remove('hidden');
-  document.getElementById('groupsList').innerHTML = '';
-  showEmpty();
-}
-
-function showStatus(msg, type = 'info') {
-  const el = document.getElementById('statusMsg');
-  if (!el) return;
-  el.textContent = msg;
-  el.className = 'status-msg status-' + type;
-  el.classList.remove('hidden');
-  clearTimeout(el._t);
-  el._t = setTimeout(() => el.classList.add('hidden'), 4000);
-}
-
-function executeCode() {
-  const code = document.getElementById('codeOut').value.trim();
-  if (!code) return;
-  showStatus('⏳ Wird ausgeführt…', 'info');
-  bcSend({ type: 'EXEC', code });
-}
-
-function copyCode() {
-  const ta = document.getElementById('codeOut');
-  ta.select(); document.execCommand('copy');
-  showStatus('📋 Code kopiert!', 'info');
-}
-
-function executeOutfitCode() {
-  const code = document.getElementById('outfitCode').value.trim();
-  if (!code) return;
-  showStatus('⏳ Outfit wird ausgeführt…', 'info');
-  bcSend({ type: 'EXEC', code });
-}
-
-function copyOutfitCode() {
-  const ta = document.getElementById('outfitCode');
-  ta.select(); document.execCommand('copy');
-  showStatus('📋 Outfit-Code kopiert!', 'info');
-}
-
-// Auto-load from localStorage
-(function () {
-  try {
-    const s = localStorage.getItem('BC_CACHE_v12') ?? localStorage.getItem('BC_CACHE_v12');
-    if (s) {
-      CACHE = JSON.parse(s);
-      const items = Object.values(CACHE).reduce((n,g) => n + Object.keys(g).length, 0);
-      if (items > 0) {
-        const modCount = Object.values(CACHE).flatMap(g => Object.values(g)).filter(i => i.archetype === 'modular').length;
-        document.getElementById('cacheInfo').textContent =
-          `✅ ${items} Items (lokal gecacht) · 🧩 ${modCount} modular`;
-        document.getElementById('clearBtn').classList.remove('hidden');
-        document.getElementById('outfitBtn').classList.remove('hidden');
-        document.getElementById('profileBtn').classList.remove('hidden');
-        document.getElementById('connectHint')?.classList.add('hidden');
-        renderGroups(); showEmpty();
-      }
-    }
-  } catch {}
-  // Ping BC (immediate + retry every 3s)
-  BCK_LOG.info('Auto-Init: sende ersten PING');
-  BCK_LOG.info('window.opener:', !!window.opener, '| URL:', window.location.href);
-  const firstPing = bcSend({ type: 'PING' }, true);
-  BCK_LOG.info('Erster PING gesendet:', firstPing);
-  startPingRetry();
-})();
-
-
-  </script>
 
 </body>
 </html>
