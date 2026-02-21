@@ -11,9 +11,6 @@
 
   // ── Cache-Builder ─────────────────────────────────────
   function buildBCCache() {
-    const cache = {};
-    let total = 0;
-
   const VIBRATING_MODES = ["Off","Constant","Escalate","Random","Tease","Deny","Edge"];
 
   // ── Echte Modul-Namen via AssetTextGet ───────────────
