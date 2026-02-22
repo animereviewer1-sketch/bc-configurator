@@ -400,18 +400,12 @@ window.CurseScanner = (() => {
   let _hookInstalled = false;
   function installLSCGHook() {
     if (_hookInstalled) return;
-    const _origRefresh = window.CharacterRefresh;
-    if (typeof _origRefresh === 'function') {
-      window.CharacterRefresh = function(C, ...args) {
-        _snapshotLSCG(C);
-        return _origRefresh(C, ...args);
-      };
-    }
+    // Nur setInterval – kein CharacterRefresh überschreiben (vermeidet BCX-Warnung)
     setInterval(() => {
-      [Player, ...(ChatRoomCharacter ?? [])].forEach(_snapshotLSCG);
-    }, 10000);
+      try { [Player, ...(ChatRoomCharacter ?? [])].forEach(_snapshotLSCG); } catch {}
+    }, 8000);
     _hookInstalled = true;
-    console.log('✅ LSCG-Hook installiert');
+    console.log('✅ LSCG-Hook installiert (polling, kein CharacterRefresh-Override)');
   }
 
   function _snapshotLSCG(C) {
@@ -462,7 +456,11 @@ window.CurseScanner = (() => {
   }
 
   function scan() {
-    const spieler = [Player, ...(ChatRoomCharacter ?? [])];
+    // Nur Raum-Charaktere scannen (nicht Player.Crafting – das ist die gesamte Garderobe)
+    // Player wird nur für LSCG-Cache-Snapshot genutzt, nicht für Craft-Scan
+    const raumChars = ChatRoomCharacter ?? [];
+    _snapshotLSCG(Player); // Player-LSCG cachen, aber Crafts nicht auflisten
+    const spieler = raumChars;
     let neuDB = 0, aktualisiert = 0, neuLSCG = 0;
     spieler.forEach(C => {
       _snapshotLSCG(C);
@@ -548,27 +546,7 @@ window.CurseScanner = (() => {
 
   installLSCGHook();
 
-  function injectEntry(key, entry) {
-    // Inject a single entry from the popup into the local database
-    if (!database[key]) {
-      database[key] = { ...entry, _injected: true };
-      BCK.info && BCK.info('💉 Injected entry: ' + key);
-    }
-  }
-
-  function loadDatabase(extDb) {
-    // Bulk-load database from popup (after browser switch / restart)
-    let count = 0;
-    Object.entries(extDb).forEach(([key, entry]) => {
-      if (!database[key]) {
-        database[key] = { ...entry, _injected: true };
-        count++;
-      }
-    });
-    console.log('[CurseScanner] loadDatabase: ' + count + ' neue Einträge geladen');
-  }
-
-  return { scan, wear, wearOn, injectEntry, loadDatabase, database, lscgTable, lscgCache };
+  return { scan, wear, wearOn, database, lscgTable, lscgCache };
 })();
 
 
@@ -652,11 +630,6 @@ window.CurseScanner = (() => {
         case 'WEAR_CURSE': {
           BCK.info('WEAR_CURSE key=' + ev.data.dbKey + ' target=' + ev.data.targetNum);
           try {
-            // If popup sent full entry data, inject it into local database first
-            // This allows wearing even after browser switch / restart with empty local DB
-            if (ev.data.entry) {
-              window.CurseScanner.injectEntry(ev.data.dbKey, ev.data.entry);
-            }
             let result;
             if (ev.data.targetNum != null) {
               result = window.CurseScanner.wearOn(ev.data.dbKey, ev.data.targetNum);
@@ -671,18 +644,6 @@ window.CurseScanner = (() => {
           } catch (ex) {
             BCK.err('WEAR_CURSE Fehler:', ex.message);
             src.postMessage({ app: APP, type: 'WEAR_CURSE_ERR', msg: ex.message }, '*');
-          }
-          break;
-        }
-        
-        case 'LOAD_CURSE_DB': {
-          // Preload entire database from popup localStorage → enables wear after restart/browser switch
-          BCK.info('LOAD_CURSE_DB: ' + Object.keys(ev.data.database ?? {}).length + ' Einträge');
-          try {
-            window.CurseScanner.loadDatabase(ev.data.database ?? {});
-            src.postMessage({ app: APP, type: 'LOAD_CURSE_DB_OK' }, '*');
-          } catch (ex) {
-            BCK.err('LOAD_CURSE_DB Fehler:', ex.message);
           }
           break;
         }
