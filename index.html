@@ -2298,8 +2298,8 @@ function renderCurseTab() {
           'data-rowid="' + rowId + '" onchange="saveCurseCommentById(this.dataset.rowid,this.value)">'+escHtml(comment)+'</textarea></td>'+
         '<td class="actions">'+
           (function(){ _curseEntryMap[rowId] = dbKey; return ''; })()+
-          '<button class="curse-apply-btn" onclick="wearCurseById(\'' + rowId + '\',null)" title="Auf mich anwenden">👤</button>'+
-          (_selectedMemberNum ? '<button class="curse-apply-btn other" onclick="wearCurseById(\'' + rowId + '\','+_selectedMemberNum+')" title="Auf #'+_selectedMemberNum+'">👥 #'+_selectedMemberNum+'</button>' : '')+
+          '<button class="curse-apply-btn" data-rid="' + rowId + '" data-tgt="" onclick="wearCurseByData(this)" title="Auf mich anwenden">👤</button>'+
+          (_selectedMemberNum ? '<button class="curse-apply-btn other" data-rid="' + rowId + '" data-tgt="' + _selectedMemberNum + '" onclick="wearCurseByData(this)" title="Auf #'+_selectedMemberNum+'">👥 #'+_selectedMemberNum+'</button>' : '')+
         '</td>';
 
       tbody.appendChild(tr);
@@ -2367,9 +2367,12 @@ function saveCurseComment(key, val) {
   _saveCurseComments();
 }
 
-function wearCurseById(rowId, targetNum) {
+function wearCurseByData(btn) {
+  const rowId = btn.dataset.rid;
+  const tgt   = btn.dataset.tgt;
+  const targetNum = tgt ? parseInt(tgt) : null;
   const key = _curseEntryMap[rowId];
-  if (!key) { showStatus('❌ Eintrag nicht gefunden (ID: ' + rowId + ')', 'error'); return; }
+  if (!key) { showStatus('❌ Eintrag nicht gefunden', 'error'); return; }
   wearCurse(key, targetNum);
 }
 
