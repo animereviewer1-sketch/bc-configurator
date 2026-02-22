@@ -1879,15 +1879,19 @@ function addToOutfit() {
     label: `${asset} (${group})`,
   });
 
-  switchTab('outfit');
   _autoOutfitCode();
 }
 
 
 function renderOutfitList() {
   const list = document.getElementById('outfitList');
-  if (!OUTFIT.length) {
-    list.innerHTML = '<p style="color:var(--text3);font-size:.8rem">Noch keine Items. Konfiguriere Items und klicke "Zum Outfit hinzufügen".</p>';
+  const q = (document.getElementById('outfitItemSearch')?.value || '').toLowerCase();
+  const visItems = OUTFIT.map((item, i) => ({...item, _origIdx: i}))
+                         .filter(item => !q || item.asset?.toLowerCase().includes(q) || item.group?.toLowerCase().includes(q));
+  if (!visItems.length) {
+    list.innerHTML = OUTFIT.length
+      ? '<div class="outfit-empty-hint">🔍 Keine Treffer.</div>'
+      : '<div class="outfit-empty-hint">Noch keine Items.<br>Konfiguriere ein Item im <strong>Item Manager</strong> und klicke <strong>„👗 Outfit"</strong>.</div>';
     return;
   }
   list.innerHTML = '';
@@ -2086,7 +2090,7 @@ function switchTab(tab) {
     document.getElementById('tab-'+t)?.classList.toggle('active', t===tab);
     document.getElementById('tab-'+t+'-btn')?.classList.toggle('active', t===tab);
   });
-  if (tab === 'outfit') { renderOutfitList(); renderOutfitMemberChips(); _autoOutfitCode(); }
+  if (tab === 'outfit') { renderOutfitList(); renderOutfitMemberChips(); renderProfileList(); _autoOutfitCode(); }
   if (tab === 'curse')  { renderCurseTab(); }
 }
 
@@ -2276,8 +2280,9 @@ function renderCurseTab() {
       tr.id = rowId;
 
       const lscgText = isLSCG
-        ? (entry.LSCGAusCache ? '💾 ' : '✅ ') + escHtml(entry.LSCG?.Name || '?')
-        : '–';
+        ? '<span class="curse-detail-badge lscg" title="' + (entry.LSCGAusCache ? 'Aus Cache' : 'Live') + '">'
+          + (entry.LSCGAusCache ? '💾' : '✅') + '</span> ' + escHtml(entry.LSCG?.Name || '?')
+        : '<span style="color:var(--text3)">–</span>';
 
       tr.innerHTML =
         '<td class="cn"><span class="cursor-detail-toggle" onclick="toggleCurseDetail(\'' + detId + '\',\'' + rowId + '\')">▶</span>'+escHtml(entry.CraftName)+'</td>'+
@@ -2621,7 +2626,7 @@ let _lastRoomMembers   = [];    // letzter bekannter Raum-Snapshot
 
 // Grace-Period: Spieler muss GRACE_NEEDED aufeinanderfolgende Scans fehlen
 // bevor er als "verlassen" gilt. BC leert ChatRoomCharacter kurz beim Sync.
-const GRACE_NEEDED = 3;
+const GRACE_NEEDED = 2;  // 2 × 5s = 10s grace for sync drops
 const _missCount   = {};  // memberNum → aufeinanderfolgende Fehlscans
 
 function scanRoom() {
@@ -2788,7 +2793,7 @@ function selectRoomMember(num) {
         document.getElementById('outfitBtn').classList.remove('hidden');
         document.getElementById('profileBtn').classList.remove('hidden');
         document.getElementById('connectHint')?.classList.add('hidden');
-        renderGroups(); showEmpty();
+        renderGroups(); showEmpty(); renderProfileList();
         console.log('[BCK-Popup] Cache aus localStorage: ' + items + ' Items');
       }
     }
@@ -2799,6 +2804,9 @@ function selectRoomMember(num) {
     console.log('[BCK-Popup] Sende ersten PING...');
     window.opener.postMessage({ app: APP, type: 'PING' }, '*');
   }
+  // Initial render even with empty cache
+  if (!Object.keys(CACHE).length) renderGroups();
+  renderProfileList();
   startPingRetry();
 })();
 </script>
