@@ -2260,6 +2260,7 @@ function renderCurseTab() {
         '<th style="padding:4px 10px;font-size:.63rem;color:var(--text3);text-align:left;font-weight:500">Gruppe</th>'+
         '<th style="padding:4px 10px;font-size:.63rem;color:var(--text3);text-align:left;font-weight:500">Flags</th>'+
         '<th style="padding:4px 10px;font-size:.63rem;color:var(--text3);text-align:left;font-weight:500">LSCG</th>'+
+        '<th style="padding:4px 10px;font-size:.63rem;color:var(--text3);text-align:center;font-weight:500;white-space:nowrap">Cache</th>'+
         '<th style="padding:4px 10px;font-size:.63rem;color:var(--text3);text-align:left;font-weight:500;min-width:160px">Kommentar</th>'+
         '<th style="padding:4px 10px;font-size:.63rem;color:var(--text3);text-align:left;font-weight:500">Aktionen</th>'+
       '</tr></thead><tbody id="cb_'+owner.num+'"></tbody></table>';
@@ -2810,8 +2811,8 @@ function selectRoomMember(num) {
     console.log('[BCK-Popup] Sende ersten PING...');
     window.opener.postMessage({ app: APP, type: 'PING' }, '*');
   }
-  // Initial render even with empty cache
-  if (!Object.keys(CACHE).length) renderGroups();
+  // Always render sidebar on startup
+  renderGroups();
   renderProfileList();
   startPingRetry();
 })();

@@ -514,8 +514,11 @@ window.CurseScanner = (() => {
     const entry = _finde(indexOderName);
     if (!entry) return { err: '"' + indexOderName + '" nicht gefunden' };
     if (entry.Gruppe === 'UNBEKANNT') return { err: 'Gruppe unbekannt für ' + entry.ItemName };
+    // Color: BC wants string or array; parse comma-separated if needed
+    let _color = entry.Farbe;
+    if (typeof _color === 'string' && _color.includes(',')) _color = _color.split(',');
     InventoryWear(target, entry.ItemName, entry.Gruppe,
-      entry.Farbe, 0, Player.MemberNumber, entry.Craft);
+      _color, 0, Player.MemberNumber, entry.Craft);
     CharacterRefresh(target);
     ChatRoomCharacterUpdate(target);
     return { ok: true, msg: '"' + entry.CraftName + '" → ' + target.Name };
