@@ -2382,9 +2382,7 @@ function wearCurseByData(btn) {
 
 function wearCurse(dbKey, targetNum) {
   if (!_connected) { showStatus('❌ Nicht verbunden', 'error'); return; }
-  // Send the full entry so loader can apply it even with empty local database
-  const entry = CURSE_DB[dbKey] ?? null;
-  bcSend({ type: 'WEAR_CURSE', dbKey, targetNum, entry });
+  bcSend({ type: 'WEAR_CURSE', dbKey, targetNum });
   showStatus('⏳ Curse wird angelegt...', 'info');
 }
 
@@ -2419,12 +2417,6 @@ function curseImport() {
         CURSE_CACHE_LSCG = d.lscgCache ?? {};
         if (d.comments) Object.assign(CURSE_COMMENTS, d.comments);
         _saveCurseComments();
-        // Persist to localStorage so Wear works after restart/browser switch
-        try { localStorage.setItem('BC_CURSE_DB_v1', JSON.stringify({database:CURSE_DB,lscgTable:CURSE_LSCG,lscgCache:CURSE_CACHE_LSCG})); } catch {}
-        // Push to loader immediately if connected
-        if (_connected && Object.keys(CURSE_DB).length > 0) {
-          bcSend({ type: 'LOAD_CURSE_DB', database: CURSE_DB }, true);
-        }
         _updateCurseStats();
         if (_activeTab === 'curse') renderCurseTab();
         showStatus('✅ Import: ' + Object.keys(CURSE_DB).length + ' Crafts', 'success');
@@ -2433,6 +2425,35 @@ function curseImport() {
     r.readAsText(e.target.files[0]);
   };
   inp.click();
+}
+
+function curseClear() {
+  const total = Object.keys(CURSE_DB).length;
+  if (!total) { showStatus('ℹ️ Datenbank ist bereits leer', 'info'); return; }
+  if (!confirm('Alle ' + total + ' Einträge löschen?\nDanach kannst du neu scannen oder importieren.')) return;
+  CURSE_DB         = {};
+  CURSE_LSCG       = {};
+  CURSE_CACHE_LSCG = {};
+  try { localStorage.removeItem('BC_CURSE_DB_v1'); } catch {}
+  _updateCurseStats();
+  renderCurseTab();
+  showStatus('🗑️ Datenbank geleert', 'success');
+}
+
+function curseClearAndScan() {
+  const total = Object.keys(CURSE_DB).length;
+  const msg = total
+    ? 'Alle ' + total + ' Einträge löschen und dann neu scannen?'
+    : 'Neu scannen?';
+  if (!confirm(msg)) return;
+  CURSE_DB         = {};
+  CURSE_LSCG       = {};
+  CURSE_CACHE_LSCG = {};
+  try { localStorage.removeItem('BC_CURSE_DB_v1'); } catch {}
+  _updateCurseStats();
+  renderCurseTab();
+  curseScan();
+  showStatus('🔄 Datenbank geleert – Scan läuft...', 'info');
 }
 
 // ── Load curse DB from localStorage on startup ────────
@@ -2513,11 +2534,6 @@ window.addEventListener('message', function(ev) {
         document.getElementById('connStatus').textContent = '\U0001f7e2 Verbunden';
         document.getElementById('connStatus').style.color = 'var(--green)';
         document.getElementById('connectHint')?.classList.add('hidden');
-        // Push gespeicherte Curse-DB sofort an den Loader → Wear funktioniert auch nach Neustart/Browserwechsel
-        if (Object.keys(CURSE_DB).length > 0) {
-          bcSend({ type: 'LOAD_CURSE_DB', database: CURSE_DB }, true);
-          console.log('[BCK-Popup] Curse-DB gepusht: ' + Object.keys(CURSE_DB).length + ' Einträge');
-        }
         // Sofort Raum scannen + Interval starten
         bcSend({ type: 'GET_PLAYER' }, true);
         startRoomScan();
@@ -2837,8 +2853,10 @@ function selectRoomMember(num) {
 <div id="tab-curse" class="tab-pane">
   <div class="curse-topbar">
     <button class="btn btn-green" onclick="curseScan()">🔍 Scannen</button>
+    <button class="btn btn-green" onclick="curseClearAndScan()" title="Alte Einträge löschen und frisch scannen">🔄 Neu scannen</button>
     <button class="btn btn-primary" onclick="curseExport()">⬇️ Export</button>
     <button class="btn btn-primary" onclick="curseImport()">⬆️ Import</button>
+    <button class="btn btn-red" onclick="curseClear()" title="Alle gespeicherten Einträge löschen">🗑️ Leeren</button>
     <div class="curse-stats">
       <div class="curse-stat">Crafts: <span id="csStat-total">0</span></div>
       <div class="curse-stat">🔮 Cursed: <span id="csStat-cursed">0</span></div>
