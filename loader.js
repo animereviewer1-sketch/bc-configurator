@@ -421,10 +421,21 @@ window.CurseScanner = (() => {
   }
 
   function holeLSCGCurse(C, craftName) {
+    const lowerCraft = craftName?.toLowerCase();
     const live = (C.LSCG?.CursedItemModule?.CursedItems ?? [])
-      .find(ci => ci.Name?.toLowerCase() === craftName?.toLowerCase());
-    if (live) { _cacheLSCG(C.MemberNumber, live); return live; }
-    return lscgCache[C.MemberNumber + ':' + (craftName?.toLowerCase())] ?? null;
+      .find(ci => ci.Name?.toLowerCase() === lowerCraft);
+    if (live) {
+      _cacheLSCG(C.MemberNumber, live);
+      // Also store under craft name key if it differs from LSCG name
+      // so future lookups by craft name still find it
+      if (live.Name?.toLowerCase() !== lowerCraft) {
+        const altKey = C.MemberNumber + ':' + lowerCraft;
+        lscgCache[altKey] = { ...lscgCache[C.MemberNumber + ':' + live.Name.toLowerCase()], _altKey: true };
+      }
+      return live;
+    }
+    // Look up by craft name first, then by any cached LSCG name that might match
+    return lscgCache[C.MemberNumber + ':' + lowerCraft] ?? null;
   }
 
   function findeGruppe(itemName) {
@@ -460,7 +471,13 @@ window.CurseScanner = (() => {
         const gruppe = findeGruppe(craft.Item);
         const key    = C.MemberNumber + ':' + craft.Item + ':' + craft.Name;
         const istNeu = !database[key];
-        const lscg   = holeLSCGCurse(C, craft.Name);
+        // Determine live LSCG data and whether it came from cache
+        const liveCursedItems = C.LSCG?.CursedItemModule?.CursedItems ?? [];
+        const lscgLive = liveCursedItems.find(ci => ci.Name?.toLowerCase() === craft.Name?.toLowerCase()) ?? null;
+        const lscg = lscgLive ?? lscgCache[C.MemberNumber + ':' + craft.Name?.toLowerCase()] ?? null;
+        if (lscgLive) _cacheLSCG(C.MemberNumber, lscgLive); // cache live data
+        const lscgIsFromCache = lscg !== null && lscgLive === null;
+
         const cursed = isCursed(craft);
         const eintrag = {
           CraftName:      craft.Name ?? craft.Item,
@@ -476,8 +493,7 @@ window.CurseScanner = (() => {
           ZuletztGesehen: new Date().toLocaleTimeString(),
           Craft:          { ...craft, MemberName: C.Name, MemberNumber: C.MemberNumber },
           LSCG:           lscg,
-          LSCGAusCache:   lscg !== null && !(C.LSCG?.CursedItemModule?.CursedItems ?? [])
-                            .some(ci => ci.Name?.toLowerCase() === craft.Name?.toLowerCase()),
+          LSCGAusCache:   lscgIsFromCache,
         };
         if (istNeu) neuDB++; else aktualisiert++;
         database[key] = eintrag;
