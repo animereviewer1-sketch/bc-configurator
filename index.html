@@ -2294,6 +2294,9 @@ function renderCurseTab() {
           (entry.Property ? '<span class="curse-detail-badge">'+escHtml(entry.Property)+'</span>' : '')+
         '</td>'+
         '<td class="lscg-col">'+lscgText+'</td>'+
+        '<td style="text-align:center;vertical-align:middle">'+
+          (isLSCG ? '<span title="'+(entry.LSCGAusCache ? 'Aus LSCG-Cache' : 'Live-Daten')+'" style="font-size:1rem;cursor:default">'+(entry.LSCGAusCache ? '✅' : '🟢')+'</span>' : '<span style="color:var(--text3)">–</span>')+
+        '</td>'+
         '<td class="comment-col"><textarea class="curse-comment-input" placeholder="Notiz..." '+
           'data-rowid="' + rowId + '" onchange="saveCurseCommentById(this.dataset.rowid,this.value)">'+escHtml(comment)+'</textarea></td>'+
         '<td class="actions">'+
