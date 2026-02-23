@@ -886,8 +886,8 @@ function loadCache() {
     document.getElementById('cacheInfo').textContent =
       `${items} Items | ${Object.keys(data).length} Gruppen${modCount ? ` | 🧩 ${modCount} Modular` : ''}`;
     document.getElementById('clearBtn').classList.remove('hidden');
-    document.getElementById('outfitBtn').classList.remove('hidden');
-    document.getElementById('profileBtn').classList.remove('hidden');
+    document.getElementById('outfitBtn')?.classList.remove('hidden');
+    document.getElementById('profileBtn')?.classList.remove('hidden');
     renderGroups();
     showEmpty();
   } catch(e) {
@@ -2156,6 +2156,7 @@ function _handleCurseData(data) {
 
 // ── CURSE FILTER STATE ───────────────────────────────
 let _curseFilter  = 'all';  // 'all' | 'cursed' | 'lscg'
+let _pendingExport = false;
 let _curseEntryMap = {};    // rowId → dbKey, for safe onclick
 
 function toggleCacheFilter() {
@@ -2382,26 +2383,46 @@ function wearCurseByData(btn) {
 
 function wearCurse(dbKey, targetNum) {
   if (!_connected) { showStatus('❌ Nicht verbunden', 'error'); return; }
-  bcSend({ type: 'WEAR_CURSE', dbKey, targetNum });
+  const entry = CURSE_DB[dbKey] ?? null;
+  if (!entry) { showStatus('❌ Eintrag nicht in DB: ' + dbKey, 'error'); return; }
+  bcSend({ type: 'WEAR_CURSE', dbKey, targetNum, entry });
   showStatus('⏳ Curse wird angelegt...', 'info');
 }
 
 // ── Export / Import ───────────────────────────────────
-function curseExport() {
-  if (!Object.keys(CURSE_DB).length) { showStatus('❌ Nichts zum Exportieren', 'error'); return; }
+function _doExportDownload(lscgCacheFromBC) {
+  // Merge: BC-Cache (aktuell) + lokaler Cache (aus letztem Import/Scan)
+  const mergedCache = Object.assign({}, CURSE_CACHE_LSCG, lscgCacheFromBC);
   const payload = {
-    _meta: { exportedAt: new Date().toISOString(), version: 1 },
+    _meta: { exportedAt: new Date().toISOString(), version: 2 },
     database: CURSE_DB,
     lscgTable: CURSE_LSCG,
-    lscgCache: CURSE_CACHE_LSCG,
+    lscgCache: mergedCache,
     comments: CURSE_COMMENTS,
   };
+  // Auch lokal mergen für zukünftige Nutzung
+  Object.assign(CURSE_CACHE_LSCG, lscgCacheFromBC);
+  try { localStorage.setItem('BC_CURSE_DB_v1', JSON.stringify({database:CURSE_DB,lscgTable:CURSE_LSCG,lscgCache:CURSE_CACHE_LSCG})); } catch {}
   const blob = new Blob([JSON.stringify(payload, null, 2)], {type:'application/json'});
   const url  = URL.createObjectURL(blob);
   const a    = document.createElement('a');
   a.href = url; a.download = 'CurseScanner_' + new Date().toISOString().slice(0,10) + '.json';
   a.click(); URL.revokeObjectURL(url);
-  showStatus('✅ Export gespeichert', 'success');
+  const n = Object.keys(mergedCache).length;
+  showStatus('✅ Export gespeichert (' + n + ' LSCG-Cache-Einträge)', 'success');
+}
+
+function curseExport() {
+  if (!Object.keys(CURSE_DB).length) { showStatus('❌ Nichts zum Exportieren', 'error'); return; }
+  if (_connected) {
+    // Erst frischen LSCG-Cache aus BC holen, dann exportieren
+    showStatus('⏳ Lade LSCG-Cache aus BC...', 'info');
+    _pendingExport = true;
+    bcSend({ type: 'GET_LSCG_CACHE' });
+  } else {
+    // Nicht verbunden → mit vorhandenen Daten exportieren
+    _doExportDownload({});
+  }
 }
 
 function curseImport() {
@@ -2417,6 +2438,14 @@ function curseImport() {
         CURSE_CACHE_LSCG = d.lscgCache ?? {};
         if (d.comments) Object.assign(CURSE_COMMENTS, d.comments);
         _saveCurseComments();
+        try { localStorage.setItem('BC_CURSE_DB_v1', JSON.stringify({database:CURSE_DB,lscgTable:CURSE_LSCG,lscgCache:CURSE_CACHE_LSCG})); } catch {}
+        if (_connected && Object.keys(CURSE_DB).length > 0) {
+          bcSend({ type: 'LOAD_CURSE_DB', database: CURSE_DB }, true);
+          // LSCG-Cache in BC-localStorage schreiben → bleibt auch nach Neustart verfügbar
+          if (Object.keys(CURSE_CACHE_LSCG).length > 0) {
+            bcSend({ type: 'LOAD_LSCG_CACHE', cache: CURSE_CACHE_LSCG }, true);
+          }
+        }
         _updateCurseStats();
         if (_activeTab === 'curse') renderCurseTab();
         showStatus('✅ Import: ' + Object.keys(CURSE_DB).length + ' Crafts', 'success');
@@ -2534,6 +2563,10 @@ window.addEventListener('message', function(ev) {
         document.getElementById('connStatus').textContent = '\U0001f7e2 Verbunden';
         document.getElementById('connStatus').style.color = 'var(--green)';
         document.getElementById('connectHint')?.classList.add('hidden');
+        // Curse-DB an Loader pushen → Wear nach Browserwechsel/Neustart möglich
+        if (Object.keys(CURSE_DB).length > 0) {
+          bcSend({ type: 'LOAD_CURSE_DB', database: CURSE_DB }, true);
+        }
         // Sofort Raum scannen + Interval starten
         bcSend({ type: 'GET_PLAYER' }, true);
         startRoomScan();
@@ -2553,8 +2586,8 @@ window.addEventListener('message', function(ev) {
       const _mc = Object.values(_data).flatMap(g => Object.values(g)).filter(i => i.archetype === 'modular').length;
       document.getElementById('cacheInfo').textContent = '\u2705 ' + _items + ' Items \u00b7 ' + Object.keys(_data).length + ' Gruppen \u00b7 \U0001f9e9 ' + _mc + ' modular';
       document.getElementById('clearBtn').classList.remove('hidden');
-      document.getElementById('outfitBtn').classList.remove('hidden');
-      document.getElementById('profileBtn').classList.remove('hidden');
+      document.getElementById('outfitBtn')?.classList.remove('hidden');
+      document.getElementById('profileBtn')?.classList.remove('hidden');
       document.getElementById('connectHint')?.classList.add('hidden');
       renderGroups();
       showEmpty();
@@ -2586,6 +2619,17 @@ window.addEventListener('message', function(ev) {
       _handleCurseData(ev.data);
       break;
 
+    case 'LSCG_CACHE_DATA':
+      if (_pendingExport) {
+        _pendingExport = false;
+        _doExportDownload(ev.data.cache ?? {});
+      } else {
+        // Auch ohne pending export: in lokalen Cache mergen
+        Object.assign(CURSE_CACHE_LSCG, ev.data.cache ?? {});
+        try { localStorage.setItem('BC_CURSE_DB_v1', JSON.stringify({database:CURSE_DB,lscgTable:CURSE_LSCG,lscgCache:CURSE_CACHE_LSCG})); } catch {}
+      }
+      break;
+
     case 'WEAR_CURSE_OK':
       showStatus('\u2705 ' + (ev.data.msg || 'Curse angelegt!'), 'success');
       break;
@@ -2614,7 +2658,7 @@ function clearCache() {
   try { localStorage.removeItem('BC_CACHE_v12'); } catch {}
   document.getElementById('cacheInfo').textContent = 'Kein Cache';
   document.getElementById('clearBtn').classList.add('hidden');
-  document.getElementById('outfitBtn').classList.add('hidden');
+  document.getElementById('outfitBtn')?.classList.add('hidden');
   document.getElementById('profileBtn')?.classList.add('hidden');
   document.getElementById('connectHint')?.classList.remove('hidden');
   document.getElementById('groupsList').innerHTML = '';
@@ -2826,8 +2870,8 @@ function selectRoomMember(num) {
         const mc = Object.values(CACHE).flatMap(g => Object.values(g)).filter(i => i.archetype === 'modular').length;
         document.getElementById('cacheInfo').textContent = '\u2705 ' + items + ' Items (lokal gecacht) \u00b7 \U0001f9e9 ' + mc + ' modular';
         document.getElementById('clearBtn').classList.remove('hidden');
-        document.getElementById('outfitBtn').classList.remove('hidden');
-        document.getElementById('profileBtn').classList.remove('hidden');
+        document.getElementById('outfitBtn')?.classList.remove('hidden');
+        document.getElementById('profileBtn')?.classList.remove('hidden');
         document.getElementById('connectHint')?.classList.add('hidden');
         renderGroups(); showEmpty(); renderProfileList();
         console.log('[BCK-Popup] Cache aus localStorage: ' + items + ' Items');
