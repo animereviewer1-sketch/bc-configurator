@@ -560,6 +560,21 @@ textarea.outfit-code{width:100%;min-height:200px;background:var(--bg4);border:1p
 .order-btn:disabled{opacity:.25;cursor:default}
 .act-kritisch{border-color:#662222!important;background:#1a0808!important}
 .act-kritisch:hover{border-color:#aa3333!important}
+.log-entry{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:6px;border:1px solid var(--border2);background:var(--bg2);font-size:.72rem}
+.log-entry.log-ok{border-color:#1a4a1a;background:#080f08}
+.log-entry.log-ungueltig{border-color:#4a1a1a;background:#0f0808}
+.log-entry.log-skip{border-color:#2a2a0a;background:#0c0c05;opacity:.7}
+.log-ts{font-size:.6rem;color:var(--text3);white-space:nowrap;min-width:54px}
+.log-badge{font-size:.62rem;padding:1px 6px;border-radius:3px;white-space:nowrap;flex-shrink:0}
+.log-badge.ok{background:#0d2a0d;color:#5c5;border:1px solid #1a4a1a}
+.log-badge.ungueltig{background:#2a0d0d;color:#e55;border:1px solid #4a1a1a}
+.log-badge.skip{background:#1a1a06;color:#aa9;border:1px solid #333310}
+.log-bot{color:var(--pl);font-weight:600;flex-shrink:0}
+.log-trig{color:var(--text2);flex-shrink:0}
+.log-player{color:var(--green);flex:1}
+.log-pos{color:var(--text3);font-size:.6rem;white-space:nowrap}
+.log-filter-btn{font-size:.65rem;padding:2px 9px;background:var(--bg3);border:1px solid var(--border2);color:var(--text3);border-radius:4px;cursor:pointer}
+.log-filter-btn.active{background:var(--pd);border-color:var(--purple);color:var(--pl)}
 .bot-status{padding:5px 18px;font-size:.68rem;font-family:var(--mono);display:none}
 .bot-status.running{background:#052818;border-bottom:1px solid var(--green2);color:var(--green);display:block}
 .bot-status.stopped{background:#0a0510;border-bottom:1px solid var(--border2);color:var(--text3);display:block}
@@ -616,6 +631,7 @@ textarea.outfit-code{width:100%;min-height:200px;background:var(--bg4);border:1p
   <button class="tab-btn"        id="tab-outfit-btn" onclick="switchTab('outfit')">👗 Outfit &amp; Profile</button>
   <button class="tab-btn"        id="tab-curse-btn"  onclick="switchTab('curse')">🔮 Craft &amp; Curse</button>
   <button class="tab-btn"        id="tab-bot-btn"    onclick="switchTab('bot')">🤖 Bot</button>
+  <button class="tab-btn"        id="tab-log-btn"    onclick="switchTab('log')">📋 Logs</button>
 </div>
 
 <!-- TAB 1: ITEM MANAGER -->
@@ -2180,13 +2196,14 @@ function deleteProfileByIdx(idx) {
 let _activeTab = 'items';
 function switchTab(tab) {
   _activeTab = tab;
-  ['items','outfit','curse','bot'].forEach(t => {
+  ['items','outfit','curse','bot','log'].forEach(t => {
     document.getElementById('tab-'+t)?.classList.toggle('active', t===tab);
     document.getElementById('tab-'+t+'-btn')?.classList.toggle('active', t===tab);
   });
   if (tab === 'outfit') { renderOutfitList(); renderOutfitMemberChips(); renderProfileList(); _autoOutfitCode(); }
   if (tab === 'curse')  { renderCurseTab(); }
   if (tab === 'bot')    { renderBotTab(); }
+  if (tab === 'log')    { renderLogTab(); }
 }
 
 // ── addToOutfit patched: auto-switch + auto-code ──────
@@ -3082,6 +3099,22 @@ function selectRoomMember(num) {
   </div>
 </div>
 
+<div id="tab-log" class="tab-pane">
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px 10px;border-bottom:1px solid var(--border)">
+    <span style="font-weight:600;font-size:.85rem;color:var(--text1)">📋 Bot-Logs</span>
+    <div style="display:flex;gap:8px;align-items:center">
+      <span id="log-count" style="font-size:.68rem;color:var(--text3)"></span>
+      <button onclick="logFilter('')" id="logf-all"    class="log-filter-btn active">Alle</button>
+      <button onclick="logFilter('ok')"         id="logf-ok"    class="log-filter-btn">✅ Ausgelöst</button>
+      <button onclick="logFilter('ungueltig')"  id="logf-ug"    class="log-filter-btn">❌ Ungültig</button>
+      <button onclick="logFilter('skip')"       id="logf-skip"  class="log-filter-btn">⏭ Übersprungen</button>
+      <button onclick="logClearFiltered()" style="font-size:.68rem;padding:3px 10px;background:#2a0a0a;border:1px solid var(--red);color:var(--red);border-radius:5px;cursor:pointer">🗑 Sichtbare löschen</button>
+      <button onclick="logClearAll()" style="font-size:.68rem;padding:3px 10px;background:var(--bg3);border:1px solid var(--border);color:var(--text3);border-radius:5px;cursor:pointer">Alle löschen</button>
+    </div>
+  </div>
+  <div id="log-entries" style="overflow-y:auto;height:calc(100vh - 162px);padding:10px 14px;display:flex;flex-direction:column;gap:4px"></div>
+</div>
+
 <script>
 // ══ BOT ENGINE ══════════════════════════════════════════════
 
@@ -3104,6 +3137,97 @@ function _loadBots() {
 function _selBot() { return _bots.find(b => b.id === _selBotId) ?? null; }
 
 // ── Tab entry ─────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════
+//  BOT LOG SYSTEM
+// ══════════════════════════════════════════════════════
+window._BCBotLog = window._BCBotLog ?? []; // [{ts,botName,trigName,trigId,player,memberNum,status,x,y,msg}]
+let _logFilter = '';
+
+function logPush(entry) {
+  window._BCBotLog.unshift(entry); // Neueste zuerst
+  if (window._BCBotLog.length > 500) window._BCBotLog.length = 500; // Max 500 Einträge
+  // Live-Update wenn Log-Tab aktiv
+  if (document.getElementById('tab-log')?.classList.contains('active')) renderLogTab();
+  // Badge auf Tab-Button aktualisieren
+  const btn = document.getElementById('tab-log-btn');
+  if (btn) btn.textContent = '📋 Logs' + (window._BCBotLog.length ? ' ('+window._BCBotLog.length+')' : '');
+}
+
+function logFilter(f) {
+  _logFilter = f;
+  ['all','ok','ug','skip'].forEach(k => document.getElementById('logf-'+k)?.classList.remove('active'));
+  const map = {'':'all','ok':'ok','ungueltig':'ug','skip':'skip'};
+  document.getElementById('logf-'+(map[f]??'all'))?.classList.add('active');
+  renderLogTab();
+}
+
+function _logEntries() {
+  if (!_logFilter) return window._BCBotLog;
+  return window._BCBotLog.filter(e => {
+    if (_logFilter === 'skip') return e.status.startsWith('skip');
+    return e.status === _logFilter;
+  });
+}
+
+function renderLogTab() {
+  const entries = _logEntries();
+  const count = document.getElementById('log-count');
+  if (count) count.textContent = entries.length + ' / ' + window._BCBotLog.length + ' Einträge';
+
+  const statusLabel = {
+    ok: '<span class="log-badge ok">✅ Ausgelöst</span>',
+    ungueltig: '<span class="log-badge ungueltig">❌ Ungültig</span>',
+    skip_wdh: '<span class="log-badge skip">⏭ Einmalig</span>',
+    skip_max: '<span class="log-badge skip">⏭ Max erreicht</span>',
+  };
+
+  const html = entries.map((e, i) => {
+    const d = new Date(e.ts);
+    const ts = d.toLocaleTimeString('de-DE', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    const pos = (e.x||e.y) ? `X${e.x} Y${e.y}` : '';
+    const badge = statusLabel[e.status] ?? `<span class="log-badge skip">⏭ ${escHtml(e.status)}</span>`;
+    const cls = e.status === 'ok' ? 'log-ok' : e.status === 'ungueltig' ? 'log-ungueltig' : 'log-skip';
+    const realIdx = window._BCBotLog.indexOf(e);
+    return `<div class="log-entry ${cls}" id="loge-${realIdx}">
+      <span class="log-ts">${ts}</span>
+      ${badge}
+      <span class="log-bot">${escHtml(e.botName)}</span>
+      <span style="color:var(--text3);font-size:.65rem">→</span>
+      <span class="log-trig">🎯 ${escHtml(e.trigName)}</span>
+      <span style="color:var(--text3);font-size:.65rem">von</span>
+      <span class="log-player">👤 ${escHtml(e.player)}</span>
+      ${pos ? `<span class="log-pos">📍 ${pos}</span>` : ''}
+      ${e.msg ? `<span style="font-size:.62rem;color:var(--text3);font-style:italic">${escHtml(e.msg)}</span>` : ''}
+      <button onclick="logDeleteEntry(${realIdx})" style="margin-left:auto;background:none;border:none;color:var(--text3);cursor:pointer;font-size:.7rem;padding:1px 5px;opacity:.5" onmouseover="this.style.opacity=1;this.style.color='var(--red)'" onmouseout="this.style.opacity=.5;this.style.color='var(--text3)'">✕</button>
+    </div>`;
+  }).join('');
+
+  document.getElementById('log-entries').innerHTML = html || `<div style="color:var(--text3);font-size:.75rem;text-align:center;margin-top:40px">Noch keine Einträge</div>`;
+}
+
+function logDeleteEntry(idx) {
+  window._BCBotLog.splice(idx, 1);
+  renderLogTab();
+  const btn = document.getElementById('tab-log-btn');
+  if (btn) btn.textContent = '📋 Logs' + (window._BCBotLog.length ? ' ('+window._BCBotLog.length+')' : '');
+}
+
+function logClearFiltered() {
+  const entries = _logEntries();
+  entries.forEach(e => {
+    const i = window._BCBotLog.indexOf(e);
+    if (i >= 0) window._BCBotLog.splice(i, 1);
+  });
+  renderLogTab();
+}
+
+function logClearAll() {
+  window._BCBotLog.length = 0;
+  renderLogTab();
+  const btn = document.getElementById('tab-log-btn');
+  if (btn) btn.textContent = '📋 Logs';
+}
+
 function renderBotTab() {
   _loadBots();
   renderBotList();
@@ -3239,6 +3363,11 @@ function renderTrigCard(bot, t, i) {
           <option value="n_mal"    ${wdh==='n_mal'?'selected':''}>N× N-mal</option>
         </select>
         ${wdh==='n_mal'?`<input class="cf cf-w80" type="number" min="1" value="${t.maxMal??2}" oninput="trigField('${t.id}','maxMal',+this.value)" title="Wie oft max. feuern">× max.`:''}
+        <label style="font-size:.65rem;color:var(--text3);margin-left:8px">🔑 Als Vorbedingung:</label>
+        <select class="cf" style="width:170px" title="Wie zählt dieser Trigger als Vorbedingung für andere Trigger?" onchange="trigField('${t.id}','charSpec',this.value==='true')">
+          <option value="false" ${!t.charSpec?'selected':''}>🌐 Global – einmal gilt für alle</option>
+          <option value="true"  ${t.charSpec?'selected':''}>👤 Pro Spieler – jeder selbst</option>
+        </select>
       </div>
 
       <div class="te-section">
@@ -3299,10 +3428,17 @@ function renderCond(bot, tid, c, ci) {
   } else if (c.typ === 'trigger_war') {
     const trigs = bot?.triggers ?? [];
     const opts = trigs.filter(t=>t.id!==tid).map(t=>`<option value="${t.id}" ${c.trigId===t.id?'selected':''}>${escHtml(t.name||t.id)}</option>`).join('');
+    const refTrig = trigs.find(t=>t.id===c.trigId);
+    const modeBadge = refTrig
+      ? refTrig.charSpec
+        ? `<span style="font-size:.58rem;background:#1a1040;border:1px solid var(--purple);color:var(--pl);padding:1px 5px;border-radius:3px">👤 Pro Spieler</span>`
+        : `<span style="font-size:.58rem;background:#0a1a0a;border:1px solid var(--green);color:var(--green);padding:1px 5px;border-radius:3px">🌐 Global</span>`
+      : '';
     inner = `
-      <select class="cf cf-w160" onchange="condField('${tid}',${ci},'trigId',this.value)">
+      <select class="cf cf-w160" onchange="condField('${tid}',${ci},'trigId',this.value);condRerender('${tid}')">
         <option value="">– Trigger wählen –</option>${opts}
       </select>
+      ${modeBadge}
       <span style="font-size:.62rem;color:var(--text3)">muss zuerst ausgelöst worden sein</span>`;
   } else if (c.typ === 'player_betritt') {
     inner = `<span style="font-size:.68rem;color:var(--green)">👋 Feuert einmalig wenn ein Spieler den Raum betritt</span>`;
@@ -3860,6 +3996,7 @@ function _buildBotCode(bot) {
     id: t.id, name: t.name, delay: t.delay??0,
       wiederholung: t.wiederholung??'immer', maxMal: t.maxMal??2,
       fallbackTyp: t.fallbackTyp??'nichts', fallbackText: t.fallbackText??'',
+      charSpec: !!t.charSpec,
     bedingungen: (t.bedingungen||[]),
     aktionen: (t.aktionen||[]).map(a => {
       if (a.typ==='item' && a.curseKey && !a.curseEntry) return {...a, curseEntry: CURSE_DB[a.curseKey]??null};
@@ -3878,8 +4015,11 @@ const _BID='${safeId}';
 if(window['_BCBot_'+_BID]){console.warn('[Bot] Bereits aktiv – erst stoppen!');return;}
 const _cfg=${cfgJson};
 const _trigs=${trigsJson};
-const _fired={};     // trigId -> last fired timestamp
-const _firedCnt={}; // trigId -> fire count
+const _fired={};       // trigId -> last fired timestamp (global latch)
+const _firedCnt={};   // trigId -> fire count (global)
+const _firedChar={};  // trigId_memberNum -> timestamp (pro Spieler)
+// Quick lookup: trigId -> trigger config (for charSpec)
+const _trigMap=Object.fromEntries(_trigs.map(t=>[t.id,t]));
 
 function _log(...a){if(_cfg.logAktiv)console.log('[Bot:${safeName}]',...a);}
 
@@ -3908,7 +4048,16 @@ function _ok(trig,rohText,typKey,C){
       const Cf=ChatRoomCharacter.find(x=>x.MemberNumber===C.MemberNumber)??C;
       if(!(Cf.Appearance??[]).some(a=>a.Asset?.Name===c.item))return false;
     }
-    else if(c.typ==='trigger_war'){if(!_fired[c.trigId])return false;}
+    else if(c.typ==='trigger_war'){
+      const ref=_trigMap[c.trigId];
+      if(ref?.charSpec){
+        // Pro-Spieler: jeder braucht eigenen Auslöser
+        if(!_firedChar[c.trigId+'_'+C.MemberNumber])return false;
+      }else{
+        // Global: einmal reicht für alle
+        if(!_fired[c.trigId])return false;
+      }
+    }
     // player_betritt & item_traegt (edge) handled by polling – skip in message _ok
   }
   return true;
@@ -4011,14 +4160,39 @@ function _runSeq(aktionen,C,vars,trigBase,onDone,onUngueltig){
   },a.delay??0);
 }
 
+
+// Sendet einen Log-Eintrag an den Tab im Index
+function _pushLog(extra,vars,trig){
+  if(typeof window.logPush!=='function')return;
+  window.logPush({
+    ts:Date.now(),
+    botName:'${safeName}',
+    trigName:trig.name??'?',
+    trigId:trig.id,
+    player:(vars.name??'?')+' #'+(vars.C?.MemberNumber??'?'),
+    memberNum:vars.C?.MemberNumber,
+    x:vars.x??0,
+    y:vars.y??0,
+    ...extra,
+  });
+}
+
 function _run(trig,vars){
   const C=vars.C??Player;
 
   // ── Wiederholung prüfen ──────────────────────────────────
   const wdh=trig.wiederholung??'immer';
   const cnt=_firedCnt[trig.id]??0;
-  if(wdh==='einmalig'&&cnt>=1){_log('\u23ED "'+trig.name+'" bereits ausgelöst (1×))');return;}
-  if(wdh==='n_mal'&&cnt>=(trig.maxMal??2)){_log('\u23ED "'+trig.name+'" max '+trig.maxMal+'× erreicht');return;}
+  if(wdh==='einmalig'&&cnt>=1){
+    _log('⏭ "'+trig.name+'" bereits ausgelöst (1×)');
+    _pushLog({status:'skip_wdh',msg:'1× bereits ausgelöst'},vars,trig);
+    return;
+  }
+  if(wdh==='n_mal'&&cnt>=(trig.maxMal??2)){
+    _log('⏭ "'+trig.name+'" max '+trig.maxMal+'× erreicht');
+    _pushLog({status:'skip_max',msg:'Max '+trig.maxMal+'× erreicht'},vars,trig);
+    return;
+  }
 
   _log('\u{1F3AF} "'+trig.name+'" von '+vars.name+' | X='+vars.x+' Y='+vars.y+' | #'+(cnt+1)+(wdh==='n_mal'?' von '+trig.maxMal:''));
 
@@ -4028,13 +4202,17 @@ function _run(trig,vars){
       trig.aktionen??[],C,vars,trig,
       // onDone – Trigger erfolgreich gezählt
       ()=>{
-        _fired[trig.id]=Date.now();
+        const now=Date.now();
+        _fired[trig.id]=now;
+        _firedChar[trig.id+'_'+C.MemberNumber]=now;
         _firedCnt[trig.id]=(cnt+1);
-        _log('\u2705 Trigger "'+trig.name+'" abgeschlossen (Gesamt: '+(_firedCnt[trig.id])+'x)');
+        _log('\u2705 Trigger "'+trig.name+'" abgeschlossen #'+_firedCnt[trig.id]+(trig.charSpec?' [pro Spieler]':' [global]'));
+        _pushLog({status:'ok'},vars,trig);
       },
       // onUngueltig – eine Aktion hat ❌ Trigger ungültig ausgelöst
       ()=>{
         _log('\u274C Trigger "'+trig.name+'" ungültig – nicht gezählt');
+        _pushLog({status:'ungueltig'},vars,trig);
         if(trig.fallbackTyp&&trig.fallbackTyp!=='nichts'&&trig.fallbackText){
           const typ={chat:'Chat',emote:'Emote'}[trig.fallbackTyp]??'Chat';
           ServerSend('ChatRoomChat',{Content:_tpl(trig.fallbackText,vars),Type:typ});
@@ -4081,7 +4259,7 @@ const _itPoll=setInterval(()=>{
         const otherOk=(trig.bedingungen??[]).every(c=>{
           if(c.typ==='item_traegt')return true;
           if(c.typ==='zone'){const p=c.puffer??1;return pos.X>=c.x-p&&pos.X<=c.x+p&&pos.Y>=c.y-p&&pos.Y<=c.y+p;}
-          if(c.typ==='trigger_war')return!!_fired[c.trigId];
+          if(c.typ==='trigger_war'){const ref=_trigMap[c.trigId];return ref?.charSpec?!!_firedChar[c.trigId+'_'+C.MemberNumber]:!!_fired[c.trigId];}
           return true;
         });
         if(otherOk)_run(trig,{name:C.Name,wort:'',typ:'Item',x:pos.X,y:pos.Y,zone:'',C});
@@ -4096,6 +4274,17 @@ const _roomPrev=new Set((ChatRoomCharacter||[]).map(c=>c.MemberNumber));
 const _joinPoll=setInterval(()=>{
   const chars=ChatRoomCharacter||[];
   const cur=new Set(chars.map(c=>c.MemberNumber));
+
+  // Spieler verlassen → pro-Spieler States zurücksetzen
+  for(const prevNum of _roomPrev){
+    if(!cur.has(prevNum)){
+      _log('\u{1F6AA} #'+prevNum+' verlassen – pro-Spieler States gelöscht');
+      for(const k of Object.keys(_firedChar)){
+        if(k.endsWith('_'+prevNum))delete _firedChar[k];
+      }
+    }
+  }
+
   for(const C of chars){
     if(!_roomPrev.has(C.MemberNumber)){
       _log('\u{1F91D} Spieler betritt: '+C.Name+' #'+C.MemberNumber);
@@ -4106,7 +4295,7 @@ const _joinPoll=setInterval(()=>{
         const otherOk=(trig.bedingungen??[]).every(c=>{
           if(c.typ==='player_betritt')return true;
           if(c.typ==='zone'){const p=c.puffer??1;return pos.X>=c.x-p&&pos.X<=c.x+p&&pos.Y>=c.y-p&&pos.Y<=c.y+p;}
-          if(c.typ==='trigger_war')return!!_fired[c.trigId];
+          if(c.typ==='trigger_war'){const ref=_trigMap[c.trigId];return ref?.charSpec?!!_firedChar[c.trigId+'_'+C.MemberNumber]:!!_fired[c.trigId];}
           return true;
         });
         if(otherOk)_run(trig,{name:C.Name,wort:'',typ:'Beitritt',x:pos.X,y:pos.Y,zone:'',C});
@@ -4141,7 +4330,7 @@ const _zonePoll=setInterval(()=>{
         // Prüfe andere Bedingungen (vortrigger, item_traegt)
         const otherOk=(trig.bedingungen??[]).every(c=>{
           if(c.typ==='zone')return true;
-          if(c.typ==='trigger_war')return!!_fired[c.trigId];
+          if(c.typ==='trigger_war'){const ref=_trigMap[c.trigId];return ref?.charSpec?!!_firedChar[c.trigId+'_'+C.MemberNumber]:!!_fired[c.trigId];}
           if(c.typ==='item_traegt')return(C.Appearance??[]).some(a=>a.Asset?.Name===c.item);
           return true;
         });
