@@ -2390,38 +2390,46 @@ function wearCurse(dbKey, targetNum) {
 }
 
 // ── Export / Import ───────────────────────────────────
-function _doExportDownload(lscgCacheFromBC) {
-  // Merge: BC-Cache (aktuell) + lokaler Cache (aus letztem Import/Scan)
-  const mergedCache = Object.assign({}, CURSE_CACHE_LSCG, lscgCacheFromBC);
+// Gesammelte Caches für Export
+let _exportLscgCache  = null;
+let _exportCraftCache = null;
+
+function _tryFinishExport() {
+  if (_exportLscgCache === null || _exportCraftCache === null) return; // warten bis beide da
+  const mergedLscg  = Object.assign({}, CURSE_CACHE_LSCG, _exportLscgCache);
+  const mergedCraft = Object.assign({}, CURSE_DB, _exportCraftCache);
+  Object.assign(CURSE_CACHE_LSCG, _exportLscgCache);
+  Object.assign(CURSE_DB, _exportCraftCache);
+  try { localStorage.setItem('BC_CURSE_DB_v1', JSON.stringify({database:CURSE_DB,lscgTable:CURSE_LSCG,lscgCache:CURSE_CACHE_LSCG})); } catch {}
   const payload = {
-    _meta: { exportedAt: new Date().toISOString(), version: 2 },
-    database: CURSE_DB,
+    _meta: { exportedAt: new Date().toISOString(), version: 3 },
+    database: mergedCraft,
     lscgTable: CURSE_LSCG,
-    lscgCache: mergedCache,
+    lscgCache: mergedLscg,
     comments: CURSE_COMMENTS,
   };
-  // Auch lokal mergen für zukünftige Nutzung
-  Object.assign(CURSE_CACHE_LSCG, lscgCacheFromBC);
-  try { localStorage.setItem('BC_CURSE_DB_v1', JSON.stringify({database:CURSE_DB,lscgTable:CURSE_LSCG,lscgCache:CURSE_CACHE_LSCG})); } catch {}
+  _exportLscgCache = null; _exportCraftCache = null;
   const blob = new Blob([JSON.stringify(payload, null, 2)], {type:'application/json'});
   const url  = URL.createObjectURL(blob);
   const a    = document.createElement('a');
   a.href = url; a.download = 'CurseScanner_' + new Date().toISOString().slice(0,10) + '.json';
   a.click(); URL.revokeObjectURL(url);
-  const n = Object.keys(mergedCache).length;
-  showStatus('✅ Export gespeichert (' + n + ' LSCG-Cache-Einträge)', 'success');
+  showStatus('✅ Export: ' + Object.keys(mergedCraft).length + ' Crafts, ' + Object.keys(mergedLscg).length + ' LSCG-Cache-Einträge', 'success');
 }
 
 function curseExport() {
   if (!Object.keys(CURSE_DB).length) { showStatus('❌ Nichts zum Exportieren', 'error'); return; }
   if (_connected) {
-    // Erst frischen LSCG-Cache aus BC holen, dann exportieren
-    showStatus('⏳ Lade LSCG-Cache aus BC...', 'info');
+    showStatus('⏳ Lade Cache aus BC...', 'info');
     _pendingExport = true;
+    _exportLscgCache  = null;
+    _exportCraftCache = null;
     bcSend({ type: 'GET_LSCG_CACHE' });
+    bcSend({ type: 'GET_CRAFT_CACHE' });
   } else {
-    // Nicht verbunden → mit vorhandenen Daten exportieren
-    _doExportDownload({});
+    _exportLscgCache  = {};
+    _exportCraftCache = {};
+    _tryFinishExport();
   }
 }
 
@@ -2441,10 +2449,11 @@ function curseImport() {
         try { localStorage.setItem('BC_CURSE_DB_v1', JSON.stringify({database:CURSE_DB,lscgTable:CURSE_LSCG,lscgCache:CURSE_CACHE_LSCG})); } catch {}
         if (_connected && Object.keys(CURSE_DB).length > 0) {
           bcSend({ type: 'LOAD_CURSE_DB', database: CURSE_DB }, true);
-          // LSCG-Cache in BC-localStorage schreiben → bleibt auch nach Neustart verfügbar
           if (Object.keys(CURSE_CACHE_LSCG).length > 0) {
             bcSend({ type: 'LOAD_LSCG_CACHE', cache: CURSE_CACHE_LSCG }, true);
           }
+          // Craft-Cache ebenfalls in BC localStorage schreiben
+          bcSend({ type: 'LOAD_CRAFT_CACHE', cache: CURSE_DB }, true);
         }
         _updateCurseStats();
         if (_activeTab === 'curse') renderCurseTab();
@@ -2566,6 +2575,10 @@ window.addEventListener('message', function(ev) {
         // Curse-DB an Loader pushen → Wear nach Browserwechsel/Neustart möglich
         if (Object.keys(CURSE_DB).length > 0) {
           bcSend({ type: 'LOAD_CURSE_DB', database: CURSE_DB }, true);
+          bcSend({ type: 'LOAD_CRAFT_CACHE', cache: CURSE_DB }, true);
+          if (Object.keys(CURSE_CACHE_LSCG).length > 0) {
+            bcSend({ type: 'LOAD_LSCG_CACHE', cache: CURSE_CACHE_LSCG }, true);
+          }
         }
         // Sofort Raum scannen + Interval starten
         bcSend({ type: 'GET_PLAYER' }, true);
@@ -2620,13 +2633,18 @@ window.addEventListener('message', function(ev) {
       break;
 
     case 'LSCG_CACHE_DATA':
+      Object.assign(CURSE_CACHE_LSCG, ev.data.cache ?? {});
       if (_pendingExport) {
-        _pendingExport = false;
-        _doExportDownload(ev.data.cache ?? {});
-      } else {
-        // Auch ohne pending export: in lokalen Cache mergen
-        Object.assign(CURSE_CACHE_LSCG, ev.data.cache ?? {});
-        try { localStorage.setItem('BC_CURSE_DB_v1', JSON.stringify({database:CURSE_DB,lscgTable:CURSE_LSCG,lscgCache:CURSE_CACHE_LSCG})); } catch {}
+        _exportLscgCache = ev.data.cache ?? {};
+        _tryFinishExport();
+      }
+      break;
+
+    case 'CRAFT_CACHE_DATA':
+      Object.assign(CURSE_DB, ev.data.cache ?? {});
+      if (_pendingExport) {
+        _exportCraftCache = ev.data.cache ?? {};
+        _tryFinishExport();
       }
       break;
 

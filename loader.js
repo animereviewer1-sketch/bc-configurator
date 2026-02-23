@@ -390,19 +390,37 @@ window.CurseScanner = (() => {
   let lscgTable = {};
 
   // ── Eigener persistenter LSCG-Cache (localStorage) ──────────────────────
-  // Unabhängig von LSCG selbst – Scanner merkt sich alles was er je gesehen hat
-  const LSCG_CACHE_KEY = 'CurseScanner_lscgCache_v1';
+  const LSCG_CACHE_KEY  = 'CurseScanner_lscgCache_v1';
+  const CRAFT_CACHE_KEY = 'CurseScanner_craftCache_v1';
+
   const lscgCache = (() => {
     try { return JSON.parse(localStorage.getItem(LSCG_CACHE_KEY) || '{}'); }
     catch { return {}; }
   })();
 
+  // Alle je gesehenen Crafts – persistent in BC's localStorage
+  // Key: "memberNum:itemName:craftName" (gleich wie database-Key)
+  const craftCache = (() => {
+    try { return JSON.parse(localStorage.getItem(CRAFT_CACHE_KEY) || '{}'); }
+    catch { return {}; }
+  })();
+  console.log('[CurseScanner] Craft-Cache geladen: ' + Object.keys(craftCache).length + ' Einträge, LSCG-Cache: ' + Object.keys(lscgCache).length + ' Einträge');
+
   let _persistTimer = null;
   function _persistLscgCache() {
-    if (_persistTimer) return; // debounce
+    if (_persistTimer) return;
     _persistTimer = setTimeout(() => {
       _persistTimer = null;
       try { localStorage.setItem(LSCG_CACHE_KEY, JSON.stringify(lscgCache)); } catch {}
+    }, 2000);
+  }
+
+  let _craftPersistTimer = null;
+  function _persistCraftCache() {
+    if (_craftPersistTimer) return;
+    _craftPersistTimer = setTimeout(() => {
+      _craftPersistTimer = null;
+      try { localStorage.setItem(CRAFT_CACHE_KEY, JSON.stringify(craftCache)); } catch {}
     }, 2000);
   }
 
@@ -494,9 +512,10 @@ window.CurseScanner = (() => {
 
   function scan() {
     // Nur Raum-Charaktere scannen (nicht Player.Crafting – das ist die gesamte Garderobe)
-    // Player wird nur für LSCG-Cache-Snapshot genutzt, nicht für Craft-Scan
+    // Vor dem Scan: craftCache in database laden (historische Einträge verfügbar halten)
+    Object.entries(craftCache).forEach(([k, e]) => { if (!database[k]) database[k] = { ...e, _fromCache: true }; });
     const raumChars = ChatRoomCharacter ?? [];
-    _snapshotAllLSCG(Player); // Player-LSCG cachen, aber Crafts nicht auflisten
+    _snapshotAllLSCG(Player);
     const spieler = raumChars;
     let neuDB = 0, aktualisiert = 0, neuLSCG = 0;
     spieler.forEach(C => {
@@ -541,6 +560,9 @@ window.CurseScanner = (() => {
         };
         if (istNeu) neuDB++; else aktualisiert++;
         database[key] = eintrag;
+        // Persistenter Craft-Cache: immer aktualisieren wenn live-Daten vorhanden
+        craftCache[key] = eintrag;
+        _persistCraftCache();
         if (lscg !== null) {
           const lscgKey = C.MemberNumber + ':' + craft.Name;
           if (!lscgTable[lscgKey]) neuLSCG++;
@@ -601,17 +623,23 @@ window.CurseScanner = (() => {
 
   function loadDatabase(extDb) {
     let n = 0;
-    Object.entries(extDb).forEach(([k, e]) => { if (!database[k]) { database[k] = { ...e, _injected: true }; n++; } });
-    console.log('[CurseScanner] loadDatabase: ' + n + ' Einträge geladen');
+    Object.entries(extDb).forEach(([k, e]) => {
+      const entry = { ...e, _injected: true };
+      if (!database[k]) { database[k] = entry; n++; }
+      // Auch in craftCache schreiben (neuere ZuletztGesehen gewinnt)
+      if (!craftCache[k] || (e.ZuletztGesehen && e.ZuletztGesehen > (craftCache[k].ZuletztGesehen ?? ''))) {
+        craftCache[k] = entry;
+      }
+    });
+    if (n > 0) _persistCraftCache();
+    console.log('[CurseScanner] loadDatabase: ' + n + ' neue Einträge (craftCache: ' + Object.keys(craftCache).length + ')');
   }
 
   function getLscgCache() {
-    // Gibt den kompletten In-Memory-Cache zurück (ist identisch mit localStorage)
     return { ...lscgCache };
   }
 
   function mergeLscgCache(extCache) {
-    // Mergt externen Cache (aus Import) in den eigenen – neuere _cachedAt gewinnt
     let n = 0;
     Object.entries(extCache).forEach(([key, val]) => {
       const existing = lscgCache[key];
@@ -625,7 +653,26 @@ window.CurseScanner = (() => {
     return n;
   }
 
-  return { scan, wear, wearOn, injectEntry, loadDatabase, getLscgCache, mergeLscgCache, database, lscgTable, lscgCache };
+  function getCraftCache() {
+    return { ...craftCache };
+  }
+
+  function mergeCraftCache(extCache) {
+    let n = 0;
+    Object.entries(extCache).forEach(([key, val]) => {
+      const existing = craftCache[key];
+      if (!existing || (val.ZuletztGesehen && val.ZuletztGesehen > (existing.ZuletztGesehen ?? ''))) {
+        craftCache[key] = { ...val, _injected: true };
+        if (!database[key]) database[key] = craftCache[key];
+        n++;
+      }
+    });
+    if (n > 0) _persistCraftCache();
+    console.log('[CurseScanner] mergeCraftCache: ' + n + ' neue/neuere Einträge');
+    return n;
+  }
+
+  return { scan, wear, wearOn, injectEntry, loadDatabase, getLscgCache, mergeLscgCache, getCraftCache, mergeCraftCache, database, lscgTable, lscgCache, craftCache };
 })();
 
 
@@ -740,12 +787,11 @@ window.CurseScanner = (() => {
         }
 
         case 'GET_LSCG_CACHE': {
-          // Popup fragt nach dem kompletten LSCG-Cache (für Export)
           BCK.info('GET_LSCG_CACHE');
           try {
             const cache = window.CurseScanner.getLscgCache();
             src.postMessage({ app: APP, type: 'LSCG_CACHE_DATA', cache }, '*');
-            BCK.ok('LSCG_CACHE_DATA gesendet: ' + Object.keys(cache).length + ' Einträge');
+            BCK.ok('LSCG_CACHE_DATA: ' + Object.keys(cache).length + ' Einträge');
           } catch (ex) {
             src.postMessage({ app: APP, type: 'LSCG_CACHE_DATA', cache: {}, err: ex.message }, '*');
           }
@@ -753,12 +799,32 @@ window.CurseScanner = (() => {
         }
 
         case 'LOAD_LSCG_CACHE': {
-          // Popup schickt importierten Cache → in BC localStorage schreiben
           BCK.info('LOAD_LSCG_CACHE: ' + Object.keys(ev.data.cache ?? {}).length + ' Einträge');
           try {
             const n = window.CurseScanner.mergeLscgCache(ev.data.cache ?? {});
             BCK.ok('LSCG-Cache: ' + n + ' neue Einträge gemergt');
           } catch (ex) { BCK.err('LOAD_LSCG_CACHE Fehler:', ex.message); }
+          break;
+        }
+
+        case 'GET_CRAFT_CACHE': {
+          BCK.info('GET_CRAFT_CACHE');
+          try {
+            const cache = window.CurseScanner.getCraftCache();
+            src.postMessage({ app: APP, type: 'CRAFT_CACHE_DATA', cache }, '*');
+            BCK.ok('CRAFT_CACHE_DATA: ' + Object.keys(cache).length + ' Einträge');
+          } catch (ex) {
+            src.postMessage({ app: APP, type: 'CRAFT_CACHE_DATA', cache: {}, err: ex.message }, '*');
+          }
+          break;
+        }
+
+        case 'LOAD_CRAFT_CACHE': {
+          BCK.info('LOAD_CRAFT_CACHE: ' + Object.keys(ev.data.cache ?? {}).length + ' Einträge');
+          try {
+            const n = window.CurseScanner.mergeCraftCache(ev.data.cache ?? {});
+            BCK.ok('Craft-Cache: ' + n + ' neue Einträge gemergt');
+          } catch (ex) { BCK.err('LOAD_CRAFT_CACHE Fehler:', ex.message); }
           break;
         }
       }
