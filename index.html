@@ -3999,22 +3999,42 @@ const _joinPoll=setInterval(()=>{
   for(const n of cur)_roomPrev.add(n);
 },3000);
 
-// Eigene Nachrichten: hookFunction gibt den Rohtext vor dem Senden + korrektes Player.X/Y
-const _mod=bcModSdk.registerMod({name:'BCBot_${safeId}',fullName:'${safeName}',version:'1.0'});
-try{
-_mod.hookFunction('ChatRoomSendChat',0,(args,next)=>{
-  const raw=document.getElementById('InputChat')?.value?.trim()??'';
-  if(raw){
-    const isE=raw.startsWith('*')&&raw.endsWith('*');
-    const isW=raw.startsWith('/w ')||raw.startsWith('/whisper ');
-    const tk=isE?'emote':isW?'whisper':'chat';
-    if((_cfg.hearChat&&tk==='chat')||(_cfg.hearEmote&&tk==='emote')||(_cfg.hearWhisper&&tk==='whisper')){
-      _proc(raw,tk,Player);
+// Eigene Nachrichten via hookFunction – Mod bekommt unique Namen (Timestamp) um Kollisionen beim Live-Sync zu vermeiden
+let _mod = null;
+try {
+  const _modName = 'BCBot_${safeId}_' + Date.now();
+  _mod = bcModSdk.registerMod({name: _modName, fullName:'${safeName}', version:'1.0'});
+  _mod.hookFunction('ChatRoomSendChat', 0, (args, next) => {
+    const raw = document.getElementById('InputChat')?.value?.trim() ?? '';
+    if (raw) {
+      const isE = raw.startsWith('*') && raw.endsWith('*');
+      const isW = raw.startsWith('/w ') || raw.startsWith('/whisper ');
+      const tk = isE ? 'emote' : isW ? 'whisper' : 'chat';
+      if ((_cfg.hearChat && tk==='chat') || (_cfg.hearEmote && tk==='emote') || (_cfg.hearWhisper && tk==='whisper')) {
+        _proc(raw, tk, Player);
+      }
     }
+    return next(args);
+  });
+  _log('✅ hookFunction aktiv');
+} catch(hookErr) {
+  _log('⚠️ hookFunction nicht verfügbar (eigene Nachrichten via Socket):', hookErr.message);
+  // Fallback: eigene Nachrichten via ServerSocket mitschneiden
+  // BC sendet keine eigenen Nachrichten zurück, daher InputChat-Observer als Alternative
+  const _origSend = window.ServerSend;
+  if (typeof _origSend === 'function') {
+    window.__BCBot_origSend_${safeId} = _origSend;
+    window.ServerSend = function(channel, data, ...rest) {
+      if (channel === 'ChatRoomChat' && data?.Content && ['Chat','Emote','Whisper'].includes(data?.Type ?? 'Chat')) {
+        const tk = (data.Type||'Chat').toLowerCase();
+        if ((_cfg.hearChat && tk==='chat') || (_cfg.hearEmote && tk==='emote') || (_cfg.hearWhisper && tk==='whisper')) {
+          setTimeout(() => _proc(data.Content, tk, Player), 0);
+        }
+      }
+      return _origSend.call(this, channel, data, ...rest);
+    };
   }
-  return next(args);
-});
-}catch(hookErr){_log('⚠️ hookFunction fehlgeschlagen (harmlos):',hookErr.message);}
+}
 
 // Andere Spieler + Bot (alle Nachrichten im Raum): ServerSocket mit named handler
 let _msgH=null;
@@ -4037,7 +4057,12 @@ window['_BCBot_'+_BID]={
   stop(){
     clearInterval(_itPoll);
     clearInterval(_joinPoll);
-    _mod.removePatches();
+    try{ if(_mod) _mod.removePatches(); } catch(e){}
+    // Restore ServerSend if we patched it as fallback
+    if(window.__BCBot_origSend_${safeId}) {
+      window.ServerSend = window.__BCBot_origSend_${safeId};
+      delete window.__BCBot_origSend_${safeId};
+    }
     if(_msgH)ServerSocket.off('ChatRoomMessage',_msgH);
     delete window['_BCBot_'+_BID];
     console.log('\u23F9\uFE0F [Bot:${safeName}] gestoppt');
