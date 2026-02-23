@@ -554,6 +554,12 @@ textarea.outfit-code{width:100%;min-height:200px;background:var(--bg4);border:1p
 .act-icon{font-size:.95rem;margin-right:4px}
 .be-addtrig{width:100%;padding:8px;background:none;border:1px dashed var(--border2);border-radius:8px;color:var(--text3);font-size:.72rem;cursor:pointer;margin-top:4px}
 .be-addtrig:hover{border-color:var(--purple);color:var(--pl)}
+.trig-order-num{font-size:.58rem;font-weight:700;color:var(--text3);background:var(--bg3);border-radius:3px;padding:1px 5px;flex-shrink:0;min-width:18px;text-align:center}
+.order-btn{background:none;border:1px solid var(--border2);border-radius:3px;color:var(--text3);cursor:pointer;font-size:.55rem;line-height:1;padding:1px 3px}
+.order-btn:hover:not(:disabled){border-color:var(--purple);color:var(--pl)}
+.order-btn:disabled{opacity:.25;cursor:default}
+.act-kritisch{border-color:#662222!important;background:#1a0808!important}
+.act-kritisch:hover{border-color:#aa3333!important}
 .bot-status{padding:5px 18px;font-size:.68rem;font-family:var(--mono);display:none}
 .bot-status.running{background:#052818;border-bottom:1px solid var(--green2);color:var(--green);display:block}
 .bot-status.stopped{background:#0a0510;border-bottom:1px solid var(--border2);color:var(--text3);display:block}
@@ -3204,19 +3210,35 @@ function botSetting(key, val) {
 function renderTrigCard(bot, t, i) {
   const condN = (t.bedingungen||[]).length;
   const actN  = (t.aktionen||[]).length;
+  const total = bot.triggers.length;
+  const wdh   = t.wiederholung ?? 'immer';
+  const wdh_lbl = wdh==='einmalig'?'1x':wdh==='n_mal'?(t.maxMal??2)+'x':'∞';
+  const wdh_color = wdh==='immer'?'var(--text3)':'var(--pl)';
   return `<div class="trig-card ${t.aktiv?'trig-on':''}" id="tc-${t.id}">
     <div class="trig-head" onclick="trigToggleBody('${t.id}')">
+      <span class="trig-order-num">${i+1}</span>
+      <span style="display:flex;flex-direction:column;gap:1px;margin-right:2px">
+        <button class="order-btn" onclick="event.stopPropagation();trigMoveUp('${t.id}')" ${i===0?'disabled':''} title="Nach oben">▲</button>
+        <button class="order-btn" onclick="event.stopPropagation();trigMoveDown('${t.id}')" ${i===total-1?'disabled':''} title="Nach unten">▼</button>
+      </span>
       <input type="checkbox" ${t.aktiv?'checked':''} onclick="event.stopPropagation();trigField('${t.id}','aktiv',this.checked)" style="accent-color:var(--purple)">
       <span class="trig-label" id="tlabel-${t.id}">${escHtml(t.name||'Trigger')}</span>
-      <span class="trig-meta">${condN} Bedingung${condN!==1?'en':''} · ${actN} Aktion${actN!==1?'en':''}</span>
+      <span class="trig-meta">${condN} Bed. · ${actN} Akt. · <span style="color:${wdh_color}">${wdh_lbl}</span></span>
       <button onclick="event.stopPropagation();trigDelete('${t.id}')" class="rm-btn" title="Trigger löschen">✕</button>
     </div>
     <div class="trig-body" id="tb-${t.id}">
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
         <label style="font-size:.65rem;color:var(--text3)">Name:</label>
         <input class="cf cf-w160" value="${escHtml(t.name||'')}" oninput="trigField('${t.id}','name',this.value)" placeholder="Trigger-Name">
-        <label style="font-size:.65rem;color:var(--text3)">Basis-Delay:</label>
+        <label style="font-size:.65rem;color:var(--text3)">Delay:</label>
         <input class="cf cf-w80" type="number" value="${t.delay??0}" oninput="trigField('${t.id}','delay',+this.value)"> ms
+        <label style="font-size:.65rem;color:var(--text3)">🔁 Wiederholung:</label>
+        <select class="cf" onchange="trigField('${t.id}','wiederholung',this.value);trigRerender('${t.id}')">
+          <option value="immer"    ${wdh==='immer'?'selected':''}>∞ Unbegrenzt</option>
+          <option value="einmalig" ${wdh==='einmalig'?'selected':''}>1× Einmalig</option>
+          <option value="n_mal"    ${wdh==='n_mal'?'selected':''}>N× N-mal</option>
+        </select>
+        ${wdh==='n_mal'?`<input class="cf cf-w80" type="number" min="1" value="${t.maxMal??2}" oninput="trigField('${t.id}','maxMal',+this.value)" title="Wie oft max. feuern">× max.`:''}
       </div>
 
       <div class="te-section">
@@ -3235,6 +3257,18 @@ function renderTrigCard(bot, t, i) {
           <button onclick="trigAddAct('${t.id}')">+ Aktion</button>
         </div>
         <div id="acts-${t.id}">${(t.aktionen||[]).map((a,ai)=>renderAct(t.id,a,ai)).join('')}</div>
+      </div>
+
+      <div class="te-section">
+        <div class="te-section-title">🔙 Fallback <small style="font-weight:normal;text-transform:none;letter-spacing:0">(wenn eine kritische Aktion scheitert – Trigger gilt dann NICHT als ausgelöst)</small></div>
+        <div style="display:flex;gap:6px;align-items:center">
+          <select class="cf" style="width:140px" onchange="trigField('${t.id}','fallbackTyp',this.value);trigRerender('${t.id}')">
+            <option value="nichts" ${(!t.fallbackTyp||t.fallbackTyp==='nichts')?'selected':''}>Nichts (still)</option>
+            <option value="chat"   ${t.fallbackTyp==='chat'?'selected':''}>💬 Chat-Nachricht</option>
+            <option value="emote"  ${t.fallbackTyp==='emote'?'selected':''}>✨ Emote</option>
+          </select>
+          ${t.fallbackTyp&&t.fallbackTyp!=='nichts'?`<input class="cf cf-flex" value="${escHtml(t.fallbackText||'')}" oninput="trigField('${t.id}','fallbackText',this.value)" placeholder="Nachricht… {name} {wort} {x} {y}">`:''} 
+        </div>
       </div>
     </div>
   </div>`;
@@ -3337,13 +3371,29 @@ function renderAct(tid, a, ai) {
       </div>`;
   }
 
-  return `<div class="act-card" id="act-${tid}-${ai}">
+  const isKritisch = !!a.kritisch;
+  const vor = a.voraussetzung ?? 'immer';
+  const kritischRow = `<div style="display:flex;gap:8px;align-items:center;margin-top:5px;padding-top:5px;border-top:1px dashed var(--border2)">
+    <label style="font-size:.62rem;color:var(--text3);display:flex;align-items:center;gap:4px;cursor:pointer">
+      <input type="checkbox" ${isKritisch?'checked':''} onchange="actField('${tid}',${ai},'kritisch',this.checked);actRerender('${tid}',${ai})" style="accent-color:#e55">
+      <span style="color:${isKritisch?'#ff7070':'var(--text3)'}">⚠️ Kritisch</span>
+    </label>
+    ${isKritisch?`<span style="font-size:.62rem;color:var(--text3)">Voraussetzung:</span>
+    <select class="cf" style="width:180px" onchange="actField('${tid}',${ai},'voraussetzung',this.value)">
+      <option value="immer"          ${vor==='immer'?'selected':''}>Immer ausführbar</option>
+      <option value="item_nicht"     ${vor==='item_nicht'?'selected':''}>Item NICHT angelegt</option>
+      <option value="item_traegt"    ${vor==='item_traegt'?'selected':''}>Item bereits angelegt</option>
+      <option value="teleport_ok"    ${vor==='teleport_ok'?'selected':''}>Teleport-Slot frei</option>
+    </select>`:'<span style="font-size:.6rem;color:var(--text3)">Wenn diese Aktion scheitert: Trigger gilt nicht als ausgelöst + Fallback läuft</span>'}
+  </div>`;
+  return `<div class="act-card ${isKritisch?'act-kritisch':''}" id="act-${tid}-${ai}">
     <div style="flex:1">
       <div style="display:flex;gap:6px;align-items:center">
         <select class="cf" style="flex:1" onchange="actChangeType('${tid}',${ai},this.value)">${typeOpts}</select>
         <input class="cf cf-w80" type="number" value="${a.delay??0}" oninput="actField('${tid}',${ai},'delay',+this.value)" title="Delay in ms"> ms
       </div>
       ${extra}
+      ${kritischRow}
     </div>
     <button class="rm-btn" onclick="actRemove('${tid}',${ai})">✕</button>
   </div>`;
@@ -3382,6 +3432,26 @@ function trigDelete(tid) {
   if (!t || !confirm(`Trigger "${t.name||tid}" löschen?`)) return;
   b.triggers = b.triggers.filter(x=>x.id!==tid); _saveBots();
   document.getElementById('tc-'+tid)?.remove();
+}
+
+function trigMoveUp(tid) {
+  const b = _selBot(); if (!b) return;
+  const i = b.triggers.findIndex(x=>x.id===tid); if (i<=0) return;
+  [b.triggers[i-1], b.triggers[i]] = [b.triggers[i], b.triggers[i-1]];
+  _saveBots();
+  const wasOpen = document.getElementById('tb-'+tid)?.classList.contains('open');
+  renderBotEditor();
+  if (wasOpen) setTimeout(()=>document.getElementById('tb-'+tid)?.classList.add('open'), 10);
+}
+
+function trigMoveDown(tid) {
+  const b = _selBot(); if (!b) return;
+  const i = b.triggers.findIndex(x=>x.id===tid); if (i<0||i>=b.triggers.length-1) return;
+  [b.triggers[i], b.triggers[i+1]] = [b.triggers[i+1], b.triggers[i]];
+  _saveBots();
+  const wasOpen = document.getElementById('tb-'+tid)?.classList.contains('open');
+  renderBotEditor();
+  if (wasOpen) setTimeout(()=>document.getElementById('tb-'+tid)?.classList.add('open'), 10);
 }
 
 function trigRerender(tid) {
@@ -3450,6 +3520,13 @@ function actField(tid, ai, field, val) {
   const t = b.triggers.find(x=>x.id===tid); if (!t) return;
   if (!t.aktionen[ai]) return;
   t.aktionen[ai][field] = val; _saveBots();
+}
+
+function actRerender(tid, ai) {
+  const b = _selBot(); if (!b) return;
+  const t = b.triggers.find(x=>x.id===tid); if (!t||!t.aktionen[ai]) return;
+  const el = document.getElementById('act-'+tid+'-'+ai);
+  if (el) { const tmp=document.createElement('div'); tmp.innerHTML=renderAct(tid,t.aktionen[ai],ai); el.replaceWith(tmp.firstElementChild); }
 }
 
 function actChangeType(tid, ai, typ) {
@@ -3763,6 +3840,8 @@ function _buildBotCode(bot) {
   const s = bot.settings;
   const triggers = (bot.triggers||[]).filter(t=>t.aktiv).map(t => ({
     id: t.id, name: t.name, delay: t.delay??0,
+      wiederholung: t.wiederholung??'immer', maxMal: t.maxMal??2,
+      fallbackTyp: t.fallbackTyp??'nichts', fallbackText: t.fallbackText??'',
     bedingungen: (t.bedingungen||[]),
     aktionen: (t.aktionen||[]).map(a => {
       if (a.typ==='item' && a.curseKey && !a.curseEntry) return {...a, curseEntry: CURSE_DB[a.curseKey]??null};
@@ -3781,9 +3860,26 @@ const _BID='${safeId}';
 if(window['_BCBot_'+_BID]){console.warn('[Bot] Bereits aktiv – erst stoppen!');return;}
 const _cfg=${cfgJson};
 const _trigs=${trigsJson};
-const _fired={};
+const _fired={};     // trigId -> last fired timestamp
+const _firedCnt={}; // trigId -> fire count
 
 function _log(...a){if(_cfg.logAktiv)console.log('[Bot:${safeName}]',...a);}
+
+// Prüft ob eine kritische Aktion ihre Voraussetzung erfüllt
+function _checkVor(a,C){
+  const vor=a.voraussetzung??'immer';
+  if(vor==='immer')return true;
+  if(vor==='item_nicht')return!(C.Appearance??[]).some(x=>x.Asset?.Name===a.item);
+  if(vor==='item_traegt')return(C.Appearance??[]).some(x=>x.Asset?.Name===a.item);
+  if(vor==='teleport_ok'){
+    const slots=a.tpSlots??[];
+    return slots.some(s=>{
+      const chars=[Player,...(ChatRoomCharacter||[])];
+      return!chars.some(ch=>ch.X===s.x&&ch.Y===s.y);
+    });
+  }
+  return true;
+}
 
 // Direkt C.X/C.Y verwenden – exakt wie funktionierendes ZoneMonitor-Pattern
 // Kein Lookup nötig: [Player,...ChatRoomCharacter] enthält bereits korrekte Positionen
@@ -3883,11 +3979,35 @@ function _applyItemAction(a, C){
 }
 
 function _run(trig,vars){
-  _log('\u{1F3AF} "'+trig.name+'" von '+vars.name+' | X='+vars.x+' Y='+vars.y);
+  const C=vars.C??Player;
+
+  // ── Wiederholung prüfen ──────────────────────────────────
+  const wdh=trig.wiederholung??'immer';
+  const cnt=_firedCnt[trig.id]??0;
+  if(wdh==='einmalig'&&cnt>=1){_log('\u23ED Trigger "'+trig.name+'" bereits einmalig ausgelöst – übersprungen');return;}
+  if(wdh==='n_mal'&&cnt>=(trig.maxMal??2)){_log('\u23ED Trigger "'+trig.name+'" max ('+trig.maxMal+'×) erreicht – übersprungen');return;}
+
+  // ── Kritische Aktionen vorab prüfen ─────────────────────
+  const kritAkt=(trig.aktionen??[]).filter(a=>a.kritisch);
+  const scheitert=kritAkt.find(a=>!_checkVor(a,C));
+  if(scheitert){
+    _log('\u26A0\uFE0F Kritische Aktion scheitert (Vor: '+(scheitert.voraussetzung??'immer')+') → Trigger nicht gezählt');
+    // Fallback ausführen
+    if(trig.fallbackTyp&&trig.fallbackTyp!=='nichts'&&trig.fallbackText){
+      const msg=_tpl(trig.fallbackText,vars);
+      const typ={chat:'Chat',emote:'Emote'}[trig.fallbackTyp]??'Chat';
+      ServerSend('ChatRoomChat',{Content:msg,Type:typ});
+    }
+    return; // _fired NICHT setzen → Trigger gilt als nicht ausgelöst
+  }
+
+  // ── Trigger zählen & ausführen ───────────────────────────
+  _log('\u{1F3AF} "'+trig.name+'" von '+vars.name+' | X='+vars.x+' Y='+vars.y+' | Auslösung '+(cnt+1)+(wdh==='n_mal'?'/'+trig.maxMal:''));
   _fired[trig.id]=Date.now();
+  _firedCnt[trig.id]=(cnt+1);
+
   (trig.aktionen??[]).forEach(a=>{
     setTimeout(()=>{
-      const C=vars.C??Player;
       try{
         if(a.typ==='chat'){ServerSend('ChatRoomChat',{Content:_tpl(a.text,vars),Type:'Chat'});}
         else if(a.typ==='emote'){ServerSend('ChatRoomChat',{Content:_tpl(a.text,vars),Type:'Emote'});}
