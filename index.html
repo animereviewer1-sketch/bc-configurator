@@ -3652,66 +3652,81 @@ function _buildBotCode(bot) {
     id: t.id, name: t.name, delay: t.delay??0,
     bedingungen: (t.bedingungen||[]),
     aktionen: (t.aktionen||[]).map(a => {
-      // Resolve live references
       if (a.typ==='item' && a.curseKey && !a.curseEntry) return {...a, curseEntry: CURSE_DB[a.curseKey]??null};
       if (a.typ==='item' && a.profilName && (!a.profilItems||!a.profilItems.length)) return {...a, profilItems: PROFILES[a.profilName]?.items??[]};
       return a;
     }),
   }));
-  const safeId = bot.id.replace(/\W/g,'_');
-  const safeName = bot.name.replace(/'/g,"\\'");
+  const safeId   = bot.id.replace(/\W/g,'_');
+  const safeName = bot.name.replace(/\\/g,'\\\\').replace(/`/g,'\\`');
+
+  const cfgJson  = JSON.stringify({hearChat:s.hearChat,hearEmote:s.hearEmote,hearWhisper:s.hearWhisper,nurEigene:s.nurEigene,logAktiv:s.logAktiv??true,modus:s.modus});
+  const trigsJson = JSON.stringify(triggers);
 
   return `(function(){
-const _BID=${JSON.stringify(safeId)};
-if(window['_BCBot_'+_BID]){console.warn('[Bot:${safeName}] Läuft bereits');return;}
-const _cfg=${JSON.stringify({hearChat:s.hearChat,hearEmote:s.hearEmote,hearWhisper:s.hearWhisper,nurEigene:s.nurEigene,logAktiv:s.logAktiv??true,modus:s.modus})};
-const _trigs=${JSON.stringify(triggers)};
+const _BID='${safeId}';
+if(window['_BCBot_'+_BID]){console.warn('[Bot] Bereits aktiv – erst stoppen!');return;}
+const _cfg=${cfgJson};
+const _trigs=${trigsJson};
 const _fired={};
+
 function _log(...a){if(_cfg.logAktiv)console.log('[Bot:${safeName}]',...a);}
-function _inZone(c,C){const p=c.puffer??1;return C.X>=c.x-p&&C.X<=c.x+p&&C.Y>=c.y-p&&C.Y<=c.y+p;}
-function _tpl(s,v){return(s??'').replace(/{name}/gi,v.name??'').replace(/{wort}/gi,v.wort??'').replace(/{typ}/gi,v.typ??'').replace(/{x}/gi,v.x??'').replace(/{y}/gi,v.y??'').replace(/{zone}/gi,v.zone??'');}
-function _ok(trig,text,typKey,C){
-  // For position: always use ChatRoomCharacter version if available (has X/Y)
-  const Cp = ChatRoomCharacter.find(c=>c.MemberNumber===C.MemberNumber)??C;
+
+function _getPos(C){
+  if(C.MemberNumber===Player.MemberNumber)return{X:Player.X??0,Y:Player.Y??0};
+  const cr=ChatRoomCharacter.find(c=>c.MemberNumber===C.MemberNumber);
+  return{X:cr?.X??0,Y:cr?.Y??0};
+}
+
+function _ok(trig,rohText,typKey,C){
+  const pos=_getPos(C);
   for(const c of(trig.bedingungen??[])){
-    if(c.typ==='wort'){const m=c.typ_msg||'any';if(m!=='any'&&m!==typKey)return false;if(c.wort&&!text.toLowerCase().includes(c.wort.toLowerCase()))return false;}
-    else if(c.typ==='zone'){if(!_inZone(c,Cp))return false;}
-    else if(c.typ==='item_traegt'){const has=(Cp.Appearance??[]).some(a=>a.Asset?.Name===c.item);if(!has)return false;}
+    if(c.typ==='wort'){
+      const m=c.typ_msg||'any';
+      if(m!=='any'&&m!==typKey)return false;
+      if(c.wort&&!rohText.toLowerCase().includes(c.wort.toLowerCase()))return false;
+    }
+    else if(c.typ==='zone'){
+      const p=c.puffer??1;
+      if(!(pos.X>=c.x-p&&pos.X<=c.x+p&&pos.Y>=c.y-p&&pos.Y<=c.y+p)){
+        _log('Zone miss: X='+pos.X+' Y='+pos.Y+' | erwartet X='+c.x+' Y='+c.y+' ±'+p);
+        return false;
+      }
+    }
+    else if(c.typ==='item_traegt'){
+      const Cf=ChatRoomCharacter.find(x=>x.MemberNumber===C.MemberNumber)??C;
+      if(!(Cf.Appearance??[]).some(a=>a.Asset?.Name===c.item))return false;
+    }
     else if(c.typ==='trigger_war'){if(!_fired[c.trigId])return false;}
   }
   return true;
 }
+
 function _run(trig,vars){
-  _log('\\u{1F3AF} "'+trig.name+'" ausgelöst von '+vars.name);
+  _log('\u{1F3AF} "'+trig.name+'" von '+vars.name+' | X='+vars.x+' Y='+vars.y);
   _fired[trig.id]=Date.now();
   (trig.aktionen??[]).forEach(a=>{
     setTimeout(()=>{
       const C=vars.C??Player;
       try{
-        if(a.typ==='chat'){const t=_tpl(a.text,vars);_log('\\u{1F4AC}',t);ServerSend('ChatRoomChat',{Content:t,Type:'Chat'});}
-        else if(a.typ==='emote'){const t=_tpl(a.text,vars);_log('\\u{2728}',t);ServerSend('ChatRoomChat',{Content:t,Type:'Emote'});}
-        else if(a.typ==='whisper'){const t=_tpl(a.text,vars);_log('\\u{1F917}',t);ServerSend('ChatRoomChat',{Content:t,Type:'Whisper',Target:C.MemberNumber});}
-        else if(a.typ==='item_entf'){_log('\\u{1F5D1}',a.gruppe,'von',C.Name);InventoryRemove(C,a.gruppe);CharacterRefresh(C);ChatRoomCharacterUpdate(C);}
+        if(a.typ==='chat'){ServerSend('ChatRoomChat',{Content:_tpl(a.text,vars),Type:'Chat'});}
+        else if(a.typ==='emote'){ServerSend('ChatRoomChat',{Content:_tpl(a.text,vars),Type:'Emote'});}
+        else if(a.typ==='whisper'){ServerSend('ChatRoomChat',{Content:_tpl(a.text,vars),Type:'Whisper',Target:C.MemberNumber});}
+        else if(a.typ==='item_entf'){InventoryRemove(C,a.gruppe);CharacterRefresh(C);ChatRoomCharacterUpdate(C);}
         else if(a.typ==='item'){
-          if(a.curseName||a.curseKey){
-            const e=a.curseEntry;if(!e)return;
-            let col=e.Farbe;if(typeof col==='string'&&col.includes(','))col=col.split(',');
-            _log('\\u{1F52E} Curse:',e.CraftName,'\\u{2192}',C.Name);
-            InventoryWear(C,e.ItemName,e.Gruppe,col,0,Player.MemberNumber,e.Craft);
+          if(a.curseEntry){
+            let col=a.curseEntry.Farbe;if(typeof col==='string'&&col.includes(','))col=col.split(',');
+            InventoryWear(C,a.curseEntry.ItemName,a.curseEntry.Gruppe,col,0,Player.MemberNumber,a.curseEntry.Craft);
             CharacterRefresh(C);ChatRoomCharacterUpdate(C);
-          } else if(a.profilName){
-            _log('\\u{1F457} Profil:',a.profilName,'\\u{2192}',C.Name);
+          }else if(a.profilName){
             (a.profilItems??[]).forEach(item=>{
               let col=item.colors??item.cfg?.Color??'#ffffff';
               if(typeof col==='string'&&col.includes(','))col=col.split(',');
-              InventoryWear(C,item.asset,item.group,col,0,Player.MemberNumber);
-              CharacterRefresh(C);
+              InventoryWear(C,item.asset,item.group,col,0,Player.MemberNumber);CharacterRefresh(C);
             });
             ChatRoomCharacterUpdate(C);
-          } else if(a.item){
-            let col=a.farbe??'#ffffff';
-            _log('\\u{1F4E6} Item:',a.item,'\\u{2192}',C.Name);
-            InventoryWear(C,a.item,a.gruppe,col,0,Player.MemberNumber);
+          }else if(a.item){
+            InventoryWear(C,a.item,a.gruppe,a.farbe??'#ffffff',0,Player.MemberNumber);
             CharacterRefresh(C);ChatRoomCharacterUpdate(C);
           }
         }
@@ -3719,27 +3734,56 @@ function _run(trig,vars){
     },trig.delay+(a.delay??0));
   });
 }
-function _proc(raw,typKey,C){
-  if(!raw)return;
-  const text=raw.replace(/^\\*|\\*\$/g,'').replace(/^\\/w\\s+\\S+\\s*/i,'').trim();
-  const typLabel={chat:'💬 Chat',emote:'✨ Emote',whisper:'🤫 Whisper'}[typKey]??typKey;
-  _trigs.forEach(trig=>{
-    if(_ok(trig,text,typKey,C))_run(trig,{name:C.Name,wort:text,typ:typLabel,x:C.X??'',y:C.Y??'',zone:'',C});
-  });
+
+function _tpl(s,v){return(s??'').replace(/{name}/gi,v.name??'').replace(/{wort}/gi,v.wort??'').replace(/{typ}/gi,v.typ??'').replace(/{x}/gi,v.x??'').replace(/{y}/gi,v.y??'').replace(/{zone}/gi,v.zone??'');}
+
+function _proc(rohText,typKey,C){
+  if(!rohText)return;
+  const pos=_getPos(C);
+  const typLabel={chat:'\u{1F4AC} Chat',emote:'\u{2728} Emote',whisper:'\u{1F917} Whisper'}[typKey]??typKey;
+  _trigs.forEach(trig=>{if(_ok(trig,rohText,typKey,C))_run(trig,{name:C.Name,wort:rohText,typ:typLabel,x:pos.X,y:pos.Y,zone:'',C});});
 }
-// Always use ServerSocket – no hookFunction (R125 compatible)
-ServerSocket.on('ChatRoomMessage',data=>{
-  if(!['Chat','Emote','Whisper'].includes(data.Type))return;
-  const typKey=data.Type.toLowerCase();
-  if(typKey==='chat'&&!_cfg.hearChat)return;
-  if(typKey==='emote'&&!_cfg.hearEmote)return;
-  if(typKey==='whisper'&&!_cfg.hearWhisper)return;
-  if(_cfg.nurEigene&&data.Sender!==Player.MemberNumber)return;
-  const C=ChatRoomCharacter.find(c=>c.MemberNumber===data.Sender)??(Player.MemberNumber===data.Sender?Player:null);
-  if(C)_proc(data.Content,typKey,C);
+
+// Eigene Nachrichten: hookFunction gibt den Rohtext vor dem Senden + korrektes Player.X/Y
+const _mod=bcModSdk.registerMod({name:'BCBot_${safeId}',fullName:'${safeName}',version:'1.0'});
+_mod.hookFunction('ChatRoomSendChat',0,(args,next)=>{
+  const raw=document.getElementById('InputChat')?.value?.trim()??'';
+  if(raw){
+    const isE=raw.startsWith('*')&&raw.endsWith('*');
+    const isW=raw.startsWith('/w ')||raw.startsWith('/whisper ');
+    const tk=isE?'emote':isW?'whisper':'chat';
+    if((_cfg.hearChat&&tk==='chat')||(_cfg.hearEmote&&tk==='emote')||(_cfg.hearWhisper&&tk==='whisper')){
+      _proc(raw,tk,Player);
+    }
+  }
+  return next(args);
 });
-window['_BCBot_'+_BID]={stop(){ServerSocket.off('ChatRoomMessage');delete window['_BCBot_'+_BID];console.log('[Bot:${safeName}] gestoppt');}};
-console.log('▶️ [Bot:${safeName}] gestartet –',_trigs.length,'Trigger aktiv');
+
+// Andere Spieler: ServerSocket mit named handler (safe stop)
+let _msgH=null;
+if(!_cfg.nurEigene){
+  _msgH=function(data){
+    if(!['Chat','Emote','Whisper'].includes(data.Type))return;
+    if(data.Sender===Player.MemberNumber)return; // eigene schon via hookFunction
+    const tk=data.Type.toLowerCase();
+    if(tk==='chat'&&!_cfg.hearChat)return;
+    if(tk==='emote'&&!_cfg.hearEmote)return;
+    if(tk==='whisper'&&!_cfg.hearWhisper)return;
+    const C=ChatRoomCharacter.find(c=>c.MemberNumber===data.Sender);
+    if(C)_proc(data.Content,tk,C);
+  };
+  ServerSocket.on('ChatRoomMessage',_msgH);
+}
+
+window['_BCBot_'+_BID]={
+  stop(){
+    _mod.removePatches(); // sauber – kein BC-Schaden
+    if(_msgH)ServerSocket.off('ChatRoomMessage',_msgH); // nur eigenen Listener
+    delete window['_BCBot_'+_BID];
+    console.log('\u23F9\uFE0F [Bot:${safeName}] gestoppt');
+  }
+};
+console.log('\u25B6\uFE0F [Bot:${safeName}] | Trigger:',_trigs.length,'| Modus:',_cfg.nurEigene?'Nur eigene':'Alle Spieler');
 })();`;
 }
 
