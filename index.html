@@ -3260,7 +3260,7 @@ function renderTrigCard(bot, t, i) {
       </div>
 
       <div class="te-section">
-        <div class="te-section-title">🔙 Fallback <small style="font-weight:normal;text-transform:none;letter-spacing:0">(wenn eine kritische Aktion scheitert – Trigger gilt dann NICHT als ausgelöst)</small></div>
+        <div class="te-section-title">🔙 Fallback <small style="font-weight:normal;text-transform:none;letter-spacing:0">(läuft wenn eine Aktion ❌ Trigger ungültig auslöst – Trigger zählt dann nicht)</small></div>
         <div style="display:flex;gap:6px;align-items:center">
           <select class="cf" style="width:140px" onchange="trigField('${t.id}','fallbackTyp',this.value);trigRerender('${t.id}')">
             <option value="nichts" ${(!t.fallbackTyp||t.fallbackTyp==='nichts')?'selected':''}>Nichts (still)</option>
@@ -3318,8 +3318,15 @@ function renderCond(bot, tid, c, ci) {
 }
 
 // ── Actions ───────────────────────────────────────────────────
+function _actBeiF(bf) {
+  return {ignorieren:'⬇️ Ignorieren – weiter',kette_stoppen:'⏹ Kette stoppen',trigger_ungueltig:'❌ Trigger ungültig'}[bf]??'⬇️ Ignorieren – weiter';
+}
+
 function renderAct(tid, a, ai) {
-  // Unified action with type selector + context fields
+  const b   = _selBot();
+  const t   = b?.triggers.find(x=>x.id===tid);
+  const tot = t?.aktionen?.length ?? 0;
+
   const types = [
     ['chat','💬 Chat senden'],['emote','✨ Emote senden'],['whisper','🤫 Whisper senden'],
     ['item','📦 Item / Curse / Profil anlegen'],['item_entf','🗑️ Item entfernen'],
@@ -3357,43 +3364,38 @@ function renderAct(tid, a, ai) {
       </div>`).join('');
     extra = `
       <div style="font-size:.63rem;color:var(--text3);margin-top:5px">
-        🌀 Teleportiert den Auslöser. Wenn die Position belegt ist, wird automatisch der nächste Fallback genutzt.
+        🌀 Teleportiert den Auslöser. Wenn alle Positionen belegt sind → gilt als Fehler.
       </div>
-      <div class="tp-slot-list" id="tpslots-${tid}-${ai}">
-        ${slotsHtml}
-      </div>
-      <button class="tp-slot-add-btn" onclick="tpSlotAdd('${tid}',${ai})">+ Position / Fallback hinzufügen</button>
-      <div class="tp-no-fb-row">
-        <label>Kein Fallback-Msg:</label>
-        <input class="cf" style="flex:1" value="${escHtml(a.keinFallbackMsg||'')}" 
-          oninput="actField('${tid}',${ai},'keinFallbackMsg',this.value)"
-          placeholder="(optional) Nachricht wenn alle Plätze belegt – z.B. Alle Positionen sind belegt!">
-      </div>`;
+      <div class="tp-slot-list" id="tpslots-${tid}-${ai}">${slotsHtml}</div>
+      <button class="tp-slot-add-btn" onclick="tpSlotAdd('${tid}',${ai})">+ Position / Fallback hinzufügen</button>`;
   }
 
-  const isKritisch = !!a.kritisch;
-  const vor = a.voraussetzung ?? 'immer';
-  const kritischRow = `<div style="display:flex;gap:8px;align-items:center;margin-top:5px;padding-top:5px;border-top:1px dashed var(--border2)">
-    <label style="font-size:.62rem;color:var(--text3);display:flex;align-items:center;gap:4px;cursor:pointer">
-      <input type="checkbox" ${isKritisch?'checked':''} onchange="actField('${tid}',${ai},'kritisch',this.checked);actRerender('${tid}',${ai})" style="accent-color:#e55">
-      <span style="color:${isKritisch?'#ff7070':'var(--text3)'}">⚠️ Kritisch</span>
-    </label>
-    ${isKritisch?`<span style="font-size:.62rem;color:var(--text3)">Voraussetzung:</span>
-    <select class="cf" style="width:180px" onchange="actField('${tid}',${ai},'voraussetzung',this.value)">
-      <option value="immer"          ${vor==='immer'?'selected':''}>Immer ausführbar</option>
-      <option value="item_nicht"     ${vor==='item_nicht'?'selected':''}>Item NICHT angelegt</option>
-      <option value="item_traegt"    ${vor==='item_traegt'?'selected':''}>Item bereits angelegt</option>
-      <option value="teleport_ok"    ${vor==='teleport_ok'?'selected':''}>Teleport-Slot frei</option>
-    </select>`:'<span style="font-size:.6rem;color:var(--text3)">Wenn diese Aktion scheitert: Trigger gilt nicht als ausgelöst + Fallback läuft</span>'}
+  // Bei Fehler
+  const bf = a.bei_fehler ?? 'ignorieren';
+  const bfColors = {ignorieren:'var(--text3)',kette_stoppen:'#e8a020',trigger_ungueltig:'#e05050'};
+  const bfRow = `<div style="display:flex;gap:6px;align-items:center;margin-top:5px;padding-top:5px;border-top:1px dashed var(--border2)">
+    <span style="font-size:.6rem;color:var(--text3);white-space:nowrap">Wenn fehlschlägt:</span>
+    <select class="cf" style="flex:1;color:${bfColors[bf]??'var(--text3)'}" onchange="actField('${tid}',${ai},'bei_fehler',this.value);actRerender('${tid}',${ai})">
+      <option value="ignorieren"        ${bf==='ignorieren'?'selected':''}>⬇️ Ignorieren – weiter mit nächster Aktion</option>
+      <option value="kette_stoppen"     ${bf==='kette_stoppen'?'selected':''}>⏹ Kette stoppen – keine weiteren Aktionen (Trigger zählt)</option>
+      <option value="trigger_ungueltig" ${bf==='trigger_ungueltig'?'selected':''}>❌ Trigger ungültig – nicht gezählt + Fallback läuft</option>
+    </select>
   </div>`;
-  return `<div class="act-card ${isKritisch?'act-kritisch':''}" id="act-${tid}-${ai}">
+
+  const bfBorder = {kette_stoppen:'#664400',trigger_ungueltig:'#660000'}[bf] ?? '';
+  return `<div class="act-card" id="act-${tid}-${ai}" style="${bfBorder?'border-color:'+bfBorder+';background:#0d0906;':''}" >
     <div style="flex:1">
-      <div style="display:flex;gap:6px;align-items:center">
+      <div style="display:flex;gap:4px;align-items:center">
+        <span style="display:flex;flex-direction:column;gap:1px;flex-shrink:0">
+          <button class="order-btn" onclick="actMoveUp('${tid}',${ai})" ${ai===0?'disabled':''}>▲</button>
+          <button class="order-btn" onclick="actMoveDown('${tid}',${ai})" ${ai===tot-1?'disabled':''}>▼</button>
+        </span>
+        <span class="trig-order-num" style="margin-right:2px">${ai+1}</span>
         <select class="cf" style="flex:1" onchange="actChangeType('${tid}',${ai},this.value)">${typeOpts}</select>
-        <input class="cf cf-w80" type="number" value="${a.delay??0}" oninput="actField('${tid}',${ai},'delay',+this.value)" title="Delay in ms"> ms
+        <input class="cf cf-w80" type="number" value="${a.delay??0}" oninput="actField('${tid}',${ai},'delay',+this.value)" title="Delay nach vorheriger Aktion (ms)"> ms
       </div>
       ${extra}
-      ${kritischRow}
+      ${bfRow}
     </div>
     <button class="rm-btn" onclick="actRemove('${tid}',${ai})">✕</button>
   </div>`;
@@ -3548,6 +3550,22 @@ function actRemove(tid, ai) {
   const b = _selBot(); if (!b) return;
   const t = b.triggers.find(x=>x.id===tid); if (!t) return;
   t.aktionen.splice(ai,1); _saveBots();
+  document.getElementById('acts-'+tid).innerHTML = t.aktionen.map((a,ai2)=>renderAct(tid,a,ai2)).join('');
+}
+
+function actMoveUp(tid, ai) {
+  const b = _selBot(); if (!b) return;
+  const t = b.triggers.find(x=>x.id===tid); if (!t||ai<=0) return;
+  [t.aktionen[ai-1], t.aktionen[ai]] = [t.aktionen[ai], t.aktionen[ai-1]];
+  _saveBots();
+  document.getElementById('acts-'+tid).innerHTML = t.aktionen.map((a,ai2)=>renderAct(tid,a,ai2)).join('');
+}
+
+function actMoveDown(tid, ai) {
+  const b = _selBot(); if (!b) return;
+  const t = b.triggers.find(x=>x.id===tid); if (!t||ai>=t.aktionen.length-1) return;
+  [t.aktionen[ai], t.aktionen[ai+1]] = [t.aktionen[ai+1], t.aktionen[ai]];
+  _saveBots();
   document.getElementById('acts-'+tid).innerHTML = t.aktionen.map((a,ai2)=>renderAct(tid,a,ai2)).join('');
 }
 
@@ -3865,21 +3883,8 @@ const _firedCnt={}; // trigId -> fire count
 
 function _log(...a){if(_cfg.logAktiv)console.log('[Bot:${safeName}]',...a);}
 
-// Prüft ob eine kritische Aktion ihre Voraussetzung erfüllt
-function _checkVor(a,C){
-  const vor=a.voraussetzung??'immer';
-  if(vor==='immer')return true;
-  if(vor==='item_nicht')return!(C.Appearance??[]).some(x=>x.Asset?.Name===a.item);
-  if(vor==='item_traegt')return(C.Appearance??[]).some(x=>x.Asset?.Name===a.item);
-  if(vor==='teleport_ok'){
-    const slots=a.tpSlots??[];
-    return slots.some(s=>{
-      const chars=[Player,...(ChatRoomCharacter||[])];
-      return!chars.some(ch=>ch.X===s.x&&ch.Y===s.y);
-    });
-  }
-  return true;
-}
+// bei_fehler: 'ignorieren' | 'kette_stoppen' | 'trigger_ungueltig'
+// Executed sequentially – each action's result determines if chain continues
 
 // Direkt C.X/C.Y verwenden – exakt wie funktionierendes ZoneMonitor-Pattern
 // Kein Lookup nötig: [Player,...ChatRoomCharacter] enthält bereits korrekte Positionen
@@ -3920,15 +3925,12 @@ function _istBesetzt(x,y,ausschliessen){
 }
 
 function _teleport(a,C){
-  const slots=(a.tpSlots??[]).filter(s=>!(s.x===0&&s.y===0)||slots.length===1);
   const allSlots=a.tpSlots??[];
-  if(!allSlots.length){_log('⚠️ Keine TP-Slots konfiguriert');return;}
+  if(!allSlots.length){_log('⚠️ Keine TP-Slots konfiguriert');return false;}
   const ziel=allSlots.find(s=>!_istBesetzt(s.x,s.y,[C.MemberNumber]));
   if(!ziel){
-    const msg=a.keinFallbackMsg;
-    if(msg)ServerSend('ChatRoomChat',{Content:msg,Type:'Chat'});
     _log('⚠️ Alle TP-Positionen belegt für '+C.Name);
-    return;
+    return false; // → bei_fehler greift
   }
   const fb=allSlots.indexOf(ziel);
   ServerSend('ChatRoomChat',{
@@ -3937,6 +3939,7 @@ function _teleport(a,C){
     Target:C.MemberNumber,
   });
   _log('🌀 TP '+C.Name+' → X='+ziel.x+' Y='+ziel.y+(fb>0?' (Fallback '+fb+')':''));
+  return true;
 }
 
 function _applyItemAction(a, C){
@@ -3978,46 +3981,67 @@ function _applyItemAction(a, C){
   }catch(ex){_log('item Fehler:',ex.message);}
 }
 
+// Führt eine einzelne Aktion aus; gibt true/false zurück (Erfolg)
+function _execAct(a,C,vars){
+  try{
+    if(a.typ==='chat'){ServerSend('ChatRoomChat',{Content:_tpl(a.text,vars),Type:'Chat'});return true;}
+    if(a.typ==='emote'){ServerSend('ChatRoomChat',{Content:_tpl(a.text,vars),Type:'Emote'});return true;}
+    if(a.typ==='whisper'){ServerSend('ChatRoomChat',{Content:_tpl(a.text,vars),Type:'Whisper',Target:C.MemberNumber});return true;}
+    if(a.typ==='item_entf'){InventoryRemove(C,a.gruppe);CharacterRefresh(C);ChatRoomCharacterUpdate(C);return true;}
+    if(a.typ==='item'){_applyItemAction(a,C);return true;}
+    if(a.typ==='teleport'){return _teleport(a,C);} // _teleport returns true/false
+    return true;
+  }catch(ex){_log('\u26A0 Aktion '+a.typ+' Fehler:',ex.message);return false;}
+}
+
+// Aktionen sequenziell ausführen (Reihenfolge + bei_fehler)
+function _runSeq(aktionen,C,vars,trigBase,onDone,onUngueltig){
+  if(!aktionen.length){onDone();return;}
+  const [a,...rest]=aktionen;
+  setTimeout(()=>{
+    const ok=_execAct(a,C,vars);
+    if(!ok){
+      const bf=a.bei_fehler??'ignorieren';
+      _log('\u26A0 Aktion '+a.typ+' fehlgeschlagen → '+bf);
+      if(bf==='kette_stoppen'){onDone();return;}         // Trigger zählt, aber Stop
+      if(bf==='trigger_ungueltig'){onUngueltig();return;} // Trigger ungültig
+      // ignorieren → weiter
+    }
+    _runSeq(rest,C,vars,trigBase,onDone,onUngueltig);
+  },a.delay??0);
+}
+
 function _run(trig,vars){
   const C=vars.C??Player;
 
   // ── Wiederholung prüfen ──────────────────────────────────
   const wdh=trig.wiederholung??'immer';
   const cnt=_firedCnt[trig.id]??0;
-  if(wdh==='einmalig'&&cnt>=1){_log('\u23ED Trigger "'+trig.name+'" bereits einmalig ausgelöst – übersprungen');return;}
-  if(wdh==='n_mal'&&cnt>=(trig.maxMal??2)){_log('\u23ED Trigger "'+trig.name+'" max ('+trig.maxMal+'×) erreicht – übersprungen');return;}
+  if(wdh==='einmalig'&&cnt>=1){_log('\u23ED "'+trig.name+'" bereits ausgelöst (1×))');return;}
+  if(wdh==='n_mal'&&cnt>=(trig.maxMal??2)){_log('\u23ED "'+trig.name+'" max '+trig.maxMal+'× erreicht');return;}
 
-  // ── Kritische Aktionen vorab prüfen ─────────────────────
-  const kritAkt=(trig.aktionen??[]).filter(a=>a.kritisch);
-  const scheitert=kritAkt.find(a=>!_checkVor(a,C));
-  if(scheitert){
-    _log('\u26A0\uFE0F Kritische Aktion scheitert (Vor: '+(scheitert.voraussetzung??'immer')+') → Trigger nicht gezählt');
-    // Fallback ausführen
-    if(trig.fallbackTyp&&trig.fallbackTyp!=='nichts'&&trig.fallbackText){
-      const msg=_tpl(trig.fallbackText,vars);
-      const typ={chat:'Chat',emote:'Emote'}[trig.fallbackTyp]??'Chat';
-      ServerSend('ChatRoomChat',{Content:msg,Type:typ});
-    }
-    return; // _fired NICHT setzen → Trigger gilt als nicht ausgelöst
-  }
+  _log('\u{1F3AF} "'+trig.name+'" von '+vars.name+' | X='+vars.x+' Y='+vars.y+' | #'+(cnt+1)+(wdh==='n_mal'?' von '+trig.maxMal:''));
 
-  // ── Trigger zählen & ausführen ───────────────────────────
-  _log('\u{1F3AF} "'+trig.name+'" von '+vars.name+' | X='+vars.x+' Y='+vars.y+' | Auslösung '+(cnt+1)+(wdh==='n_mal'?'/'+trig.maxMal:''));
-  _fired[trig.id]=Date.now();
-  _firedCnt[trig.id]=(cnt+1);
-
-  (trig.aktionen??[]).forEach(a=>{
-    setTimeout(()=>{
-      try{
-        if(a.typ==='chat'){ServerSend('ChatRoomChat',{Content:_tpl(a.text,vars),Type:'Chat'});}
-        else if(a.typ==='emote'){ServerSend('ChatRoomChat',{Content:_tpl(a.text,vars),Type:'Emote'});}
-        else if(a.typ==='whisper'){ServerSend('ChatRoomChat',{Content:_tpl(a.text,vars),Type:'Whisper',Target:C.MemberNumber});}
-        else if(a.typ==='item_entf'){InventoryRemove(C,a.gruppe);CharacterRefresh(C);ChatRoomCharacterUpdate(C);}
-        else if(a.typ==='item'){_applyItemAction(a,C);}
-        else if(a.typ==='teleport'){_teleport(a,C);}
-      }catch(ex){_log(a.typ,'Fehler:',ex.message);}
-    },trig.delay+(a.delay??0));
-  });
+  // ── Aktionen sequenziell mit Basis-Delay starten ─────────
+  setTimeout(()=>{
+    _runSeq(
+      trig.aktionen??[],C,vars,trig,
+      // onDone – Trigger erfolgreich gezählt
+      ()=>{
+        _fired[trig.id]=Date.now();
+        _firedCnt[trig.id]=(cnt+1);
+        _log('\u2705 Trigger "'+trig.name+'" abgeschlossen (Gesamt: '+(_firedCnt[trig.id])+'x)');
+      },
+      // onUngueltig – eine Aktion hat ❌ Trigger ungültig ausgelöst
+      ()=>{
+        _log('\u274C Trigger "'+trig.name+'" ungültig – nicht gezählt');
+        if(trig.fallbackTyp&&trig.fallbackTyp!=='nichts'&&trig.fallbackText){
+          const typ={chat:'Chat',emote:'Emote'}[trig.fallbackTyp]??'Chat';
+          ServerSend('ChatRoomChat',{Content:_tpl(trig.fallbackText,vars),Type:typ});
+        }
+      }
+    );
+  },trig.delay??0);
 }
 
 function _tpl(s,v){return(s??'').replace(/{name}/gi,v.name??'').replace(/{wort}/gi,v.wort??'').replace(/{typ}/gi,v.typ??'').replace(/{x}/gi,v.x??'').replace(/{y}/gi,v.y??'').replace(/{zone}/gi,v.zone??'');}
