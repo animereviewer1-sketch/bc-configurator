@@ -3785,14 +3785,11 @@ const _fired={};
 
 function _log(...a){if(_cfg.logAktiv)console.log('[Bot:${safeName}]',...a);}
 
-function _getPos(C){
-  if(C.MemberNumber===Player.MemberNumber)return{X:Player.X??0,Y:Player.Y??0};
-  const cr=ChatRoomCharacter.find(c=>c.MemberNumber===C.MemberNumber);
-  return{X:cr?.X??0,Y:cr?.Y??0};
-}
+// Direkt C.X/C.Y verwenden – exakt wie funktionierendes ZoneMonitor-Pattern
+// Kein Lookup nötig: [Player,...ChatRoomCharacter] enthält bereits korrekte Positionen
 
 function _ok(trig,rohText,typKey,C){
-  const pos=_getPos(C);
+  const cx=C.X??-999,cy=C.Y??-999;
   for(const c of(trig.bedingungen??[])){
     if(c.typ==='wort'){
       const m=c.typ_msg||'any';
@@ -3801,8 +3798,8 @@ function _ok(trig,rohText,typKey,C){
     }
     else if(c.typ==='zone'){
       const p=c.puffer??1;
-      if(!(pos.X>=c.x-p&&pos.X<=c.x+p&&pos.Y>=c.y-p&&pos.Y<=c.y+p)){
-        _log('Zone miss: X='+pos.X+' Y='+pos.Y+' | erwartet X='+c.x+' Y='+c.y+' ±'+p);
+      if(!(cx>=c.x-p&&cx<=c.x+p&&cy>=c.y-p&&cy<=c.y+p)){
+        _log('Zone miss: X='+cx+' Y='+cy+' | erwartet X='+c.x+' Y='+c.y+' ±'+p);
         return false;
       }
     }
@@ -3907,7 +3904,7 @@ function _tpl(s,v){return(s??'').replace(/{name}/gi,v.name??'').replace(/{wort}/
 
 function _proc(rohText,typKey,C){
   if(!rohText)return;
-  const pos=_getPos(C);
+  const pos={X:C.X??0,Y:C.Y??0}; // direkt vom Character
   const typLabel={chat:'\u{1F4AC} Chat',emote:'\u{2728} Emote',whisper:'\u{1F917} Whisper'}[typKey]??typKey;
   _trigs.forEach(trig=>{
     // Trigger mit player_betritt -> nur Join-Poll, nie Nachrichten
@@ -3936,8 +3933,7 @@ const _itPoll=setInterval(()=>{
       const key=C.MemberNumber+'_'+trig.id;
       const was=_itState[key]??false;
       if(allWorn&&!was){
-        // Prüfe Zone/Vortrigger (nicht item_traegt selbst)
-        const pos=_getPos(C);
+        const pos={X:C.X??0,Y:C.Y??0};
         const otherOk=(trig.bedingungen??[]).every(c=>{
           if(c.typ==='item_traegt')return true;
           if(c.typ==='zone'){const p=c.puffer??1;return pos.X>=c.x-p&&pos.X<=c.x+p&&pos.Y>=c.y-p&&pos.Y<=c.y+p;}
@@ -3962,7 +3958,7 @@ const _joinPoll=setInterval(()=>{
       _trigs.forEach(trig=>{
         const hasBetritt=(trig.bedingungen??[]).some(c=>c.typ==='player_betritt');
         if(!hasBetritt)return;
-        const pos=_getPos(C);
+        const pos={X:C.X??0,Y:C.Y??0};
         const otherOk=(trig.bedingungen??[]).every(c=>{
           if(c.typ==='player_betritt')return true;
           if(c.typ==='zone'){const p=c.puffer??1;return pos.X>=c.x-p&&pos.X<=c.x+p&&pos.Y>=c.y-p&&pos.Y<=c.y+p;}
@@ -3977,38 +3973,43 @@ const _joinPoll=setInterval(()=>{
   for(const n of cur)_roomPrev.add(n);
 },3000);
 
-// ── Zonen-Betreten Polling (feuert 1x beim Betreten, ohne Chat-Trigger) ──
-const _zoneState={}; // 'memberNum_trigId' -> bool
+// ── Zonen-Betreten Polling – direkt C.X/C.Y (wie ZoneMonitor-Pattern) ──
+const _zoneState={}; // 'memberNum_trigId' -> bool (war zuletzt drin)
 const _zonePoll=setInterval(()=>{
-  const chars=[...(ChatRoomCharacter||[])];
-  if(Player&&!chars.find(c=>c.MemberNumber===Player.MemberNumber))chars.push(Player);
+  const chars=[Player,...(ChatRoomCharacter||[])];
   _trigs.forEach(trig=>{
     const zoneConds=(trig.bedingungen??[]).filter(c=>c.typ==='zone');
     if(!zoneConds.length)return;
     const hasWort=(trig.bedingungen??[]).some(c=>c.typ==='wort');
     const hasBetritt=(trig.bedingungen??[]).some(c=>c.typ==='player_betritt');
-    if(hasWort||hasBetritt)return; // wort-Trigger laufen via _proc, betritt via joinPoll
+    if(hasWort||hasBetritt)return;
     chars.forEach(C=>{
-      const pos=_getPos(C);
-      const inZone=zoneConds.every(c=>{const p=c.puffer??1;return pos.X>=c.x-p&&pos.X<=c.x+p&&pos.Y>=c.y-p&&pos.Y<=c.y+p;});
+      if(!C)return;
+      // Direkt C.X / C.Y – kein _getPos Umweg nötig
+      const cx=C.X??-999, cy=C.Y??-999;
+      const inZone=zoneConds.every(c=>{
+        const p=c.puffer??1;
+        return cx>=c.x-p&&cx<=c.x+p&&cy>=c.y-p&&cy<=c.y+p;
+      });
       const key=C.MemberNumber+'_'+trig.id;
       const war=_zoneState[key]??false;
       if(inZone&&!war){
+        // Prüfe andere Bedingungen (vortrigger, item_traegt)
         const otherOk=(trig.bedingungen??[]).every(c=>{
           if(c.typ==='zone')return true;
           if(c.typ==='trigger_war')return!!_fired[c.trigId];
-          if(c.typ==='item_traegt'){const Cf=ChatRoomCharacter.find(x=>x.MemberNumber===C.MemberNumber)??C;return(Cf.Appearance??[]).some(a=>a.Asset?.Name===c.item);}
+          if(c.typ==='item_traegt')return(C.Appearance??[]).some(a=>a.Asset?.Name===c.item);
           return true;
         });
         if(otherOk){
-          _log('\u{1F4CD} Zone: '+C.Name+' X='+pos.X+' Y='+pos.Y+' \u2192 "'+trig.name+'"');
-          _run(trig,{name:C.Name,wort:'',typ:'\u{1F4CD} Zone',x:pos.X,y:pos.Y,zone:'',C});
+          _log('\u{1F4CD} Zone: '+C.Name+' X='+cx+' Y='+cy+' \u2192 "'+trig.name+'"');
+          _run(trig,{name:C.Name,wort:'',typ:'\u{1F4CD} Zone',x:cx,y:cy,zone:'',C});
         }
       }
       _zoneState[key]=inZone;
     });
   });
-},750);
+},500);
 
 // Eigene Nachrichten via hookFunction – Mod bekommt unique Namen (Timestamp) um Kollisionen beim Live-Sync zu vermeiden
 let _mod = null;
