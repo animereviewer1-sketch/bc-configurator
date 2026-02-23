@@ -492,53 +492,73 @@ textarea.outfit-code{width:100%;min-height:200px;background:var(--bg4);border:1p
 .outfit-search:focus{outline:none;border-color:var(--purple)}
 
 
-/* ── BOT TAB ── */
-.bot-layout { display:grid; grid-template-columns:320px 1fr; gap:0; height:calc(100vh - 110px); overflow:hidden; }
-.bot-sidebar { background:var(--bg2); border-right:1px solid var(--border); overflow-y:auto; display:flex; flex-direction:column; }
-.bot-main    { overflow-y:auto; padding:16px; }
-.bot-section { padding:12px 16px; border-bottom:1px solid var(--border); }
-.bot-section-title { font-size:.65rem; text-transform:uppercase; letter-spacing:.08em; color:var(--text3); margin-bottom:8px; font-weight:600; }
-.bot-field { margin-bottom:8px; }
-.bot-field label { font-size:.68rem; color:var(--text3); display:block; margin-bottom:3px; }
-.bot-field input, .bot-field select, .bot-field textarea {
-  width:100%; background:var(--bg3); border:1px solid var(--border2); border-radius:5px;
-  color:var(--text); padding:4px 8px; font-size:.72rem; font-family:var(--mono); box-sizing:border-box;
-}
-.bot-field input:focus, .bot-field select:focus, .bot-field textarea:focus { outline:none; border-color:var(--purple); }
-.bot-field textarea { resize:vertical; min-height:50px; }
-.bot-toggle-row { display:flex; align-items:center; gap:8px; margin-bottom:6px; font-size:.72rem; color:var(--text2); }
-.bot-toggle-row input[type=checkbox] { accent-color:var(--purple); width:13px; height:13px; cursor:pointer; }
-.trigger-list { display:flex; flex-direction:column; gap:6px; }
-.trigger-card { background:var(--bg2); border:1px solid var(--border); border-radius:8px; overflow:hidden; }
-.trigger-card.active-card { border-color:var(--purple); }
-.trigger-head { display:flex; align-items:center; gap:8px; padding:8px 12px; cursor:pointer; background:var(--bg3); }
-.trigger-head:hover { background:var(--bg2); }
-.trigger-word { font-size:.75rem; font-weight:600; color:var(--pl); font-family:var(--mono); }
-.trigger-meta { font-size:.62rem; color:var(--text3); flex:1; }
-.trigger-body { padding:10px 12px; display:none; border-top:1px solid var(--border); }
-.trigger-body.open { display:block; }
-.action-list { display:flex; flex-direction:column; gap:6px; margin-top:8px; }
-.action-card { background:var(--bg3); border:1px solid var(--border2); border-radius:6px; padding:8px 10px; display:flex; gap:8px; align-items:flex-start; }
-.action-card .action-icon { font-size:1rem; flex-shrink:0; margin-top:2px; }
-.action-fields { flex:1; display:flex; flex-direction:column; gap:4px; }
-.action-fields select, .action-fields input { background:var(--bg2); border:1px solid var(--border2); border-radius:4px; color:var(--text); padding:3px 7px; font-size:.68rem; font-family:var(--mono); width:100%; box-sizing:border-box; }
-.action-fields input:focus, .action-fields select:focus { outline:none; border-color:var(--purple); }
-.bot-add-btn { background:none; border:1px dashed var(--border2); border-radius:6px; color:var(--text3); font-size:.68rem; padding:5px 10px; cursor:pointer; width:100%; margin-top:6px; }
-.bot-add-btn:hover { border-color:var(--purple); color:var(--pl); }
-.bot-status { padding:6px 12px; font-size:.68rem; font-family:var(--mono); border-radius:6px; margin-top:8px; display:none; }
-.bot-status.running { background:#052818; border:1px solid var(--green2); color:var(--green); display:block; }
-.bot-status.stopped { background:#200808; border:1px solid var(--rd); color:var(--red); display:block; }
-.zone-card { background:var(--bg3); border:1px solid var(--border2); border-radius:6px; padding:8px 10px; display:flex; gap:8px; align-items:center; margin-bottom:6px; }
-.zone-card input { background:var(--bg2); border:1px solid var(--border2); border-radius:4px; color:var(--text); padding:3px 6px; font-size:.68rem; font-family:var(--mono); }
-.zone-name-inp { width:110px; }
-.zone-coord-inp { width:44px; }
-.item-picker-modal { position:fixed; inset:0; background:rgba(0,0,0,.7); z-index:500; display:flex; align-items:center; justify-content:center; }
-.item-picker-box { background:var(--bg2); border:1px solid var(--border); border-radius:12px; width:540px; max-height:80vh; display:flex; flex-direction:column; overflow:hidden; }
-.item-picker-head { padding:12px 16px; display:flex; align-items:center; gap:10px; border-bottom:1px solid var(--border); }
-.item-picker-list { overflow-y:auto; flex:1; }
-.item-picker-row { padding:8px 16px; font-size:.72rem; cursor:pointer; border-bottom:1px solid var(--border); display:flex; gap:10px; align-items:center; }
-.item-picker-row:hover { background:var(--bg3); color:var(--pl); }
-.item-picker-tag { font-size:.6rem; background:var(--pd); color:var(--pl); border-radius:3px; padding:1px 5px; }
+
+/* ══ BOT TAB ══════════════════════════════════════════════ */
+.bot-wrap{display:grid;grid-template-columns:260px 1fr;height:calc(100vh - 108px);overflow:hidden}
+.bot-sidebar{border-right:1px solid var(--border);display:flex;flex-direction:column;overflow-y:auto;background:var(--bg2)}
+.bot-main{overflow-y:auto;background:var(--bg)}
+.bs-head{padding:10px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:6px}
+.bs-head span{flex:1;font-size:.73rem;font-weight:600;color:var(--text)}
+.bot-list{flex:1;overflow-y:auto}
+.bot-item{padding:9px 14px;border-bottom:1px solid var(--border);cursor:pointer;display:flex;align-items:center;gap:8px;transition:background .1s}
+.bot-item:hover{background:var(--bg3)}
+.bot-item.sel{background:var(--pd);border-left:3px solid var(--purple)}
+.bot-item .bi-name{flex:1;font-size:.74rem;font-weight:500;color:var(--text)}
+.bot-item .bi-stat{font-size:.6rem;color:var(--text3)}
+.bot-toggle{width:32px;height:17px;border-radius:9px;border:none;cursor:pointer;flex-shrink:0;transition:background .2s;position:relative}
+.bot-toggle.on{background:var(--gd)}
+.bot-toggle.off{background:var(--bg3);border:1px solid var(--border2)}
+.bot-toggle::after{content:'';position:absolute;top:2px;width:13px;height:13px;border-radius:50%;background:#fff;transition:left .15s}
+.bot-toggle.on::after{left:16px}
+.bot-toggle.off::after{left:2px}
+/* Editor */
+.be-topbar{padding:10px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;background:var(--bg2)}
+.be-topbar input{background:var(--bg3);border:1px solid var(--border2);border-radius:5px;color:var(--text);padding:4px 10px;font-size:.78rem;font-weight:600;font-family:var(--mono)}
+.be-body{padding:16px 18px}
+/* Trigger cards */
+.trig-card{background:var(--bg2);border:1px solid var(--border);border-radius:9px;margin-bottom:10px;overflow:hidden}
+.trig-card.trig-on{border-color:var(--purple)}
+.trig-head{display:flex;align-items:center;gap:8px;padding:9px 12px;cursor:pointer;user-select:none}
+.trig-head:hover{background:var(--bg3)}
+.trig-label{font-size:.72rem;font-weight:600;color:var(--pl);font-family:var(--mono);flex:1}
+.trig-meta{font-size:.61rem;color:var(--text3)}
+.trig-body{padding:12px 14px;border-top:1px solid var(--border);display:none}
+.trig-body.open{display:block}
+/* Condition/Action sections */
+.te-section{margin-bottom:12px}
+.te-section-title{font-size:.61rem;text-transform:uppercase;letter-spacing:.07em;color:var(--text3);font-weight:600;margin-bottom:6px;display:flex;align-items:center;gap:8px}
+.te-section-title button{font-size:.6rem;padding:2px 7px;border-radius:4px;border:1px dashed var(--border2);background:none;color:var(--text3);cursor:pointer}
+.te-section-title button:hover{border-color:var(--purple);color:var(--pl)}
+.cond-card,.act-card{background:var(--bg3);border:1px solid var(--border2);border-radius:6px;padding:7px 10px;margin-bottom:5px;display:grid;grid-template-columns:1fr auto;gap:6px;align-items:start}
+.cond-card.cond-op{background:#0e0b1a;border-color:var(--purple)}
+.card-fields{display:flex;flex-wrap:wrap;gap:4px;align-items:center}
+.cf{background:var(--bg2);border:1px solid var(--border2);border-radius:4px;color:var(--text);padding:3px 6px;font-size:.68rem;font-family:var(--mono)}
+.cf:focus{outline:none;border-color:var(--purple)}
+.cf-w80{width:80px}.cf-w120{width:120px}.cf-w160{width:160px}.cf-w200{width:200px}.cf-flex{flex:1;min-width:100px}
+.rm-btn{background:none;border:none;color:var(--red);cursor:pointer;font-size:.8rem;padding:2px 4px;line-height:1;flex-shrink:0}
+.act-icon{font-size:.95rem;margin-right:4px}
+.be-addtrig{width:100%;padding:8px;background:none;border:1px dashed var(--border2);border-radius:8px;color:var(--text3);font-size:.72rem;cursor:pointer;margin-top:4px}
+.be-addtrig:hover{border-color:var(--purple);color:var(--pl)}
+.be-empty{padding:60px 20px;text-align:center;color:var(--text3);font-size:.78rem}
+.be-empty .be-empty-icon{font-size:2.5rem;margin-bottom:10px}
+/* Settings panel */
+.bot-cfg-panel{background:var(--bg2);border-bottom:1px solid var(--border);padding:10px 18px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.bot-cfg-label{font-size:.66rem;color:var(--text3)}
+.bot-cfg-panel input[type=checkbox]{accent-color:var(--purple)}
+/* Item picker */
+.ipicker-overlay{position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:600;display:flex;align-items:center;justify-content:center}
+.ipicker-box{background:var(--bg2);border:1px solid var(--border);border-radius:12px;width:560px;max-height:78vh;display:flex;flex-direction:column;overflow:hidden}
+.ipicker-head{padding:12px 16px;display:flex;gap:8px;align-items:center;border-bottom:1px solid var(--border)}
+.ipicker-tabs{display:flex;gap:4px;padding:8px 14px;border-bottom:1px solid var(--border)}
+.ipicker-tab{padding:4px 10px;border-radius:5px;border:1px solid var(--border2);background:var(--bg3);color:var(--text3);font-size:.66rem;cursor:pointer}
+.ipicker-tab.on{background:var(--pd);color:var(--pl);border-color:var(--purple)}
+.ipicker-list{overflow-y:auto;flex:1}
+.ipicker-row{padding:8px 14px;font-size:.71rem;cursor:pointer;border-bottom:1px solid var(--border);display:flex;gap:8px;align-items:center}
+.ipicker-row:hover{background:var(--bg3);color:var(--pl)}
+.ipicker-tag{font-size:.58rem;background:var(--pd);color:var(--pl);border-radius:3px;padding:1px 5px;white-space:nowrap}
+.ipicker-tag.green{background:var(--gd);color:var(--green)}
+.ipicker-tag.purple{background:#1e1040;color:var(--pl)}
+
 </style>
 </head>
 <body>
@@ -3002,670 +3022,677 @@ function selectRoomMember(num) {
 </div>
 <!-- /tab-curse -->
 
-<!-- ── BOT TAB ── -->
+
+
+<!-- ══ BOT TAB ══════════════════════════════════════════════ -->
 <div id="tab-bot" class="tab-pane">
-  <div class="bot-layout">
-    <!-- SIDEBAR: Config -->
+  <div class="bot-wrap">
+
+    <!-- Sidebar: Bot list -->
     <div class="bot-sidebar">
-
-      <!-- Bot Info -->
-      <div class="bot-section">
-        <div class="bot-section-title">⚙️ Bot-Einstellungen</div>
-        <div class="bot-field"><label>Bot-Name</label><input id="bot-name" value="MeinBot"></div>
-        <div class="bot-field"><label>Version</label><input id="bot-version" value="1.0.0"></div>
-        <div class="bot-field">
-          <label>Modus</label>
-          <select id="bot-modus">
-            <option value="chat">chat – Nur Chatnachrichten</option>
-            <option value="zone">zone – Nur Map-Positionen</option>
-            <option value="both" selected>both – Chat UND Zone</option>
-          </select>
-        </div>
-        <div class="bot-section-title" style="margin-top:10px">📡 Chat hören auf</div>
-        <div class="bot-toggle-row"><input type="checkbox" id="bot-hear-chat" checked> Normale Chatnachrichten</div>
-        <div class="bot-toggle-row"><input type="checkbox" id="bot-hear-emote" checked> *Emotes*</div>
-        <div class="bot-toggle-row"><input type="checkbox" id="bot-hear-whisper" checked> /w Whisper</div>
-        <div class="bot-toggle-row"><input type="checkbox" id="bot-nur-eigene" checked> Nur eigene Nachrichten</div>
+      <div class="bs-head">
+        <span>🤖 Meine Bots</span>
+        <button class="btn btn-green" onclick="botNew()" style="font-size:.65rem;padding:3px 8px">+ Neu</button>
       </div>
-
-      <!-- Zones -->
-      <div class="bot-section">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-          <div class="bot-section-title" style="margin:0">🗺️ Zonen</div>
-          <button class="bot-add-btn" style="width:auto;padding:3px 10px" onclick="botAddZone()">+ Zone</button>
-        </div>
-        <div id="bot-zone-list"></div>
-      </div>
-
-      <!-- Logging -->
-      <div class="bot-section">
-        <div class="bot-section-title">📋 Logging</div>
-        <div class="bot-toggle-row"><input type="checkbox" id="bot-log-aktiv" checked> Logging aktiv</div>
-        <div class="bot-toggle-row"><input type="checkbox" id="bot-log-trigger" checked> Trigger loggen</div>
-        <div class="bot-toggle-row"><input type="checkbox" id="bot-log-aktionen" checked> Aktionen loggen</div>
-      </div>
-
-      <!-- Controls -->
-      <div class="bot-section" style="margin-top:auto">
-        <div style="display:flex;gap:6px;flex-wrap:wrap">
-          <button class="btn btn-green" onclick="botDeploy()" style="flex:1">▶️ Starten</button>
-          <button class="btn btn-red"   onclick="botStop()"   style="flex:1">⏹ Stoppen</button>
-        </div>
-        <div id="bot-status-bar" class="bot-status stopped">⏹ Nicht gestartet</div>
-        <button class="btn btn-primary" onclick="botExportConfig()" style="width:100%;margin-top:6px;font-size:.68rem">⬇️ Config exportieren</button>
-        <button class="btn btn-primary" onclick="botImportConfig()" style="width:100%;margin-top:4px;font-size:.68rem">⬆️ Config importieren</button>
-      </div>
+      <div class="bot-list" id="botList"></div>
     </div>
 
-    <!-- MAIN: Trigger Editor -->
-    <div class="bot-main">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
-        <div style="font-size:.85rem;font-weight:600;color:var(--text)">🎯 Trigger</div>
-        <button class="bot-add-btn" style="width:auto;padding:4px 14px" onclick="botAddTrigger()">+ Trigger hinzufügen</button>
-      </div>
-      <div class="trigger-list" id="bot-trigger-list"></div>
+    <!-- Main: Editor -->
+    <div class="bot-main" id="botEditor">
+      <div class="be-empty"><div class="be-empty-icon">🤖</div>Wähle einen Bot aus oder erstelle einen neuen.</div>
     </div>
   </div>
 </div>
 
-<!-- Item Picker Modal -->
-<div class="item-picker-modal" id="itemPickerModal" style="display:none" onclick="if(event.target===this)closeItemPicker()">
-  <div class="item-picker-box">
-    <div class="item-picker-head">
-      <span style="font-size:.8rem;font-weight:600">📦 Item auswählen</span>
-      <input class="sidebar-search" id="itemPickerSearch" placeholder="🔍 Suchen..." oninput="renderItemPicker()" style="flex:1">
-      <button class="btn btn-red" onclick="closeItemPicker()" style="font-size:.68rem;padding:3px 8px">✕</button>
+<!-- Item/Curse/Profile Picker Modal -->
+<div class="ipicker-overlay" id="ipickerOverlay" style="display:none" onclick="if(event.target===this)ipickerClose()">
+  <div class="ipicker-box">
+    <div class="ipicker-head">
+      <span style="font-size:.78rem;font-weight:600">Auswählen</span>
+      <input class="cf cf-flex" id="ipickerSearch" placeholder="🔍 Suchen..." oninput="ipickerRender()">
+      <button class="btn btn-red" onclick="ipickerClose()" style="font-size:.65rem;padding:3px 8px">✕</button>
     </div>
-    <div class="item-picker-list" id="itemPickerList"></div>
+    <div class="ipicker-tabs" id="ipickerTabs"></div>
+    <div class="ipicker-list" id="ipickerList"></div>
   </div>
 </div>
 
-<!-- ── PROFILE MODAL ── -->
-<div class="modal-overlay hidden" id="profileOverlay">
-  <div class="modal" style="max-width:650px">
-    <div class="modal-head">
-      <h2>📁 Outfit-Profile</h2>
-      <button class="btn btn-red" onclick="closeProfiles()">✕ Schließen</button>
-    </div>
-    <div class="modal-body">
-      <div class="profile-new-row">
-        <input class="profile-name-input" id="profileNameInput" placeholder="Profilname eingeben..." maxlength="40">
-        <button class="btn btn-green" onclick="saveProfile()">💾 Aktuelles Outfit speichern</button>
-      </div>
-      <div id="profileListEl"><p style="color:var(--text3);font-size:.8rem">Noch keine Profile. Outfit zusammenstellen und oben speichern.</p></div>
-    </div>
-  </div>
-</div>
+<script>
+// ══ BOT ENGINE ══════════════════════════════════════════════
 
+const BOT_KEY = 'BC_Bots_v2';
 
+// State
+let _bots = [];           // [{id, name, aktiv, triggers, settings}]
+let _selBotId = null;     // currently selected bot id
+let _ipickerCb = null;    // callback for item picker
+let _ipickerTab = 'item'; // current picker tab
 
+function _saveBots() {
+  try { localStorage.setItem(BOT_KEY, JSON.stringify(_bots)); } catch {}
+}
 
-
-// ══════════════════════════════════════════════════════════════
-//  BOT TAB
-// ══════════════════════════════════════════════════════════════
-
-let _botTriggers = [
-  {
-    id: Date.now(), aktiv: true, wort: "start", zone: "", delay: 500,
-    aktionen: [
-      { id: Date.now()+1, typ: "chat", nachricht: "{name} hat 'start' geschrieben!", delay: 0 }
-    ]
-  }
-];
-let _botZones = [
-  { id: Date.now()+2, name: "Start-Zone", x: 22, y: 21, puffer: 1, aktiv: true }
-];
-let _botRunning = false;
-let _itemPickerCallback = null;
-
-const BOT_STORAGE_KEY = 'BC_Bot_Config_v1';
-
-function _loadBotConfig() {
+function _loadBots() {
   try {
-    const s = localStorage.getItem(BOT_STORAGE_KEY);
-    if (!s) return;
-    const d = JSON.parse(s);
-    if (d.triggers) _botTriggers = d.triggers;
-    if (d.zones)    _botZones    = d.zones;
-    if (d.settings) {
-      document.getElementById('bot-name').value          = d.settings.name ?? 'MeinBot';
-      document.getElementById('bot-version').value       = d.settings.version ?? '1.0.0';
-      document.getElementById('bot-modus').value         = d.settings.modus ?? 'both';
-      document.getElementById('bot-hear-chat').checked   = d.settings.hearChat ?? true;
-      document.getElementById('bot-hear-emote').checked  = d.settings.hearEmote ?? true;
-      document.getElementById('bot-hear-whisper').checked= d.settings.hearWhisper ?? true;
-      document.getElementById('bot-nur-eigene').checked  = d.settings.nurEigene ?? true;
-    }
+    const s = localStorage.getItem(BOT_KEY);
+    if (s) _bots = JSON.parse(s);
   } catch {}
 }
 
-function _saveBotConfig() {
-  try {
-    localStorage.setItem(BOT_STORAGE_KEY, JSON.stringify({
-      triggers: _botTriggers,
-      zones:    _botZones,
-      settings: _getBotSettings(),
-    }));
-  } catch {}
+function _selBot() {
+  return _bots.find(b => b.id === _selBotId) ?? null;
 }
 
-function _getBotSettings() {
-  return {
-    name:        document.getElementById('bot-name')?.value ?? 'MeinBot',
-    version:     document.getElementById('bot-version')?.value ?? '1.0.0',
-    modus:       document.getElementById('bot-modus')?.value ?? 'both',
-    hearChat:    document.getElementById('bot-hear-chat')?.checked ?? true,
-    hearEmote:   document.getElementById('bot-hear-emote')?.checked ?? true,
-    hearWhisper: document.getElementById('bot-hear-whisper')?.checked ?? true,
-    nurEigene:   document.getElementById('bot-nur-eigene')?.checked ?? true,
-    logAktiv:    document.getElementById('bot-log-aktiv')?.checked ?? true,
-    logTrigger:  document.getElementById('bot-log-trigger')?.checked ?? true,
-    logAktionen: document.getElementById('bot-log-aktionen')?.checked ?? true,
-  };
-}
-
+// ── Lifecycle ─────────────────────────────────────────────────
 function renderBotTab() {
-  _loadBotConfig();
-  renderBotZones();
-  renderBotTriggers();
+  _loadBots();
+  renderBotList();
+  if (_selBotId) renderBotEditor();
 }
 
-// ── Zones ─────────────────────────────────────────────────────
-function renderBotZones() {
-  const el = document.getElementById('bot-zone-list');
+// ── Bot List ──────────────────────────────────────────────────
+function renderBotList() {
+  const el = document.getElementById('botList');
   if (!el) return;
-  el.innerHTML = _botZones.map((z, i) => `
-    <div class="zone-card">
-      <input type="checkbox" ${z.aktiv?'checked':''} onchange="botZoneField(${i},'aktiv',this.checked)" style="accent-color:var(--purple);flex-shrink:0">
-      <input class="zone-name-inp" value="${escHtml(z.name)}" oninput="botZoneField(${i},'name',this.value)" title="Name">
-      <input class="zone-coord-inp" type="number" value="${z.x}" oninput="botZoneField(${i},'x',+this.value)" title="X">
-      <input class="zone-coord-inp" type="number" value="${z.y}" oninput="botZoneField(${i},'y',+this.value)" title="Y">
-      <input class="zone-coord-inp" type="number" value="${z.puffer}" oninput="botZoneField(${i},'puffer',+this.value)" title="±Puffer" style="width:36px">
-      <button onclick="botRemoveZone(${i})" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.8rem;flex-shrink:0">✕</button>
-    </div>`).join('');
-}
-
-function botZoneField(i, field, val) { _botZones[i][field] = val; _saveBotConfig(); }
-function botAddZone() {
-  _botZones.push({ id: Date.now(), name: 'Neue Zone', x: 0, y: 0, puffer: 1, aktiv: true });
-  renderBotZones(); _saveBotConfig();
-}
-function botRemoveZone(i) { _botZones.splice(i,1); renderBotZones(); _saveBotConfig(); }
-
-// ── Triggers ──────────────────────────────────────────────────
-const ACTION_ICONS = {
-  item_anlegen: '📦', item_entfernen: '🗑', item_curse: '🔮',
-  chat: '💬', emote: '✨', whisper: '🤫', profil_anlegen: '👗'
-};
-
-function renderBotTriggers() {
-  const el = document.getElementById('bot-trigger-list');
-  if (!el) return;
-  if (!_botTriggers.length) {
-    el.innerHTML = '<div style="color:var(--text3);font-size:.72rem;padding:20px;text-align:center">Noch keine Trigger. Klicke + Trigger hinzufügen.</div>';
+  if (!_bots.length) {
+    el.innerHTML = '<div style="padding:20px;color:var(--text3);font-size:.71rem;text-align:center">Noch keine Bots. Klicke + Neu.</div>';
     return;
   }
-  el.innerHTML = _botTriggers.map((t, ti) => `
-    <div class="trigger-card ${t.aktiv?'active-card':''}">
-      <div class="trigger-head" onclick="botToggleTriggerBody(${ti})">
-        <input type="checkbox" ${t.aktiv?'checked':''} onclick="event.stopPropagation();botTriggerField(${ti},'aktiv',this.checked)" style="accent-color:var(--purple)">
-        <span class="trigger-word">"${escHtml(t.wort)}"</span>
-        <span class="trigger-meta">Zone: ${t.zone||'–'} · ${t.aktionen.length} Aktion(en)</span>
-        <button onclick="event.stopPropagation();botRemoveTrigger(${ti})" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.75rem">✕</button>
+  el.innerHTML = _bots.map(b => `
+    <div class="bot-item${b.id===_selBotId?' sel':''}" onclick="botSelect('${b.id}')">
+      <div>
+        <div class="bi-name">${escHtml(b.name)}</div>
+        <div class="bi-stat">${b.triggers.filter(t=>t.aktiv).length} Trigger aktiv</div>
       </div>
-      <div class="trigger-body" id="tbody-${ti}">
-        <div style="display:grid;grid-template-columns:1fr 1fr 100px;gap:8px;margin-bottom:8px">
-          <div class="bot-field"><label>Triggerwort</label>
-            <input value="${escHtml(t.wort)}" oninput="botTriggerField(${ti},'wort',this.value)">
-          </div>
-          <div class="bot-field"><label>Zone (leer = überall)</label>
-            <select onchange="botTriggerField(${ti},'zone',this.value)">
-              <option value="">– Überall –</option>
-              ${_botZones.map(z=>`<option value="${escHtml(z.name)}" ${t.zone===z.name?'selected':''}>${escHtml(z.name)}</option>`).join('')}
-            </select>
-          </div>
-          <div class="bot-field"><label>Delay (ms)</label>
-            <input type="number" value="${t.delay??0}" oninput="botTriggerField(${ti},'delay',+this.value)">
-          </div>
-        </div>
-        <div style="font-size:.66rem;color:var(--text3);margin-bottom:4px;font-weight:600;text-transform:uppercase;letter-spacing:.06em">Aktionen</div>
-        <div class="action-list" id="alist-${ti}">
-          ${t.aktionen.map((a,ai) => renderActionCard(ti,ai,a)).join('')}
-        </div>
-        <button class="bot-add-btn" onclick="botAddAction(${ti})">+ Aktion hinzufügen</button>
-      </div>
+      <button class="bot-toggle ${b.aktiv?'on':'off'}" onclick="event.stopPropagation();botToggle('${b.id}')" title="${b.aktiv?'Aktiv – klicken zum Deaktivieren':'Inaktiv – klicken zum Aktivieren'}"></button>
+      <button onclick="event.stopPropagation();botDelete('${b.id}')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.75rem;padding:2px">✕</button>
     </div>`).join('');
 }
 
-function renderActionCard(ti, ai, a) {
-  const icon = ACTION_ICONS[a.typ] ?? '❓';
-  const zoneOptions = _botZones.map(z=>`<option value="${escHtml(z.name)}">${escHtml(z.name)}</option>`).join('');
+function botNew() {
+  const bot = {
+    id: 'b' + Date.now(),
+    name: 'Mein Bot',
+    aktiv: false,
+    settings: { modus:'both', hearChat:true, hearEmote:true, hearWhisper:true, nurEigene:true, logAktiv:true },
+    triggers: [],
+  };
+  _bots.push(bot);
+  _selBotId = bot.id;
+  _saveBots();
+  renderBotList();
+  renderBotEditor();
+}
 
-  let extraFields = '';
-  if (a.typ === 'item_anlegen') {
-    extraFields = `
-      <div style="display:flex;gap:4px;align-items:center">
-        <input value="${escHtml(a.item||'')}" placeholder="Item-Name" oninput="botActionField(${ti},${ai},'item',this.value)" style="flex:1" id="act-item-${ti}-${ai}">
-        <button onclick="openItemPicker(${ti},${ai},'item')" style="background:var(--pd);border:none;color:var(--pl);border-radius:4px;padding:3px 7px;cursor:pointer;font-size:.65rem;white-space:nowrap">📦 Aus Cache</button>
-        <button onclick="openItemPicker(${ti},${ai},'curse')" style="background:#1e1040;border:1px solid var(--purple);color:var(--pl);border-radius:4px;padding:3px 7px;cursor:pointer;font-size:.65rem;white-space:nowrap">🔮 Curse</button>
-      </div>
-      <input value="${escHtml(a.gruppe||'')}" placeholder="Gruppe (z.B. ItemMouth)" oninput="botActionField(${ti},${ai},'gruppe',this.value)">
-      <div style="display:flex;gap:4px">
-        <input value="${escHtml(a.farbe||'#ffffff')}" placeholder="Farbe" oninput="botActionField(${ti},${ai},'farbe',this.value)" style="flex:1">
-        <input type="color" value="${a.farbe||'#ffffff'}" oninput="botActionField(${ti},${ai},'farbe',this.value);this.previousElementSibling.value=this.value" style="width:32px;padding:1px;background:var(--bg2);border:1px solid var(--border2);border-radius:4px;cursor:pointer">
-      </div>`;
-  } else if (a.typ === 'item_curse') {
-    extraFields = `
-      <div style="display:flex;gap:4px;align-items:center">
-        <input value="${escHtml(a.curseKey||'')}" placeholder="Curse-Key (MemberNum:Item:Name)" oninput="botActionField(${ti},${ai},'curseKey',this.value)" style="flex:1" id="act-item-${ti}-${ai}">
-        <button onclick="openItemPicker(${ti},${ai},'curse')" style="background:#1e1040;border:1px solid var(--purple);color:var(--pl);border-radius:4px;padding:3px 7px;cursor:pointer;font-size:.65rem">🔮 Wählen</button>
-      </div>`;
-  } else if (a.typ === 'item_entfernen') {
-    extraFields = `<input value="${escHtml(a.gruppe||'')}" placeholder="Gruppe (z.B. ItemMouth)" oninput="botActionField(${ti},${ai},'gruppe',this.value)">`;
-  } else if (a.typ === 'profil_anlegen') {
-    const profileOptions = Object.keys(PROFILES).map(p=>`<option value="${escHtml(p)}" ${a.profil===p?'selected':''}>${escHtml(p)}</option>`).join('');
-    extraFields = `<select onchange="botActionField(${ti},${ai},'profil',this.value)"><option value="">– Profil wählen –</option>${profileOptions}</select>`;
-  } else if (['chat','emote','whisper'].includes(a.typ)) {
-    extraFields = `<textarea rows="2" oninput="botActionField(${ti},${ai},'nachricht',this.value)" placeholder="{name} hat '{wort}' geschrieben...">${escHtml(a.nachricht||'')}</textarea>
-      <div style="font-size:.59rem;color:var(--text3)">Variablen: {name} {wort} {typ} {x} {y} {zone}</div>`;
-  }
+function botSelect(id) {
+  _selBotId = id;
+  renderBotList();
+  renderBotEditor();
+}
 
-  return `<div class="action-card">
-    <div class="action-icon">${icon}</div>
-    <div class="action-fields">
-      <div style="display:flex;gap:4px;align-items:center">
-        <select onchange="botActionTypeChange(${ti},${ai},this.value)" style="flex:1">
-          <option value="item_anlegen"   ${a.typ==='item_anlegen'  ?'selected':''}>📦 Item anlegen</option>
-          <option value="item_entfernen" ${a.typ==='item_entfernen'?'selected':''}>🗑 Item entfernen</option>
-          <option value="item_curse"     ${a.typ==='item_curse'    ?'selected':''}>🔮 Curse anlegen</option>
-          <option value="profil_anlegen" ${a.typ==='profil_anlegen'?'selected':''}>👗 Profil anlegen</option>
-          <option value="chat"           ${a.typ==='chat'          ?'selected':''}>💬 Chat senden</option>
-          <option value="emote"          ${a.typ==='emote'         ?'selected':''}>✨ Emote senden</option>
-          <option value="whisper"        ${a.typ==='whisper'       ?'selected':''}>🤫 Whisper senden</option>
-        </select>
-        <input type="number" value="${a.delay??0}" oninput="botActionField(${ti},${ai},'delay',+this.value)" style="width:60px" title="Delay ms">
-        <button onclick="botRemoveAction(${ti},${ai})" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.8rem">✕</button>
+function botToggle(id) {
+  const b = _bots.find(x => x.id === id);
+  if (b) { b.aktiv = !b.aktiv; _saveBots(); renderBotList(); }
+}
+
+function botDelete(id) {
+  const b = _bots.find(x => x.id === id);
+  if (!b || !confirm(`Bot "${b.name}" löschen?`)) return;
+  _bots = _bots.filter(x => x.id !== id);
+  if (_selBotId === id) _selBotId = _bots[0]?.id ?? null;
+  _saveBots();
+  renderBotList();
+  if (_selBotId) renderBotEditor();
+  else document.getElementById('botEditor').innerHTML = '<div class="be-empty"><div class="be-empty-icon">🤖</div>Wähle einen Bot aus oder erstelle einen neuen.</div>';
+}
+
+// ── Bot Editor ────────────────────────────────────────────────
+function renderBotEditor() {
+  const bot = _selBot();
+  if (!bot) return;
+  const s = bot.settings;
+
+  const html = `
+    <div class="be-topbar">
+      <input value="${escHtml(bot.name)}" oninput="botField('name',this.value)" style="width:200px">
+      <div style="flex:1"></div>
+      <label class="bot-cfg-label"><input type="checkbox" ${s.hearChat?'checked':''} onchange="botSetting('hearChat',this.checked)"> Chat</label>
+      <label class="bot-cfg-label"><input type="checkbox" ${s.hearEmote?'checked':''} onchange="botSetting('hearEmote',this.checked)"> *Emote*</label>
+      <label class="bot-cfg-label"><input type="checkbox" ${s.hearWhisper?'checked':''} onchange="botSetting('hearWhisper',this.checked)"> /w Whisper</label>
+      <label class="bot-cfg-label"><input type="checkbox" ${s.nurEigene?'checked':''} onchange="botSetting('nurEigene',this.checked)"> Nur eigene</label>
+      <select class="cf" onchange="botSetting('modus',this.value)" style="width:120px">
+        <option value="chat" ${s.modus==='chat'?'selected':''}>Nur Chat</option>
+        <option value="zone" ${s.modus==='zone'?'selected':''}>Nur Zone</option>
+        <option value="both" ${s.modus==='both'?'selected':''}>Chat + Zone</option>
+      </select>
+      <button class="btn btn-green" onclick="botDeploy()" style="font-size:.68rem;padding:4px 10px">▶️ Starten</button>
+      <button class="btn btn-red"   onclick="botStop()"   style="font-size:.68rem;padding:4px 10px">⏹ Stop</button>
+      <button class="btn btn-primary" onclick="botExportConfig()" style="font-size:.66rem;padding:4px 8px">⬇️</button>
+      <button class="btn btn-primary" onclick="botImportConfig()" style="font-size:.66rem;padding:4px 8px">⬆️</button>
+    </div>
+    <div id="bot-status-bar" style="display:none;padding:5px 18px;font-size:.68rem;font-family:var(--mono);background:#052818;border-bottom:1px solid var(--green2);color:var(--green)"></div>
+    <div class="be-body">
+      <div id="trig-list">${bot.triggers.map((t,i)=>renderTrigCard(bot,t,i)).join('')}</div>
+      <button class="be-addtrig" onclick="botAddTrig()">+ Trigger hinzufügen</button>
+    </div>`;
+  document.getElementById('botEditor').innerHTML = html;
+}
+
+function botField(field, val) {
+  const b = _selBot(); if (!b) return;
+  b[field] = val; _saveBots();
+  if (field === 'name') renderBotList();
+}
+
+function botSetting(key, val) {
+  const b = _selBot(); if (!b) return;
+  b.settings[key] = val; _saveBots();
+}
+
+// ── Triggers ──────────────────────────────────────────────────
+function _trigIds(bot) { return bot.triggers.map(t => t.id); }
+
+function renderTrigCard(bot, t, i) {
+  const condCount = t.bedingungen?.length ?? 0;
+  const actCount  = t.aktionen?.length ?? 0;
+  return `<div class="trig-card ${t.aktiv?'trig-on':''}" id="tc-${t.id}">
+    <div class="trig-head" onclick="trigToggleBody('${t.id}')">
+      <input type="checkbox" ${t.aktiv?'checked':''} onclick="event.stopPropagation();trigField('${t.id}','aktiv',this.checked)" style="accent-color:var(--purple)">
+      <span class="trig-label">${escHtml(t.name||'Trigger')}</span>
+      <span class="trig-meta">${condCount} Bed. · ${actCount} Akt.</span>
+      <button onclick="event.stopPropagation();trigDelete('${t.id}')" class="rm-btn">✕</button>
+    </div>
+    <div class="trig-body" id="tb-${t.id}">
+      <div class="bot-field" style="margin-bottom:10px;display:flex;gap:8px;align-items:center">
+        <label style="font-size:.65rem;color:var(--text3)">Name:</label>
+        <input class="cf cf-w160" value="${escHtml(t.name||'')}" oninput="trigField('${t.id}','name',this.value)" placeholder="Trigger-Name">
+        <label style="font-size:.65rem;color:var(--text3)">Delay:</label>
+        <input class="cf cf-w80" type="number" value="${t.delay??0}" oninput="trigField('${t.id}','delay',+this.value)" placeholder="ms"> ms
       </div>
-      ${extraFields}
+
+      <!-- Bedingungen -->
+      <div class="te-section">
+        <div class="te-section-title">🔎 Bedingungen (alle müssen zutreffen)
+          <button onclick="trigAddCond('${t.id}','wort')">+ Wort</button>
+          <button onclick="trigAddCond('${t.id}','zone')">+ Zone</button>
+          <button onclick="trigAddCond('${t.id}','item_traegt')">+ Item trägt</button>
+          <button onclick="trigAddCond('${t.id}','trigger_war')">+ Vortrigger</button>
+        </div>
+        <div id="conds-${t.id}">${(t.bedingungen||[]).map((c,ci)=>renderCond(t.id,c,ci,bot)).join('')}</div>
+      </div>
+
+      <!-- Aktionen -->
+      <div class="te-section">
+        <div class="te-section-title">⚡ Aktionen
+          <button onclick="trigAddAct('${t.id}','chat')">+ Chat</button>
+          <button onclick="trigAddAct('${t.id}','emote')">+ Emote</button>
+          <button onclick="trigAddAct('${t.id}','whisper')">+ Whisper</button>
+          <button onclick="trigAddAct('${t.id}','item')">+ Item</button>
+          <button onclick="trigAddAct('${t.id}','curse')">+ Curse</button>
+          <button onclick="trigAddAct('${t.id}','profil')">+ Profil</button>
+          <button onclick="trigAddAct('${t.id}','item_entf')">+ Entfernen</button>
+        </div>
+        <div id="acts-${t.id}">${(t.aktionen||[]).map((a,ai)=>renderAct(t.id,a,ai)).join('')}</div>
+      </div>
     </div>
   </div>`;
 }
 
-function botToggleTriggerBody(ti) {
-  document.getElementById('tbody-'+ti)?.classList.toggle('open');
+function renderCond(tid, c, ci, bot) {
+  const trigs = bot?.triggers ?? _selBot()?.triggers ?? [];
+  let inner = '';
+  if (c.typ === 'wort') {
+    inner = `<input class="cf cf-w120" value="${escHtml(c.wort||'')}" oninput="condField('${tid}',${ci},'wort',this.value)" placeholder="Triggerwort">
+      <select class="cf" onchange="condField('${tid}',${ci},'typ_msg',this.value)">
+        <option value="any" ${c.typ_msg==='any'?'selected':''}>Chat/Emote/Whisper</option>
+        <option value="chat" ${c.typ_msg==='chat'?'selected':''}>Nur Chat</option>
+        <option value="emote" ${c.typ_msg==='emote'?'selected':''}>Nur Emote</option>
+        <option value="whisper" ${c.typ_msg==='whisper'?'selected':''}>Nur Whisper</option>
+      </select>`;
+  } else if (c.typ === 'zone') {
+    inner = `<input class="cf cf-w80" value="${escHtml(c.name||'')}" oninput="condField('${tid}',${ci},'name',this.value)" placeholder="Zonenname">
+      X<input class="cf" style="width:44px" type="number" value="${c.x??0}" oninput="condField('${tid}',${ci},'x',+this.value)">
+      Y<input class="cf" style="width:44px" type="number" value="${c.y??0}" oninput="condField('${tid}',${ci},'y',+this.value)">
+      ±<input class="cf" style="width:36px" type="number" value="${c.puffer??1}" oninput="condField('${tid}',${ci},'puffer',+this.value)">`;
+  } else if (c.typ === 'item_traegt') {
+    inner = `<span style="font-size:.68rem;color:var(--text3)">${c.gruppe?escHtml(c.gruppe)+'/':''}<b>${escHtml(c.item||'?')}</b></span>
+      <button onclick="ipickerOpen(null,null,'item',v=>{condField('${tid}',${ci},'item',v.name);condField('${tid}',${ci},'gruppe',v.group);trigRerender('${tid}');})" style="font-size:.62rem;padding:2px 6px;background:var(--pd);border:none;color:var(--pl);border-radius:4px;cursor:pointer">📦 Wählen</button>`;
+  } else if (c.typ === 'trigger_war') {
+    inner = `<select class="cf cf-w160" onchange="condField('${tid}',${ci},'trigId',this.value)">
+      <option value="">– Trigger wählen –</option>
+      ${trigs.filter(t=>t.id!==tid).map(t=>`<option value="${t.id}" ${c.trigId===t.id?'selected':''}>${escHtml(t.name||t.id)}</option>`).join('')}
+    </select>
+    <span style="font-size:.62rem;color:var(--text3)">wurde ausgelöst</span>`;
+  }
+  return `<div class="cond-card cond-op">
+    <div class="card-fields">
+      <span style="font-size:.62rem;font-weight:600;color:var(--purple);margin-right:4px">${condIcon(c.typ)}</span>
+      ${inner}
+    </div>
+    <button class="rm-btn" onclick="condRemove('${tid}',${ci})">✕</button>
+  </div>`;
 }
 
-function botTriggerField(ti, field, val) {
-  _botTriggers[ti][field] = val;
-  if (field === 'aktiv') { renderBotTriggers(); } // re-render for active-card class
-  else _saveBotConfig();
+function condIcon(typ) {
+  return {wort:'💬',zone:'🗺️',item_traegt:'👗',trigger_war:'🔗'}[typ]??'❓';
 }
 
-function botActionField(ti, ai, field, val) {
-  _botTriggers[ti].aktionen[ai][field] = val;
-  _saveBotConfig();
+function renderAct(tid, a, ai) {
+  const icon = {chat:'💬',emote:'✨',whisper:'🤫',item:'📦',curse:'🔮',profil:'👗',item_entf:'🗑️'}[a.typ]??'❓';
+  let inner = `<input class="cf cf-w80" type="number" value="${a.delay??0}" oninput="actField('${tid}',${ai},'delay',+this.value)" placeholder="ms" title="Delay ms"> ms `;
+  if (['chat','emote','whisper'].includes(a.typ)) {
+    inner += `<textarea class="cf cf-flex" rows="2" oninput="actField('${tid}',${ai},'text',this.value)" placeholder="{name} {wort} {typ} {x} {y}">${escHtml(a.text||'')}</textarea>`;
+  } else if (a.typ === 'item') {
+    inner += `<span style="font-size:.68rem;color:var(--text3)">${a.gruppe?escHtml(a.gruppe)+'/':''}<b>${escHtml(a.item||'–')}</b></span>
+      <input class="cf" type="color" value="${a.farbe||'#ffffff'}" oninput="actField('${tid}',${ai},'farbe',this.value)" style="width:28px;padding:1px;cursor:pointer">
+      <button onclick="ipickerOpen('${tid}',${ai},'item',v=>{actField('${tid}',${ai},'item',v.name);actField('${tid}',${ai},'gruppe',v.group);trigRerender('${tid}');})" style="font-size:.62rem;padding:2px 6px;background:var(--pd);border:none;color:var(--pl);border-radius:4px;cursor:pointer">📦 Aus Cache</button>
+      <button onclick="switchTab('items');showStatus('Item Manager geöffnet','')" style="font-size:.62rem;padding:2px 6px;background:var(--bg3);border:1px solid var(--border2);color:var(--text3);border-radius:4px;cursor:pointer" title="Zum Item Manager springen">🔧 IM</button>`;
+  } else if (a.typ === 'curse') {
+    inner += `<span style="font-size:.68rem;color:var(--text3)"><b>${escHtml(a.curseName||a.curseKey||'–')}</b></span>
+      <button onclick="ipickerOpen('${tid}',${ai},'curse',v=>{actField('${tid}',${ai},'curseKey',v.key);actField('${tid}',${ai},'curseName',v.name);actField('${tid}',${ai},'curseEntry',v.entry);trigRerender('${tid}');})" style="font-size:.62rem;padding:2px 6px;background:#1e1040;border:1px solid var(--purple);color:var(--pl);border-radius:4px;cursor:pointer">🔮 Wählen</button>`;
+  } else if (a.typ === 'profil') {
+    const opts = Object.keys(PROFILES).map(p=>`<option value="${escHtml(p)}" ${a.profil===p?'selected':''}>${escHtml(p)}</option>`).join('');
+    inner += `<select class="cf cf-w160" onchange="actField('${tid}',${ai},'profil',this.value)"><option value="">– Profil wählen –</option>${opts}</select>`;
+  } else if (a.typ === 'item_entf') {
+    inner += `<input class="cf cf-w120" value="${escHtml(a.gruppe||'')}" oninput="actField('${tid}',${ai},'gruppe',this.value)" placeholder="Gruppe (z.B. ItemMouth)">`;
+  }
+  return `<div class="act-card">
+    <div class="card-fields"><span class="act-icon">${icon}</span>${inner}</div>
+    <button class="rm-btn" onclick="actRemove('${tid}',${ai})">✕</button>
+  </div>`;
 }
 
-function botActionTypeChange(ti, ai, typ) {
-  _botTriggers[ti].aktionen[ai] = { id: Date.now(), typ, delay: _botTriggers[ti].aktionen[ai].delay ?? 0 };
-  renderBotTriggers();
-  // Re-open the trigger body
-  const tbody = document.getElementById('tbody-'+ti);
-  if (tbody) tbody.classList.add('open');
-  _saveBotConfig();
+// ── Trigger CRUD ──────────────────────────────────────────────
+function botAddTrig() {
+  const b = _selBot(); if (!b) return;
+  const t = { id: 't'+Date.now(), name:'Neuer Trigger', aktiv:true, delay:0, bedingungen:[], aktionen:[] };
+  b.triggers.push(t);
+  _saveBots();
+  renderBotEditor();
+  // Open new trigger body
+  setTimeout(() => {
+    document.getElementById('tb-'+t.id)?.classList.add('open');
+    document.getElementById('tc-'+t.id)?.scrollIntoView({behavior:'smooth',block:'start'});
+  }, 50);
 }
 
-function botAddTrigger() {
-  _botTriggers.push({ id: Date.now(), aktiv: true, wort: 'neues-wort', zone: '', delay: 0, aktionen: [] });
-  renderBotTriggers();
-  // Auto-open last trigger
-  const last = _botTriggers.length - 1;
-  setTimeout(() => document.getElementById('tbody-'+last)?.classList.add('open'), 50);
-  _saveBotConfig();
+function trigToggleBody(tid) {
+  document.getElementById('tb-'+tid)?.classList.toggle('open');
 }
 
-function botRemoveTrigger(ti) {
-  if (!confirm('Trigger "' + _botTriggers[ti].wort + '" löschen?')) return;
-  _botTriggers.splice(ti, 1);
-  renderBotTriggers();
-  _saveBotConfig();
+function trigField(tid, field, val) {
+  const b = _selBot(); if (!b) return;
+  const t = b.triggers.find(x=>x.id===tid); if (!t) return;
+  t[field] = val;
+  _saveBots();
+  if (field === 'aktiv' || field === 'name') {
+    // Update card header without full re-render
+    const card = document.getElementById('tc-'+tid);
+    if (card) {
+      card.classList.toggle('trig-on', val === true || val === 'true');
+      const label = card.querySelector('.trig-label');
+      if (label && field==='name') label.textContent = val||'Trigger';
+    }
+  }
 }
 
-function botAddAction(ti) {
-  _botTriggers[ti].aktionen.push({ id: Date.now(), typ: 'chat', nachricht: '', delay: 0 });
-  renderBotTriggers();
-  document.getElementById('tbody-'+ti)?.classList.add('open');
-  _saveBotConfig();
+function trigRerender(tid) {
+  const b = _selBot(); if (!b) return;
+  const t = b.triggers.find(x=>x.id===tid); if (!t) return;
+  const i = b.triggers.indexOf(t);
+  const card = document.getElementById('tc-'+tid);
+  if (!card) return;
+  const wasOpen = document.getElementById('tb-'+tid)?.classList.contains('open');
+  card.outerHTML = renderTrigCard(b, t, i);
+  if (wasOpen) document.getElementById('tb-'+tid)?.classList.add('open');
 }
 
-function botRemoveAction(ti, ai) {
-  _botTriggers[ti].aktionen.splice(ai, 1);
-  renderBotTriggers();
-  document.getElementById('tbody-'+ti)?.classList.add('open');
-  _saveBotConfig();
+function trigDelete(tid) {
+  const b = _selBot(); if (!b) return;
+  const t = b.triggers.find(x=>x.id===tid);
+  if (!t || !confirm(`Trigger "${t.name||tid}" löschen?`)) return;
+  b.triggers = b.triggers.filter(x=>x.id!==tid);
+  _saveBots();
+  document.getElementById('tc-'+tid)?.remove();
 }
 
-// ── Item Picker ────────────────────────────────────────────────
-let _pickerMode = 'item'; // 'item' or 'curse'
-let _pickerTarget = null; // {ti, ai}
-
-function openItemPicker(ti, ai, mode) {
-  _pickerMode = mode;
-  _pickerTarget = { ti, ai };
-  document.getElementById('itemPickerModal').style.display = 'flex';
-  document.getElementById('itemPickerSearch').value = '';
-  renderItemPicker();
+// ── Conditions ────────────────────────────────────────────────
+function trigAddCond(tid, typ) {
+  const b = _selBot(); if (!b) return;
+  const t = b.triggers.find(x=>x.id===tid); if (!t) return;
+  const defaults = {wort:{typ:'wort',wort:'',typ_msg:'any'},zone:{typ:'zone',name:'',x:0,y:0,puffer:1},item_traegt:{typ:'item_traegt',item:'',gruppe:''},trigger_war:{typ:'trigger_war',trigId:''}};
+  t.bedingungen = t.bedingungen ?? [];
+  t.bedingungen.push(defaults[typ]??{typ});
+  _saveBots();
+  document.getElementById('conds-'+tid).innerHTML = t.bedingungen.map((c,ci)=>renderCond(tid,c,ci,b)).join('');
+  document.getElementById('tb-'+tid)?.classList.add('open');
 }
 
-function closeItemPicker() {
-  document.getElementById('itemPickerModal').style.display = 'none';
+function condField(tid, ci, field, val) {
+  const b = _selBot(); if (!b) return;
+  const t = b.triggers.find(x=>x.id===tid); if (!t) return;
+  t.bedingungen[ci][field] = val;
+  _saveBots();
 }
 
-function renderItemPicker() {
-  const search = document.getElementById('itemPickerSearch').value.toLowerCase();
-  const el     = document.getElementById('itemPickerList');
-  let rows = '';
+function condRemove(tid, ci) {
+  const b = _selBot(); if (!b) return;
+  const t = b.triggers.find(x=>x.id===tid); if (!t) return;
+  t.bedingungen.splice(ci,1);
+  _saveBots();
+  document.getElementById('conds-'+tid).innerHTML = t.bedingungen.map((c,ci2)=>renderCond(tid,c,ci2,b)).join('');
+}
 
-  if (_pickerMode === 'curse') {
-    // Crafts from CURSE_DB
-    const entries = Object.entries(CURSE_DB).filter(([k, e]) =>
-      !search || k.toLowerCase().includes(search) ||
-      (e.CraftName||'').toLowerCase().includes(search) ||
-      (e.ItemName||'').toLowerCase().includes(search)
-    ).slice(0, 100);
-    if (!entries.length) { el.innerHTML = '<div style="padding:20px;color:var(--text3);font-size:.72rem;text-align:center">Keine Curse gefunden. Bitte erst scannen oder importieren.</div>'; return; }
-    rows = entries.map(([k, e]) => `
-      <div class="item-picker-row" onclick="selectItemPickerEntry('${k.replace(/'/g,"\'")}','curse')">
-        <span class="item-picker-tag">${escHtml(e.Gruppe||'?')}</span>
+// ── Actions ───────────────────────────────────────────────────
+function trigAddAct(tid, typ) {
+  const b = _selBot(); if (!b) return;
+  const t = b.triggers.find(x=>x.id===tid); if (!t) return;
+  t.aktionen = t.aktionen ?? [];
+  t.aktionen.push({typ, delay:0});
+  _saveBots();
+  document.getElementById('acts-'+tid).innerHTML = t.aktionen.map((a,ai)=>renderAct(tid,a,ai)).join('');
+  document.getElementById('tb-'+tid)?.classList.add('open');
+}
+
+function actField(tid, ai, field, val) {
+  const b = _selBot(); if (!b) return;
+  const t = b.triggers.find(x=>x.id===tid); if (!t) return;
+  if (!t.aktionen[ai]) return;
+  t.aktionen[ai][field] = val;
+  _saveBots();
+}
+
+function actRemove(tid, ai) {
+  const b = _selBot(); if (!b) return;
+  const t = b.triggers.find(x=>x.id===tid); if (!t) return;
+  t.aktionen.splice(ai,1);
+  _saveBots();
+  document.getElementById('acts-'+tid).innerHTML = t.aktionen.map((a,ai2)=>renderAct(tid,a,ai2)).join('');
+}
+
+// ── Item/Curse/Profile Picker ─────────────────────────────────
+function ipickerOpen(tid, ai, defaultTab, cb) {
+  _ipickerCb = cb;
+  _ipickerTab = defaultTab;
+  document.getElementById('ipickerOverlay').style.display = 'flex';
+  document.getElementById('ipickerSearch').value = '';
+  ipickerRenderTabs();
+  ipickerRender();
+}
+
+function ipickerClose() {
+  document.getElementById('ipickerOverlay').style.display = 'none';
+  _ipickerCb = null;
+}
+
+function ipickerRenderTabs() {
+  const tabs = [
+    {id:'item', label:'📦 BC-Items'},
+    {id:'curse', label:'🔮 Curses'},
+    {id:'profil', label:'👗 Profile'},
+  ];
+  document.getElementById('ipickerTabs').innerHTML = tabs.map(t=>
+    `<span class="ipicker-tab ${_ipickerTab===t.id?'on':''}" onclick="ipickerSetTab('${t.id}')">${t.label}</span>`
+  ).join('');
+}
+
+function ipickerSetTab(tab) {
+  _ipickerTab = tab;
+  ipickerRenderTabs();
+  ipickerRender();
+}
+
+function ipickerRender() {
+  const search = (document.getElementById('ipickerSearch')?.value??'').toLowerCase();
+  const el = document.getElementById('ipickerList');
+  let html = '';
+
+  if (_ipickerTab === 'item') {
+    const rows = [];
+    for (const g in CACHE) for (const n in CACHE[g]) {
+      if (!search || n.toLowerCase().includes(search) || g.toLowerCase().includes(search)) rows.push({group:g,name:n});
+    }
+    rows.sort((a,b)=>a.name.localeCompare(b.name));
+    if (!rows.length) { el.innerHTML = '<div style="padding:20px;color:var(--text3);font-size:.72rem;text-align:center">Kein BC-Cache geladen. Bitte zuerst "Aus Spiel laden" klicken.</div>'; return; }
+    html = rows.slice(0,120).map(r=>`
+      <div class="ipicker-row" onclick="ipickerSelect({name:${JSON.stringify(r.name)},group:${JSON.stringify(r.group)}})">
+        <span class="ipicker-tag">${escHtml(r.group)}</span>
+        <span style="flex:1">${escHtml(r.name)}</span>
+      </div>`).join('');
+  } else if (_ipickerTab === 'curse') {
+    const entries = Object.entries(CURSE_DB).filter(([k,e])=>
+      !search||k.toLowerCase().includes(search)||(e.CraftName||'').toLowerCase().includes(search));
+    if (!entries.length) { el.innerHTML = '<div style="padding:20px;color:var(--text3);font-size:.72rem;text-align:center">Keine Curses gefunden. Bitte erst Craft & Curse scannen/importieren.</div>'; return; }
+    html = entries.slice(0,120).map(([k,e])=>`
+      <div class="ipicker-row" onclick="ipickerSelect({key:${JSON.stringify(k)},name:${JSON.stringify(e.CraftName||e.ItemName)},entry:${JSON.stringify(e)}})">
+        <span class="ipicker-tag purple">${escHtml(e.Gruppe||'?')}</span>
         <span style="flex:1">${escHtml(e.CraftName||e.ItemName)}</span>
-        <span style="color:var(--text3);font-size:.62rem">${escHtml(e.Besitzer?.Name||'?')}</span>
-        ${e.IstLSCGCurse?'<span class="item-picker-tag" style="background:#1e1040">🧿</span>':''}
+        <span style="color:var(--text3);font-size:.6rem">${escHtml(e.Besitzer?.Name||'')}</span>
+        ${e.IstLSCGCurse?'<span class="ipicker-tag green">🧿</span>':''}
       </div>`).join('');
-  } else {
-    // Items from BC CACHE
-    const allItems = [];
-    for (const g in CACHE) {
-      for (const n in CACHE[g]) {
-        if (!search || n.toLowerCase().includes(search) || g.toLowerCase().includes(search)) {
-          allItems.push({ group: g, name: n });
-        }
-      }
-    }
-    allItems.sort((a,b) => a.name.localeCompare(b.name));
-    const shown = allItems.slice(0, 100);
-    if (!shown.length) { el.innerHTML = '<div style="padding:20px;color:var(--text3);font-size:.72rem;text-align:center">Kein BC-Cache geladen. Bitte "Aus Spiel laden" klicken.</div>'; return; }
-    rows = shown.map(i => `
-      <div class="item-picker-row" onclick="selectItemPickerEntry('${i.group}||${i.name}','item')">
-        <span class="item-picker-tag">${escHtml(i.group)}</span>
-        <span style="flex:1">${escHtml(i.name)}</span>
+  } else if (_ipickerTab === 'profil') {
+    const profiles = Object.keys(PROFILES).filter(p=>!search||p.toLowerCase().includes(search));
+    if (!profiles.length) { el.innerHTML = '<div style="padding:20px;color:var(--text3);font-size:.72rem;text-align:center">Keine Profile gefunden. Bitte zuerst ein Outfit-Profil speichern.</div>'; return; }
+    html = profiles.map(p=>`
+      <div class="ipicker-row" onclick="ipickerSelect({profil:${JSON.stringify(p)}})">
+        <span class="ipicker-tag green">👗</span>
+        <span style="flex:1">${escHtml(p)}</span>
+        <span style="color:var(--text3);font-size:.6rem">${PROFILES[p]?.date||''}</span>
       </div>`).join('');
   }
-  el.innerHTML = rows;
+  el.innerHTML = html;
 }
 
-function selectItemPickerEntry(val, mode) {
-  const { ti, ai } = _pickerTarget;
-  if (mode === 'curse') {
-    const entry = CURSE_DB[val];
-    if (entry) {
-      _botTriggers[ti].aktionen[ai] = {
-        ..._botTriggers[ti].aktionen[ai],
-        typ:      'item_curse',
-        curseKey: val,
-        _curseName: entry.CraftName,
-      };
-    }
-  } else {
-    const [group, name] = val.split('||');
-    _botTriggers[ti].aktionen[ai] = {
-      ..._botTriggers[ti].aktionen[ai],
-      typ:    'item_anlegen',
-      item:   name,
-      gruppe: group,
-    };
-  }
-  closeItemPicker();
-  renderBotTriggers();
-  document.getElementById('tbody-'+ti)?.classList.add('open');
-  _saveBotConfig();
+function ipickerSelect(val) {
+  if (_ipickerCb) _ipickerCb(val);
+  ipickerClose();
 }
 
-// ── Config Export / Import ─────────────────────────────────────
+// ── Config Export / Import ────────────────────────────────────
 function botExportConfig() {
-  const cfg = { settings: _getBotSettings(), triggers: _botTriggers, zones: _botZones };
-  const blob = new Blob([JSON.stringify(cfg, null, 2)], { type: 'application/json' });
+  const b = _selBot(); if (!b) { showStatus('❌ Kein Bot ausgewählt','error'); return; }
+  const blob = new Blob([JSON.stringify(b, null, 2)], {type:'application/json'});
   const url  = URL.createObjectURL(blob);
   const a    = document.createElement('a');
-  a.href = url; a.download = 'BCBot_Config_' + new Date().toISOString().slice(0,10) + '.json';
+  a.href = url; a.download = 'BCBot_'+b.name.replace(/\s+/g,'_')+'_'+new Date().toISOString().slice(0,10)+'.json';
   a.click(); URL.revokeObjectURL(url);
-  showStatus('✅ Bot-Config exportiert', 'success');
+  showStatus('✅ Bot-Config exportiert','success');
 }
 
 function botImportConfig() {
   const inp = document.createElement('input');
-  inp.type = 'file'; inp.accept = '.json';
+  inp.type='file'; inp.accept='.json';
   inp.onchange = e => {
     const r = new FileReader();
     r.onload = ev => {
       try {
         const d = JSON.parse(ev.target.result);
-        if (d.triggers) _botTriggers = d.triggers;
-        if (d.zones)    _botZones    = d.zones;
-        _saveBotConfig();
-        renderBotTab();
-        showStatus('✅ Bot-Config importiert', 'success');
-      } catch(err) { showStatus('❌ Import fehlgeschlagen: ' + err.message, 'error'); }
+        // Import as new bot or replace current
+        const b = _selBot();
+        if (b && confirm('Aktuellen Bot überschreiben? (Abbrechen = Als neuen Bot importieren)')) {
+          Object.assign(b, d, {id: b.id});
+        } else {
+          d.id = 'b'+Date.now();
+          _bots.push(d);
+          _selBotId = d.id;
+        }
+        _saveBots();
+        renderBotList();
+        renderBotEditor();
+        showStatus('✅ Bot importiert','success');
+      } catch(err) { showStatus('❌ Import fehlgeschlagen: '+err.message,'error'); }
     };
     r.readAsText(e.target.files[0]);
   };
   inp.click();
 }
 
-// ── Code Generator & Deploy ───────────────────────────────────
-function _buildBotCode() {
-  const s = _getBotSettings();
-  const triggerJson = JSON.stringify(_botTriggers.filter(t => t.aktiv).map(t => ({
-    wort:  t.wort,
-    zone:  t.zone || null,
-    delay: t.delay ?? 0,
-    aktiv: true,
-    aktionen: t.aktionen.map(a => {
-      if (a.typ === 'item_curse') {
-        // Convert curse reference to wear action using CurseScanner
-        const entry = CURSE_DB[a.curseKey];
-        return { typ: '_curse', curseKey: a.curseKey, entry: entry ?? null, delay: a.delay ?? 0 };
+// ── Deploy ────────────────────────────────────────────────────
+function _buildBotCode(bot) {
+  const s = bot.settings;
+
+  // Serialize triggers with resolved entries
+  const triggers = bot.triggers.filter(t=>t.aktiv).map(t => ({
+    id: t.id,
+    name: t.name,
+    delay: t.delay??0,
+    bedingungen: (t.bedingungen||[]),
+    aktionen: (t.aktionen||[]).map(a => {
+      if (a.typ==='curse' && a.curseKey && !a.curseEntry) {
+        return {...a, curseEntry: CURSE_DB[a.curseKey]??null};
       }
-      if (a.typ === 'profil_anlegen') {
-        const prof = PROFILES[a.profil];
-        return { typ: '_profil', profil: a.profil, items: prof?.items ?? [], delay: a.delay ?? 0 };
+      if (a.typ==='profil' && a.profil) {
+        return {...a, profilItems: PROFILES[a.profil]?.items??[]};
       }
       return a;
     }),
-  })), null, 2);
-
-  const zoneJson    = JSON.stringify(_botZones.filter(z => z.aktiv), null, 2);
+  }));
 
   return `
-// ── BC Bot – generiert von BC Konfigurator ──────────────────
-if (window._BCBot_running) { console.warn('[Bot] Bereits läuft – stoppe zuerst mit BCBot.stop()'); }
-else {
+(function(){
+if(window._BCBot_${bot.id}) { console.warn('[Bot:${bot.name}] Läuft bereits – stoppe zuerst'); return; }
 
-const BOT_CONFIG = {
-  name:    ${JSON.stringify(s.name)},
-  version: ${JSON.stringify(s.version)},
-  modus:   ${JSON.stringify(s.modus)},
-  chat: {
-    hoereAuf: { chat: ${s.hearChat}, emote: ${s.hearEmote}, whisper: ${s.hearWhisper} },
-    nurEigeneNachrichten: ${s.nurEigene},
-  },
-  zonen:   ${zoneJson},
-  trigger: ${triggerJson},
-  logging: { aktiv: ${s.logAktiv}, trigger: ${s.logTrigger}, aktionen: ${s.logAktionen} },
-};
+const _cfg = ${JSON.stringify({name:bot.name,modus:s.modus,hearChat:s.hearChat,hearEmote:s.hearEmote,hearWhisper:s.hearWhisper,nurEigene:s.nurEigene,logAktiv:s.logAktiv??true},null,0)};
+const _triggers = ${JSON.stringify(triggers,null,0)};
+const _firedMap = {}; // trigId → last fired timestamp
 
-const BCBot = (() => {
-  const cfg = BOT_CONFIG;
-  let aktiv = false;
-  let mod   = null;
+function _log(...a){if(_cfg.logAktiv)console.log('[Bot:${bot.name}]',...a);}
 
-  function log(typ, ...args) {
-    if (!cfg.logging.aktiv) return;
-    if (typ === 'trigger'  && !cfg.logging.trigger)  return;
-    if (typ === 'aktion'   && !cfg.logging.aktionen) return;
-    console.log('[' + cfg.name + ']', ...args);
-  }
+function _inZone(cond,C){
+  const p=cond.puffer??1;
+  return C.X>=cond.x-p&&C.X<=cond.x+p&&C.Y>=cond.y-p&&C.Y<=cond.y+p;
+}
 
-  function findeZone(name) {
-    return cfg.zonen.find(z => z.name === name && z.aktiv) ?? null;
-  }
+function _render(tmpl,v){
+  return (tmpl??'').replace(/{name}/g,v.name??'').replace(/{wort}/g,v.wort??'')
+    .replace(/{typ}/g,v.typ??'').replace(/{x}/g,v.x??'').replace(/{y}/g,v.y??'')
+    .replace(/{zone}/g,v.zone??'');
+}
 
-  function inZone(zone, C) {
-    if (!zone) return true;
-    const p = zone.puffer ?? 0;
-    return C.X >= zone.x - p && C.X <= zone.x + p && C.Y >= zone.y - p && C.Y <= zone.y + p;
-  }
-
-  function render(tmpl, vars) {
-    return (tmpl ?? '').replace(/\{name\}/g, vars.name ?? '').replace(/\{wort\}/g, vars.wort ?? '')
-      .replace(/\{typ\}/g, vars.typ ?? '').replace(/\{x\}/g, vars.x ?? '').replace(/\{y\}/g, vars.y ?? '')
-      .replace(/\{zone\}/g, vars.zone ?? '–');
-  }
-
-  function führeAus(aktionen, vars, basisDelay) {
-    aktionen.forEach(aktion => {
-      setTimeout(() => {
-        const C = vars.charakter ?? Player;
-        switch (aktion.typ) {
-          case 'item_anlegen':
-            log('aktion', '📦 Anlegen: ' + aktion.item + ' (' + aktion.gruppe + ') → ' + C.Name);
-            InventoryWear(C, aktion.item, aktion.gruppe, aktion.farbe ?? '#ffffff', 0, Player.MemberNumber);
-            CharacterRefresh(C); ChatRoomCharacterUpdate(C);
-            break;
-          case 'item_entfernen':
-            log('aktion', '🗑 Entfernen: ' + aktion.gruppe + ' von ' + C.Name);
-            InventoryRemove(C, aktion.gruppe);
-            CharacterRefresh(C); ChatRoomCharacterUpdate(C);
-            break;
-          case '_curse':
-            if (!aktion.entry) { console.warn('[Bot] Kein Entry für Curse: ' + aktion.curseKey); break; }
-            const e = aktion.entry;
-            let _col = e.Farbe;
-            if (typeof _col === 'string' && _col.includes(',')) _col = _col.split(',');
-            log('aktion', '🔮 Curse: ' + e.CraftName + ' → ' + C.Name);
-            InventoryWear(C, e.ItemName, e.Gruppe, _col, 0, Player.MemberNumber, e.Craft);
-            CharacterRefresh(C); ChatRoomCharacterUpdate(C);
-            break;
-          case '_profil':
-            log('aktion', '👗 Profil: ' + aktion.profil + ' → ' + C.Name);
-            (aktion.items ?? []).forEach(item => {
-              const cfg2 = item.cfg;
-              if (!cfg2) return;
-              let col = cfg2.Color;
-              if (typeof col === 'string' && col.includes(',')) col = col.split(',');
-              InventoryWear(C, item.asset, item.group, col, 0, Player.MemberNumber, cfg2.Craft ?? undefined);
-              CharacterRefresh(C);
-            });
-            ChatRoomCharacterUpdate(C);
-            break;
-          case 'chat':
-            const ct = render(aktion.nachricht, vars);
-            log('aktion', '💬 Chat: "' + ct + '"');
-            ServerSend('ChatRoomChat', { Content: ct, Type: 'Chat' });
-            break;
-          case 'emote':
-            const et = render(aktion.nachricht, vars);
-            log('aktion', '✨ Emote: "' + et + '"');
-            ServerSend('ChatRoomChat', { Content: et, Type: 'Emote' });
-            break;
-          case 'whisper':
-            const wt = render(aktion.nachricht, vars);
-            const ziel = vars.charakter?.MemberNumber;
-            if (!ziel) break;
-            log('aktion', '🤫 Whisper → ' + C.Name + ': "' + wt + '"');
-            ServerSend('ChatRoomChat', { Content: wt, Type: 'Whisper', Target: ziel });
-            break;
-        }
-      }, basisDelay + (aktion.delay ?? 0));
-    });
-  }
-
-  function prüfe(rohText, sender) {
-    if (!rohText) return;
-    const istEmote   = rohText.startsWith('*') && rohText.endsWith('*');
-    const istWhisper = rohText.startsWith('/w ') || rohText.startsWith('/whisper ');
-    const typKey     = istEmote ? 'emote' : istWhisper ? 'whisper' : 'chat';
-    const typLabel   = istEmote ? '✨ Emote' : istWhisper ? '🤫 Whisper' : '💬 Chat';
-    if (!cfg.chat.hoereAuf[typKey]) return;
-    const inhalt = rohText.toLowerCase().replace(/^\*|\*$/g,'').replace(/^\/w\s+\S+\s*/i,'').trim();
-    cfg.trigger.filter(t => t.aktiv).forEach(t => {
-      if (!inhalt.includes(t.wort)) return;
-      if (cfg.modus !== 'chat' && t.zone) {
-        const zone = findeZone(t.zone);
-        if (!inZone(zone, sender)) return;
-      }
-      log('trigger', '🎯 "' + t.wort + '" von ' + sender.Name + ' (' + typLabel + ')');
-      führeAus(t.aktionen, { name: sender.Name, wort: t.wort, typ: typLabel, x: sender.X, y: sender.Y, zone: t.zone ?? '–', charakter: sender }, t.delay ?? 0);
-    });
-  }
-
-  function start() {
-    if (aktiv) return;
-    mod = bcModSdk.registerMod({ name: cfg.name, fullName: cfg.name, version: cfg.version });
-    if (cfg.chat.nurEigeneNachrichten) {
-      mod.hookFunction('ChatRoomSendChat', 0, (args, next) => {
-        const inputEl = document.getElementById('InputChat');
-        const rohText = inputEl?.value?.trim() ?? '';
-        prüfe(rohText, Player);
-        return next(args);
-      });
-    } else {
-      ServerSocket.on('ChatRoomMessage', data => {
-        if (!['Chat','Whisper','Emote'].includes(data.Type)) return;
-        const sender = ChatRoomCharacter.find(c => c.MemberNumber === data.Sender) ?? (Player.MemberNumber === data.Sender ? Player : null);
-        if (sender) prüfe(data.Content, sender);
-      });
+function _check(trig,text,typKey,sender){
+  for(const c of (trig.bedingungen??[])){
+    if(c.typ==='wort'){
+      const msgTyp=c.typ_msg??'any';
+      if(msgTyp!=='any'&&msgTyp!==typKey)return null;
+      if(!text.toLowerCase().includes(c.wort.toLowerCase()))return null;
+    } else if(c.typ==='zone'){
+      if(!_inZone(c,sender))return null;
+    } else if(c.typ==='item_traegt'){
+      const hasItem=sender.Appearance?.some(a=>a.Asset?.Name===c.item&&a.Asset?.Group?.Name===c.gruppe);
+      if(!hasItem)return null;
+    } else if(c.typ==='trigger_war'){
+      if(!_firedMap[c.trigId])return null;
     }
-    aktiv = true;
-    window._BCBot_running = true;
-    console.log('▶️  [' + cfg.name + '] v' + cfg.version + ' gestartet! Trigger: ' + cfg.trigger.filter(t=>t.aktiv).length);
   }
+  return true;
+}
 
-  function stop() {
-    mod?.removePatches();
-    aktiv = false;
-    window._BCBot_running = false;
-    console.log('⏹️  [' + cfg.name + '] gestoppt');
-  }
+function _run(trig,vars){
+  _log('🎯 "'+trig.name+'" ausgelöst von '+vars.name);
+  _firedMap[trig.id]=Date.now();
+  (trig.aktionen??[]).forEach(a=>{
+    setTimeout(()=>{
+      const C=vars.charakter??Player;
+      try{
+        if(a.typ==='chat'){const t=_render(a.text,vars);_log('💬',t);ServerSend('ChatRoomChat',{Content:t,Type:'Chat'});}
+        else if(a.typ==='emote'){const t=_render(a.text,vars);_log('✨',t);ServerSend('ChatRoomChat',{Content:t,Type:'Emote'});}
+        else if(a.typ==='whisper'){const t=_render(a.text,vars);_log('🤫',t);ServerSend('ChatRoomChat',{Content:t,Type:'Whisper',Target:C.MemberNumber});}
+        else if(a.typ==='item'){
+          let col=a.farbe??'#ffffff';
+          _log('📦 Anlegen:',a.item,'→',C.Name);
+          InventoryWear(C,a.item,a.gruppe,col,0,Player.MemberNumber);
+          CharacterRefresh(C);ChatRoomCharacterUpdate(C);
+        }
+        else if(a.typ==='curse'){
+          const e=a.curseEntry;if(!e)return;
+          let col=e.Farbe;if(typeof col==='string'&&col.includes(','))col=col.split(',');
+          _log('🔮 Curse:',e.CraftName,'→',C.Name);
+          InventoryWear(C,e.ItemName,e.Gruppe,col,0,Player.MemberNumber,e.Craft);
+          CharacterRefresh(C);ChatRoomCharacterUpdate(C);
+        }
+        else if(a.typ==='profil'){
+          _log('👗 Profil:',a.profil,'→',C.Name);
+          (a.profilItems??[]).forEach(item=>{
+            const cfg2=item.cfg;if(!cfg2)return;
+            let col=cfg2.Color;if(typeof col==='string'&&col.includes(','))col=col.split(',');
+            InventoryWear(C,item.asset,item.group,col,0,Player.MemberNumber,cfg2.Craft??undefined);
+            CharacterRefresh(C);
+          });
+          ChatRoomCharacterUpdate(C);
+        }
+        else if(a.typ==='item_entf'){
+          _log('🗑️ Entfernen:',a.gruppe,'von',C.Name);
+          InventoryRemove(C,a.gruppe);CharacterRefresh(C);ChatRoomCharacterUpdate(C);
+        }
+      }catch(ex){console.error('[Bot:${bot.name}] Aktion fehlgeschlagen:',ex.message);}
+    },trig.delay+(a.delay??0));
+  });
+}
 
-  return { start, stop };
-})();
+function _process(rohText,typKey,sender){
+  const text=rohText.toLowerCase().replace(/^\\*|\\*$/g,'').replace(/^\\/w\\s+\\S+\\s*/i,'').trim();
+  _triggers.forEach(trig=>{
+    if(_check(trig,text,typKey,sender)){
+      const typLabel={chat:'💬 Chat',emote:'✨ Emote',whisper:'🤫 Whisper'}[typKey]??typKey;
+      _run(trig,{name:sender.Name,wort:text,typ:typLabel,x:sender.X,y:sender.Y,zone:'',charakter:sender});
+    }
+  });
+}
 
-window.BCBot = BCBot;
-BCBot.start();
-}`;
+const _mod=bcModSdk.registerMod({name:'BCBot_${bot.id}',fullName:'${bot.name}',version:'1.0'});
+
+if(_cfg.nurEigene){
+  _mod.hookFunction('ChatRoomSendChat',0,(args,next)=>{
+    const inp=document.getElementById('InputChat');
+    const txt=inp?.value?.trim()??'';
+    if(!txt)return next(args);
+    const isEmote=txt.startsWith('*')&&txt.endsWith('*');
+    const isWhisper=txt.startsWith('/w ')||txt.startsWith('/whisper ');
+    const typKey=isEmote?'emote':isWhisper?'whisper':'chat';
+    if((_cfg.hearChat&&typKey==='chat')||(_cfg.hearEmote&&typKey==='emote')||(_cfg.hearWhisper&&typKey==='whisper')){
+      _process(txt,typKey,Player);
+    }
+    return next(args);
+  });
+} else {
+  ServerSocket.on('ChatRoomMessage',data=>{
+    if(!['Chat','Emote','Whisper'].includes(data.Type))return;
+    const typKey=data.Type.toLowerCase();
+    if((_cfg.hearChat&&typKey==='chat')||(_cfg.hearEmote&&typKey==='emote')||(_cfg.hearWhisper&&typKey==='whisper')){
+      const sender=ChatRoomCharacter.find(c=>c.MemberNumber===data.Sender)??(Player.MemberNumber===data.Sender?Player:null);
+      if(sender)_process(data.Content,typKey,sender);
+    }
+  });
+}
+
+window._BCBot_${bot.id}={stop:()=>{_mod.removePatches();delete window._BCBot_${bot.id};console.log('[Bot:${bot.name}] gestoppt');}};
+console.log('▶️ [Bot:${bot.name}] gestartet –',_triggers.length,'Trigger aktiv');
+})();`;
 }
 
 function botDeploy() {
-  if (!_connected) { showStatus('❌ Nicht mit BC verbunden', 'error'); return; }
-  const code = _buildBotCode();
-  bcSend({ type: 'EXEC', code });
-  _botRunning = true;
+  if (!_connected) { showStatus('❌ Nicht mit BC verbunden','error'); return; }
+  const b = _selBot(); if (!b) { showStatus('❌ Kein Bot ausgewählt','error'); return; }
+  bcSend({ type:'EXEC', code: _buildBotCode(b) });
+  b.aktiv = true;
+  _saveBots();
+  renderBotList();
   const bar = document.getElementById('bot-status-bar');
-  bar.className = 'bot-status running';
-  bar.textContent = '▶️ Bot läuft – "BCBot.stop()" in BC-Konsole zum Stoppen';
-  showStatus('▶️ Bot gestartet!', 'success');
+  if (bar) { bar.style.display='block'; bar.textContent='▶️ Bot "'+b.name+'" läuft – window._BCBot_'+b.id+'.stop() zum Stoppen'; }
+  showStatus('▶️ Bot "'+b.name+'" gestartet!','success');
 }
 
 function botStop() {
-  if (!_connected) { showStatus('❌ Nicht mit BC verbunden', 'error'); return; }
-  bcSend({ type: 'EXEC', code: 'if(window.BCBot) BCBot.stop(); window._BCBot_running=false;' });
-  _botRunning = false;
+  if (!_connected) { showStatus('❌ Nicht mit BC verbunden','error'); return; }
+  const b = _selBot(); if (!b) { showStatus('❌ Kein Bot ausgewählt','error'); return; }
+  bcSend({ type:'EXEC', code: 'if(window._BCBot_'+b.id+')window._BCBot_'+b.id+'.stop();' });
+  b.aktiv = false;
+  _saveBots();
+  renderBotList();
   const bar = document.getElementById('bot-status-bar');
-  bar.className = 'bot-status stopped';
-  bar.textContent = '⏹ Bot gestoppt';
-  showStatus('⏹ Bot gestoppt', 'success');
+  if (bar) { bar.style.display='none'; }
+  showStatus('⏹ Bot "'+b.name+'" gestoppt','success');
 }
 
+</script>
 </body>
-</html>
