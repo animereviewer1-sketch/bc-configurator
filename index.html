@@ -247,6 +247,10 @@ textarea.outfit-code{width:100%;min-height:200px;background:var(--bg4);border:1p
 #connectHint h2 { color: var(--text1); }
 
   
+.btn-sync{background:linear-gradient(135deg,#1d4ed8,#1e3a8a);color:#93c5fd;border:none;border-radius:6px;cursor:pointer;transition:all .15s;white-space:nowrap}
+.btn-sync:hover{background:linear-gradient(135deg,#2563eb,#1d4ed8)}
+.btn-sync:disabled{opacity:.5;cursor:not-allowed}
+
 /* ── TP SLOT EDITOR ── */
 .tp-slot-list{display:flex;flex-direction:column;gap:4px;margin-top:6px}
 .tp-slot-row{display:flex;align-items:center;gap:5px;background:var(--bg2);border:1px solid var(--border);border-radius:5px;padding:4px 7px}
@@ -3122,7 +3126,7 @@ function renderBotList() {
 function botNew() {
   const bot = {
     id: 'b' + Date.now(), name: 'Mein Bot', laufend: false,
-    settings: { modus:'both', hearChat:true, hearEmote:true, hearWhisper:true, nurEigene:true, logAktiv:true },
+    settings: { modus:'both', hearChat:true, hearEmote:true, hearWhisper:true, nurEigene:false, logAktiv:true },
     triggers: [],
   };
   _bots.push(bot); _selBotId = bot.id; _saveBots();
@@ -3153,7 +3157,7 @@ function renderBotEditor() {
   const bot = _selBot(); if (!bot) return;
   const s = bot.settings;
   const statusCls = bot.laufend ? 'running' : 'stopped';
-  const statusTxt = bot.laufend ? '▶️ Bot läuft · <span style="font-size:.62rem;opacity:.7">🔄 Änderungen werden live synchronisiert</span>' : '⏹ Nicht gestartet';
+  const statusTxt = bot.laufend ? '▶️ Bot läuft · <span style="font-size:.62rem;opacity:.7">Änderungen → 🔄 Sync klicken</span>' : '⏹ Nicht gestartet';
 
   const html = `
     <div class="be-topbar">
@@ -3170,7 +3174,8 @@ function renderBotEditor() {
         <option value="both"  ${s.modus==='both'?'selected':''}>Chat + Zone</option>
       </select>
       ${bot.laufend
-        ? `<button class="btn btn-red" onclick="botStop()" style="font-size:.68rem;padding:4px 12px">⏹ Stoppen</button>`
+        ? `<button class="btn btn-red" onclick="botStop()" style="font-size:.68rem;padding:4px 12px">⏹ Stoppen</button>
+           <button class="btn btn-sync" id="syncBtn" onclick="botSync()" title="Bot stoppen, Änderungen speichern und neu starten" style="font-size:.68rem;padding:4px 12px">🔄 Sync</button>`
         : `<button class="btn btn-green" onclick="botDeploy()" style="font-size:.68rem;padding:4px 12px">▶️ Starten</button>`
       }
       <button class="btn btn-primary" onclick="botExportConfig()" title="Export" style="font-size:.65rem;padding:4px 8px">⬇️</button>
@@ -3193,7 +3198,6 @@ function botField(field, val) {
 function botSetting(key, val) {
   const b = _selBot(); if (!b) return;
   b.settings[key] = val; _saveBots();
-  _liveSync();
 }
 
 // ── Trigger Cards ─────────────────────────────────────────────
@@ -3358,27 +3362,6 @@ function botAddTrig() {
 
 function trigToggleBody(tid) { document.getElementById('tb-'+tid)?.classList.toggle('open'); }
 
-// ── Live-Sync: redeploys bot if currently running (debounced) ──────────
-let _liveSyncTimer = null;
-function _liveSync() {
-  const b = _selBot();
-  if (!b || !b.laufend || !_connected) return;
-  // Debounce: wait until user stops typing for 1200ms before redeploying
-  clearTimeout(_liveSyncTimer);
-  _liveSyncTimer = setTimeout(() => {
-    const bot = _selBot();
-    if (!bot || !bot.laufend || !_connected) return;
-    const safeId = bot.id.replace(/\W/g,'_');
-    bcSend({ type:'EXEC', code:`if(window['_BCBot_${safeId}'])window['_BCBot_${safeId}'].stop();` });
-    setTimeout(() => {
-      // Re-read latest bot state after stop delay
-      const latestBot = _selBot();
-      if (!latestBot || !latestBot.laufend) return;
-      bcSend({ type:'EXEC', code: _buildBotCode(latestBot) });
-      showStatus('🔄 Bot live aktualisiert', 'info');
-    }, 600);
-  }, 1200);
-}
 
 function trigField(tid, field, val) {
   const b = _selBot(); if (!b) return;
@@ -3391,7 +3374,6 @@ function trigField(tid, field, val) {
     const el = document.getElementById('tlabel-'+tid);
     if (el) el.textContent = val || 'Trigger';
   }
-  _liveSync();
 }
 
 function trigDelete(tid) {
@@ -3437,7 +3419,6 @@ function condField(tid, ci, field, val) {
   const t = b.triggers.find(x=>x.id===tid); if (!t) return;
   if (!t.bedingungen[ci]) return;
   t.bedingungen[ci][field] = val; _saveBots();
-  _liveSync();
 }
 
 function condRemove(tid, ci) {
@@ -3445,7 +3426,6 @@ function condRemove(tid, ci) {
   const t = b.triggers.find(x=>x.id===tid); if (!t) return;
   t.bedingungen.splice(ci,1); _saveBots();
   document.getElementById('conds-'+tid).innerHTML = t.bedingungen.map((c,ci2)=>renderCond(b,tid,c,ci2)).join('');
-  _liveSync();
 }
 
 function condRerender(tid) {
@@ -3470,7 +3450,6 @@ function actField(tid, ai, field, val) {
   const t = b.triggers.find(x=>x.id===tid); if (!t) return;
   if (!t.aktionen[ai]) return;
   t.aktionen[ai][field] = val; _saveBots();
-  _liveSync();
 }
 
 function actChangeType(tid, ai, typ) {
@@ -3486,7 +3465,6 @@ function actChangeType(tid, ai, typ) {
   // Re-render just this action card
   const el = document.getElementById('act-'+tid+'-'+ai);
   if (el) { const tmp=document.createElement('div'); tmp.innerHTML=renderAct(tid,t.aktionen[ai],ai); el.replaceWith(tmp.firstElementChild); }
-  _liveSync();
 }
 
 function actRemove(tid, ai) {
@@ -3494,7 +3472,6 @@ function actRemove(tid, ai) {
   const t = b.triggers.find(x=>x.id===tid); if (!t) return;
   t.aktionen.splice(ai,1); _saveBots();
   document.getElementById('acts-'+tid).innerHTML = t.aktionen.map((a,ai2)=>renderAct(tid,a,ai2)).join('');
-  _liveSync();
 }
 
 // ── TP Slot helpers ───────────────────────────────────────────────
@@ -3507,7 +3484,6 @@ function tpSlotAdd(tid, ai) {
   _saveBots();
   const el = document.getElementById('act-'+tid+'-'+ai);
   if (el) { const tmp=document.createElement('div'); tmp.innerHTML=renderAct(tid,a,ai); el.replaceWith(tmp.firstElementChild); }
-  _liveSync();
 }
 
 function tpSlotRemove(tid, ai, si) {
@@ -3519,7 +3495,6 @@ function tpSlotRemove(tid, ai, si) {
   _saveBots();
   const el = document.getElementById('act-'+tid+'-'+ai);
   if (el) { const tmp=document.createElement('div'); tmp.innerHTML=renderAct(tid,a,ai); el.replaceWith(tmp.firstElementChild); }
-  _liveSync();
 }
 
 function tpSlotField(tid, ai, si, field, val) {
@@ -3530,7 +3505,6 @@ function tpSlotField(tid, ai, si, field, val) {
   if (!a.tpSlots[si]) return;
   a.tpSlots[si][field] = val;
   _saveBots();
-  _liveSync();
 }
 
 // ── Unified Item/Curse/Profile Picker ─────────────────────────
@@ -3936,10 +3910,14 @@ function _proc(rohText,typKey,C){
   const pos=_getPos(C);
   const typLabel={chat:'\u{1F4AC} Chat',emote:'\u{2728} Emote',whisper:'\u{1F917} Whisper'}[typKey]??typKey;
   _trigs.forEach(trig=>{
-    // Nur Trigger mit mindestens einer Wort-Bedingung werden durch Nachrichten ausgelöst
+    // Trigger mit player_betritt -> nur Join-Poll, nie Nachrichten
+    if((trig.bedingungen??[]).some(c=>c.typ==='player_betritt'))return;
+    // Trigger mit item_traegt aber ohne wort -> nur Polling
+    const hasItem=(trig.bedingungen??[]).some(c=>c.typ==='item_traegt');
     const hasWort=(trig.bedingungen??[]).some(c=>c.typ==='wort');
-    if(hasWort&&_ok(trig,rohText,typKey,C))_run(trig,{name:C.Name,wort:rohText,typ:typLabel,x:pos.X,y:pos.Y,zone:'',C});
-    // Trigger ohne Wort-Bedingung aber mit item_traegt werden durch Polling verarbeitet
+    if(hasItem&&!hasWort)return;
+    // Alle anderen: _ok prueft Bedingungen (wort, zone, vortrigger)
+    if(_ok(trig,rohText,typKey,C))_run(trig,{name:C.Name,wort:rohText,typ:typLabel,x:pos.X,y:pos.Y,zone:'',C});
   });
 }
 
@@ -4036,22 +4014,21 @@ try {
   }
 }
 
-// Andere Spieler + Bot (alle Nachrichten im Raum): ServerSocket mit named handler
-let _msgH=null;
-if(!_cfg.nurEigene){
-  _msgH=function(data){
-    if(!['Chat','Emote','Whisper'].includes(data.Type))return;
-    if(data.Sender===Player.MemberNumber)return; // eigene schon via hookFunction
-    const tk=data.Type.toLowerCase();
-    if(tk==='chat'&&!_cfg.hearChat)return;
-    if(tk==='emote'&&!_cfg.hearEmote)return;
-    if(tk==='whisper'&&!_cfg.hearWhisper)return;
-    // Auslöser: immer der tatsächliche Absender
-    const C=ChatRoomCharacter.find(c=>c.MemberNumber===data.Sender);
-    if(C)_proc(data.Content,tk,C);
-  };
-  ServerSocket.on('ChatRoomMessage',_msgH);
-}
+// ── ServerSocket: alle Spieler im Raum (IMMER aktiv, unabhaengig von nurEigene) ──
+// Eigene Nachrichten kommen NICHT via Socket zurueck – die kommen via hookFunction
+const _msgH=function(data){
+  if(!['Chat','Emote','Whisper'].includes(data.Type))return;
+  if(data.Sender===Player.MemberNumber)return; // eigene via hookFunction abgefangen
+  const tk=data.Type.toLowerCase();
+  if(tk==='chat'&&!_cfg.hearChat)return;
+  if(tk==='emote'&&!_cfg.hearEmote)return;
+  if(tk==='whisper'&&!_cfg.hearWhisper)return;
+  // Absender finden (alle Spieler + Player selbst, wie im Original ChatMonitor)
+  const C=ChatRoomCharacter.find(c=>c.MemberNumber===data.Sender)
+        ??(Player.MemberNumber===data.Sender?Player:null);
+  if(C)_proc(data.Content,tk,C);
+};
+ServerSocket.on('ChatRoomMessage',_msgH);
 
 window['_BCBot_'+_BID]={
   stop(){
@@ -4063,7 +4040,7 @@ window['_BCBot_'+_BID]={
       window.ServerSend = window.__BCBot_origSend_${safeId};
       delete window.__BCBot_origSend_${safeId};
     }
-    if(_msgH)ServerSocket.off('ChatRoomMessage',_msgH);
+    if(_msgH) ServerSocket.off('ChatRoomMessage',_msgH);
     delete window['_BCBot_'+_BID];
     console.log('\u23F9\uFE0F [Bot:${safeName}] gestoppt');
   }
@@ -4098,6 +4075,29 @@ function botStopById(id) {
 
 function botDeploy() { const b=_selBot(); if(b) botDeployById(b.id); }
 function botStop()   { const b=_selBot(); if(b) botStopById(b.id);   }
+
+function botSync() {
+  const b = _selBot();
+  if (!b) return;
+  if (!_connected) { showStatus('❌ Nicht mit BC verbunden', 'error'); return; }
+  if (!b.laufend)  { showStatus('ℹ️ Bot läuft nicht – einfach Starten klicken', 'info'); return; }
+
+  const btn = document.getElementById('syncBtn');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Sync…'; }
+
+  // Step 1: Stop
+  const safeId = b.id.replace(/\W/g,'_');
+  bcSend({ type:'EXEC', code:`if(window['_BCBot_${safeId}'])window['_BCBot_${safeId}'].stop();` });
+
+  // Step 2: After stop delay, redeploy with latest saved config
+  setTimeout(() => {
+    const latest = _selBot();
+    if (!latest) return;
+    bcSend({ type:'EXEC', code: _buildBotCode(latest) });
+    latest.laufend = true; _saveBots(); renderBotList(); renderBotEditor();
+    showStatus('✅ Bot synchronisiert und neu gestartet', 'success');
+  }, 700);
+}
 
 </script>
 </body>
