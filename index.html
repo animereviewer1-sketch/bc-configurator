@@ -3358,16 +3358,26 @@ function botAddTrig() {
 
 function trigToggleBody(tid) { document.getElementById('tb-'+tid)?.classList.toggle('open'); }
 
-// ── Live-Sync: redeploys bot if currently running ─────────────────────
+// ── Live-Sync: redeploys bot if currently running (debounced) ──────────
+let _liveSyncTimer = null;
 function _liveSync() {
   const b = _selBot();
   if (!b || !b.laufend || !_connected) return;
-  const safeId = b.id.replace(/\W/g,'_');
-  bcSend({ type:'EXEC', code:`if(window['_BCBot_${safeId}'])window['_BCBot_${safeId}'].stop();` });
-  setTimeout(() => {
-    bcSend({ type:'EXEC', code: _buildBotCode(b) });
-    showStatus('🔄 Bot live aktualisiert', 'info');
-  }, 350);
+  // Debounce: wait until user stops typing for 1200ms before redeploying
+  clearTimeout(_liveSyncTimer);
+  _liveSyncTimer = setTimeout(() => {
+    const bot = _selBot();
+    if (!bot || !bot.laufend || !_connected) return;
+    const safeId = bot.id.replace(/\W/g,'_');
+    bcSend({ type:'EXEC', code:`if(window['_BCBot_${safeId}'])window['_BCBot_${safeId}'].stop();` });
+    setTimeout(() => {
+      // Re-read latest bot state after stop delay
+      const latestBot = _selBot();
+      if (!latestBot || !latestBot.laufend) return;
+      bcSend({ type:'EXEC', code: _buildBotCode(latestBot) });
+      showStatus('🔄 Bot live aktualisiert', 'info');
+    }, 600);
+  }, 1200);
 }
 
 function trigField(tid, field, val) {
@@ -3833,22 +3843,27 @@ function _ok(trig,rohText,typKey,C){
 }
 
 function _istBesetzt(x,y,ausschliessen){
+  // Ignore target positions at 0,0 — BC hasn't synced position yet
+  if(x===0&&y===0)return false;
   return[Player,...(ChatRoomCharacter||[])].some(C=>{
     if(ausschliessen.includes(C.MemberNumber))return false;
+    if(C.X===0&&C.Y===0)return false; // character position not yet loaded
     return C.X===x&&C.Y===y;
   });
 }
 
 function _teleport(a,C){
-  const slots=a.tpSlots??[];
-  const ziel=slots.find(s=>!_istBesetzt(s.x,s.y,[C.MemberNumber]));
+  const slots=(a.tpSlots??[]).filter(s=>!(s.x===0&&s.y===0)||slots.length===1);
+  const allSlots=a.tpSlots??[];
+  if(!allSlots.length){_log('⚠️ Keine TP-Slots konfiguriert');return;}
+  const ziel=allSlots.find(s=>!_istBesetzt(s.x,s.y,[C.MemberNumber]));
   if(!ziel){
     const msg=a.keinFallbackMsg;
     if(msg)ServerSend('ChatRoomChat',{Content:msg,Type:'Chat'});
     _log('⚠️ Alle TP-Positionen belegt für '+C.Name);
     return;
   }
-  const fb=slots.indexOf(ziel);
+  const fb=allSlots.indexOf(ziel);
   ServerSend('ChatRoomChat',{
     Content:'ChatRoomMapViewTeleport',Type:'Hidden',
     Dictionary:[{Tag:'MapViewTeleport',Position:{X:ziel.x,Y:ziel.y}}],
@@ -3986,6 +4001,7 @@ const _joinPoll=setInterval(()=>{
 
 // Eigene Nachrichten: hookFunction gibt den Rohtext vor dem Senden + korrektes Player.X/Y
 const _mod=bcModSdk.registerMod({name:'BCBot_${safeId}',fullName:'${safeName}',version:'1.0'});
+try{
 _mod.hookFunction('ChatRoomSendChat',0,(args,next)=>{
   const raw=document.getElementById('InputChat')?.value?.trim()??'';
   if(raw){
@@ -3998,6 +4014,7 @@ _mod.hookFunction('ChatRoomSendChat',0,(args,next)=>{
   }
   return next(args);
 });
+}catch(hookErr){_log('⚠️ hookFunction fehlgeschlagen (harmlos):',hookErr.message);}
 
 // Andere Spieler + Bot (alle Nachrichten im Raum): ServerSocket mit named handler
 let _msgH=null;
