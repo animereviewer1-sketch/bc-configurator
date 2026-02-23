@@ -3977,6 +3977,39 @@ const _joinPoll=setInterval(()=>{
   for(const n of cur)_roomPrev.add(n);
 },3000);
 
+// ── Zonen-Betreten Polling (feuert 1x beim Betreten, ohne Chat-Trigger) ──
+const _zoneState={}; // 'memberNum_trigId' -> bool
+const _zonePoll=setInterval(()=>{
+  const chars=[...(ChatRoomCharacter||[])];
+  if(Player&&!chars.find(c=>c.MemberNumber===Player.MemberNumber))chars.push(Player);
+  _trigs.forEach(trig=>{
+    const zoneConds=(trig.bedingungen??[]).filter(c=>c.typ==='zone');
+    if(!zoneConds.length)return;
+    const hasWort=(trig.bedingungen??[]).some(c=>c.typ==='wort');
+    const hasBetritt=(trig.bedingungen??[]).some(c=>c.typ==='player_betritt');
+    if(hasWort||hasBetritt)return; // wort-Trigger laufen via _proc, betritt via joinPoll
+    chars.forEach(C=>{
+      const pos=_getPos(C);
+      const inZone=zoneConds.every(c=>{const p=c.puffer??1;return pos.X>=c.x-p&&pos.X<=c.x+p&&pos.Y>=c.y-p&&pos.Y<=c.y+p;});
+      const key=C.MemberNumber+'_'+trig.id;
+      const war=_zoneState[key]??false;
+      if(inZone&&!war){
+        const otherOk=(trig.bedingungen??[]).every(c=>{
+          if(c.typ==='zone')return true;
+          if(c.typ==='trigger_war')return!!_fired[c.trigId];
+          if(c.typ==='item_traegt'){const Cf=ChatRoomCharacter.find(x=>x.MemberNumber===C.MemberNumber)??C;return(Cf.Appearance??[]).some(a=>a.Asset?.Name===c.item);}
+          return true;
+        });
+        if(otherOk){
+          _log('\u{1F4CD} Zone: '+C.Name+' X='+pos.X+' Y='+pos.Y+' \u2192 "'+trig.name+'"');
+          _run(trig,{name:C.Name,wort:'',typ:'\u{1F4CD} Zone',x:pos.X,y:pos.Y,zone:'',C});
+        }
+      }
+      _zoneState[key]=inZone;
+    });
+  });
+},750);
+
 // Eigene Nachrichten via hookFunction – Mod bekommt unique Namen (Timestamp) um Kollisionen beim Live-Sync zu vermeiden
 let _mod = null;
 try {
@@ -4034,6 +4067,7 @@ window['_BCBot_'+_BID]={
   stop(){
     clearInterval(_itPoll);
     clearInterval(_joinPoll);
+    clearInterval(_zonePoll);
     try{ if(_mod) _mod.removePatches(); } catch(e){}
     // Restore ServerSend if we patched it as fallback
     if(window.__BCBot_origSend_${safeId}) {
