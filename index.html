@@ -491,6 +491,54 @@ textarea.outfit-code{width:100%;min-height:200px;background:var(--bg4);border:1p
 }
 .outfit-search:focus{outline:none;border-color:var(--purple)}
 
+
+/* ── BOT TAB ── */
+.bot-layout { display:grid; grid-template-columns:320px 1fr; gap:0; height:calc(100vh - 110px); overflow:hidden; }
+.bot-sidebar { background:var(--bg2); border-right:1px solid var(--border); overflow-y:auto; display:flex; flex-direction:column; }
+.bot-main    { overflow-y:auto; padding:16px; }
+.bot-section { padding:12px 16px; border-bottom:1px solid var(--border); }
+.bot-section-title { font-size:.65rem; text-transform:uppercase; letter-spacing:.08em; color:var(--text3); margin-bottom:8px; font-weight:600; }
+.bot-field { margin-bottom:8px; }
+.bot-field label { font-size:.68rem; color:var(--text3); display:block; margin-bottom:3px; }
+.bot-field input, .bot-field select, .bot-field textarea {
+  width:100%; background:var(--bg3); border:1px solid var(--border2); border-radius:5px;
+  color:var(--text); padding:4px 8px; font-size:.72rem; font-family:var(--mono); box-sizing:border-box;
+}
+.bot-field input:focus, .bot-field select:focus, .bot-field textarea:focus { outline:none; border-color:var(--purple); }
+.bot-field textarea { resize:vertical; min-height:50px; }
+.bot-toggle-row { display:flex; align-items:center; gap:8px; margin-bottom:6px; font-size:.72rem; color:var(--text2); }
+.bot-toggle-row input[type=checkbox] { accent-color:var(--purple); width:13px; height:13px; cursor:pointer; }
+.trigger-list { display:flex; flex-direction:column; gap:6px; }
+.trigger-card { background:var(--bg2); border:1px solid var(--border); border-radius:8px; overflow:hidden; }
+.trigger-card.active-card { border-color:var(--purple); }
+.trigger-head { display:flex; align-items:center; gap:8px; padding:8px 12px; cursor:pointer; background:var(--bg3); }
+.trigger-head:hover { background:var(--bg2); }
+.trigger-word { font-size:.75rem; font-weight:600; color:var(--pl); font-family:var(--mono); }
+.trigger-meta { font-size:.62rem; color:var(--text3); flex:1; }
+.trigger-body { padding:10px 12px; display:none; border-top:1px solid var(--border); }
+.trigger-body.open { display:block; }
+.action-list { display:flex; flex-direction:column; gap:6px; margin-top:8px; }
+.action-card { background:var(--bg3); border:1px solid var(--border2); border-radius:6px; padding:8px 10px; display:flex; gap:8px; align-items:flex-start; }
+.action-card .action-icon { font-size:1rem; flex-shrink:0; margin-top:2px; }
+.action-fields { flex:1; display:flex; flex-direction:column; gap:4px; }
+.action-fields select, .action-fields input { background:var(--bg2); border:1px solid var(--border2); border-radius:4px; color:var(--text); padding:3px 7px; font-size:.68rem; font-family:var(--mono); width:100%; box-sizing:border-box; }
+.action-fields input:focus, .action-fields select:focus { outline:none; border-color:var(--purple); }
+.bot-add-btn { background:none; border:1px dashed var(--border2); border-radius:6px; color:var(--text3); font-size:.68rem; padding:5px 10px; cursor:pointer; width:100%; margin-top:6px; }
+.bot-add-btn:hover { border-color:var(--purple); color:var(--pl); }
+.bot-status { padding:6px 12px; font-size:.68rem; font-family:var(--mono); border-radius:6px; margin-top:8px; display:none; }
+.bot-status.running { background:#052818; border:1px solid var(--green2); color:var(--green); display:block; }
+.bot-status.stopped { background:#200808; border:1px solid var(--rd); color:var(--red); display:block; }
+.zone-card { background:var(--bg3); border:1px solid var(--border2); border-radius:6px; padding:8px 10px; display:flex; gap:8px; align-items:center; margin-bottom:6px; }
+.zone-card input { background:var(--bg2); border:1px solid var(--border2); border-radius:4px; color:var(--text); padding:3px 6px; font-size:.68rem; font-family:var(--mono); }
+.zone-name-inp { width:110px; }
+.zone-coord-inp { width:44px; }
+.item-picker-modal { position:fixed; inset:0; background:rgba(0,0,0,.7); z-index:500; display:flex; align-items:center; justify-content:center; }
+.item-picker-box { background:var(--bg2); border:1px solid var(--border); border-radius:12px; width:540px; max-height:80vh; display:flex; flex-direction:column; overflow:hidden; }
+.item-picker-head { padding:12px 16px; display:flex; align-items:center; gap:10px; border-bottom:1px solid var(--border); }
+.item-picker-list { overflow-y:auto; flex:1; }
+.item-picker-row { padding:8px 16px; font-size:.72rem; cursor:pointer; border-bottom:1px solid var(--border); display:flex; gap:10px; align-items:center; }
+.item-picker-row:hover { background:var(--bg3); color:var(--pl); }
+.item-picker-tag { font-size:.6rem; background:var(--pd); color:var(--pl); border-radius:3px; padding:1px 5px; }
 </style>
 </head>
 <body>
@@ -2086,12 +2134,13 @@ function deleteProfileByIdx(idx) {
 let _activeTab = 'items';
 function switchTab(tab) {
   _activeTab = tab;
-  ['items','outfit','curse'].forEach(t => {
+  ['items','outfit','curse','bot'].forEach(t => {
     document.getElementById('tab-'+t)?.classList.toggle('active', t===tab);
     document.getElementById('tab-'+t+'-btn')?.classList.toggle('active', t===tab);
   });
   if (tab === 'outfit') { renderOutfitList(); renderOutfitMemberChips(); renderProfileList(); _autoOutfitCode(); }
   if (tab === 'curse')  { renderCurseTab(); }
+  if (tab === 'bot')    { renderBotTab(); }
 }
 
 // ── addToOutfit patched: auto-switch + auto-code ──────
@@ -2952,6 +3001,84 @@ function selectRoomMember(num) {
 </div>
 <!-- /tab-curse -->
 
+<!-- ── BOT TAB ── -->
+<div id="tab-bot" class="tab-pane">
+  <div class="bot-layout">
+    <!-- SIDEBAR: Config -->
+    <div class="bot-sidebar">
+
+      <!-- Bot Info -->
+      <div class="bot-section">
+        <div class="bot-section-title">⚙️ Bot-Einstellungen</div>
+        <div class="bot-field"><label>Bot-Name</label><input id="bot-name" value="MeinBot"></div>
+        <div class="bot-field"><label>Version</label><input id="bot-version" value="1.0.0"></div>
+        <div class="bot-field">
+          <label>Modus</label>
+          <select id="bot-modus">
+            <option value="chat">chat – Nur Chatnachrichten</option>
+            <option value="zone">zone – Nur Map-Positionen</option>
+            <option value="both" selected>both – Chat UND Zone</option>
+          </select>
+        </div>
+        <div class="bot-section-title" style="margin-top:10px">📡 Chat hören auf</div>
+        <div class="bot-toggle-row"><input type="checkbox" id="bot-hear-chat" checked> Normale Chatnachrichten</div>
+        <div class="bot-toggle-row"><input type="checkbox" id="bot-hear-emote" checked> *Emotes*</div>
+        <div class="bot-toggle-row"><input type="checkbox" id="bot-hear-whisper" checked> /w Whisper</div>
+        <div class="bot-toggle-row"><input type="checkbox" id="bot-nur-eigene" checked> Nur eigene Nachrichten</div>
+      </div>
+
+      <!-- Zones -->
+      <div class="bot-section">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+          <div class="bot-section-title" style="margin:0">🗺️ Zonen</div>
+          <button class="bot-add-btn" style="width:auto;padding:3px 10px" onclick="botAddZone()">+ Zone</button>
+        </div>
+        <div id="bot-zone-list"></div>
+      </div>
+
+      <!-- Logging -->
+      <div class="bot-section">
+        <div class="bot-section-title">📋 Logging</div>
+        <div class="bot-toggle-row"><input type="checkbox" id="bot-log-aktiv" checked> Logging aktiv</div>
+        <div class="bot-toggle-row"><input type="checkbox" id="bot-log-trigger" checked> Trigger loggen</div>
+        <div class="bot-toggle-row"><input type="checkbox" id="bot-log-aktionen" checked> Aktionen loggen</div>
+      </div>
+
+      <!-- Controls -->
+      <div class="bot-section" style="margin-top:auto">
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <button class="btn btn-green" onclick="botDeploy()" style="flex:1">▶️ Starten</button>
+          <button class="btn btn-red"   onclick="botStop()"   style="flex:1">⏹ Stoppen</button>
+        </div>
+        <div id="bot-status-bar" class="bot-status stopped">⏹ Nicht gestartet</div>
+        <button class="btn btn-primary" onclick="botExportConfig()" style="width:100%;margin-top:6px;font-size:.68rem">⬇️ Config exportieren</button>
+        <button class="btn btn-primary" onclick="botImportConfig()" style="width:100%;margin-top:4px;font-size:.68rem">⬆️ Config importieren</button>
+      </div>
+    </div>
+
+    <!-- MAIN: Trigger Editor -->
+    <div class="bot-main">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+        <div style="font-size:.85rem;font-weight:600;color:var(--text)">🎯 Trigger</div>
+        <button class="bot-add-btn" style="width:auto;padding:4px 14px" onclick="botAddTrigger()">+ Trigger hinzufügen</button>
+      </div>
+      <div class="trigger-list" id="bot-trigger-list"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Item Picker Modal -->
+<div class="item-picker-modal" id="itemPickerModal" style="display:none" onclick="if(event.target===this)closeItemPicker()">
+  <div class="item-picker-box">
+    <div class="item-picker-head">
+      <span style="font-size:.8rem;font-weight:600">📦 Item auswählen</span>
+      <input class="sidebar-search" id="itemPickerSearch" placeholder="🔍 Suchen..." oninput="renderItemPicker()" style="flex:1">
+      <button class="btn btn-red" onclick="closeItemPicker()" style="font-size:.68rem;padding:3px 8px">✕</button>
+    </div>
+    <div class="item-picker-list" id="itemPickerList"></div>
+  </div>
+</div>
+
 <!-- ── PROFILE MODAL ── -->
 <div class="modal-overlay hidden" id="profileOverlay">
   <div class="modal" style="max-width:650px">
@@ -2970,6 +3097,574 @@ function selectRoomMember(num) {
 </div>
 
 
+
+
+
+// ══════════════════════════════════════════════════════════════
+//  BOT TAB
+// ══════════════════════════════════════════════════════════════
+
+let _botTriggers = [
+  {
+    id: Date.now(), aktiv: true, wort: "start", zone: "", delay: 500,
+    aktionen: [
+      { id: Date.now()+1, typ: "chat", nachricht: "{name} hat 'start' geschrieben!", delay: 0 }
+    ]
+  }
+];
+let _botZones = [
+  { id: Date.now()+2, name: "Start-Zone", x: 22, y: 21, puffer: 1, aktiv: true }
+];
+let _botRunning = false;
+let _itemPickerCallback = null;
+
+const BOT_STORAGE_KEY = 'BC_Bot_Config_v1';
+
+function _loadBotConfig() {
+  try {
+    const s = localStorage.getItem(BOT_STORAGE_KEY);
+    if (!s) return;
+    const d = JSON.parse(s);
+    if (d.triggers) _botTriggers = d.triggers;
+    if (d.zones)    _botZones    = d.zones;
+    if (d.settings) {
+      document.getElementById('bot-name').value          = d.settings.name ?? 'MeinBot';
+      document.getElementById('bot-version').value       = d.settings.version ?? '1.0.0';
+      document.getElementById('bot-modus').value         = d.settings.modus ?? 'both';
+      document.getElementById('bot-hear-chat').checked   = d.settings.hearChat ?? true;
+      document.getElementById('bot-hear-emote').checked  = d.settings.hearEmote ?? true;
+      document.getElementById('bot-hear-whisper').checked= d.settings.hearWhisper ?? true;
+      document.getElementById('bot-nur-eigene').checked  = d.settings.nurEigene ?? true;
+    }
+  } catch {}
+}
+
+function _saveBotConfig() {
+  try {
+    localStorage.setItem(BOT_STORAGE_KEY, JSON.stringify({
+      triggers: _botTriggers,
+      zones:    _botZones,
+      settings: _getBotSettings(),
+    }));
+  } catch {}
+}
+
+function _getBotSettings() {
+  return {
+    name:        document.getElementById('bot-name')?.value ?? 'MeinBot',
+    version:     document.getElementById('bot-version')?.value ?? '1.0.0',
+    modus:       document.getElementById('bot-modus')?.value ?? 'both',
+    hearChat:    document.getElementById('bot-hear-chat')?.checked ?? true,
+    hearEmote:   document.getElementById('bot-hear-emote')?.checked ?? true,
+    hearWhisper: document.getElementById('bot-hear-whisper')?.checked ?? true,
+    nurEigene:   document.getElementById('bot-nur-eigene')?.checked ?? true,
+    logAktiv:    document.getElementById('bot-log-aktiv')?.checked ?? true,
+    logTrigger:  document.getElementById('bot-log-trigger')?.checked ?? true,
+    logAktionen: document.getElementById('bot-log-aktionen')?.checked ?? true,
+  };
+}
+
+function renderBotTab() {
+  _loadBotConfig();
+  renderBotZones();
+  renderBotTriggers();
+}
+
+// ── Zones ─────────────────────────────────────────────────────
+function renderBotZones() {
+  const el = document.getElementById('bot-zone-list');
+  if (!el) return;
+  el.innerHTML = _botZones.map((z, i) => `
+    <div class="zone-card">
+      <input type="checkbox" ${z.aktiv?'checked':''} onchange="botZoneField(${i},'aktiv',this.checked)" style="accent-color:var(--purple);flex-shrink:0">
+      <input class="zone-name-inp" value="${escHtml(z.name)}" oninput="botZoneField(${i},'name',this.value)" title="Name">
+      <input class="zone-coord-inp" type="number" value="${z.x}" oninput="botZoneField(${i},'x',+this.value)" title="X">
+      <input class="zone-coord-inp" type="number" value="${z.y}" oninput="botZoneField(${i},'y',+this.value)" title="Y">
+      <input class="zone-coord-inp" type="number" value="${z.puffer}" oninput="botZoneField(${i},'puffer',+this.value)" title="±Puffer" style="width:36px">
+      <button onclick="botRemoveZone(${i})" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.8rem;flex-shrink:0">✕</button>
+    </div>`).join('');
+}
+
+function botZoneField(i, field, val) { _botZones[i][field] = val; _saveBotConfig(); }
+function botAddZone() {
+  _botZones.push({ id: Date.now(), name: 'Neue Zone', x: 0, y: 0, puffer: 1, aktiv: true });
+  renderBotZones(); _saveBotConfig();
+}
+function botRemoveZone(i) { _botZones.splice(i,1); renderBotZones(); _saveBotConfig(); }
+
+// ── Triggers ──────────────────────────────────────────────────
+const ACTION_ICONS = {
+  item_anlegen: '📦', item_entfernen: '🗑', item_curse: '🔮',
+  chat: '💬', emote: '✨', whisper: '🤫', profil_anlegen: '👗'
+};
+
+function renderBotTriggers() {
+  const el = document.getElementById('bot-trigger-list');
+  if (!el) return;
+  if (!_botTriggers.length) {
+    el.innerHTML = '<div style="color:var(--text3);font-size:.72rem;padding:20px;text-align:center">Noch keine Trigger. Klicke + Trigger hinzufügen.</div>';
+    return;
+  }
+  el.innerHTML = _botTriggers.map((t, ti) => `
+    <div class="trigger-card ${t.aktiv?'active-card':''}">
+      <div class="trigger-head" onclick="botToggleTriggerBody(${ti})">
+        <input type="checkbox" ${t.aktiv?'checked':''} onclick="event.stopPropagation();botTriggerField(${ti},'aktiv',this.checked)" style="accent-color:var(--purple)">
+        <span class="trigger-word">"${escHtml(t.wort)}"</span>
+        <span class="trigger-meta">Zone: ${t.zone||'–'} · ${t.aktionen.length} Aktion(en)</span>
+        <button onclick="event.stopPropagation();botRemoveTrigger(${ti})" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.75rem">✕</button>
+      </div>
+      <div class="trigger-body" id="tbody-${ti}">
+        <div style="display:grid;grid-template-columns:1fr 1fr 100px;gap:8px;margin-bottom:8px">
+          <div class="bot-field"><label>Triggerwort</label>
+            <input value="${escHtml(t.wort)}" oninput="botTriggerField(${ti},'wort',this.value)">
+          </div>
+          <div class="bot-field"><label>Zone (leer = überall)</label>
+            <select onchange="botTriggerField(${ti},'zone',this.value)">
+              <option value="">– Überall –</option>
+              ${_botZones.map(z=>`<option value="${escHtml(z.name)}" ${t.zone===z.name?'selected':''}>${escHtml(z.name)}</option>`).join('')}
+            </select>
+          </div>
+          <div class="bot-field"><label>Delay (ms)</label>
+            <input type="number" value="${t.delay??0}" oninput="botTriggerField(${ti},'delay',+this.value)">
+          </div>
+        </div>
+        <div style="font-size:.66rem;color:var(--text3);margin-bottom:4px;font-weight:600;text-transform:uppercase;letter-spacing:.06em">Aktionen</div>
+        <div class="action-list" id="alist-${ti}">
+          ${t.aktionen.map((a,ai) => renderActionCard(ti,ai,a)).join('')}
+        </div>
+        <button class="bot-add-btn" onclick="botAddAction(${ti})">+ Aktion hinzufügen</button>
+      </div>
+    </div>`).join('');
+}
+
+function renderActionCard(ti, ai, a) {
+  const icon = ACTION_ICONS[a.typ] ?? '❓';
+  const zoneOptions = _botZones.map(z=>`<option value="${escHtml(z.name)}">${escHtml(z.name)}</option>`).join('');
+
+  let extraFields = '';
+  if (a.typ === 'item_anlegen') {
+    extraFields = `
+      <div style="display:flex;gap:4px;align-items:center">
+        <input value="${escHtml(a.item||'')}" placeholder="Item-Name" oninput="botActionField(${ti},${ai},'item',this.value)" style="flex:1" id="act-item-${ti}-${ai}">
+        <button onclick="openItemPicker(${ti},${ai},'item')" style="background:var(--pd);border:none;color:var(--pl);border-radius:4px;padding:3px 7px;cursor:pointer;font-size:.65rem;white-space:nowrap">📦 Aus Cache</button>
+        <button onclick="openItemPicker(${ti},${ai},'curse')" style="background:#1e1040;border:1px solid var(--purple);color:var(--pl);border-radius:4px;padding:3px 7px;cursor:pointer;font-size:.65rem;white-space:nowrap">🔮 Curse</button>
+      </div>
+      <input value="${escHtml(a.gruppe||'')}" placeholder="Gruppe (z.B. ItemMouth)" oninput="botActionField(${ti},${ai},'gruppe',this.value)">
+      <div style="display:flex;gap:4px">
+        <input value="${escHtml(a.farbe||'#ffffff')}" placeholder="Farbe" oninput="botActionField(${ti},${ai},'farbe',this.value)" style="flex:1">
+        <input type="color" value="${a.farbe||'#ffffff'}" oninput="botActionField(${ti},${ai},'farbe',this.value);this.previousElementSibling.value=this.value" style="width:32px;padding:1px;background:var(--bg2);border:1px solid var(--border2);border-radius:4px;cursor:pointer">
+      </div>`;
+  } else if (a.typ === 'item_curse') {
+    extraFields = `
+      <div style="display:flex;gap:4px;align-items:center">
+        <input value="${escHtml(a.curseKey||'')}" placeholder="Curse-Key (MemberNum:Item:Name)" oninput="botActionField(${ti},${ai},'curseKey',this.value)" style="flex:1" id="act-item-${ti}-${ai}">
+        <button onclick="openItemPicker(${ti},${ai},'curse')" style="background:#1e1040;border:1px solid var(--purple);color:var(--pl);border-radius:4px;padding:3px 7px;cursor:pointer;font-size:.65rem">🔮 Wählen</button>
+      </div>`;
+  } else if (a.typ === 'item_entfernen') {
+    extraFields = `<input value="${escHtml(a.gruppe||'')}" placeholder="Gruppe (z.B. ItemMouth)" oninput="botActionField(${ti},${ai},'gruppe',this.value)">`;
+  } else if (a.typ === 'profil_anlegen') {
+    const profileOptions = Object.keys(PROFILES).map(p=>`<option value="${escHtml(p)}" ${a.profil===p?'selected':''}>${escHtml(p)}</option>`).join('');
+    extraFields = `<select onchange="botActionField(${ti},${ai},'profil',this.value)"><option value="">– Profil wählen –</option>${profileOptions}</select>`;
+  } else if (['chat','emote','whisper'].includes(a.typ)) {
+    extraFields = `<textarea rows="2" oninput="botActionField(${ti},${ai},'nachricht',this.value)" placeholder="{name} hat '{wort}' geschrieben...">${escHtml(a.nachricht||'')}</textarea>
+      <div style="font-size:.59rem;color:var(--text3)">Variablen: {name} {wort} {typ} {x} {y} {zone}</div>`;
+  }
+
+  return `<div class="action-card">
+    <div class="action-icon">${icon}</div>
+    <div class="action-fields">
+      <div style="display:flex;gap:4px;align-items:center">
+        <select onchange="botActionTypeChange(${ti},${ai},this.value)" style="flex:1">
+          <option value="item_anlegen"   ${a.typ==='item_anlegen'  ?'selected':''}>📦 Item anlegen</option>
+          <option value="item_entfernen" ${a.typ==='item_entfernen'?'selected':''}>🗑 Item entfernen</option>
+          <option value="item_curse"     ${a.typ==='item_curse'    ?'selected':''}>🔮 Curse anlegen</option>
+          <option value="profil_anlegen" ${a.typ==='profil_anlegen'?'selected':''}>👗 Profil anlegen</option>
+          <option value="chat"           ${a.typ==='chat'          ?'selected':''}>💬 Chat senden</option>
+          <option value="emote"          ${a.typ==='emote'         ?'selected':''}>✨ Emote senden</option>
+          <option value="whisper"        ${a.typ==='whisper'       ?'selected':''}>🤫 Whisper senden</option>
+        </select>
+        <input type="number" value="${a.delay??0}" oninput="botActionField(${ti},${ai},'delay',+this.value)" style="width:60px" title="Delay ms">
+        <button onclick="botRemoveAction(${ti},${ai})" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.8rem">✕</button>
+      </div>
+      ${extraFields}
+    </div>
+  </div>`;
+}
+
+function botToggleTriggerBody(ti) {
+  document.getElementById('tbody-'+ti)?.classList.toggle('open');
+}
+
+function botTriggerField(ti, field, val) {
+  _botTriggers[ti][field] = val;
+  if (field === 'aktiv') { renderBotTriggers(); } // re-render for active-card class
+  else _saveBotConfig();
+}
+
+function botActionField(ti, ai, field, val) {
+  _botTriggers[ti].aktionen[ai][field] = val;
+  _saveBotConfig();
+}
+
+function botActionTypeChange(ti, ai, typ) {
+  _botTriggers[ti].aktionen[ai] = { id: Date.now(), typ, delay: _botTriggers[ti].aktionen[ai].delay ?? 0 };
+  renderBotTriggers();
+  // Re-open the trigger body
+  const tbody = document.getElementById('tbody-'+ti);
+  if (tbody) tbody.classList.add('open');
+  _saveBotConfig();
+}
+
+function botAddTrigger() {
+  _botTriggers.push({ id: Date.now(), aktiv: true, wort: 'neues-wort', zone: '', delay: 0, aktionen: [] });
+  renderBotTriggers();
+  // Auto-open last trigger
+  const last = _botTriggers.length - 1;
+  setTimeout(() => document.getElementById('tbody-'+last)?.classList.add('open'), 50);
+  _saveBotConfig();
+}
+
+function botRemoveTrigger(ti) {
+  if (!confirm('Trigger "' + _botTriggers[ti].wort + '" löschen?')) return;
+  _botTriggers.splice(ti, 1);
+  renderBotTriggers();
+  _saveBotConfig();
+}
+
+function botAddAction(ti) {
+  _botTriggers[ti].aktionen.push({ id: Date.now(), typ: 'chat', nachricht: '', delay: 0 });
+  renderBotTriggers();
+  document.getElementById('tbody-'+ti)?.classList.add('open');
+  _saveBotConfig();
+}
+
+function botRemoveAction(ti, ai) {
+  _botTriggers[ti].aktionen.splice(ai, 1);
+  renderBotTriggers();
+  document.getElementById('tbody-'+ti)?.classList.add('open');
+  _saveBotConfig();
+}
+
+// ── Item Picker ────────────────────────────────────────────────
+let _pickerMode = 'item'; // 'item' or 'curse'
+let _pickerTarget = null; // {ti, ai}
+
+function openItemPicker(ti, ai, mode) {
+  _pickerMode = mode;
+  _pickerTarget = { ti, ai };
+  document.getElementById('itemPickerModal').style.display = 'flex';
+  document.getElementById('itemPickerSearch').value = '';
+  renderItemPicker();
+}
+
+function closeItemPicker() {
+  document.getElementById('itemPickerModal').style.display = 'none';
+}
+
+function renderItemPicker() {
+  const search = document.getElementById('itemPickerSearch').value.toLowerCase();
+  const el     = document.getElementById('itemPickerList');
+  let rows = '';
+
+  if (_pickerMode === 'curse') {
+    // Crafts from CURSE_DB
+    const entries = Object.entries(CURSE_DB).filter(([k, e]) =>
+      !search || k.toLowerCase().includes(search) ||
+      (e.CraftName||'').toLowerCase().includes(search) ||
+      (e.ItemName||'').toLowerCase().includes(search)
+    ).slice(0, 100);
+    if (!entries.length) { el.innerHTML = '<div style="padding:20px;color:var(--text3);font-size:.72rem;text-align:center">Keine Curse gefunden. Bitte erst scannen oder importieren.</div>'; return; }
+    rows = entries.map(([k, e]) => `
+      <div class="item-picker-row" onclick="selectItemPickerEntry('${k.replace(/'/g,"\'")}','curse')">
+        <span class="item-picker-tag">${escHtml(e.Gruppe||'?')}</span>
+        <span style="flex:1">${escHtml(e.CraftName||e.ItemName)}</span>
+        <span style="color:var(--text3);font-size:.62rem">${escHtml(e.Besitzer?.Name||'?')}</span>
+        ${e.IstLSCGCurse?'<span class="item-picker-tag" style="background:#1e1040">🧿</span>':''}
+      </div>`).join('');
+  } else {
+    // Items from BC CACHE
+    const allItems = [];
+    for (const g in CACHE) {
+      for (const n in CACHE[g]) {
+        if (!search || n.toLowerCase().includes(search) || g.toLowerCase().includes(search)) {
+          allItems.push({ group: g, name: n });
+        }
+      }
+    }
+    allItems.sort((a,b) => a.name.localeCompare(b.name));
+    const shown = allItems.slice(0, 100);
+    if (!shown.length) { el.innerHTML = '<div style="padding:20px;color:var(--text3);font-size:.72rem;text-align:center">Kein BC-Cache geladen. Bitte "Aus Spiel laden" klicken.</div>'; return; }
+    rows = shown.map(i => `
+      <div class="item-picker-row" onclick="selectItemPickerEntry('${i.group}||${i.name}','item')">
+        <span class="item-picker-tag">${escHtml(i.group)}</span>
+        <span style="flex:1">${escHtml(i.name)}</span>
+      </div>`).join('');
+  }
+  el.innerHTML = rows;
+}
+
+function selectItemPickerEntry(val, mode) {
+  const { ti, ai } = _pickerTarget;
+  if (mode === 'curse') {
+    const entry = CURSE_DB[val];
+    if (entry) {
+      _botTriggers[ti].aktionen[ai] = {
+        ..._botTriggers[ti].aktionen[ai],
+        typ:      'item_curse',
+        curseKey: val,
+        _curseName: entry.CraftName,
+      };
+    }
+  } else {
+    const [group, name] = val.split('||');
+    _botTriggers[ti].aktionen[ai] = {
+      ..._botTriggers[ti].aktionen[ai],
+      typ:    'item_anlegen',
+      item:   name,
+      gruppe: group,
+    };
+  }
+  closeItemPicker();
+  renderBotTriggers();
+  document.getElementById('tbody-'+ti)?.classList.add('open');
+  _saveBotConfig();
+}
+
+// ── Config Export / Import ─────────────────────────────────────
+function botExportConfig() {
+  const cfg = { settings: _getBotSettings(), triggers: _botTriggers, zones: _botZones };
+  const blob = new Blob([JSON.stringify(cfg, null, 2)], { type: 'application/json' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url; a.download = 'BCBot_Config_' + new Date().toISOString().slice(0,10) + '.json';
+  a.click(); URL.revokeObjectURL(url);
+  showStatus('✅ Bot-Config exportiert', 'success');
+}
+
+function botImportConfig() {
+  const inp = document.createElement('input');
+  inp.type = 'file'; inp.accept = '.json';
+  inp.onchange = e => {
+    const r = new FileReader();
+    r.onload = ev => {
+      try {
+        const d = JSON.parse(ev.target.result);
+        if (d.triggers) _botTriggers = d.triggers;
+        if (d.zones)    _botZones    = d.zones;
+        _saveBotConfig();
+        renderBotTab();
+        showStatus('✅ Bot-Config importiert', 'success');
+      } catch(err) { showStatus('❌ Import fehlgeschlagen: ' + err.message, 'error'); }
+    };
+    r.readAsText(e.target.files[0]);
+  };
+  inp.click();
+}
+
+// ── Code Generator & Deploy ───────────────────────────────────
+function _buildBotCode() {
+  const s = _getBotSettings();
+  const triggerJson = JSON.stringify(_botTriggers.filter(t => t.aktiv).map(t => ({
+    wort:  t.wort,
+    zone:  t.zone || null,
+    delay: t.delay ?? 0,
+    aktiv: true,
+    aktionen: t.aktionen.map(a => {
+      if (a.typ === 'item_curse') {
+        // Convert curse reference to wear action using CurseScanner
+        const entry = CURSE_DB[a.curseKey];
+        return { typ: '_curse', curseKey: a.curseKey, entry: entry ?? null, delay: a.delay ?? 0 };
+      }
+      if (a.typ === 'profil_anlegen') {
+        const prof = PROFILES[a.profil];
+        return { typ: '_profil', profil: a.profil, items: prof?.items ?? [], delay: a.delay ?? 0 };
+      }
+      return a;
+    }),
+  })), null, 2);
+
+  const zoneJson    = JSON.stringify(_botZones.filter(z => z.aktiv), null, 2);
+
+  return `
+// ── BC Bot – generiert von BC Konfigurator ──────────────────
+if (window._BCBot_running) { console.warn('[Bot] Bereits läuft – stoppe zuerst mit BCBot.stop()'); }
+else {
+
+const BOT_CONFIG = {
+  name:    ${JSON.stringify(s.name)},
+  version: ${JSON.stringify(s.version)},
+  modus:   ${JSON.stringify(s.modus)},
+  chat: {
+    hoereAuf: { chat: ${s.hearChat}, emote: ${s.hearEmote}, whisper: ${s.hearWhisper} },
+    nurEigeneNachrichten: ${s.nurEigene},
+  },
+  zonen:   ${zoneJson},
+  trigger: ${triggerJson},
+  logging: { aktiv: ${s.logAktiv}, trigger: ${s.logTrigger}, aktionen: ${s.logAktionen} },
+};
+
+const BCBot = (() => {
+  const cfg = BOT_CONFIG;
+  let aktiv = false;
+  let mod   = null;
+
+  function log(typ, ...args) {
+    if (!cfg.logging.aktiv) return;
+    if (typ === 'trigger'  && !cfg.logging.trigger)  return;
+    if (typ === 'aktion'   && !cfg.logging.aktionen) return;
+    console.log('[' + cfg.name + ']', ...args);
+  }
+
+  function findeZone(name) {
+    return cfg.zonen.find(z => z.name === name && z.aktiv) ?? null;
+  }
+
+  function inZone(zone, C) {
+    if (!zone) return true;
+    const p = zone.puffer ?? 0;
+    return C.X >= zone.x - p && C.X <= zone.x + p && C.Y >= zone.y - p && C.Y <= zone.y + p;
+  }
+
+  function render(tmpl, vars) {
+    return (tmpl ?? '').replace(/\{name\}/g, vars.name ?? '').replace(/\{wort\}/g, vars.wort ?? '')
+      .replace(/\{typ\}/g, vars.typ ?? '').replace(/\{x\}/g, vars.x ?? '').replace(/\{y\}/g, vars.y ?? '')
+      .replace(/\{zone\}/g, vars.zone ?? '–');
+  }
+
+  function führeAus(aktionen, vars, basisDelay) {
+    aktionen.forEach(aktion => {
+      setTimeout(() => {
+        const C = vars.charakter ?? Player;
+        switch (aktion.typ) {
+          case 'item_anlegen':
+            log('aktion', '📦 Anlegen: ' + aktion.item + ' (' + aktion.gruppe + ') → ' + C.Name);
+            InventoryWear(C, aktion.item, aktion.gruppe, aktion.farbe ?? '#ffffff', 0, Player.MemberNumber);
+            CharacterRefresh(C); ChatRoomCharacterUpdate(C);
+            break;
+          case 'item_entfernen':
+            log('aktion', '🗑 Entfernen: ' + aktion.gruppe + ' von ' + C.Name);
+            InventoryRemove(C, aktion.gruppe);
+            CharacterRefresh(C); ChatRoomCharacterUpdate(C);
+            break;
+          case '_curse':
+            if (!aktion.entry) { console.warn('[Bot] Kein Entry für Curse: ' + aktion.curseKey); break; }
+            const e = aktion.entry;
+            let _col = e.Farbe;
+            if (typeof _col === 'string' && _col.includes(',')) _col = _col.split(',');
+            log('aktion', '🔮 Curse: ' + e.CraftName + ' → ' + C.Name);
+            InventoryWear(C, e.ItemName, e.Gruppe, _col, 0, Player.MemberNumber, e.Craft);
+            CharacterRefresh(C); ChatRoomCharacterUpdate(C);
+            break;
+          case '_profil':
+            log('aktion', '👗 Profil: ' + aktion.profil + ' → ' + C.Name);
+            (aktion.items ?? []).forEach(item => {
+              const cfg2 = item.cfg;
+              if (!cfg2) return;
+              let col = cfg2.Color;
+              if (typeof col === 'string' && col.includes(',')) col = col.split(',');
+              InventoryWear(C, item.asset, item.group, col, 0, Player.MemberNumber, cfg2.Craft ?? undefined);
+              CharacterRefresh(C);
+            });
+            ChatRoomCharacterUpdate(C);
+            break;
+          case 'chat':
+            const ct = render(aktion.nachricht, vars);
+            log('aktion', '💬 Chat: "' + ct + '"');
+            ServerSend('ChatRoomChat', { Content: ct, Type: 'Chat' });
+            break;
+          case 'emote':
+            const et = render(aktion.nachricht, vars);
+            log('aktion', '✨ Emote: "' + et + '"');
+            ServerSend('ChatRoomChat', { Content: et, Type: 'Emote' });
+            break;
+          case 'whisper':
+            const wt = render(aktion.nachricht, vars);
+            const ziel = vars.charakter?.MemberNumber;
+            if (!ziel) break;
+            log('aktion', '🤫 Whisper → ' + C.Name + ': "' + wt + '"');
+            ServerSend('ChatRoomChat', { Content: wt, Type: 'Whisper', Target: ziel });
+            break;
+        }
+      }, basisDelay + (aktion.delay ?? 0));
+    });
+  }
+
+  function prüfe(rohText, sender) {
+    if (!rohText) return;
+    const istEmote   = rohText.startsWith('*') && rohText.endsWith('*');
+    const istWhisper = rohText.startsWith('/w ') || rohText.startsWith('/whisper ');
+    const typKey     = istEmote ? 'emote' : istWhisper ? 'whisper' : 'chat';
+    const typLabel   = istEmote ? '✨ Emote' : istWhisper ? '🤫 Whisper' : '💬 Chat';
+    if (!cfg.chat.hoereAuf[typKey]) return;
+    const inhalt = rohText.toLowerCase().replace(/^\*|\*$/g,'').replace(/^\/w\s+\S+\s*/i,'').trim();
+    cfg.trigger.filter(t => t.aktiv).forEach(t => {
+      if (!inhalt.includes(t.wort)) return;
+      if (cfg.modus !== 'chat' && t.zone) {
+        const zone = findeZone(t.zone);
+        if (!inZone(zone, sender)) return;
+      }
+      log('trigger', '🎯 "' + t.wort + '" von ' + sender.Name + ' (' + typLabel + ')');
+      führeAus(t.aktionen, { name: sender.Name, wort: t.wort, typ: typLabel, x: sender.X, y: sender.Y, zone: t.zone ?? '–', charakter: sender }, t.delay ?? 0);
+    });
+  }
+
+  function start() {
+    if (aktiv) return;
+    mod = bcModSdk.registerMod({ name: cfg.name, fullName: cfg.name, version: cfg.version });
+    if (cfg.chat.nurEigeneNachrichten) {
+      mod.hookFunction('ChatRoomSendChat', 0, (args, next) => {
+        const inputEl = document.getElementById('InputChat');
+        const rohText = inputEl?.value?.trim() ?? '';
+        prüfe(rohText, Player);
+        return next(args);
+      });
+    } else {
+      ServerSocket.on('ChatRoomMessage', data => {
+        if (!['Chat','Whisper','Emote'].includes(data.Type)) return;
+        const sender = ChatRoomCharacter.find(c => c.MemberNumber === data.Sender) ?? (Player.MemberNumber === data.Sender ? Player : null);
+        if (sender) prüfe(data.Content, sender);
+      });
+    }
+    aktiv = true;
+    window._BCBot_running = true;
+    console.log('▶️  [' + cfg.name + '] v' + cfg.version + ' gestartet! Trigger: ' + cfg.trigger.filter(t=>t.aktiv).length);
+  }
+
+  function stop() {
+    mod?.removePatches();
+    aktiv = false;
+    window._BCBot_running = false;
+    console.log('⏹️  [' + cfg.name + '] gestoppt');
+  }
+
+  return { start, stop };
+})();
+
+window.BCBot = BCBot;
+BCBot.start();
+}`;
+}
+
+function botDeploy() {
+  if (!_connected) { showStatus('❌ Nicht mit BC verbunden', 'error'); return; }
+  const code = _buildBotCode();
+  bcSend({ type: 'EXEC', code });
+  _botRunning = true;
+  const bar = document.getElementById('bot-status-bar');
+  bar.className = 'bot-status running';
+  bar.textContent = '▶️ Bot läuft – "BCBot.stop()" in BC-Konsole zum Stoppen';
+  showStatus('▶️ Bot gestartet!', 'success');
+}
+
+function botStop() {
+  if (!_connected) { showStatus('❌ Nicht mit BC verbunden', 'error'); return; }
+  bcSend({ type: 'EXEC', code: 'if(window.BCBot) BCBot.stop(); window._BCBot_running=false;' });
+  _botRunning = false;
+  const bar = document.getElementById('bot-status-bar');
+  bar.className = 'bot-status stopped';
+  bar.textContent = '⏹ Bot gestoppt';
+  showStatus('⏹ Bot gestoppt', 'success');
+}
 
 </body>
 </html>

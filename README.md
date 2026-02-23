@@ -8,7 +8,6 @@ Ein Browser-Tool zum Verwalten, Scannen und Anlegen von Crafts & Curses in Bonda
 
 - Einen modernen Browser (Chrome empfohlen)
 - Ein Bondage Club Account
-- Die `index.html` Datei (das Popup)
 
 ---
 
@@ -31,15 +30,14 @@ javascript:(function(){let s=document.createElement('script');s.src='https://ani
 
 ---
 
-## 🚀 Schritt 2 – Verbinden
+## 🚀 Schritt 2 – Starten
 
-1. Öffne **Bondage Club** im Browser und betritt einen Raum (oder bleibe im Lobby)
-2. Öffne die `index.html` in einem **neuen Tab oder Fenster** (nicht schließen!)
-3. Klicke in BC auf das gespeicherte **Bookmarklet**
-4. Klicke in der `index.html` auf **„Verbinden"**
-5. Der Status wechselt zu 🟢 **Verbunden**
+1. Öffne **Bondage Club** im Browser
+2. Klicke auf das gespeicherte **Bookmarklet**
+3. Das Konfigurator-Fenster öffnet sich automatisch unter `https://animereviewer1-sketch.github.io/bc-configurator/`
+4. Der Status wechselt zu 🟢 **Verbunden**
 
-> 💡 Das Bookmarklet muss bei jedem BC-Seitenaufruf neu geklickt werden. Die `index.html` kann geöffnet bleiben.
+> 💡 Das Bookmarklet muss bei jedem BC-Seitenaufruf neu geklickt werden. Das Konfigurator-Fenster kann geöffnet bleiben.
 
 ---
 
@@ -70,8 +68,8 @@ Das Tool speichert automatisch alle gefundenen Daten in zwei Schichten:
 
 ### Browser wechseln
 1. In **altem Browser**: **⬇️ Export** klicken → JSON-Datei speichern
-2. In **neuem Browser**: `index.html` öffnen → **⬆️ Import** → JSON-Datei laden
-3. Bookmarklet klicken + Verbinden → Daten sind sofort verfügbar
+2. In **neuem Browser**: Bookmarklet klicken → Konfigurator öffnet sich → **⬆️ Import** → JSON-Datei laden
+3. Alle Daten sind sofort verfügbar
 
 ---
 
