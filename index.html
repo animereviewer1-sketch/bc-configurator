@@ -894,6 +894,7 @@ textarea.outfit-code{width:100%;min-height:200px;background:var(--bg4);border:1p
 // ══════════════════════════════════════════════════════
 let CACHE   = {};
 let CURRENT = null;
+window._BCCurrent = () => CURRENT; // expose for bot tab
 
 let dimMode      = {};
 let dimSelected  = {};
@@ -3487,40 +3488,64 @@ function ipickerSetTab(tab) {
   _ipickerTab = tab; _ipickerRenderTabs(); ipickerRender();
 }
 
+// Lookup cache: avoids putting complex objects in onclick attributes
+const _ipickerCache = {};
+let _ipickerCacheIdx = 0;
+
 function ipickerRender() {
   const search = (document.getElementById('ipickerSearch')?.value??'').toLowerCase();
   const el = document.getElementById('ipickerList');
   if (!el) return;
-  let html = '';
+  // Reset cache on each render
+  Object.keys(_ipickerCache).forEach(k => delete _ipickerCache[k]);
+  _ipickerCacheIdx = 0;
 
+  let html = '';
   if (_ipickerTab === 'curse') {
     const entries = Object.entries(CURSE_DB).filter(([k,e])=>
       !search || k.toLowerCase().includes(search) || (e.CraftName||'').toLowerCase().includes(search) || (e.ItemName||'').toLowerCase().includes(search)
     ).slice(0, 150);
     if (!entries.length) { el.innerHTML='<div style="padding:20px;color:var(--text3);font-size:.72rem;text-align:center">Keine Curses. Bitte Craft & Curse scannen/importieren.</div>'; return; }
-    html = entries.map(([k,e])=>`
-      <div class="ipicker-row" onclick="ipickerSelect({type:'curse',key:${JSON.stringify(k)},name:${JSON.stringify(e.CraftName||e.ItemName)},entry:${JSON.stringify(e)}})">
+    html = entries.map(([k,e])=>{
+      const idx = _ipickerCacheIdx++;
+      _ipickerCache[idx] = {type:'curse', key:k, name:e.CraftName||e.ItemName, entry:e};
+      return `<div class="ipicker-row" onclick="ipickerSelectIdx(${idx})">
         <span class="ipicker-tag purple">${escHtml(e.Gruppe||'?')}</span>
         <span style="flex:1">${escHtml(e.CraftName||e.ItemName)}</span>
         <span style="color:var(--text3);font-size:.6rem">${escHtml(e.Besitzer?.Name||'')}</span>
         ${e.IstLSCGCurse?'<span class="ipicker-tag green">🧿</span>':''}
-      </div>`).join('');
+      </div>`;
+    }).join('');
   } else if (_ipickerTab === 'profil') {
     const profiles = Object.keys(PROFILES).filter(p=>!search||p.toLowerCase().includes(search));
     if (!profiles.length) { el.innerHTML='<div style="padding:20px;color:var(--text3);font-size:.72rem;text-align:center">Keine Profile. Zuerst ein Outfit-Profil speichern.</div>'; return; }
-    html = profiles.map(p=>`
-      <div class="ipicker-row" onclick="ipickerSelect({type:'profil',name:${JSON.stringify(p)}})">
+    html = profiles.map(p=>{
+      const idx = _ipickerCacheIdx++;
+      _ipickerCache[idx] = {type:'profil', name:p};
+      return `<div class="ipicker-row" onclick="ipickerSelectIdx(${idx})">
         <span class="ipicker-tag green">👗</span>
         <span style="flex:1">${escHtml(p)}</span>
         <span style="color:var(--text3);font-size:.6rem">${PROFILES[p]?.date||''}</span>
-      </div>`).join('');
+      </div>`;
+    }).join('');
   }
   el.innerHTML = html;
 }
 
+function ipickerSelectIdx(idx) {
+  const val = _ipickerCache[idx];
+  if (!val) return;
+  ipickerSelect(val);
+}
+
 function ipickerSelect(val) {
-  if (_ipickerCb) _ipickerCb(val);
-  ipickerClose();
+  if (_ipickerCb) {
+    const cb = _ipickerCb;
+    ipickerClose(); // close first so cb can re-open if needed
+    cb(val);
+  } else {
+    ipickerClose();
+  }
 }
 
 // ── Item Manager Integration ──────────────────────────────────
@@ -3565,12 +3590,13 @@ function _injectTriggerButton() {
 }
 
 function _addCurrentItemToTrigger() {
-  if (!_trigPending || !window.CURRENT) { showStatus('❌ Kein Item ausgewählt','error'); return; }
-  const val = { type:'item', name: CURRENT.asset, group: CURRENT.group };
+  const cur = window._BCCurrent ? window._BCCurrent() : null;
+  if (!_trigPending || !cur) { showStatus('❌ Kein Item ausgewählt – bitte erst ein Item in der Sidebar anklicken','error'); return; }
+  const val = { type:'item', name: cur.asset, group: cur.group };
   _trigPending.cb(val);
   _cancelTrigPending();
   switchTab('bot');
-  showStatus('✅ Item zum Trigger hinzugefügt','success');
+  showStatus('✅ ' + cur.asset + ' zum Trigger hinzugefügt','success');
 }
 
 let _origBuildConf = null;
@@ -3645,10 +3671,12 @@ function _log(...a){if(_cfg.logAktiv)console.log('[Bot:${safeName}]',...a);}
 function _inZone(c,C){const p=c.puffer??1;return C.X>=c.x-p&&C.X<=c.x+p&&C.Y>=c.y-p&&C.Y<=c.y+p;}
 function _tpl(s,v){return(s??'').replace(/{name}/gi,v.name??'').replace(/{wort}/gi,v.wort??'').replace(/{typ}/gi,v.typ??'').replace(/{x}/gi,v.x??'').replace(/{y}/gi,v.y??'').replace(/{zone}/gi,v.zone??'');}
 function _ok(trig,text,typKey,C){
+  // For position: always use ChatRoomCharacter version if available (has X/Y)
+  const Cp = ChatRoomCharacter.find(c=>c.MemberNumber===C.MemberNumber)??C;
   for(const c of(trig.bedingungen??[])){
     if(c.typ==='wort'){const m=c.typ_msg||'any';if(m!=='any'&&m!==typKey)return false;if(c.wort&&!text.toLowerCase().includes(c.wort.toLowerCase()))return false;}
-    else if(c.typ==='zone'){if(!_inZone(c,C))return false;}
-    else if(c.typ==='item_traegt'){const has=(C.Appearance??[]).some(a=>a.Asset?.Name===c.item);if(!has)return false;}
+    else if(c.typ==='zone'){if(!_inZone(c,Cp))return false;}
+    else if(c.typ==='item_traegt'){const has=(Cp.Appearance??[]).some(a=>a.Asset?.Name===c.item);if(!has)return false;}
     else if(c.typ==='trigger_war'){if(!_fired[c.trigId])return false;}
   }
   return true;
@@ -3674,7 +3702,8 @@ function _run(trig,vars){
           } else if(a.profilName){
             _log('\\u{1F457} Profil:',a.profilName,'\\u{2192}',C.Name);
             (a.profilItems??[]).forEach(item=>{
-              let col=item.colors??'#ffffff';
+              let col=item.colors??item.cfg?.Color??'#ffffff';
+              if(typeof col==='string'&&col.includes(','))col=col.split(',');
               InventoryWear(C,item.asset,item.group,col,0,Player.MemberNumber);
               CharacterRefresh(C);
             });
