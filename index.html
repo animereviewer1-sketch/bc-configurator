@@ -534,11 +534,14 @@ textarea.outfit-code{width:100%;min-height:200px;background:var(--bg4);border:1p
 .card-fields{display:flex;flex-wrap:wrap;gap:4px;align-items:center}
 .cf{background:var(--bg2);border:1px solid var(--border2);border-radius:4px;color:var(--text);padding:3px 6px;font-size:.68rem;font-family:var(--mono)}
 .cf:focus{outline:none;border-color:var(--purple)}
-.cf-w80{width:80px}.cf-w120{width:120px}.cf-w160{width:160px}.cf-w200{width:200px}.cf-flex{flex:1;min-width:100px}
+.cf-w80{width:80px}.cf-w100{width:100px}.cf-w120{width:120px}.cf-w160{width:160px}.cf-w200{width:200px}.cf-flex{flex:1;min-width:100px}
 .rm-btn{background:none;border:none;color:var(--red);cursor:pointer;font-size:.8rem;padding:2px 4px;line-height:1;flex-shrink:0}
 .act-icon{font-size:.95rem;margin-right:4px}
 .be-addtrig{width:100%;padding:8px;background:none;border:1px dashed var(--border2);border-radius:8px;color:var(--text3);font-size:.72rem;cursor:pointer;margin-top:4px}
 .be-addtrig:hover{border-color:var(--purple);color:var(--pl)}
+.bot-status{padding:5px 18px;font-size:.68rem;font-family:var(--mono);display:none}
+.bot-status.running{background:#052818;border-bottom:1px solid var(--green2);color:var(--green);display:block}
+.bot-status.stopped{background:#0a0510;border-bottom:1px solid var(--border2);color:var(--text3);display:block}
 .be-empty{padding:60px 20px;text-align:center;color:var(--text3);font-size:.78rem}
 .be-empty .be-empty-icon{font-size:2.5rem;margin-bottom:10px}
 /* Settings panel */
@@ -3062,117 +3065,108 @@ function selectRoomMember(num) {
 
 const BOT_KEY = 'BC_Bots_v2';
 
-// State
-let _bots = [];           // [{id, name, aktiv, triggers, settings}]
-let _selBotId = null;     // currently selected bot id
-let _ipickerCb = null;    // callback for item picker
-let _ipickerTab = 'item'; // current picker tab
+let _bots      = [];
+let _selBotId  = null;
+let _ipickerCb = null;
+let _ipickerTab= 'item';
+// Item Manager integration: pending trigger context
+let _trigPending = null; // {tid, ai} – set when IM opened from trigger
 
+// ── Persistence ───────────────────────────────────────────────
 function _saveBots() {
   try { localStorage.setItem(BOT_KEY, JSON.stringify(_bots)); } catch {}
 }
-
 function _loadBots() {
-  try {
-    const s = localStorage.getItem(BOT_KEY);
-    if (s) _bots = JSON.parse(s);
-  } catch {}
+  try { const s = localStorage.getItem(BOT_KEY); if (s) _bots = JSON.parse(s); } catch {}
 }
+function _selBot() { return _bots.find(b => b.id === _selBotId) ?? null; }
 
-function _selBot() {
-  return _bots.find(b => b.id === _selBotId) ?? null;
-}
-
-// ── Lifecycle ─────────────────────────────────────────────────
+// ── Tab entry ─────────────────────────────────────────────────
 function renderBotTab() {
   _loadBots();
   renderBotList();
   if (_selBotId) renderBotEditor();
 }
 
-// ── Bot List ──────────────────────────────────────────────────
+// ── Bot Sidebar ───────────────────────────────────────────────
 function renderBotList() {
   const el = document.getElementById('botList');
   if (!el) return;
   if (!_bots.length) {
-    el.innerHTML = '<div style="padding:20px;color:var(--text3);font-size:.71rem;text-align:center">Noch keine Bots. Klicke + Neu.</div>';
+    el.innerHTML = '<div style="padding:20px;color:var(--text3);font-size:.71rem;text-align:center">Noch keine Bots.<br>Klicke + Neu.</div>';
     return;
   }
   el.innerHTML = _bots.map(b => `
     <div class="bot-item${b.id===_selBotId?' sel':''}" onclick="botSelect('${b.id}')">
-      <div>
+      <div style="flex:1">
         <div class="bi-name">${escHtml(b.name)}</div>
-        <div class="bi-stat">${b.triggers.filter(t=>t.aktiv).length} Trigger aktiv</div>
+        <div class="bi-stat">${(b.triggers||[]).filter(t=>t.aktiv).length} Trigger aktiv</div>
       </div>
-      <button class="bot-toggle ${b.aktiv?'on':'off'}" onclick="event.stopPropagation();botToggle('${b.id}')" title="${b.aktiv?'Aktiv – klicken zum Deaktivieren':'Inaktiv – klicken zum Aktivieren'}"></button>
-      <button onclick="event.stopPropagation();botDelete('${b.id}')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.75rem;padding:2px">✕</button>
+      <button class="bot-toggle ${b.laufend?'on':'off'}" onclick="event.stopPropagation();botToggleLaufend('${b.id}')" title="${b.laufend?'Läuft':'Gestoppt'}"></button>
+      <button onclick="event.stopPropagation();botDelete('${b.id}')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.75rem;padding:2px 4px">✕</button>
     </div>`).join('');
 }
 
 function botNew() {
   const bot = {
-    id: 'b' + Date.now(),
-    name: 'Mein Bot',
-    aktiv: false,
+    id: 'b' + Date.now(), name: 'Mein Bot', laufend: false,
     settings: { modus:'both', hearChat:true, hearEmote:true, hearWhisper:true, nurEigene:true, logAktiv:true },
     triggers: [],
   };
-  _bots.push(bot);
-  _selBotId = bot.id;
-  _saveBots();
-  renderBotList();
-  renderBotEditor();
+  _bots.push(bot); _selBotId = bot.id; _saveBots();
+  renderBotList(); renderBotEditor();
 }
 
 function botSelect(id) {
-  _selBotId = id;
-  renderBotList();
-  renderBotEditor();
+  _selBotId = id; renderBotList(); renderBotEditor();
 }
 
-function botToggle(id) {
-  const b = _bots.find(x => x.id === id);
-  if (b) { b.aktiv = !b.aktiv; _saveBots(); renderBotList(); }
+function botToggleLaufend(id) {
+  const b = _bots.find(x => x.id === id); if (!b) return;
+  if (b.laufend) botStopById(id); else botDeployById(id);
 }
 
 function botDelete(id) {
   const b = _bots.find(x => x.id === id);
   if (!b || !confirm(`Bot "${b.name}" löschen?`)) return;
   _bots = _bots.filter(x => x.id !== id);
-  if (_selBotId === id) _selBotId = _bots[0]?.id ?? null;
-  _saveBots();
-  renderBotList();
+  if (_selBotId === id) { _selBotId = _bots[0]?.id ?? null; }
+  _saveBots(); renderBotList();
   if (_selBotId) renderBotEditor();
   else document.getElementById('botEditor').innerHTML = '<div class="be-empty"><div class="be-empty-icon">🤖</div>Wähle einen Bot aus oder erstelle einen neuen.</div>';
 }
 
 // ── Bot Editor ────────────────────────────────────────────────
 function renderBotEditor() {
-  const bot = _selBot();
-  if (!bot) return;
+  const bot = _selBot(); if (!bot) return;
   const s = bot.settings;
+  const statusCls = bot.laufend ? 'running' : 'stopped';
+  const statusTxt = bot.laufend ? '▶️ Bot läuft' : '⏹ Nicht gestartet';
 
   const html = `
     <div class="be-topbar">
-      <input value="${escHtml(bot.name)}" oninput="botField('name',this.value)" style="width:200px">
+      <input value="${escHtml(bot.name)}" oninput="botField('name',this.value)" style="width:180px;font-size:.78rem;font-weight:600;background:var(--bg3);border:1px solid var(--border2);border-radius:5px;color:var(--text);padding:4px 10px;font-family:var(--mono)">
       <div style="flex:1"></div>
-      <label class="bot-cfg-label"><input type="checkbox" ${s.hearChat?'checked':''} onchange="botSetting('hearChat',this.checked)"> Chat</label>
-      <label class="bot-cfg-label"><input type="checkbox" ${s.hearEmote?'checked':''} onchange="botSetting('hearEmote',this.checked)"> *Emote*</label>
-      <label class="bot-cfg-label"><input type="checkbox" ${s.hearWhisper?'checked':''} onchange="botSetting('hearWhisper',this.checked)"> /w Whisper</label>
-      <label class="bot-cfg-label"><input type="checkbox" ${s.nurEigene?'checked':''} onchange="botSetting('nurEigene',this.checked)"> Nur eigene</label>
-      <select class="cf" onchange="botSetting('modus',this.value)" style="width:120px">
-        <option value="chat" ${s.modus==='chat'?'selected':''}>Nur Chat</option>
-        <option value="zone" ${s.modus==='zone'?'selected':''}>Nur Zone</option>
-        <option value="both" ${s.modus==='both'?'selected':''}>Chat + Zone</option>
+      <label class="bot-cfg-label" title="Normale Chatnachrichten"><input type="checkbox" ${s.hearChat?'checked':''} onchange="botSetting('hearChat',this.checked)"> Chat</label>
+      <label class="bot-cfg-label" title="Emotes"><input type="checkbox" ${s.hearEmote?'checked':''} onchange="botSetting('hearEmote',this.checked)"> *Emote*</label>
+      <label class="bot-cfg-label" title="Whisper"><input type="checkbox" ${s.hearWhisper?'checked':''} onchange="botSetting('hearWhisper',this.checked)"> Whisper</label>
+      <label class="bot-cfg-label" title="Nur eigene Nachrichten überwachen"><input type="checkbox" ${s.nurEigene?'checked':''} onchange="botSetting('nurEigene',this.checked)"> Nur eigene</label>
+      <label class="bot-cfg-label"><input type="checkbox" ${s.logAktiv?'checked':''} onchange="botSetting('logAktiv',this.checked)"> Log</label>
+      <select class="cf" onchange="botSetting('modus',this.value)" style="width:110px">
+        <option value="chat"  ${s.modus==='chat'?'selected':''}>Nur Chat</option>
+        <option value="zone"  ${s.modus==='zone'?'selected':''}>Nur Zone</option>
+        <option value="both"  ${s.modus==='both'?'selected':''}>Chat + Zone</option>
       </select>
-      <button class="btn btn-green" onclick="botDeploy()" style="font-size:.68rem;padding:4px 10px">▶️ Starten</button>
-      <button class="btn btn-red"   onclick="botStop()"   style="font-size:.68rem;padding:4px 10px">⏹ Stop</button>
-      <button class="btn btn-primary" onclick="botExportConfig()" style="font-size:.66rem;padding:4px 8px">⬇️</button>
-      <button class="btn btn-primary" onclick="botImportConfig()" style="font-size:.66rem;padding:4px 8px">⬆️</button>
+      ${bot.laufend
+        ? `<button class="btn btn-red" onclick="botStop()" style="font-size:.68rem;padding:4px 12px">⏹ Stoppen</button>`
+        : `<button class="btn btn-green" onclick="botDeploy()" style="font-size:.68rem;padding:4px 12px">▶️ Starten</button>`
+      }
+      <button class="btn btn-primary" onclick="botExportConfig()" title="Export" style="font-size:.65rem;padding:4px 8px">⬇️</button>
+      <button class="btn btn-primary" onclick="botImportConfig()" title="Import" style="font-size:.65rem;padding:4px 8px">⬆️</button>
     </div>
-    <div id="bot-status-bar" style="display:none;padding:5px 18px;font-size:.68rem;font-family:var(--mono);background:#052818;border-bottom:1px solid var(--green2);color:var(--green)"></div>
+    <div class="bot-status ${statusCls}" id="bot-status-bar">${statusTxt}</div>
     <div class="be-body">
-      <div id="trig-list">${bot.triggers.map((t,i)=>renderTrigCard(bot,t,i)).join('')}</div>
+      <div id="trig-list">${(bot.triggers||[]).map((t,i)=>renderTrigCard(bot,t,i)).join('')}</div>
       <button class="be-addtrig" onclick="botAddTrig()">+ Trigger hinzufügen</button>
     </div>`;
   document.getElementById('botEditor').innerHTML = html;
@@ -3189,48 +3183,38 @@ function botSetting(key, val) {
   b.settings[key] = val; _saveBots();
 }
 
-// ── Triggers ──────────────────────────────────────────────────
-function _trigIds(bot) { return bot.triggers.map(t => t.id); }
-
+// ── Trigger Cards ─────────────────────────────────────────────
 function renderTrigCard(bot, t, i) {
-  const condCount = t.bedingungen?.length ?? 0;
-  const actCount  = t.aktionen?.length ?? 0;
+  const condN = (t.bedingungen||[]).length;
+  const actN  = (t.aktionen||[]).length;
   return `<div class="trig-card ${t.aktiv?'trig-on':''}" id="tc-${t.id}">
     <div class="trig-head" onclick="trigToggleBody('${t.id}')">
       <input type="checkbox" ${t.aktiv?'checked':''} onclick="event.stopPropagation();trigField('${t.id}','aktiv',this.checked)" style="accent-color:var(--purple)">
-      <span class="trig-label">${escHtml(t.name||'Trigger')}</span>
-      <span class="trig-meta">${condCount} Bed. · ${actCount} Akt.</span>
-      <button onclick="event.stopPropagation();trigDelete('${t.id}')" class="rm-btn">✕</button>
+      <span class="trig-label" id="tlabel-${t.id}">${escHtml(t.name||'Trigger')}</span>
+      <span class="trig-meta">${condN} Bedingung${condN!==1?'en':''} · ${actN} Aktion${actN!==1?'en':''}</span>
+      <button onclick="event.stopPropagation();trigDelete('${t.id}')" class="rm-btn" title="Trigger löschen">✕</button>
     </div>
     <div class="trig-body" id="tb-${t.id}">
-      <div class="bot-field" style="margin-bottom:10px;display:flex;gap:8px;align-items:center">
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
         <label style="font-size:.65rem;color:var(--text3)">Name:</label>
         <input class="cf cf-w160" value="${escHtml(t.name||'')}" oninput="trigField('${t.id}','name',this.value)" placeholder="Trigger-Name">
-        <label style="font-size:.65rem;color:var(--text3)">Delay:</label>
-        <input class="cf cf-w80" type="number" value="${t.delay??0}" oninput="trigField('${t.id}','delay',+this.value)" placeholder="ms"> ms
+        <label style="font-size:.65rem;color:var(--text3)">Basis-Delay:</label>
+        <input class="cf cf-w80" type="number" value="${t.delay??0}" oninput="trigField('${t.id}','delay',+this.value)"> ms
       </div>
 
-      <!-- Bedingungen -->
       <div class="te-section">
-        <div class="te-section-title">🔎 Bedingungen (alle müssen zutreffen)
-          <button onclick="trigAddCond('${t.id}','wort')">+ Wort</button>
+        <div class="te-section-title">🔎 Bedingungen <small style="font-weight:normal;text-transform:none;letter-spacing:0">(alle müssen zutreffen)</small>
+          <button onclick="trigAddCond('${t.id}','wort')">+ Wort/Chat</button>
           <button onclick="trigAddCond('${t.id}','zone')">+ Zone</button>
           <button onclick="trigAddCond('${t.id}','item_traegt')">+ Item trägt</button>
           <button onclick="trigAddCond('${t.id}','trigger_war')">+ Vortrigger</button>
         </div>
-        <div id="conds-${t.id}">${(t.bedingungen||[]).map((c,ci)=>renderCond(t.id,c,ci,bot)).join('')}</div>
+        <div id="conds-${t.id}">${(t.bedingungen||[]).map((c,ci)=>renderCond(bot,t.id,c,ci)).join('')}</div>
       </div>
 
-      <!-- Aktionen -->
       <div class="te-section">
         <div class="te-section-title">⚡ Aktionen
-          <button onclick="trigAddAct('${t.id}','chat')">+ Chat</button>
-          <button onclick="trigAddAct('${t.id}','emote')">+ Emote</button>
-          <button onclick="trigAddAct('${t.id}','whisper')">+ Whisper</button>
-          <button onclick="trigAddAct('${t.id}','item')">+ Item</button>
-          <button onclick="trigAddAct('${t.id}','curse')">+ Curse</button>
-          <button onclick="trigAddAct('${t.id}','profil')">+ Profil</button>
-          <button onclick="trigAddAct('${t.id}','item_entf')">+ Entfernen</button>
+          <button onclick="trigAddAct('${t.id}')">+ Aktion</button>
         </div>
         <div id="acts-${t.id}">${(t.aktionen||[]).map((a,ai)=>renderAct(t.id,a,ai)).join('')}</div>
       </div>
@@ -3238,157 +3222,175 @@ function renderTrigCard(bot, t, i) {
   </div>`;
 }
 
-function renderCond(tid, c, ci, bot) {
-  const trigs = bot?.triggers ?? _selBot()?.triggers ?? [];
+// ── Conditions ────────────────────────────────────────────────
+function renderCond(bot, tid, c, ci) {
   let inner = '';
   if (c.typ === 'wort') {
-    inner = `<input class="cf cf-w120" value="${escHtml(c.wort||'')}" oninput="condField('${tid}',${ci},'wort',this.value)" placeholder="Triggerwort">
+    inner = `
+      <input class="cf cf-w120" value="${escHtml(c.wort||'')}" oninput="condField('${tid}',${ci},'wort',this.value)" placeholder="Triggerwort (lowercase)">
       <select class="cf" onchange="condField('${tid}',${ci},'typ_msg',this.value)">
-        <option value="any" ${c.typ_msg==='any'?'selected':''}>Chat/Emote/Whisper</option>
-        <option value="chat" ${c.typ_msg==='chat'?'selected':''}>Nur Chat</option>
-        <option value="emote" ${c.typ_msg==='emote'?'selected':''}>Nur Emote</option>
+        <option value="any"     ${(!c.typ_msg||c.typ_msg==='any')?'selected':''}>Chat+Emote+Whisper</option>
+        <option value="chat"    ${c.typ_msg==='chat'?'selected':''}>Nur Chat</option>
+        <option value="emote"   ${c.typ_msg==='emote'?'selected':''}>Nur Emote</option>
         <option value="whisper" ${c.typ_msg==='whisper'?'selected':''}>Nur Whisper</option>
       </select>`;
   } else if (c.typ === 'zone') {
-    inner = `<input class="cf cf-w80" value="${escHtml(c.name||'')}" oninput="condField('${tid}',${ci},'name',this.value)" placeholder="Zonenname">
-      X<input class="cf" style="width:44px" type="number" value="${c.x??0}" oninput="condField('${tid}',${ci},'x',+this.value)">
-      Y<input class="cf" style="width:44px" type="number" value="${c.y??0}" oninput="condField('${tid}',${ci},'y',+this.value)">
-      ±<input class="cf" style="width:36px" type="number" value="${c.puffer??1}" oninput="condField('${tid}',${ci},'puffer',+this.value)">`;
+    inner = `
+      <input class="cf cf-w100" value="${escHtml(c.name||'')}" oninput="condField('${tid}',${ci},'name',this.value)" placeholder="Zonenname (optional)">
+      X<input class="cf" style="width:46px" type="number" value="${c.x??0}" oninput="condField('${tid}',${ci},'x',+this.value)">
+      Y<input class="cf" style="width:46px" type="number" value="${c.y??0}" oninput="condField('${tid}',${ci},'y',+this.value)">
+      ±<input class="cf" style="width:38px" type="number" value="${c.puffer??1}" oninput="condField('${tid}',${ci},'puffer',+this.value)" title="Puffer">`;
   } else if (c.typ === 'item_traegt') {
-    inner = `<span style="font-size:.68rem;color:var(--text3)">${c.gruppe?escHtml(c.gruppe)+'/':''}<b>${escHtml(c.item||'?')}</b></span>
-      <button onclick="ipickerOpen(null,null,'item',v=>{condField('${tid}',${ci},'item',v.name);condField('${tid}',${ci},'gruppe',v.group);trigRerender('${tid}');})" style="font-size:.62rem;padding:2px 6px;background:var(--pd);border:none;color:var(--pl);border-radius:4px;cursor:pointer">📦 Wählen</button>`;
+    inner = `
+      <span style="font-size:.68rem;color:var(--text2)">${c.gruppe?escHtml(c.gruppe)+' / ':''}<b>${escHtml(c.item||'–')}</b></span>
+      <button onclick="ipickerOpen('item',v=>{condField('${tid}',${ci},'item',v.asset||v.name);condField('${tid}',${ci},'gruppe',v.group);condRerender('${tid}');})" style="font-size:.62rem;padding:2px 7px;background:var(--pd);border:none;color:var(--pl);border-radius:4px;cursor:pointer">📦 Wählen</button>`;
   } else if (c.typ === 'trigger_war') {
-    inner = `<select class="cf cf-w160" onchange="condField('${tid}',${ci},'trigId',this.value)">
-      <option value="">– Trigger wählen –</option>
-      ${trigs.filter(t=>t.id!==tid).map(t=>`<option value="${t.id}" ${c.trigId===t.id?'selected':''}>${escHtml(t.name||t.id)}</option>`).join('')}
-    </select>
-    <span style="font-size:.62rem;color:var(--text3)">wurde ausgelöst</span>`;
+    const trigs = bot?.triggers ?? [];
+    const opts = trigs.filter(t=>t.id!==tid).map(t=>`<option value="${t.id}" ${c.trigId===t.id?'selected':''}>${escHtml(t.name||t.id)}</option>`).join('');
+    inner = `
+      <select class="cf cf-w160" onchange="condField('${tid}',${ci},'trigId',this.value)">
+        <option value="">– Trigger wählen –</option>${opts}
+      </select>
+      <span style="font-size:.62rem;color:var(--text3)">muss zuerst ausgelöst worden sein</span>`;
   }
+  const icons = {wort:'💬',zone:'🗺️',item_traegt:'👗',trigger_war:'🔗'};
   return `<div class="cond-card cond-op">
     <div class="card-fields">
-      <span style="font-size:.62rem;font-weight:600;color:var(--purple);margin-right:4px">${condIcon(c.typ)}</span>
+      <span style="font-size:.7rem;font-weight:600;color:var(--purple);flex-shrink:0">${icons[c.typ]??'❓'}</span>
       ${inner}
     </div>
     <button class="rm-btn" onclick="condRemove('${tid}',${ci})">✕</button>
   </div>`;
 }
 
-function condIcon(typ) {
-  return {wort:'💬',zone:'🗺️',item_traegt:'👗',trigger_war:'🔗'}[typ]??'❓';
-}
-
+// ── Actions ───────────────────────────────────────────────────
 function renderAct(tid, a, ai) {
-  const icon = {chat:'💬',emote:'✨',whisper:'🤫',item:'📦',curse:'🔮',profil:'👗',item_entf:'🗑️'}[a.typ]??'❓';
-  let inner = `<input class="cf cf-w80" type="number" value="${a.delay??0}" oninput="actField('${tid}',${ai},'delay',+this.value)" placeholder="ms" title="Delay ms"> ms `;
+  // Unified action with type selector + context fields
+  const types = [
+    ['chat','💬 Chat senden'],['emote','✨ Emote senden'],['whisper','🤫 Whisper senden'],
+    ['item','📦 Item / Curse / Profil anlegen'],['item_entf','🗑️ Item entfernen'],
+  ];
+  const typeOpts = types.map(([v,l])=>`<option value="${v}" ${a.typ===v?'selected':''}>${l}</option>`).join('');
+
+  let extra = '';
   if (['chat','emote','whisper'].includes(a.typ)) {
-    inner += `<textarea class="cf cf-flex" rows="2" oninput="actField('${tid}',${ai},'text',this.value)" placeholder="{name} {wort} {typ} {x} {y}">${escHtml(a.text||'')}</textarea>`;
+    extra = `<textarea class="cf" style="width:100%;resize:vertical;min-height:44px;margin-top:4px" rows="2"
+        oninput="actField('${tid}',${ai},'text',this.value)"
+        placeholder="{name} schrieb: {wort} – Pos: {x}/{y}">${escHtml(a.text||'')}</textarea>
+      <div style="font-size:.59rem;color:var(--text3);margin-top:2px">Variablen: {name} {wort} {typ} {x} {y}</div>`;
   } else if (a.typ === 'item') {
-    inner += `<span style="font-size:.68rem;color:var(--text3)">${a.gruppe?escHtml(a.gruppe)+'/':''}<b>${escHtml(a.item||'–')}</b></span>
-      <input class="cf" type="color" value="${a.farbe||'#ffffff'}" oninput="actField('${tid}',${ai},'farbe',this.value)" style="width:28px;padding:1px;cursor:pointer">
-      <button onclick="ipickerOpen('${tid}',${ai},'item',v=>{actField('${tid}',${ai},'item',v.name);actField('${tid}',${ai},'gruppe',v.group);trigRerender('${tid}');})" style="font-size:.62rem;padding:2px 6px;background:var(--pd);border:none;color:var(--pl);border-radius:4px;cursor:pointer">📦 Aus Cache</button>
-      <button onclick="switchTab('items');showStatus('Item Manager geöffnet','')" style="font-size:.62rem;padding:2px 6px;background:var(--bg3);border:1px solid var(--border2);color:var(--text3);border-radius:4px;cursor:pointer" title="Zum Item Manager springen">🔧 IM</button>`;
-  } else if (a.typ === 'curse') {
-    inner += `<span style="font-size:.68rem;color:var(--text3)"><b>${escHtml(a.curseName||a.curseKey||'–')}</b></span>
-      <button onclick="ipickerOpen('${tid}',${ai},'curse',v=>{actField('${tid}',${ai},'curseKey',v.key);actField('${tid}',${ai},'curseName',v.name);actField('${tid}',${ai},'curseEntry',v.entry);trigRerender('${tid}');})" style="font-size:.62rem;padding:2px 6px;background:#1e1040;border:1px solid var(--purple);color:var(--pl);border-radius:4px;cursor:pointer">🔮 Wählen</button>`;
-  } else if (a.typ === 'profil') {
-    const opts = Object.keys(PROFILES).map(p=>`<option value="${escHtml(p)}" ${a.profil===p?'selected':''}>${escHtml(p)}</option>`).join('');
-    inner += `<select class="cf cf-w160" onchange="actField('${tid}',${ai},'profil',this.value)"><option value="">– Profil wählen –</option>${opts}</select>`;
+    const label = a.profilName ? `👗 ${a.profilName}` : a.curseName ? `🔮 ${a.curseName}` : a.item ? `📦 ${a.gruppe||'?'}/${a.item}` : '– nichts gewählt –';
+    extra = `<div style="display:flex;gap:6px;align-items:center;margin-top:4px;flex-wrap:wrap">
+        <span style="font-size:.7rem;color:var(--text2);flex:1">${escHtml(label)}</span>
+        <button onclick="ipickerOpenForAct('${tid}',${ai})" style="font-size:.63rem;padding:3px 9px;background:var(--pd);border:none;color:var(--pl);border-radius:5px;cursor:pointer">📂 Auswählen…</button>
+        ${a.item ? `<input class="cf" type="color" value="${a.farbe||'#ffffff'}" oninput="actField('${tid}',${ai},'farbe',this.value)" style="width:28px;padding:1px;cursor:pointer" title="Farbe">` : ''}
+      </div>`;
   } else if (a.typ === 'item_entf') {
-    inner += `<input class="cf cf-w120" value="${escHtml(a.gruppe||'')}" oninput="actField('${tid}',${ai},'gruppe',this.value)" placeholder="Gruppe (z.B. ItemMouth)">`;
+    extra = `<input class="cf" style="width:100%;margin-top:4px" value="${escHtml(a.gruppe||'')}"
+        oninput="actField('${tid}',${ai},'gruppe',this.value)" placeholder="Gruppe (z.B. ItemMouth, ItemArms …)">`;
   }
-  return `<div class="act-card">
-    <div class="card-fields"><span class="act-icon">${icon}</span>${inner}</div>
+
+  return `<div class="act-card" id="act-${tid}-${ai}">
+    <div style="flex:1">
+      <div style="display:flex;gap:6px;align-items:center">
+        <select class="cf" style="flex:1" onchange="actChangeType('${tid}',${ai},this.value)">${typeOpts}</select>
+        <input class="cf cf-w80" type="number" value="${a.delay??0}" oninput="actField('${tid}',${ai},'delay',+this.value)" title="Delay in ms"> ms
+      </div>
+      ${extra}
+    </div>
     <button class="rm-btn" onclick="actRemove('${tid}',${ai})">✕</button>
   </div>`;
 }
 
-// ── Trigger CRUD ──────────────────────────────────────────────
+// ── Trigger CRUD helpers ───────────────────────────────────────
 function botAddTrig() {
   const b = _selBot(); if (!b) return;
-  const t = { id: 't'+Date.now(), name:'Neuer Trigger', aktiv:true, delay:0, bedingungen:[], aktionen:[] };
-  b.triggers.push(t);
-  _saveBots();
-  renderBotEditor();
-  // Open new trigger body
+  const t = { id:'t'+Date.now(), name:'Neuer Trigger', aktiv:true, delay:0, bedingungen:[], aktionen:[] };
+  b.triggers.push(t); _saveBots(); renderBotEditor();
   setTimeout(() => {
     document.getElementById('tb-'+t.id)?.classList.add('open');
     document.getElementById('tc-'+t.id)?.scrollIntoView({behavior:'smooth',block:'start'});
   }, 50);
 }
 
-function trigToggleBody(tid) {
-  document.getElementById('tb-'+tid)?.classList.toggle('open');
-}
+function trigToggleBody(tid) { document.getElementById('tb-'+tid)?.classList.toggle('open'); }
 
 function trigField(tid, field, val) {
   const b = _selBot(); if (!b) return;
   const t = b.triggers.find(x=>x.id===tid); if (!t) return;
-  t[field] = val;
-  _saveBots();
-  if (field === 'aktiv' || field === 'name') {
-    // Update card header without full re-render
-    const card = document.getElementById('tc-'+tid);
-    if (card) {
-      card.classList.toggle('trig-on', val === true || val === 'true');
-      const label = card.querySelector('.trig-label');
-      if (label && field==='name') label.textContent = val||'Trigger';
-    }
+  t[field] = val; _saveBots();
+  if (field === 'aktiv') {
+    document.getElementById('tc-'+tid)?.classList.toggle('trig-on', !!val);
   }
-}
-
-function trigRerender(tid) {
-  const b = _selBot(); if (!b) return;
-  const t = b.triggers.find(x=>x.id===tid); if (!t) return;
-  const i = b.triggers.indexOf(t);
-  const card = document.getElementById('tc-'+tid);
-  if (!card) return;
-  const wasOpen = document.getElementById('tb-'+tid)?.classList.contains('open');
-  card.outerHTML = renderTrigCard(b, t, i);
-  if (wasOpen) document.getElementById('tb-'+tid)?.classList.add('open');
+  if (field === 'name') {
+    const el = document.getElementById('tlabel-'+tid);
+    if (el) el.textContent = val || 'Trigger';
+  }
 }
 
 function trigDelete(tid) {
   const b = _selBot(); if (!b) return;
   const t = b.triggers.find(x=>x.id===tid);
   if (!t || !confirm(`Trigger "${t.name||tid}" löschen?`)) return;
-  b.triggers = b.triggers.filter(x=>x.id!==tid);
-  _saveBots();
+  b.triggers = b.triggers.filter(x=>x.id!==tid); _saveBots();
   document.getElementById('tc-'+tid)?.remove();
 }
 
-// ── Conditions ────────────────────────────────────────────────
+function trigRerender(tid) {
+  const b = _selBot(); if (!b) return;
+  const t = b.triggers.find(x=>x.id===tid); if (!t) return;
+  const i = b.triggers.indexOf(t);
+  const card = document.getElementById('tc-'+tid); if (!card) return;
+  const wasOpen = document.getElementById('tb-'+tid)?.classList.contains('open');
+  const tmp = document.createElement('div');
+  tmp.innerHTML = renderTrigCard(b, t, i);
+  card.replaceWith(tmp.firstElementChild);
+  if (wasOpen) document.getElementById('tb-'+tid)?.classList.add('open');
+}
+
+// Conditions
 function trigAddCond(tid, typ) {
   const b = _selBot(); if (!b) return;
   const t = b.triggers.find(x=>x.id===tid); if (!t) return;
-  const defaults = {wort:{typ:'wort',wort:'',typ_msg:'any'},zone:{typ:'zone',name:'',x:0,y:0,puffer:1},item_traegt:{typ:'item_traegt',item:'',gruppe:''},trigger_war:{typ:'trigger_war',trigId:''}};
+  const defs = {
+    wort:       {typ:'wort', wort:'', typ_msg:'any'},
+    zone:       {typ:'zone', name:'', x:0, y:0, puffer:1},
+    item_traegt:{typ:'item_traegt', item:'', gruppe:''},
+    trigger_war:{typ:'trigger_war', trigId:''},
+  };
   t.bedingungen = t.bedingungen ?? [];
-  t.bedingungen.push(defaults[typ]??{typ});
+  t.bedingungen.push(defs[typ]??{typ});
   _saveBots();
-  document.getElementById('conds-'+tid).innerHTML = t.bedingungen.map((c,ci)=>renderCond(tid,c,ci,b)).join('');
+  document.getElementById('conds-'+tid).innerHTML = t.bedingungen.map((c,ci)=>renderCond(b,tid,c,ci)).join('');
   document.getElementById('tb-'+tid)?.classList.add('open');
 }
 
 function condField(tid, ci, field, val) {
   const b = _selBot(); if (!b) return;
   const t = b.triggers.find(x=>x.id===tid); if (!t) return;
-  t.bedingungen[ci][field] = val;
-  _saveBots();
+  if (!t.bedingungen[ci]) return;
+  t.bedingungen[ci][field] = val; _saveBots();
 }
 
 function condRemove(tid, ci) {
   const b = _selBot(); if (!b) return;
   const t = b.triggers.find(x=>x.id===tid); if (!t) return;
-  t.bedingungen.splice(ci,1);
-  _saveBots();
-  document.getElementById('conds-'+tid).innerHTML = t.bedingungen.map((c,ci2)=>renderCond(tid,c,ci2,b)).join('');
+  t.bedingungen.splice(ci,1); _saveBots();
+  document.getElementById('conds-'+tid).innerHTML = t.bedingungen.map((c,ci2)=>renderCond(b,tid,c,ci2)).join('');
 }
 
-// ── Actions ───────────────────────────────────────────────────
-function trigAddAct(tid, typ) {
+function condRerender(tid) {
+  const b = _selBot(); if (!b) return;
+  const t = b.triggers.find(x=>x.id===tid); if (!t) return;
+  document.getElementById('conds-'+tid).innerHTML = (t.bedingungen||[]).map((c,ci)=>renderCond(b,tid,c,ci)).join('');
+}
+
+// Actions
+function trigAddAct(tid) {
   const b = _selBot(); if (!b) return;
   const t = b.triggers.find(x=>x.id===tid); if (!t) return;
   t.aktionen = t.aktionen ?? [];
-  t.aktionen.push({typ, delay:0});
+  t.aktionen.push({typ:'chat', delay:0, text:''});
   _saveBots();
   document.getElementById('acts-'+tid).innerHTML = t.aktionen.map((a,ai)=>renderAct(tid,a,ai)).join('');
   document.getElementById('tb-'+tid)?.classList.add('open');
@@ -3398,25 +3400,62 @@ function actField(tid, ai, field, val) {
   const b = _selBot(); if (!b) return;
   const t = b.triggers.find(x=>x.id===tid); if (!t) return;
   if (!t.aktionen[ai]) return;
-  t.aktionen[ai][field] = val;
-  _saveBots();
+  t.aktionen[ai][field] = val; _saveBots();
+}
+
+function actChangeType(tid, ai, typ) {
+  const b = _selBot(); if (!b) return;
+  const t = b.triggers.find(x=>x.id===tid); if (!t) return;
+  const delay = t.aktionen[ai]?.delay ?? 0;
+  t.aktionen[ai] = {typ, delay}; _saveBots();
+  // Re-render just this action card
+  const el = document.getElementById('act-'+tid+'-'+ai);
+  if (el) { const tmp=document.createElement('div'); tmp.innerHTML=renderAct(tid,t.aktionen[ai],ai); el.replaceWith(tmp.firstElementChild); }
 }
 
 function actRemove(tid, ai) {
   const b = _selBot(); if (!b) return;
   const t = b.triggers.find(x=>x.id===tid); if (!t) return;
-  t.aktionen.splice(ai,1);
-  _saveBots();
+  t.aktionen.splice(ai,1); _saveBots();
   document.getElementById('acts-'+tid).innerHTML = t.aktionen.map((a,ai2)=>renderAct(tid,a,ai2)).join('');
 }
 
-// ── Item/Curse/Profile Picker ─────────────────────────────────
-function ipickerOpen(tid, ai, defaultTab, cb) {
-  _ipickerCb = cb;
+// ── Unified Item/Curse/Profile Picker ─────────────────────────
+function ipickerOpenForAct(tid, ai) {
+  ipickerOpen('item', v => {
+    const b = _selBot(); if (!b) return;
+    const t = b.triggers.find(x=>x.id===tid); if (!t||!t.aktionen[ai]) return;
+    const a = t.aktionen[ai];
+    // Clear old type data
+    delete a.item; delete a.gruppe; delete a.farbe;
+    delete a.curseKey; delete a.curseName; delete a.curseEntry;
+    delete a.profilName; delete a.profilItems;
+
+    if (v.type === 'item') {
+      a.item   = v.name;
+      a.gruppe = v.group;
+      a.farbe  = '#ffffff';
+    } else if (v.type === 'curse') {
+      a.curseKey  = v.key;
+      a.curseName = v.name;
+      a.curseEntry = v.entry;
+    } else if (v.type === 'profil') {
+      a.profilName  = v.name;
+      a.profilItems = PROFILES[v.name]?.items ?? [];
+    }
+    _saveBots();
+    // Re-render action card
+    const el = document.getElementById('act-'+tid+'-'+ai);
+    if (el) { const tmp=document.createElement('div'); tmp.innerHTML=renderAct(tid,a,ai); el.replaceWith(tmp.firstElementChild); }
+  });
+}
+
+function ipickerOpen(defaultTab, cb) {
+  _ipickerCb  = cb;
   _ipickerTab = defaultTab;
   document.getElementById('ipickerOverlay').style.display = 'flex';
   document.getElementById('ipickerSearch').value = '';
-  ipickerRenderTabs();
+  _ipickerRenderTabs();
   ipickerRender();
 }
 
@@ -3425,46 +3464,42 @@ function ipickerClose() {
   _ipickerCb = null;
 }
 
-function ipickerRenderTabs() {
-  const tabs = [
-    {id:'item', label:'📦 BC-Items'},
-    {id:'curse', label:'🔮 Curses'},
-    {id:'profil', label:'👗 Profile'},
-  ];
+function _ipickerRenderTabs() {
+  const tabs = [{id:'item',l:'📦 BC-Items'},{id:'curse',l:'🔮 Curses'},{id:'profil',l:'👗 Profile'}];
   document.getElementById('ipickerTabs').innerHTML = tabs.map(t=>
-    `<span class="ipicker-tab ${_ipickerTab===t.id?'on':''}" onclick="ipickerSetTab('${t.id}')">${t.label}</span>`
+    `<span class="ipicker-tab${_ipickerTab===t.id?' on':''}" onclick="ipickerSetTab('${t.id}')">${t.l}</span>`
   ).join('');
 }
 
 function ipickerSetTab(tab) {
-  _ipickerTab = tab;
-  ipickerRenderTabs();
-  ipickerRender();
+  if (tab === 'item') {
+    // If there's a pending action context, go to Item Manager with button
+    if (_ipickerCb) {
+      _trigPending = {cb: _ipickerCb};
+      _ipickerCb = null;
+    }
+    ipickerClose();
+    switchTab('items');
+    // Show "Zum Trigger hinzufügen" banner in item manager
+    _showTriggerAddBanner();
+    return;
+  }
+  _ipickerTab = tab; _ipickerRenderTabs(); ipickerRender();
 }
 
 function ipickerRender() {
   const search = (document.getElementById('ipickerSearch')?.value??'').toLowerCase();
   const el = document.getElementById('ipickerList');
+  if (!el) return;
   let html = '';
 
-  if (_ipickerTab === 'item') {
-    const rows = [];
-    for (const g in CACHE) for (const n in CACHE[g]) {
-      if (!search || n.toLowerCase().includes(search) || g.toLowerCase().includes(search)) rows.push({group:g,name:n});
-    }
-    rows.sort((a,b)=>a.name.localeCompare(b.name));
-    if (!rows.length) { el.innerHTML = '<div style="padding:20px;color:var(--text3);font-size:.72rem;text-align:center">Kein BC-Cache geladen. Bitte zuerst "Aus Spiel laden" klicken.</div>'; return; }
-    html = rows.slice(0,120).map(r=>`
-      <div class="ipicker-row" onclick="ipickerSelect({name:${JSON.stringify(r.name)},group:${JSON.stringify(r.group)}})">
-        <span class="ipicker-tag">${escHtml(r.group)}</span>
-        <span style="flex:1">${escHtml(r.name)}</span>
-      </div>`).join('');
-  } else if (_ipickerTab === 'curse') {
+  if (_ipickerTab === 'curse') {
     const entries = Object.entries(CURSE_DB).filter(([k,e])=>
-      !search||k.toLowerCase().includes(search)||(e.CraftName||'').toLowerCase().includes(search));
-    if (!entries.length) { el.innerHTML = '<div style="padding:20px;color:var(--text3);font-size:.72rem;text-align:center">Keine Curses gefunden. Bitte erst Craft & Curse scannen/importieren.</div>'; return; }
-    html = entries.slice(0,120).map(([k,e])=>`
-      <div class="ipicker-row" onclick="ipickerSelect({key:${JSON.stringify(k)},name:${JSON.stringify(e.CraftName||e.ItemName)},entry:${JSON.stringify(e)}})">
+      !search || k.toLowerCase().includes(search) || (e.CraftName||'').toLowerCase().includes(search) || (e.ItemName||'').toLowerCase().includes(search)
+    ).slice(0, 150);
+    if (!entries.length) { el.innerHTML='<div style="padding:20px;color:var(--text3);font-size:.72rem;text-align:center">Keine Curses. Bitte Craft & Curse scannen/importieren.</div>'; return; }
+    html = entries.map(([k,e])=>`
+      <div class="ipicker-row" onclick="ipickerSelect({type:'curse',key:${JSON.stringify(k)},name:${JSON.stringify(e.CraftName||e.ItemName)},entry:${JSON.stringify(e)}})">
         <span class="ipicker-tag purple">${escHtml(e.Gruppe||'?')}</span>
         <span style="flex:1">${escHtml(e.CraftName||e.ItemName)}</span>
         <span style="color:var(--text3);font-size:.6rem">${escHtml(e.Besitzer?.Name||'')}</span>
@@ -3472,9 +3507,9 @@ function ipickerRender() {
       </div>`).join('');
   } else if (_ipickerTab === 'profil') {
     const profiles = Object.keys(PROFILES).filter(p=>!search||p.toLowerCase().includes(search));
-    if (!profiles.length) { el.innerHTML = '<div style="padding:20px;color:var(--text3);font-size:.72rem;text-align:center">Keine Profile gefunden. Bitte zuerst ein Outfit-Profil speichern.</div>'; return; }
+    if (!profiles.length) { el.innerHTML='<div style="padding:20px;color:var(--text3);font-size:.72rem;text-align:center">Keine Profile. Zuerst ein Outfit-Profil speichern.</div>'; return; }
     html = profiles.map(p=>`
-      <div class="ipicker-row" onclick="ipickerSelect({profil:${JSON.stringify(p)}})">
+      <div class="ipicker-row" onclick="ipickerSelect({type:'profil',name:${JSON.stringify(p)}})">
         <span class="ipicker-tag green">👗</span>
         <span style="flex:1">${escHtml(p)}</span>
         <span style="color:var(--text3);font-size:.6rem">${PROFILES[p]?.date||''}</span>
@@ -3488,15 +3523,77 @@ function ipickerSelect(val) {
   ipickerClose();
 }
 
+// ── Item Manager Integration ──────────────────────────────────
+// Shows a banner in item manager: "Zum Trigger hinzufügen" per selected item
+function _showTriggerAddBanner() {
+  // Remove old banner if exists
+  document.getElementById('_trigBanner')?.remove();
+  if (!_trigPending) return;
+  const banner = document.createElement('div');
+  banner.id = '_trigBanner';
+  banner.style.cssText = 'position:fixed;bottom:0;left:0;right:0;z-index:400;background:#1e1040;border-top:2px solid var(--purple);padding:8px 18px;display:flex;align-items:center;gap:12px;font-size:.73rem';
+  banner.innerHTML = `<span style="color:var(--pl)">🎯 Item für Trigger wählen:</span>
+    <span style="color:var(--text3);flex:1">Klicke ein Item in der Sidebar, dann auf <b style="color:var(--pl)">➕ Zum Trigger</b></span>
+    <button onclick="_cancelTrigPending()" style="background:var(--rd);border:none;color:var(--red);border-radius:5px;padding:4px 10px;cursor:pointer;font-size:.68rem">✕ Abbrechen</button>`;
+  document.body.appendChild(banner);
+
+  // Patch the action buttons area to show "Zum Trigger" button
+  _patchItemManagerForTrigger();
+}
+
+function _patchItemManagerForTrigger() {
+  // Observe the btn-row to add our button when an item is selected
+  const _origBuildConf = window.buildConfigurator;
+  if (!_origBuildConf) return;
+  window.buildConfigurator = function(...args) {
+    _origBuildConf.apply(this, args);
+    _injectTriggerButton();
+  };
+}
+
+function _injectTriggerButton() {
+  if (!_trigPending) { _restoreBuildConf(); return; }
+  const btnRow = document.querySelector('.btn-row');
+  if (!btnRow || document.getElementById('_trigAddBtn')) return;
+  const btn = document.createElement('button');
+  btn.id = '_trigAddBtn';
+  btn.className = 'btn btn-green';
+  btn.style.cssText = 'min-width:130px;font-size:.8rem;border:2px solid var(--green)';
+  btn.textContent = '➕ Zum Trigger';
+  btn.onclick = _addCurrentItemToTrigger;
+  btnRow.appendChild(btn);
+}
+
+function _addCurrentItemToTrigger() {
+  if (!_trigPending || !window.CURRENT) { showStatus('❌ Kein Item ausgewählt','error'); return; }
+  const val = { type:'item', name: CURRENT.asset, group: CURRENT.group };
+  _trigPending.cb(val);
+  _cancelTrigPending();
+  switchTab('bot');
+  showStatus('✅ Item zum Trigger hinzugefügt','success');
+}
+
+let _origBuildConf = null;
+function _restoreBuildConf() {
+  if (_origBuildConf) { window.buildConfigurator = _origBuildConf; _origBuildConf = null; }
+}
+
+function _cancelTrigPending() {
+  _trigPending = null;
+  document.getElementById('_trigBanner')?.remove();
+  document.getElementById('_trigAddBtn')?.remove();
+  _restoreBuildConf();
+}
+
 // ── Config Export / Import ────────────────────────────────────
 function botExportConfig() {
   const b = _selBot(); if (!b) { showStatus('❌ Kein Bot ausgewählt','error'); return; }
-  const blob = new Blob([JSON.stringify(b, null, 2)], {type:'application/json'});
-  const url  = URL.createObjectURL(blob);
-  const a    = document.createElement('a');
-  a.href = url; a.download = 'BCBot_'+b.name.replace(/\s+/g,'_')+'_'+new Date().toISOString().slice(0,10)+'.json';
+  const blob = new Blob([JSON.stringify(b,null,2)],{type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href=url; a.download='BCBot_'+b.name.replace(/\W+/g,'_')+'_'+new Date().toISOString().slice(0,10)+'.json';
   a.click(); URL.revokeObjectURL(url);
-  showStatus('✅ Bot-Config exportiert','success');
+  showStatus('✅ Bot exportiert','success');
 }
 
 function botImportConfig() {
@@ -3507,20 +3604,15 @@ function botImportConfig() {
     r.onload = ev => {
       try {
         const d = JSON.parse(ev.target.result);
-        // Import as new bot or replace current
-        const b = _selBot();
-        if (b && confirm('Aktuellen Bot überschreiben? (Abbrechen = Als neuen Bot importieren)')) {
-          Object.assign(b, d, {id: b.id});
+        const cur = _selBot();
+        if (cur && confirm('Aktuellen Bot überschreiben?\n(Abbrechen = Als neuen Bot importieren)')) {
+          Object.assign(cur, d, {id:cur.id}); _selBotId = cur.id;
         } else {
-          d.id = 'b'+Date.now();
-          _bots.push(d);
-          _selBotId = d.id;
+          d.id = 'b'+Date.now(); _bots.push(d); _selBotId = d.id;
         }
-        _saveBots();
-        renderBotList();
-        renderBotEditor();
+        _saveBots(); renderBotList(); renderBotEditor();
         showStatus('✅ Bot importiert','success');
-      } catch(err) { showStatus('❌ Import fehlgeschlagen: '+err.message,'error'); }
+      } catch(err) { showStatus('❌ '+err.message,'error'); }
     };
     r.readAsText(e.target.files[0]);
   };
@@ -3530,169 +3622,124 @@ function botImportConfig() {
 // ── Deploy ────────────────────────────────────────────────────
 function _buildBotCode(bot) {
   const s = bot.settings;
-
-  // Serialize triggers with resolved entries
-  const triggers = bot.triggers.filter(t=>t.aktiv).map(t => ({
-    id: t.id,
-    name: t.name,
-    delay: t.delay??0,
+  const triggers = (bot.triggers||[]).filter(t=>t.aktiv).map(t => ({
+    id: t.id, name: t.name, delay: t.delay??0,
     bedingungen: (t.bedingungen||[]),
     aktionen: (t.aktionen||[]).map(a => {
-      if (a.typ==='curse' && a.curseKey && !a.curseEntry) {
-        return {...a, curseEntry: CURSE_DB[a.curseKey]??null};
-      }
-      if (a.typ==='profil' && a.profil) {
-        return {...a, profilItems: PROFILES[a.profil]?.items??[]};
-      }
+      // Resolve live references
+      if (a.typ==='item' && a.curseKey && !a.curseEntry) return {...a, curseEntry: CURSE_DB[a.curseKey]??null};
+      if (a.typ==='item' && a.profilName && (!a.profilItems||!a.profilItems.length)) return {...a, profilItems: PROFILES[a.profilName]?.items??[]};
       return a;
     }),
   }));
+  const safeId = bot.id.replace(/\W/g,'_');
+  const safeName = bot.name.replace(/'/g,"\\'");
 
-  return `
-(function(){
-if(window._BCBot_${bot.id}) { console.warn('[Bot:${bot.name}] Läuft bereits – stoppe zuerst'); return; }
-
-const _cfg = ${JSON.stringify({name:bot.name,modus:s.modus,hearChat:s.hearChat,hearEmote:s.hearEmote,hearWhisper:s.hearWhisper,nurEigene:s.nurEigene,logAktiv:s.logAktiv??true},null,0)};
-const _triggers = ${JSON.stringify(triggers,null,0)};
-const _firedMap = {}; // trigId → last fired timestamp
-
-function _log(...a){if(_cfg.logAktiv)console.log('[Bot:${bot.name}]',...a);}
-
-function _inZone(cond,C){
-  const p=cond.puffer??1;
-  return C.X>=cond.x-p&&C.X<=cond.x+p&&C.Y>=cond.y-p&&C.Y<=cond.y+p;
-}
-
-function _render(tmpl,v){
-  return (tmpl??'').replace(/{name}/g,v.name??'').replace(/{wort}/g,v.wort??'')
-    .replace(/{typ}/g,v.typ??'').replace(/{x}/g,v.x??'').replace(/{y}/g,v.y??'')
-    .replace(/{zone}/g,v.zone??'');
-}
-
-function _check(trig,text,typKey,sender){
-  for(const c of (trig.bedingungen??[])){
-    if(c.typ==='wort'){
-      const msgTyp=c.typ_msg??'any';
-      if(msgTyp!=='any'&&msgTyp!==typKey)return null;
-      if(!text.toLowerCase().includes(c.wort.toLowerCase()))return null;
-    } else if(c.typ==='zone'){
-      if(!_inZone(c,sender))return null;
-    } else if(c.typ==='item_traegt'){
-      const hasItem=sender.Appearance?.some(a=>a.Asset?.Name===c.item&&a.Asset?.Group?.Name===c.gruppe);
-      if(!hasItem)return null;
-    } else if(c.typ==='trigger_war'){
-      if(!_firedMap[c.trigId])return null;
-    }
+  return `(function(){
+const _BID=${JSON.stringify(safeId)};
+if(window['_BCBot_'+_BID]){console.warn('[Bot:${safeName}] Läuft bereits');return;}
+const _cfg=${JSON.stringify({hearChat:s.hearChat,hearEmote:s.hearEmote,hearWhisper:s.hearWhisper,nurEigene:s.nurEigene,logAktiv:s.logAktiv??true,modus:s.modus})};
+const _trigs=${JSON.stringify(triggers)};
+const _fired={};
+function _log(...a){if(_cfg.logAktiv)console.log('[Bot:${safeName}]',...a);}
+function _inZone(c,C){const p=c.puffer??1;return C.X>=c.x-p&&C.X<=c.x+p&&C.Y>=c.y-p&&C.Y<=c.y+p;}
+function _tpl(s,v){return(s??'').replace(/{name}/gi,v.name??'').replace(/{wort}/gi,v.wort??'').replace(/{typ}/gi,v.typ??'').replace(/{x}/gi,v.x??'').replace(/{y}/gi,v.y??'').replace(/{zone}/gi,v.zone??'');}
+function _ok(trig,text,typKey,C){
+  for(const c of(trig.bedingungen??[])){
+    if(c.typ==='wort'){const m=c.typ_msg||'any';if(m!=='any'&&m!==typKey)return false;if(c.wort&&!text.toLowerCase().includes(c.wort.toLowerCase()))return false;}
+    else if(c.typ==='zone'){if(!_inZone(c,C))return false;}
+    else if(c.typ==='item_traegt'){const has=(C.Appearance??[]).some(a=>a.Asset?.Name===c.item);if(!has)return false;}
+    else if(c.typ==='trigger_war'){if(!_fired[c.trigId])return false;}
   }
   return true;
 }
-
 function _run(trig,vars){
-  _log('🎯 "'+trig.name+'" ausgelöst von '+vars.name);
-  _firedMap[trig.id]=Date.now();
+  _log('\\u{1F3AF} "'+trig.name+'" ausgelöst von '+vars.name);
+  _fired[trig.id]=Date.now();
   (trig.aktionen??[]).forEach(a=>{
     setTimeout(()=>{
-      const C=vars.charakter??Player;
+      const C=vars.C??Player;
       try{
-        if(a.typ==='chat'){const t=_render(a.text,vars);_log('💬',t);ServerSend('ChatRoomChat',{Content:t,Type:'Chat'});}
-        else if(a.typ==='emote'){const t=_render(a.text,vars);_log('✨',t);ServerSend('ChatRoomChat',{Content:t,Type:'Emote'});}
-        else if(a.typ==='whisper'){const t=_render(a.text,vars);_log('🤫',t);ServerSend('ChatRoomChat',{Content:t,Type:'Whisper',Target:C.MemberNumber});}
+        if(a.typ==='chat'){const t=_tpl(a.text,vars);_log('\\u{1F4AC}',t);ServerSend('ChatRoomChat',{Content:t,Type:'Chat'});}
+        else if(a.typ==='emote'){const t=_tpl(a.text,vars);_log('\\u{2728}',t);ServerSend('ChatRoomChat',{Content:t,Type:'Emote'});}
+        else if(a.typ==='whisper'){const t=_tpl(a.text,vars);_log('\\u{1F917}',t);ServerSend('ChatRoomChat',{Content:t,Type:'Whisper',Target:C.MemberNumber});}
+        else if(a.typ==='item_entf'){_log('\\u{1F5D1}',a.gruppe,'von',C.Name);InventoryRemove(C,a.gruppe);CharacterRefresh(C);ChatRoomCharacterUpdate(C);}
         else if(a.typ==='item'){
-          let col=a.farbe??'#ffffff';
-          _log('📦 Anlegen:',a.item,'→',C.Name);
-          InventoryWear(C,a.item,a.gruppe,col,0,Player.MemberNumber);
-          CharacterRefresh(C);ChatRoomCharacterUpdate(C);
+          if(a.curseName||a.curseKey){
+            const e=a.curseEntry;if(!e)return;
+            let col=e.Farbe;if(typeof col==='string'&&col.includes(','))col=col.split(',');
+            _log('\\u{1F52E} Curse:',e.CraftName,'\\u{2192}',C.Name);
+            InventoryWear(C,e.ItemName,e.Gruppe,col,0,Player.MemberNumber,e.Craft);
+            CharacterRefresh(C);ChatRoomCharacterUpdate(C);
+          } else if(a.profilName){
+            _log('\\u{1F457} Profil:',a.profilName,'\\u{2192}',C.Name);
+            (a.profilItems??[]).forEach(item=>{
+              let col=item.colors??'#ffffff';
+              InventoryWear(C,item.asset,item.group,col,0,Player.MemberNumber);
+              CharacterRefresh(C);
+            });
+            ChatRoomCharacterUpdate(C);
+          } else if(a.item){
+            let col=a.farbe??'#ffffff';
+            _log('\\u{1F4E6} Item:',a.item,'\\u{2192}',C.Name);
+            InventoryWear(C,a.item,a.gruppe,col,0,Player.MemberNumber);
+            CharacterRefresh(C);ChatRoomCharacterUpdate(C);
+          }
         }
-        else if(a.typ==='curse'){
-          const e=a.curseEntry;if(!e)return;
-          let col=e.Farbe;if(typeof col==='string'&&col.includes(','))col=col.split(',');
-          _log('🔮 Curse:',e.CraftName,'→',C.Name);
-          InventoryWear(C,e.ItemName,e.Gruppe,col,0,Player.MemberNumber,e.Craft);
-          CharacterRefresh(C);ChatRoomCharacterUpdate(C);
-        }
-        else if(a.typ==='profil'){
-          _log('👗 Profil:',a.profil,'→',C.Name);
-          (a.profilItems??[]).forEach(item=>{
-            const cfg2=item.cfg;if(!cfg2)return;
-            let col=cfg2.Color;if(typeof col==='string'&&col.includes(','))col=col.split(',');
-            InventoryWear(C,item.asset,item.group,col,0,Player.MemberNumber,cfg2.Craft??undefined);
-            CharacterRefresh(C);
-          });
-          ChatRoomCharacterUpdate(C);
-        }
-        else if(a.typ==='item_entf'){
-          _log('🗑️ Entfernen:',a.gruppe,'von',C.Name);
-          InventoryRemove(C,a.gruppe);CharacterRefresh(C);ChatRoomCharacterUpdate(C);
-        }
-      }catch(ex){console.error('[Bot:${bot.name}] Aktion fehlgeschlagen:',ex.message);}
+      }catch(ex){console.error('[Bot:${safeName}]',a.typ,'Fehler:',ex.message);}
     },trig.delay+(a.delay??0));
   });
 }
-
-function _process(rohText,typKey,sender){
-  const text=rohText.toLowerCase().replace(/^\\*|\\*$/g,'').replace(/^\\/w\\s+\\S+\\s*/i,'').trim();
-  _triggers.forEach(trig=>{
-    if(_check(trig,text,typKey,sender)){
-      const typLabel={chat:'💬 Chat',emote:'✨ Emote',whisper:'🤫 Whisper'}[typKey]??typKey;
-      _run(trig,{name:sender.Name,wort:text,typ:typLabel,x:sender.X,y:sender.Y,zone:'',charakter:sender});
-    }
+function _proc(raw,typKey,C){
+  if(!raw)return;
+  const text=raw.replace(/^\\*|\\*\$/g,'').replace(/^\\/w\\s+\\S+\\s*/i,'').trim();
+  const typLabel={chat:'💬 Chat',emote:'✨ Emote',whisper:'🤫 Whisper'}[typKey]??typKey;
+  _trigs.forEach(trig=>{
+    if(_ok(trig,text,typKey,C))_run(trig,{name:C.Name,wort:text,typ:typLabel,x:C.X??'',y:C.Y??'',zone:'',C});
   });
 }
-
-const _mod=bcModSdk.registerMod({name:'BCBot_${bot.id}',fullName:'${bot.name}',version:'1.0'});
-
-if(_cfg.nurEigene){
-  _mod.hookFunction('ChatRoomSendChat',0,(args,next)=>{
-    const inp=document.getElementById('InputChat');
-    const txt=inp?.value?.trim()??'';
-    if(!txt)return next(args);
-    const isEmote=txt.startsWith('*')&&txt.endsWith('*');
-    const isWhisper=txt.startsWith('/w ')||txt.startsWith('/whisper ');
-    const typKey=isEmote?'emote':isWhisper?'whisper':'chat';
-    if((_cfg.hearChat&&typKey==='chat')||(_cfg.hearEmote&&typKey==='emote')||(_cfg.hearWhisper&&typKey==='whisper')){
-      _process(txt,typKey,Player);
-    }
-    return next(args);
-  });
-} else {
-  ServerSocket.on('ChatRoomMessage',data=>{
-    if(!['Chat','Emote','Whisper'].includes(data.Type))return;
-    const typKey=data.Type.toLowerCase();
-    if((_cfg.hearChat&&typKey==='chat')||(_cfg.hearEmote&&typKey==='emote')||(_cfg.hearWhisper&&typKey==='whisper')){
-      const sender=ChatRoomCharacter.find(c=>c.MemberNumber===data.Sender)??(Player.MemberNumber===data.Sender?Player:null);
-      if(sender)_process(data.Content,typKey,sender);
-    }
-  });
-}
-
-window._BCBot_${bot.id}={stop:()=>{_mod.removePatches();delete window._BCBot_${bot.id};console.log('[Bot:${bot.name}] gestoppt');}};
-console.log('▶️ [Bot:${bot.name}] gestartet –',_triggers.length,'Trigger aktiv');
+// Always use ServerSocket – no hookFunction (R125 compatible)
+ServerSocket.on('ChatRoomMessage',data=>{
+  if(!['Chat','Emote','Whisper'].includes(data.Type))return;
+  const typKey=data.Type.toLowerCase();
+  if(typKey==='chat'&&!_cfg.hearChat)return;
+  if(typKey==='emote'&&!_cfg.hearEmote)return;
+  if(typKey==='whisper'&&!_cfg.hearWhisper)return;
+  if(_cfg.nurEigene&&data.Sender!==Player.MemberNumber)return;
+  const C=ChatRoomCharacter.find(c=>c.MemberNumber===data.Sender)??(Player.MemberNumber===data.Sender?Player:null);
+  if(C)_proc(data.Content,typKey,C);
+});
+window['_BCBot_'+_BID]={stop(){ServerSocket.off('ChatRoomMessage');delete window['_BCBot_'+_BID];console.log('[Bot:${safeName}] gestoppt');}};
+console.log('▶️ [Bot:${safeName}] gestartet –',_trigs.length,'Trigger aktiv');
 })();`;
 }
 
-function botDeploy() {
+function botDeployById(id) {
+  const b = _bots.find(x=>x.id===id); if (!b) return;
   if (!_connected) { showStatus('❌ Nicht mit BC verbunden','error'); return; }
-  const b = _selBot(); if (!b) { showStatus('❌ Kein Bot ausgewählt','error'); return; }
   bcSend({ type:'EXEC', code: _buildBotCode(b) });
-  b.aktiv = true;
-  _saveBots();
-  renderBotList();
-  const bar = document.getElementById('bot-status-bar');
-  if (bar) { bar.style.display='block'; bar.textContent='▶️ Bot "'+b.name+'" läuft – window._BCBot_'+b.id+'.stop() zum Stoppen'; }
+  b.laufend = true; _saveBots(); renderBotList();
+  if (_selBotId === id) {
+    const bar = document.getElementById('bot-status-bar');
+    if (bar) { bar.className='bot-status running'; bar.textContent='▶️ Bot "'+b.name+'" läuft'; }
+    // Re-render topbar button
+    renderBotEditor();
+  }
   showStatus('▶️ Bot "'+b.name+'" gestartet!','success');
 }
 
-function botStop() {
+function botStopById(id) {
+  const b = _bots.find(x=>x.id===id); if (!b) return;
   if (!_connected) { showStatus('❌ Nicht mit BC verbunden','error'); return; }
-  const b = _selBot(); if (!b) { showStatus('❌ Kein Bot ausgewählt','error'); return; }
-  bcSend({ type:'EXEC', code: 'if(window._BCBot_'+b.id+')window._BCBot_'+b.id+'.stop();' });
-  b.aktiv = false;
-  _saveBots();
-  renderBotList();
-  const bar = document.getElementById('bot-status-bar');
-  if (bar) { bar.style.display='none'; }
+  const safeId = b.id.replace(/\W/g,'_');
+  bcSend({ type:'EXEC', code:`if(window['_BCBot_${safeId}'])window['_BCBot_${safeId}'].stop();` });
+  b.laufend = false; _saveBots(); renderBotList();
+  if (_selBotId === id) renderBotEditor();
   showStatus('⏹ Bot "'+b.name+'" gestoppt','success');
 }
+
+function botDeploy() { const b=_selBot(); if(b) botDeployById(b.id); }
+function botStop()   { const b=_selBot(); if(b) botStopById(b.id);   }
 
 </script>
 </body>
