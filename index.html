@@ -3227,6 +3227,11 @@ function logClearFiltered() {
 
 function logClearAll() {
   window._BCBotLog.length = 0;
+  // Auch Bot-States in BC zurücksetzen (alle laufenden Bots)
+  _bots.filter(b=>b.laufend).forEach(b=>{
+    const safeId = b.id.replace(/\W/g,'_');
+    bcSend({ type:'EXEC', code:`if(window['_BCBot_${safeId}'])window['_BCBot_${safeId}'].clearState();else{delete window['__BCKBotState_${safeId}'];}` });
+  });
   renderLogTab();
   const btn = document.getElementById('tab-log-btn');
   if (btn) btn.textContent = '📋 Logs';
@@ -3519,21 +3524,51 @@ function renderAct(tid, a, ai) {
       <div class="tp-slot-list" id="tpslots-${tid}-${ai}">${slotsHtml}</div>
       <button class="tp-slot-add-btn" onclick="tpSlotAdd('${tid}',${ai})">+ Position / Fallback hinzufügen</button>`;
   }
+  }
 
-  // Bei Fehler
+  // Chat/Emote/Whisper sind immer erfolgreich → kein Dann/Sonst
+  const canBranch = ['teleport','item','item_entf'].includes(a.typ);
+
+  // Dann/Sonst Inline-Nachrichten
+  function renderMsg(field, label, color, placeholder) {
+    const val = a[field] ?? '';
+    const typField = field+'_typ';
+    const mt = a[typField] ?? 'chat';
+    if (!canBranch) return '';
+    return `<div style="display:flex;gap:5px;align-items:center;margin-top:4px">
+      <span style="font-size:.62rem;font-weight:600;color:${color};white-space:nowrap;min-width:42px">${label}</span>
+      <select class="cf" style="width:86px;font-size:.62rem" onchange="actField('${tid}',${ai},'${typField}',this.value);actRerender('${tid}',${ai})">
+        <option value="nichts"   ${mt==='nichts'?'selected':''}>– nichts</option>
+        <option value="chat"    ${mt==='chat'?'selected':''}>💬 Chat</option>
+        <option value="emote"   ${mt==='emote'?'selected':''}>✨ Emote</option>
+        <option value="whisper" ${mt==='whisper'?'selected':''}>🤫 Whisper</option>
+      </select>
+      ${mt!=='nichts'?`<input class="cf cf-flex" style="font-size:.68rem" value="${escHtml(val)}"
+        oninput="actField('${tid}',${ai},'${field}',this.value)"
+        placeholder="${placeholder}">`:''}
+    </div>`;
+  }
+
+  const branchSection = canBranch ? `
+    <div style="margin-top:6px;padding-top:6px;border-top:1px dashed var(--border2)">
+      ${renderMsg('dann_msg','✅ Dann:','#5c5','{name} teleportiert nach X{x} Y{y}')}
+      ${renderMsg('sonst_msg','❌ Sonst:','#e55','Kein freier Platz für {name}!')}
+    </div>` : '';
+
+  // Bei Fehler (canBranch Aktionen können fehlschlagen)
   const bf = a.bei_fehler ?? 'ignorieren';
   const bfColors = {ignorieren:'var(--text3)',kette_stoppen:'#e8a020',trigger_ungueltig:'#e05050'};
-  const bfRow = `<div style="display:flex;gap:6px;align-items:center;margin-top:5px;padding-top:5px;border-top:1px dashed var(--border2)">
+  const bfRow = canBranch ? `<div style="display:flex;gap:6px;align-items:center;margin-top:4px">
     <span style="font-size:.6rem;color:var(--text3);white-space:nowrap">Wenn fehlschlägt:</span>
     <select class="cf" style="flex:1;color:${bfColors[bf]??'var(--text3)'}" onchange="actField('${tid}',${ai},'bei_fehler',this.value);actRerender('${tid}',${ai})">
-      <option value="ignorieren"        ${bf==='ignorieren'?'selected':''}>⬇️ Ignorieren – weiter mit nächster Aktion</option>
-      <option value="kette_stoppen"     ${bf==='kette_stoppen'?'selected':''}>⏹ Kette stoppen – keine weiteren Aktionen (Trigger zählt)</option>
-      <option value="trigger_ungueltig" ${bf==='trigger_ungueltig'?'selected':''}>❌ Trigger ungültig – nicht gezählt + Fallback läuft</option>
+      <option value="ignorieren"        ${bf==='ignorieren'?'selected':''}>⬇️ Weiter mit nächster Aktion</option>
+      <option value="kette_stoppen"     ${bf==='kette_stoppen'?'selected':''}>⏹ Kette stoppen (Trigger zählt)</option>
+      <option value="trigger_ungueltig" ${bf==='trigger_ungueltig'?'selected':''}>❌ Trigger ungültig (Fallback läuft)</option>
     </select>
-  </div>`;
+  </div>` : '';
 
   const bfBorder = {kette_stoppen:'#664400',trigger_ungueltig:'#660000'}[bf] ?? '';
-  return `<div class="act-card" id="act-${tid}-${ai}" style="${bfBorder?'border-color:'+bfBorder+';background:#0d0906;':''}" >
+  return `<div class="act-card" id="act-${tid}-${ai}" style="${bfBorder?'border-color:'+bfBorder+';background:#0d0906;':''}">
     <div style="flex:1">
       <div style="display:flex;gap:4px;align-items:center">
         <span style="display:flex;flex-direction:column;gap:1px;flex-shrink:0">
@@ -3545,6 +3580,7 @@ function renderAct(tid, a, ai) {
         <input class="cf cf-w80" type="number" value="${a.delay??0}" oninput="actField('${tid}',${ai},'delay',+this.value)" title="Delay nach vorheriger Aktion (ms)"> ms
       </div>
       ${extra}
+      ${branchSection}
       ${bfRow}
     </div>
     <button class="rm-btn" onclick="actRemove('${tid}',${ai})">✕</button>
@@ -4029,9 +4065,15 @@ const _BID='${safeId}';
 if(window['_BCBot_'+_BID]){console.warn('[Bot] Bereits aktiv – erst stoppen!');return;}
 const _cfg=${cfgJson};
 const _trigs=${trigsJson};
-const _fired={};       // trigId -> last fired timestamp (global latch)
-const _firedCnt={};   // trigId -> fire count (global)
-const _firedChar={};  // trigId_memberNum -> timestamp (pro Spieler)
+// State-Persistenz: beim Sync (Stop+Start) bleiben Fired-States erhalten
+const _stateKey='__BCKBotState_${safeId}';
+const _savedState=window[_stateKey]??{};
+const _fired    =_savedState.fired    ??{}; // trigId -> last timestamp (global latch)
+const _firedCnt =_savedState.firedCnt ??{}; // trigId -> fire count
+const _firedChar=_savedState.firedChar??{}; // trigId_memberNum -> timestamp
+const _roomEver =new Set(_savedState.roomEver??[]); // wer je im Raum war
+// State sofort zurückschreiben damit Referenz live ist
+window[_stateKey]={fired:_fired,firedCnt:_firedCnt,firedChar:_firedChar,roomEver:_roomEver};
 // Quick lookup: trigId -> trigger config (for charSpec)
 const _trigMap=Object.fromEntries(_trigs.map(t=>[t.id,t]));
 
@@ -4146,15 +4188,30 @@ function _applyItemAction(a, C){
 
 // Führt eine einzelne Aktion aus; gibt true/false zurück (Erfolg)
 function _execAct(a,C,vars){
+  let ok=false;
   try{
-    if(a.typ==='chat'){ServerSend('ChatRoomChat',{Content:_tpl(a.text,vars),Type:'Chat'});return true;}
-    if(a.typ==='emote'){ServerSend('ChatRoomChat',{Content:_tpl(a.text,vars),Type:'Emote'});return true;}
-    if(a.typ==='whisper'){ServerSend('ChatRoomChat',{Content:_tpl(a.text,vars),Type:'Whisper',Target:C.MemberNumber});return true;}
-    if(a.typ==='item_entf'){InventoryRemove(C,a.gruppe);CharacterRefresh(C);ChatRoomCharacterUpdate(C);return true;}
-    if(a.typ==='item'){_applyItemAction(a,C);return true;}
-    if(a.typ==='teleport'){return _teleport(a,C);} // _teleport returns true/false
-    return true;
-  }catch(ex){_log('\u26A0 Aktion '+a.typ+' Fehler:',ex.message);return false;}
+    if(a.typ==='chat'){ServerSend('ChatRoomChat',{Content:_tpl(a.text,vars),Type:'Chat'});ok=true;}
+    else if(a.typ==='emote'){ServerSend('ChatRoomChat',{Content:_tpl(a.text,vars),Type:'Emote'});ok=true;}
+    else if(a.typ==='whisper'){ServerSend('ChatRoomChat',{Content:_tpl(a.text,vars),Type:'Whisper',Target:C.MemberNumber});ok=true;}
+    else if(a.typ==='item_entf'){InventoryRemove(C,a.gruppe);CharacterRefresh(C);ChatRoomCharacterUpdate(C);ok=true;}
+    else if(a.typ==='item'){_applyItemAction(a,C);ok=true;}
+    else if(a.typ==='teleport'){ok=_teleport(a,C);}
+    else ok=true;
+  }catch(ex){_log('\u26A0 Aktion '+a.typ+' Fehler:',ex.message);ok=false;}
+  // Dann / Sonst Nachrichten senden
+  const msgField=ok?'dann_msg':'sonst_msg';
+  const msgTypField=msgField+'_typ';
+  const msgTyp=a[msgTypField]??'chat';
+  const msgText=a[msgField];
+  if(msgText&&msgTyp!=='nichts'){
+    setTimeout(()=>{
+      const txt=_tpl(msgText,vars);
+      if(msgTyp==='whisper')ServerSend('ChatRoomChat',{Content:txt,Type:'Whisper',Target:C.MemberNumber});
+      else if(msgTyp==='emote')ServerSend('ChatRoomChat',{Content:txt,Type:'Emote'});
+      else ServerSend('ChatRoomChat',{Content:txt,Type:'Chat'});
+    },200);
+  }
+  return ok;
 }
 
 // Aktionen sequenziell ausführen (Reihenfolge + bei_fehler)
@@ -4289,7 +4346,7 @@ const _itPoll=setInterval(()=>{
 
 // ── Spieler-Betritt Polling (feuert 1x beim Betreten) ──
 const _roomPrev=new Set((ChatRoomCharacter||[]).map(c=>c.MemberNumber));
-const _roomEver=new Set([..._roomPrev]); // alle die je im Raum waren (für neu/rejoin)
+// _roomEver is now part of persisted state (declared above)
 const _joinPoll=setInterval(()=>{
   const chars=ChatRoomCharacter||[];
   const cur=new Set(chars.map(c=>c.MemberNumber));
@@ -4447,7 +4504,16 @@ window['_BCBot_'+_BID]={
     }
     if(_msgH) ServerSocket.off('ChatRoomMessage',_msgH);
     delete window['_BCBot_'+_BID];
-    console.log('\u23F9\uFE0F [Bot:${safeName}] gestoppt');
+    // State im window-Objekt belassen – wird beim nächsten Start wiederverwendet
+    // (window[_stateKey] bleibt erhalten → Sync-safe)
+    // _roomEver auch persistieren
+    window[_stateKey].roomEver=[..._roomEver];
+    console.log('\u23F9\uFE0F [Bot:${safeName}] gestoppt | States gesichert');
+  },
+  // Manuelles State-Reset (z.B. aus der Konsole: window['_BCBot_...'].clearState())
+  clearState(){
+    window[_stateKey]={fired:{},firedCnt:{},firedChar:{},roomEver:[]};
+    console.log('\u{1F9F9} [Bot:${safeName}] States zurückgesetzt');
   }
 };
 console.log('\u25B6\uFE0F [Bot:${safeName}] | Trigger:',_trigs.length,'| Modus:',_cfg.nurEigene?'Nur eigene':'Alle Spieler');
