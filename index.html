@@ -3524,7 +3524,6 @@ function renderAct(tid, a, ai) {
       <div class="tp-slot-list" id="tpslots-${tid}-${ai}">${slotsHtml}</div>
       <button class="tp-slot-add-btn" onclick="tpSlotAdd('${tid}',${ai})">+ Position / Fallback hinzufügen</button>`;
   }
-  }
 
   // Chat/Emote/Whisper sind immer erfolgreich → kein Dann/Sonst
   const canBranch = ['teleport','item','item_entf'].includes(a.typ);
