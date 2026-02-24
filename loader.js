@@ -11,8 +11,9 @@
     return {
       info: (...a) => _l('INFO', '#93c5fd', ...a),
       ok:   (...a) => _l('OK',   '#6ee7b7', ...a),
-      warn: (...a) => _l('WARN', '#fbbf24', ...a),
-      err:  (...a) => _l('ERR',  '#fca5a5', ...a),
+      // FIX: warn and err now use the correct console methods for proper DevTools filtering
+      warn: (...a) => console.warn('%c' + P + ' [WARN]', 'color:#fbbf24;font-weight:bold', ...a),
+      err:  (...a) => console.error('%c' + P + ' [ERR]',  'color:#fca5a5;font-weight:bold', ...a),
     };
   })();
 
@@ -27,6 +28,8 @@
   const POPUP_W  = 1380;
   const POPUP_H  = 900;
   const POPUP_URL = 'https://animereviewer1-sketch.github.io/bc-configurator/';
+  // FIX: Validate origin to prevent other pages from sending EXEC commands
+  const ALLOWED_ORIGIN = 'https://animereviewer1-sketch.github.io';
 
   // ── Cache-Builder ─────────────────────────────────────
   function buildBCCache() {
@@ -681,7 +684,13 @@ window.CurseScanner = (() => {
     window.__BCK_LISTENER__ = true;
 
     window.addEventListener('message', function (ev) {
+      // FIX: Validate origin - only accept messages from the known popup URL
+      // This prevents arbitrary pages from executing EXEC commands in the BC context
       if (!ev.data || ev.data.app !== APP) return;
+      if (ev.origin !== ALLOWED_ORIGIN) {
+        BCK.warn('postMessage von unbekannter Origin blockiert:', ev.origin);
+        return;
+      }
       const src = ev.source;
       window.__BCK_popupRef = src; // Bot kann damit Logs zurückschicken
       BCK.info('\u2190 postMessage:', ev.data.type, '| origin:', ev.origin);
@@ -689,7 +698,7 @@ window.CurseScanner = (() => {
       switch (ev.data.type) {
         case 'PING':
           BCK.info('PING \u2192 sende PONG');
-          src.postMessage({ app: APP, type: 'PONG' }, '*');
+          src.postMessage({ app: APP, type: 'PONG' }, ALLOWED_ORIGIN);
           break;
 
         case 'GET_CACHE': {
@@ -705,7 +714,7 @@ window.CurseScanner = (() => {
             BCK.err('buildBCCache FEHLER:', ex.message);
           }
           BCK.info('Sende CACHE_DATA | err:', err ?? 'keiner');
-          src.postMessage({ app: APP, type: 'CACHE_DATA', cache, err }, '*');
+          src.postMessage({ app: APP, type: 'CACHE_DATA', cache, err }, ALLOWED_ORIGIN);
           break;
         }
 
@@ -716,9 +725,9 @@ window.CurseScanner = (() => {
               memberNumber: P?.MemberNumber,
               name: P?.Name,
               members: (window.ChatRoomCharacter ?? []).map(c => ({ num: c.MemberNumber, name: c.Name })),
-            }, '*');
+            }, ALLOWED_ORIGIN);
           } catch (ex) {
-            src.postMessage({ app: APP, type: 'PLAYER_DATA', err: ex.message }, '*');
+            src.postMessage({ app: APP, type: 'PLAYER_DATA', err: ex.message }, ALLOWED_ORIGIN);
           }
           break;
         }
@@ -729,10 +738,10 @@ window.CurseScanner = (() => {
             // eslint-disable-next-line no-new-func
             new Function(ev.data.code)();
             BCK.ok('EXEC \u2705');
-            src.postMessage({ app: APP, type: 'EXEC_OK' }, '*');
+            src.postMessage({ app: APP, type: 'EXEC_OK' }, ALLOWED_ORIGIN);
           } catch (ex) {
             BCK.err('EXEC \u274c:', ex.message);
-            src.postMessage({ app: APP, type: 'EXEC_ERR', msg: ex.message }, '*');
+            src.postMessage({ app: APP, type: 'EXEC_ERR', msg: ex.message }, ALLOWED_ORIGIN);
           }
           break;
 
@@ -745,11 +754,11 @@ window.CurseScanner = (() => {
               database:  result.database,
               lscgTable: result.lscgTable,
               lscgCache: result.lscgCache,
-            }, '*');
+            }, ALLOWED_ORIGIN);
             BCK.ok('CURSE_DATA gesendet: ' + Object.keys(result.database).length + ' Crafts');
           } catch (ex) {
             BCK.err('SCAN_CURSES Fehler:', ex.message);
-            src.postMessage({ app: APP, type: 'CURSE_DATA', err: ex.message }, '*');
+            src.postMessage({ app: APP, type: 'CURSE_DATA', err: ex.message }, ALLOWED_ORIGIN);
           }
           break;
         }
@@ -768,13 +777,13 @@ window.CurseScanner = (() => {
               result = window.CurseScanner.wear(ev.data.dbKey);
             }
             if (result?.err) {
-              src.postMessage({ app: APP, type: 'WEAR_CURSE_ERR', msg: result.err }, '*');
+              src.postMessage({ app: APP, type: 'WEAR_CURSE_ERR', msg: result.err }, ALLOWED_ORIGIN);
             } else {
-              src.postMessage({ app: APP, type: 'WEAR_CURSE_OK', msg: result?.msg }, '*');
+              src.postMessage({ app: APP, type: 'WEAR_CURSE_OK', msg: result?.msg }, ALLOWED_ORIGIN);
             }
           } catch (ex) {
             BCK.err('WEAR_CURSE Fehler:', ex.message);
-            src.postMessage({ app: APP, type: 'WEAR_CURSE_ERR', msg: ex.message }, '*');
+            src.postMessage({ app: APP, type: 'WEAR_CURSE_ERR', msg: ex.message }, ALLOWED_ORIGIN);
           }
           break;
         }
@@ -791,10 +800,10 @@ window.CurseScanner = (() => {
           BCK.info('GET_LSCG_CACHE');
           try {
             const cache = window.CurseScanner.getLscgCache();
-            src.postMessage({ app: APP, type: 'LSCG_CACHE_DATA', cache }, '*');
+            src.postMessage({ app: APP, type: 'LSCG_CACHE_DATA', cache }, ALLOWED_ORIGIN);
             BCK.ok('LSCG_CACHE_DATA: ' + Object.keys(cache).length + ' Einträge');
           } catch (ex) {
-            src.postMessage({ app: APP, type: 'LSCG_CACHE_DATA', cache: {}, err: ex.message }, '*');
+            src.postMessage({ app: APP, type: 'LSCG_CACHE_DATA', cache: {}, err: ex.message }, ALLOWED_ORIGIN);
           }
           break;
         }
@@ -812,10 +821,10 @@ window.CurseScanner = (() => {
           BCK.info('GET_CRAFT_CACHE');
           try {
             const cache = window.CurseScanner.getCraftCache();
-            src.postMessage({ app: APP, type: 'CRAFT_CACHE_DATA', cache }, '*');
+            src.postMessage({ app: APP, type: 'CRAFT_CACHE_DATA', cache }, ALLOWED_ORIGIN);
             BCK.ok('CRAFT_CACHE_DATA: ' + Object.keys(cache).length + ' Einträge');
           } catch (ex) {
-            src.postMessage({ app: APP, type: 'CRAFT_CACHE_DATA', cache: {}, err: ex.message }, '*');
+            src.postMessage({ app: APP, type: 'CRAFT_CACHE_DATA', cache: {}, err: ex.message }, ALLOWED_ORIGIN);
           }
           break;
         }

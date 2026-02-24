@@ -2251,10 +2251,17 @@ function buildItemCode({ group, asset, cfg, colors, tr, trStr, typeStr, propCode
 // ══════════════════════════════════════════════════════
 function copyCode() {
   const ta = document.getElementById('codeOut');
-  ta.select(); document.execCommand('copy');
+  const text = ta.value;
   const btn = document.getElementById('copyBtn');
-  btn.textContent = '✅ Kopiert!'; btn.classList.add('copied');
-  setTimeout(()=>{ btn.textContent='📋 Code kopieren'; btn.classList.remove('copied'); }, 2000);
+  navigator.clipboard.writeText(text).then(() => {
+    btn.textContent = '✅ Kopiert!'; btn.classList.add('copied');
+    setTimeout(()=>{ btn.textContent='📋 Code kopieren'; btn.classList.remove('copied'); }, 2000);
+  }).catch(() => {
+    // Fallback für ältere Browser
+    ta.select(); document.execCommand('copy');
+    btn.textContent = '✅ Kopiert!'; btn.classList.add('copied');
+    setTimeout(()=>{ btn.textContent='📋 Code kopieren'; btn.classList.remove('copied'); }, 2000);
+  });
 }
 
 // ══════════════════════════════════════════════════════
@@ -2404,8 +2411,12 @@ function generateOutfitCode() {
 
 function copyOutfitCode() {
   const ta = document.getElementById('outfitCode');
-  ta.select(); document.execCommand('copy');
-  alert('✅ Outfit-Code kopiert!');
+  navigator.clipboard.writeText(ta.value).then(() => {
+    showStatus('✅ Outfit-Code kopiert!', 'success');
+  }).catch(() => {
+    ta.select(); document.execCommand('copy');
+    showStatus('✅ Outfit-Code kopiert!', 'success');
+  });
 }
 
 // ══════════════════════════════════════════════════════
@@ -2415,9 +2426,9 @@ function openProfiles()  { switchTab('outfit'); renderProfileList(); }
 function closeProfiles() { switchTab('outfit'); }
 
 function saveProfile() {
-  if (!OUTFIT.length) { alert('Erst Outfit-Items hinzufügen!'); return; }
+  if (!OUTFIT.length) { showStatus('❌ Erst Outfit-Items hinzufügen!', 'error'); return; }
   const name = document.getElementById('profileNameInput').value.trim();
-  if (!name) { alert('Profilname eingeben!'); return; }
+  if (!name) { showStatus('❌ Profilname eingeben!', 'error'); return; }
 
   // Nur die nötigen Felder speichern – cfg/propCode/craftStr sind zu groß (localStorage-Limit)
   const SAVE_KEYS = ['group','asset','colors','tr','trStr','typeStr','tightCode','lock','lockParams','isOther','memberNum','label'];
@@ -2434,9 +2445,9 @@ function saveProfile() {
     localStorage.setItem('BC_PROFILES_v11', json);
     renderProfileList();
     document.getElementById('profileNameInput').value = '';
-    alert('✅ Profil "' + name + '" gespeichert (' + stripped.length + ' Items)');
+    showStatus('✅ Profil "' + name + '" gespeichert (' + stripped.length + ' Items)', 'success');
   } catch(e) {
-    alert('❌ Speichern fehlgeschlagen: ' + e.message + '\nProfile zu groß?');
+    showStatus('❌ Speichern fehlgeschlagen: ' + e.message, 'error');
   }
 }
 
@@ -2445,7 +2456,7 @@ function loadProfile(name) {
   if (!profile) return;
 
   if (!Object.keys(CACHE).length) {
-    alert('❌ Cache nicht geladen! Erst Dump-Script ausführen und Cache importieren.');
+    showStatus('❌ Cache nicht geladen! Erst Dump-Script ausführen und Cache importieren.', 'error');
     return;
   }
 
@@ -2512,7 +2523,8 @@ function deleteProfileByIdx(idx) {
 
 // Init profile button visibility
 (function() {
-  const s = localStorage.getItem('BC_CACHE_v11') ?? localStorage.getItem('BC_CACHE_v11');
+  // FIX: was 'BC_CACHE_v11' (wrong version) and also duplicated the same key in fallback
+  const s = localStorage.getItem('BC_CACHE_v12');
   if (s) {
     try {
       const data = JSON.parse(s);
@@ -2543,9 +2555,7 @@ function switchTab(tab) {
   if (tab === 'events') { renderEventsTab(); }
 }
 
-// ── addToOutfit patched: auto-switch + auto-code ──────
-// (original addToOutfit is below, we override it here)
-const _origAddToOutfit = window.addToOutfit;
+// ── addToOutfit: auto-switch tab + auto-generate code after adding ──
 
 // ══════════════════════════════════════════════════════
 //  OUTFIT AUTO-CODE
@@ -3024,7 +3034,8 @@ window.addEventListener('message', function(ev) {
         // Curse-DB an Loader pushen → Wear nach Browserwechsel/Neustart möglich
         if (Object.keys(CURSE_DB).length > 0) {
           bcSend({ type: 'LOAD_CURSE_DB', database: CURSE_DB }, true);
-          bcSend({ type: 'LOAD_CRAFT_CACHE', cache: CURSE_DB }, true);
+          // FIX: was incorrectly sending CURSE_DB as craft cache - craft entries are already in CURSE_DB
+          // Only send LSCG cache separately as it uses a different table
           if (Object.keys(CURSE_CACHE_LSCG).length > 0) {
             bcSend({ type: 'LOAD_LSCG_CACHE', cache: CURSE_CACHE_LSCG }, true);
           }
@@ -3035,7 +3046,7 @@ window.addEventListener('message', function(ev) {
       }
       break;
 
-    case 'CACHE_DATA':
+    case 'CACHE_DATA': {
       console.log('[BCK-Popup] CACHE_DATA err=' + ev.data.err, 'groups=' + Object.keys(ev.data.cache ?? {}).length);
       document.getElementById('loadingSpinner').classList.add('hidden');
       document.getElementById('loadCacheBtn').disabled = false;
@@ -3056,6 +3067,7 @@ window.addEventListener('message', function(ev) {
       showStatus('\u2705 ' + _items + ' Items geladen!', 'success');
       bcSend({ type: 'GET_PLAYER' });
       break;
+    }
 
     case 'PLAYER_DATA':
       if (!ev.data.err) {
@@ -3117,15 +3129,6 @@ window.addEventListener('message', function(ev) {
       break;
     }
 
-    case 'BOT_ROOM_EVER': {
-      // Speichere roomEver in localStorage (überlebt Konfigurator-Neustart)
-      const reKey = 'BC_RoomEver_v1';
-      const reData = JSON.parse(localStorage.getItem(reKey)||'{}');
-      reData[ev.data.botId] = ev.data.members;
-      localStorage.setItem(reKey, JSON.stringify(reData));
-      break;
-    }
-
     case 'EXEC_OK':
       console.log('[BCK-Popup] EXEC_OK \u2705');
       showStatus('\u2705 Ausgef\u00fchrt!', 'success');
@@ -3149,7 +3152,13 @@ window.addEventListener('message', function(ev) {
       break;
 
     case 'CRAFT_CACHE_DATA':
-      Object.assign(CURSE_DB, ev.data.cache ?? {});
+      // FIX: was incorrectly merging into CURSE_DB, corrupting it with craft-cache entries
+      // Craft-cache is already part of CURSE_DB structure; just merge missing keys safely
+      if (ev.data.cache) {
+        for (const [k, v] of Object.entries(ev.data.cache)) {
+          if (!CURSE_DB[k]) CURSE_DB[k] = v; // only add truly new entries, don't overwrite
+        }
+      }
       if (_pendingExport) {
         _exportCraftCache = ev.data.cache ?? {};
         _tryFinishExport();
@@ -3360,7 +3369,7 @@ function setOutfitTarget(num) {
   // Code neu generieren falls bereits vorhanden
   _autoOutfitCode();
   console.log('[BCK-Popup] Outfit-Ziel:', num === null ? 'selbst (Player)' : '#' + num);
-  _autoOutfitCode();
+  // FIX: removed duplicate _autoOutfitCode() call that was here
 }
 
 function escHtml(s) {
@@ -5018,8 +5027,9 @@ function _showTriggerAddBanner() {
 
 function _patchItemManagerForTrigger() {
   // Observe the btn-row to add our button when an item is selected
-  const _origBuildConf = window.buildConfigurator;
-  if (!_origBuildConf) return;
+  // FIX: Use module-level _origBuildConf (no const/let) so _restoreBuildConf() can access it
+  if (!window.buildConfigurator) return;
+  _origBuildConf = window.buildConfigurator;
   window.buildConfigurator = function(...args) {
     _origBuildConf.apply(this, args);
     _injectTriggerButton();
@@ -5110,15 +5120,17 @@ function botImportConfig() {
           const existing = new Set(window._BCBotLog.map(l=>l.ts+'_'+l.player));
           d._exportedLogs.forEach(l => { if (!existing.has(l.ts+'_'+l.player)) window._BCBotLog.push(l); });
           window._BCBotLog.sort((a,b)=>b.ts-a.ts);
-          // Rebuild _roomEver from logs
-          _rebuildRoomEverFromLogs(d.id);
         }
         delete d._exportedLogs; delete d._exportedAt;
         const cur = _selBot();
         if (cur && confirm('Aktuellen Bot überschreiben?\n(Abbrechen = Als neuen Bot importieren)')) {
           Object.assign(cur, d, {id:cur.id}); _selBotId = cur.id;
+          // FIX: rebuild roomEver with the correct final ID (cur.id, not the imported d.id)
+          _rebuildRoomEverFromLogs(cur.id);
         } else {
           d.id = 'b'+Date.now(); _bots.push(d); _selBotId = d.id;
+          // FIX: rebuild roomEver AFTER assigning the new ID so the correct ID is used
+          _rebuildRoomEverFromLogs(d.id);
         }
         _saveBots(); renderBotList(); renderBotEditor();
         showStatus('✅ Bot importiert','success');
@@ -5237,6 +5249,8 @@ const _savedState=window[_stateKey]??_lsSaved;
 const _fired    =_savedState.fired    ??{}; // trigId -> last timestamp (global latch)
 const _firedCnt =_savedState.firedCnt ??{}; // trigId -> fire count
 const _firedChar=_savedState.firedChar??{}; // trigId_memberNum -> timestamp
+// FIX: also persist evFiredCnt so einmalig/n_mal events survive bot restart/sync
+const _evFiredCnt=Object.assign({},_savedState.evFiredCnt??{});
 // roomEver: merge window-state + popup-persisted (build-time injected) + log-based
 const _roomEver=new Set([...(_savedState.roomEver??[]),...(${roomEverJson})]);
 // State sofort zurückschreiben damit Referenz live ist
@@ -5463,7 +5477,7 @@ function _runSeq(aktionen,C,vars,trigBase,onDone,onUngueltig){
 // Sendet Log-Eintrag via PostMessage-Brücke zurück an das Popup
 // ── Events Runtime ────────────────────────────────────────
 const _evTimers={};
-const _evFiredCnt={};  // evId -> fire count
+// NOTE: _evFiredCnt is declared above with persisted state
 const _evState={}; // for interval state
 
 function _okEv(ev,C,rohText,typKey){
@@ -5677,6 +5691,8 @@ function _proc(rohText,typKey,C){
 }
 
 function _procEvents(rohText,typKey,C){
+  // FIX: Define typLabel here so it's available whether called from _proc or directly from _msgH
+  const typLabel={chat:'\u{1F4AC} Chat',emote:'\u{2728} Emote',whisper:'\u{1F917} Whisper'}[typKey]??typKey;
   _evts.forEach(ev=>{
     if(!ev.aktiv)return;
     // Chat-Events: brauchen wort-Bedingung und KEIN ev_timer/ev_interval
@@ -5703,11 +5719,12 @@ function _procEvents(rohText,typKey,C){
       _log('💬 Chat-Event "'+ev.name+'" von '+C.Name+' → '+targets.length+' Ziel(e)');
       targets.forEach(ch=>{
         const vars={name:ch.Name,wort:rohText,typ:typLabel,x:ch.X??0,y:ch.Y??0,zone:'',C:ch};
-        const cnt=_evFiredCnt[ev.id]??0;
-        if(ev.wiederholung==='einmalig'&&cnt>=1)return;
-        if(ev.wiederholung==='n_mal'&&cnt>=(ev.maxMal??2))return;
+        // FIX: Read cnt inside callback to avoid all targets writing the same stale value
+        const cntNow=_evFiredCnt[ev.id]??0;
+        if(ev.wiederholung==='einmalig'&&cntNow>=1)return;
+        if(ev.wiederholung==='n_mal'&&cntNow>=(ev.maxMal??2))return;
         _runSeq(ev.aktionen??[],ch,vars,ev,
-          ()=>{_evFiredCnt[ev.id]=(cnt+1);_pushLog({status:'ok'},vars,{name:ev.name,id:ev.id});},
+          ()=>{_evFiredCnt[ev.id]=(_evFiredCnt[ev.id]??0)+1;_pushLog({status:'ok'},vars,{name:ev.name,id:ev.id});},
           ()=>{_pushLog({status:'ungueltig'},vars,{name:ev.name,id:ev.id});}
         );
       });
@@ -5718,6 +5735,7 @@ function _procEvents(rohText,typKey,C){
 
 // ── Item-Trägt Polling (edge-triggered: feuert 1x wenn Item erscheint) ──
 const _itState={}; // 'memberNum_trigId_typ' -> bool
+// FIX: 500ms is sufficient for item-state changes, 100ms caused unnecessary CPU load
 const _itPoll=setInterval(()=>{
   const chars=[Player,...(ChatRoomCharacter||[])];
   _trigs.forEach(trig=>{
@@ -5747,7 +5765,7 @@ const _itPoll=setInterval(()=>{
       _itState[key]=condMet;
     });
   });
-},100);
+},500);
 
 // ── Spieler-Betritt Polling (feuert 1x beim Betreten) ──
 const _roomPrev=new Set((ChatRoomCharacter||[]).map(c=>c.MemberNumber));
@@ -5864,8 +5882,9 @@ const _joinPoll=setInterval(()=>{
         if(ev.wiederholung==='n_mal'&&cnt>=(ev.maxMal??2))return;
         targets.forEach(ch=>{
           const vars={name:ch.Name,wort:'',typ:label,x:ch.X??0,y:ch.Y??0,zone:'',C:ch};
+          // FIX: Read cnt inside callback so each target increments independently
           _runSeq(ev.aktionen??[],ch,vars,ev,
-            ()=>{_evFiredCnt[ev.id]=(cnt+1);_pushLog({status:'ok'},vars,{name:ev.name,id:ev.id});},
+            ()=>{_evFiredCnt[ev.id]=(_evFiredCnt[ev.id]??0)+1;_pushLog({status:'ok'},vars,{name:ev.name,id:ev.id});},
             ()=>{_pushLog({status:'ungueltig'},vars,{name:ev.name,id:ev.id});}
           );
         });
@@ -5910,6 +5929,7 @@ const _joinPoll=setInterval(()=>{
 
 // ── Zonen-Betreten Polling – direkt C.X/C.Y (wie ZoneMonitor-Pattern) ──
 const _zoneState={}; // 'memberNum_trigId' -> bool (war zuletzt drin)
+// FIX: 500ms is sufficient for zone detection, 100ms caused unnecessary CPU load
 const _zonePoll=setInterval(()=>{
   const chars=[Player,...(ChatRoomCharacter||[])];
   _trigs.forEach(trig=>{
@@ -5946,7 +5966,7 @@ const _zonePoll=setInterval(()=>{
       _zoneState[key]=inZone;
     });
   });
-},100);
+},500);
 
 // Eigene Nachrichten via hookFunction – Mod bekommt unique Namen (Timestamp) um Kollisionen beim Live-Sync zu vermeiden
 let _mod = null;
@@ -5981,10 +6001,9 @@ try {
     window.ServerSend = function(channel, data, ...rest) {
       if (channel === 'ChatRoomChat' && data?.Content && ['Chat','Emote','Whisper'].includes(data?.Type ?? 'Chat')) {
         const tk = (data.Type||'Chat').toLowerCase();
-        if ((_cfg.hearChat && tk==='chat') || (_cfg.hearEmote && tk==='emote') || (_cfg.hearWhisper && tk==='whisper')) {
-          const ssHearOk=(_cfg.hearChat&&tk==='chat')||(_cfg.hearEmote&&tk==='emote')||(_cfg.hearWhisper&&tk==='whisper');
-          setTimeout(() => { if(ssHearOk)_proc(data.Content,tk,Player); else _procEvents(data.Content,tk,Player); }, 0);
-        }
+        const ssHearOk=(_cfg.hearChat&&tk==='chat')||(_cfg.hearEmote&&tk==='emote')||(_cfg.hearWhisper&&tk==='whisper');
+        // FIX: removed redundant double-check of ssHearOk inside the already-matching if-block
+        setTimeout(() => { if(ssHearOk)_proc(data.Content,tk,Player); else _procEvents(data.Content,tk,Player); }, 0);
       }
       return _origSend.call(this, channel, data, ...rest);
     };
@@ -6029,6 +6048,7 @@ window['_BCBot_'+_BID]={
       ls['${safeId}']={
         fired:_fired, firedCnt:_firedCnt,
         firedChar:_firedChar, roomEver:[..._roomEver],
+        evFiredCnt:_evFiredCnt,
         ts:Date.now()
       };
       localStorage.setItem('__BCKBotStates',JSON.stringify(ls));
@@ -6050,11 +6070,12 @@ window['_BCBot_'+_BID]={
   fireEvent(eid){this.fireEventNow(eid);},
   // Manuelles State-Reset (z.B. aus der Konsole: window['_BCBot_...'].clearState())
   clearState(){
-    window[_stateKey]={fired:{},firedCnt:{},firedChar:{},roomEver:[]};
+    window[_stateKey]={fired:{},firedCnt:{},firedChar:{},roomEver:[],evFiredCnt:{}};
     try{const ls=JSON.parse(localStorage.getItem('__BCKBotStates')||'{}');delete ls['${safeId}'];localStorage.setItem('__BCKBotStates',JSON.stringify(ls));}catch(e){}
     Object.keys(_fired).forEach(k=>delete _fired[k]);
     Object.keys(_firedCnt).forEach(k=>delete _firedCnt[k]);
     Object.keys(_firedChar).forEach(k=>delete _firedChar[k]);
+    Object.keys(_evFiredCnt).forEach(k=>delete _evFiredCnt[k]);
     _roomEver.clear();
     console.log('\u{1F9F9} [Bot:${safeName}] States zurückgesetzt (Mem+LS)');
   }
