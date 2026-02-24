@@ -2795,7 +2795,7 @@ window.addEventListener('message', function(ev) {
       break;
     }
     case 'MONEY_QUERY': {
-      const id = 'mn_'+ev.data.memberNum;
+      const id = ev.data.memberNum; // raw MemberNumber key
       const p = _money.balances[id];
       const bal = p?.balance ?? 0;
       const cur = _money.settings.name || 'Gold';
@@ -2803,8 +2803,14 @@ window.addEventListener('message', function(ev) {
       // Find any active bot to send the response
       const actBot = _bots.find(b=>b.laufend);
       if (actBot) {
-        const safeId = actBot.id.replace(/\W/g,'_');
-        bcSend({type:'EXEC', code:`ServerSend('ChatRoomChat',{Content:'${name}: Du hast ' + ${bal} + ' ${cur}',Type:'Chat'});`});
+        const queryTyp = _money.settings.queryTyp ?? 'whisper';
+        const msgType = queryTyp === 'whisper' ? 'Whisper' : 'Chat';
+        const memberNum = ev.data.memberNum;
+        const msg = `Du hast ${bal} ${cur}`;
+        const code = msgType === 'Whisper'
+          ? `ServerSend('ChatRoomChat',{Content:${JSON.stringify(msg)},Type:'Whisper',Target:${memberNum}});`
+          : `ServerSend('ChatRoomChat',{Content:${JSON.stringify(name+': '+msg)},Type:'Chat'});`;
+        bcSend({type:'EXEC', code});
       }
       break;
     }
@@ -3235,6 +3241,12 @@ function selectRoomMember(num) {
       <input id="money-cmd-inp" class="cf" style="width:100px;margin-left:4px" placeholder="!gold"
         value="" oninput="moneySetCmd(this.value)">
     </label>
+    <label style="font-size:.7rem;color:var(--text3)">Antwort:
+      <select id="money-typ-inp" class="cf" style="margin-left:4px" onchange="moneySetTyp(this.value)">
+        <option value="whisper">🤫 Whisper</option>
+        <option value="chat">💬 Chat</option>
+      </select>
+    </label>
     <button onclick="moneyAddPlayer()" style="font-size:.68rem;padding:4px 11px;background:var(--pd);border:none;color:var(--pl);border-radius:5px;cursor:pointer">+ Spieler hinzufügen</button>
     <button onclick="moneyResetAll()" style="font-size:.68rem;padding:4px 11px;background:#2a0a0a;border:1px solid var(--red);color:var(--red);border-radius:5px;cursor:pointer">Alle zurücksetzen</button>
   </div>
@@ -3248,7 +3260,7 @@ const BOT_KEY = 'BC_Bots_v2';
 const MONEY_KEY = 'BC_Money_v1';
 
 // Money storage: { settings: {name, queryCmd}, balances: { memberNum: {name, balance} } }
-let _money = { settings: { name: 'Gold', queryCmd: '!gold' }, balances: {} };
+let _money = { settings: { name: 'Gold', queryCmd: '!gold', queryTyp: 'whisper' }, balances: {} };
 (()=>{ try { const s=localStorage.getItem(MONEY_KEY); if(s){ const d=JSON.parse(s); _money=Object.assign(_money,d); } } catch{} })();
 function _saveMoney() { try { localStorage.setItem(MONEY_KEY, JSON.stringify(_money)); } catch {} }
 
@@ -3276,6 +3288,8 @@ function renderMoneyTab() {
   // Init UI values
   document.getElementById('money-name-inp').value = _money.settings.name ?? 'Gold';
   document.getElementById('money-cmd-inp').value  = _money.settings.queryCmd ?? '!gold';
+  const typSel = document.getElementById('money-typ-inp');
+  if (typSel) typSel.value = _money.settings.queryTyp ?? 'whisper';
   const entries = Object.entries(_money.balances);
   const cur = _money.settings.name || 'Gold';
   if (!entries.length) {
@@ -3300,6 +3314,7 @@ function renderMoneyTab() {
 
 function moneySetName(v) { _money.settings.name = v.trim()||'Gold'; _saveMoney(); }
 function moneySetCmd(v)  { _money.settings.queryCmd = v.trim(); _saveMoney(); }
+function moneySetTyp(v)  { _money.settings.queryTyp = v; _saveMoney(); }
 
 function moneyAdj(id, sign) {
   const amt = +document.getElementById('madj-'+id)?.value || 0;
@@ -3336,7 +3351,7 @@ function moneyResetAll() {
 
 // Called by bot via postMessage
 function _moneyApply(memberNum, name, delta, setVal) {
-  const id = 'mn_'+memberNum;
+  const id = memberNum; // key = raw MemberNumber
   if (!_money.balances[id]) _money.balances[id] = { name: name||('#'+memberNum), balance: 0 };
   const p = _money.balances[id];
   p.name = name || p.name;
@@ -3498,42 +3513,33 @@ function renderEventsTab() {
   container.innerHTML = html;
 }
 
+function _evBadge(e) {
+  const beds = e.bedingungen ?? [];
+  if (!e.aktiv) return {cls:'manual', lbl:'⏸ Pausiert'};
+  if (beds.some(c=>c.typ==='ev_interval')) return {cls:'interval', lbl:'🔁 Intervall'};
+  if (beds.some(c=>c.typ==='ev_timer'))    return {cls:'auto',     lbl:'⏱ Timer'};
+  if (beds.some(c=>c.typ==='player_betritt')) return {cls:'betritt-ev', lbl:'🚪 Betritt'};
+  if (beds.some(c=>c.typ==='wort'))        return {cls:'chat-ev',  lbl:'💬 Chat'};
+  return {cls:'manual', lbl:'🖱 Manuell'};
+}
+
 function renderEventCard(bot, e, i) {
   const total = (bot.events||[]).length;
-  const ausloeser = e.ausloeser ?? 'manuell';
-  const typeBadgeClass = {manuell:'manual', timer:'auto', interval:'interval', chat:'chat-ev', betritt:'betritt-ev'}[ausloeser] ?? 'manual';
-  const typeLabel = {manuell:'🖱 Manuell', timer:'⏱ Timer', interval:'🔁 Intervall', chat:'💬 Chat', betritt:'🚪 Betritt'}[ausloeser] ?? '?';
   const actN = (e.aktionen||[]).length;
   const condN = (e.bedingungen||[]).length;
   const bodyOpen = document.getElementById('evb-'+e.id)?.classList.contains('open');
   const ziel = e.ziel ?? 'ausloeser';
   const wdh = e.wiederholung ?? 'immer';
-
   const evVon = e.von ?? 'alle';
-  let scheduleHtml = '';
-  if (ausloeser === 'timer') {
-    scheduleHtml = `<label style="font-size:.65rem;color:var(--text3)">Nach:
-      <input class="cf cf-w80" type="number" value="${e.delay??5000}" oninput="evField('${e.id}','delay',+this.value)"> ms
-    </label>`;
-  } else if (ausloeser === 'interval') {
-    scheduleHtml = `<label style="font-size:.65rem;color:var(--text3)">Min:
-      <input class="cf cf-w80" type="number" value="${e.delay_min??3000}" oninput="evField('${e.id}','delay_min',+this.value)"> ms
-    </label>
-    <label style="font-size:.65rem;color:var(--text3)">Max:
-      <input class="cf cf-w80" type="number" value="${e.delay_max??10000}" oninput="evField('${e.id}','delay_max',+this.value)"> ms
-    </label>`;
-  } else if (ausloeser === 'chat' || ausloeser === 'betritt') {
-    const vonNumVal = e.vonNummer ?? '';
-    scheduleHtml = `<label style="font-size:.65rem;color:var(--text3)">Von:
-      <select class="cf" style="margin-left:4px" onchange="evField('${e.id}','von',this.value);evRerender('${e.id}')">
-        <option value="alle"   ${evVon==='alle'?'selected':''}>👥 Alle</option>
-        <option value="bot"    ${evVon==='bot'?'selected':''}>🤖 Bot (ich)</option>
-        <option value="nummer" ${evVon==='nummer'?'selected':''}>🔢 Nummer…</option>
-      </select>
-    </label>
-    ${evVon==='nummer'?`<input class="cf cf-w80" type="number" placeholder="MemberNr" value="${vonNumVal}"
-      oninput="evField('${e.id}','vonNummer',+this.value)" title="MemberNumber des Spielers">`:''}`;
-  }
+  const badge = _evBadge(e);
+
+  const vonHtml = `<label style="font-size:.65rem;color:var(--text3)">Von:
+    <select class="cf" style="margin-left:4px" onchange="evField('${e.id}','von',this.value);evRerender('${e.id}')">
+      <option value="alle"   ${evVon==='alle'?'selected':''}>👥 Alle</option>
+      <option value="bot"    ${evVon==='bot'?'selected':''}>🤖 Bot (ich)</option>
+      <option value="nummer" ${evVon==='nummer'?'selected':''}>🔢 Nummer…</option>
+    </select></label>
+  ${evVon==='nummer'?`<input class="cf cf-w80" type="number" placeholder="MemberNr" value="${e.vonNummer??''}" oninput="evField('${e.id}','vonNummer',+this.value)">`:``}`;
 
   return `<div class="event-card ${e.aktiv?'ev-on':''}" id="ec-${e.id}">
     <div class="event-head" onclick="evToggleBody('${e.id}')">
@@ -3542,10 +3548,10 @@ function renderEventCard(bot, e, i) {
         <button class="order-btn" onclick="event.stopPropagation();evMoveDown('${e.id}')" ${i===total-1?'disabled':''}>▼</button>
       </span>
       <input type="checkbox" ${e.aktiv?'checked':''} onclick="event.stopPropagation();evField('${e.id}','aktiv',this.checked)" style="accent-color:var(--purple)">
-      <span class="ev-type-badge ${typeBadgeClass}">${typeLabel}</span>
+      <span class="ev-type-badge ${badge.cls}">${badge.lbl}</span>
       <span class="ev-label">${escHtml(e.name||'Event')}</span>
       <span class="ev-meta">${condN} Bed. · ${actN} Akt.</span>
-      <button onclick="event.stopPropagation();evFire('${e.id}')" style="font-size:.62rem;padding:2px 9px;background:var(--pd);border:none;color:var(--pl);border-radius:4px;cursor:pointer" title="Jetzt manuell auslösen">▶️ Feuern</button>
+      <button onclick="event.stopPropagation();evFireImmediate('${e.id}')" style="font-size:.62rem;padding:2px 9px;background:var(--pd);border:none;color:var(--pl);border-radius:4px;cursor:pointer" title="Sofort auslösen (ignoriert Timer/Wdh)">▶️ Feuern</button>
       <button onclick="event.stopPropagation();evDelete('${e.id}')" class="rm-btn">✕</button>
     </div>
     <div class="event-body ${bodyOpen?'open':''}" id="evb-${e.id}">
@@ -3553,24 +3559,15 @@ function renderEventCard(bot, e, i) {
         <label style="font-size:.65rem;color:var(--text3)">Name:
           <input class="cf cf-w160" style="margin-left:4px" value="${escHtml(e.name||'')}" oninput="evField('${e.id}','name',this.value)">
         </label>
-        <label style="font-size:.65rem;color:var(--text3)">Auslöser:
-          <select class="cf" style="margin-left:4px" onchange="evField('${e.id}','ausloeser',this.value);evRerender('${e.id}')">
-            <option value="manuell"  ${ausloeser==='manuell'?'selected':''}>🖱 Manuell</option>
-            <option value="timer"    ${ausloeser==='timer'?'selected':''}>⏱ Timer (einmalig nach X ms)</option>
-            <option value="interval" ${ausloeser==='interval'?'selected':''}>🔁 Intervall (wiederholt)</option>
-            <option value="chat"     ${ausloeser==='chat'?'selected':''}>💬 Chat / Wort</option>
-            <option value="betritt"  ${ausloeser==='betritt'?'selected':''}>🚪 Spieler betritt</option>
-          </select>
-        </label>
-        ${scheduleHtml}
+        ${vonHtml}
         <label style="font-size:.65rem;color:var(--text3)">Ziel:
           <select class="cf" style="margin-left:4px" onchange="evField('${e.id}','ziel',this.value);evRerender('${e.id}')">
-            <option value="ausloeser" ${ziel==='ausloeser'?'selected':''}>👤 Player (Auslöser / Random)</option>
+            <option value="ausloeser" ${ziel==='ausloeser'?'selected':''}>👤 Player (Auslöser/Random)</option>
             <option value="alle"      ${ziel==='alle'?'selected':''}>👥 Alle im Raum</option>
-            <option value="liste"     ${ziel==='liste'?'selected':''}>📋 Auswahl (Liste)</option>
+            <option value="liste"     ${ziel==='liste'?'selected':''}>📋 Liste</option>
           </select>
         </label>
-        ${ziel==='liste'?`<input class="cf" style="width:200px;font-size:.65rem" placeholder="MemberNr kommagetrennt: 1234,5678"
+        ${ziel==='liste'?`<input class="cf" style="width:180px;font-size:.65rem" placeholder="MemberNr: 1234,5678"
           value="${escHtml((e.zielListe||[]).join(','))}"
           oninput="evField('${e.id}','zielListe',this.value.split(',').map(x=>+x.trim()).filter(Boolean))">`:``}
         <label style="font-size:.65rem;color:var(--text3)">🔁 Wdh.:
@@ -3585,6 +3582,9 @@ function renderEventCard(bot, e, i) {
 
       <div class="te-section">
         <div class="te-section-title">🔎 Bedingungen
+          <button onclick="evAddCond('${e.id}','ev_timer')" title="Einmalig nach X Sekunden">⏱ Timer</button>
+          <button onclick="evAddCond('${e.id}','ev_interval')" title="Wiederholt alle X-Y Sekunden">🔁 Intervall</button>
+          <button onclick="evAddCond('${e.id}','player_betritt')" title="Wenn Spieler den Raum betritt">🚪 Betritt</button>
           <button onclick="evAddCond('${e.id}','wort')">+ Wort</button>
           <button onclick="evAddCond('${e.id}','zone_rect')">+ Zone Bereich</button>
           <button onclick="evAddCond('${e.id}','zone')">+ Zone Punkt</button>
@@ -3619,11 +3619,54 @@ function renderEventCard(bot, e, i) {
   </div>`;
 }
 
-// Event conditions use same renderCond but with 'eid' prefix
 function renderEvCond(bot, eid, c, ci) {
-  // Reuse condition rendering but with ev-specific callbacks
-  const c2 = {...c};
-  // Same rendering, just different field/rerender functions
+  // Special standalone conditions (timer, interval, betritt)
+  if (c.typ === 'ev_timer') {
+    return `<div class="cond-group" id="evcond-${eid}-${ci}">
+      <div class="cond-when-lbl">⏱ Timer</div>
+      <div class="cond-card" style="background:#0a2a0a;border-color:#1a5a1a">
+        <div class="card-fields">
+          <span style="font-size:.65rem;color:var(--text3)">Einmalig nach</span>
+          <input class="cf cf-w80" type="number" min="0.1" step="0.1" value="${c.sek??10}"
+            oninput="evCondField('${eid}',${ci},'sek',+this.value)">
+          <span style="font-size:.65rem;color:var(--text3)">Sek</span>
+        </div>
+        <button class="rm-btn" onclick="evCondRemove('${eid}',${ci})">✕</button>
+      </div></div>`;
+  }
+  if (c.typ === 'ev_interval') {
+    return `<div class="cond-group" id="evcond-${eid}-${ci}">
+      <div class="cond-when-lbl">🔁 Intervall</div>
+      <div class="cond-card" style="background:#0a1a2a;border-color:#1a3a5a">
+        <div class="card-fields">
+          <span style="font-size:.65rem;color:var(--text3)">Alle</span>
+          <input class="cf cf-w70" type="number" min="1" value="${c.sek_min??20}"
+            oninput="evCondField('${eid}',${ci},'sek_min',+this.value)">
+          <span style="font-size:.62rem;color:var(--text3)">–</span>
+          <input class="cf cf-w70" type="number" min="1" value="${c.sek_max??60}"
+            oninput="evCondField('${eid}',${ci},'sek_max',+this.value)">
+          <span style="font-size:.65rem;color:var(--text3)">Sek</span>
+        </div>
+        <button class="rm-btn" onclick="evCondRemove('${eid}',${ci})">✕</button>
+      </div></div>`;
+  }
+  if (c.typ === 'player_betritt') {
+    const bt = c.betritt_typ ?? 'alle';
+    return `<div class="cond-group" id="evcond-${eid}-${ci}">
+      <div class="cond-when-lbl">🚪 Betritt</div>
+      <div class="cond-card" style="background:#1a0a2a;border-color:#5a1a7a">
+        <div class="card-fields">
+          <select class="cf" onchange="evCondField('${eid}',${ci},'betritt_typ',this.value)">
+            <option value="alle"   ${bt==='alle'?'selected':''}>Alle Spieler</option>
+            <option value="neu"    ${bt==='neu'?'selected':''}>🆕 Nur Neue</option>
+            <option value="rejoin" ${bt==='rejoin'?'selected':''}>🔄 Nur Rejoin</option>
+          </select>
+        </div>
+        <button class="rm-btn" onclick="evCondRemove('${eid}',${ci})">✕</button>
+      </div></div>`;
+  }
+  // Standard conditions (same as trigger, different callbacks)
+  const icons = {wort:'💬',zone:'🗺️',zone_rect:'📐',item_traegt:'👗',item_traegt_nicht:'🚫',trigger_war:'🔗'};
   let inner = '';
   if (c.typ === 'wort') {
     inner = `<input class="cf cf-w120" value="${escHtml(c.wort||'')}" oninput="evCondField('${eid}',${ci},'wort',this.value)" placeholder="Triggerwort">
@@ -3638,17 +3681,17 @@ function renderEvCond(bot, eid, c, ci) {
       X<input class="cf" style="width:46px" type="number" value="${c.x??0}" oninput="evCondField('${eid}',${ci},'x',+this.value)">
       Y<input class="cf" style="width:46px" type="number" value="${c.y??0}" oninput="evCondField('${eid}',${ci},'y',+this.value)">
       ±<input class="cf" style="width:38px" type="number" value="${c.puffer??1}" oninput="evCondField('${eid}',${ci},'puffer',+this.value)">`;
+  } else if (c.typ === 'zone_rect') {
+    inner = `<span style="font-size:.62rem;color:var(--text3)">Von</span>
+      X<input class="cf" style="width:44px" type="number" value="${c.x1??0}" oninput="evCondField('${eid}',${ci},'x1',+this.value)">
+      Y<input class="cf" style="width:44px" type="number" value="${c.y1??0}" oninput="evCondField('${eid}',${ci},'y1',+this.value)">
+      <span style="font-size:.62rem;color:var(--text3)">Bis</span>
+      X<input class="cf" style="width:44px" type="number" value="${c.x2??2}" oninput="evCondField('${eid}',${ci},'x2',+this.value)">
+      Y<input class="cf" style="width:44px" type="number" value="${c.y2??2}" oninput="evCondField('${eid}',${ci},'y2',+this.value)">`;
   } else if (c.typ === 'item_traegt' || c.typ === 'item_traegt_nicht') {
     const negLabel = c.typ === 'item_traegt_nicht' ? '<span style="color:#e55;font-size:.65rem;font-weight:600;margin-right:4px">🚫 NICHT</span>' : '';
     inner = `${negLabel}<span style="font-size:.68rem;color:var(--text2)">${c.gruppe?escHtml(c.gruppe)+' / ':''}<b>${escHtml(c.item||'–')}</b></span>
       <button onclick="ipickerOpen('item',v=>{evCondField('${eid}',${ci},'item',v.asset||v.name);evCondField('${eid}',${ci},'gruppe',v.group);evCondRerender('${eid}');})" style="font-size:.62rem;padding:2px 7px;background:var(--pd);border:none;color:var(--pl);border-radius:4px;cursor:pointer">📦 Wählen</button>`;
-  } else if (c.typ === 'zone_rect') {
-    inner = `<span style="font-size:.62rem;color:var(--text3)">Von</span>
-      X<input class="cf" style="width:44px" type="number" value="${c.x1??0}" oninput="evCondField('${eid}',${ci},'x1',+this.value)" title="X-Start">
-      Y<input class="cf" style="width:44px" type="number" value="${c.y1??0}" oninput="evCondField('${eid}',${ci},'y1',+this.value)" title="Y-Start">
-      <span style="font-size:.62rem;color:var(--text3)">Bis</span>
-      X<input class="cf" style="width:44px" type="number" value="${c.x2??2}" oninput="evCondField('${eid}',${ci},'x2',+this.value)" title="X-Ende">
-      Y<input class="cf" style="width:44px" type="number" value="${c.y2??2}" oninput="evCondField('${eid}',${ci},'y2',+this.value)" title="Y-Ende">`;
   } else if (c.typ === 'trigger_war') {
     const trigs = bot?.triggers ?? [];
     const opts = trigs.map(t=>`<option value="${t.id}" ${c.trigId===t.id?'selected':''}>${escHtml(t.name||t.id)}</option>`).join('');
@@ -3657,7 +3700,6 @@ function renderEvCond(bot, eid, c, ci) {
       </select>
       <span style="font-size:.62rem;color:var(--text3)">muss ausgelöst worden sein</span>`;
   }
-  const icons = {wort:'💬',zone:'🗺️',zone_rect:'📐',item_traegt:'👗',item_traegt_nicht:'🚫',trigger_war:'🔗'};
   const logik = c.logik ?? 'und';
   const logikBadge = ci === 0
     ? `<div class="cond-when-lbl">WENN</div>`
@@ -3665,17 +3707,15 @@ function renderEvCond(bot, eid, c, ci) {
         <button onclick="evCondLogik('${eid}',${ci},'und')" class="logik-btn ${logik==='und'?'active':''}">UND</button>
         <button onclick="evCondLogik('${eid}',${ci},'oder')" class="logik-btn ${logik==='oder'?'active':''}">ODER</button>
       </div>`;
-  return `<div class="cond-group ${logik==='oder'?'cond-group-oder':''}">
+  return `<div class="cond-group ${logik==='oder'?'cond-group-oder':''}" id="evcond-${eid}-${ci}">
     ${logikBadge}
-    <div class="cond-card cond-op" id="evcond-${eid}-${ci}">
+    <div class="cond-card cond-op">
       <div class="card-fields">
         <span class="cond-num">${ci+1}</span>
         <span style="font-size:.7rem;font-weight:600;color:var(--purple)">${icons[c.typ]??'❓'}</span>
         ${inner}
       </div>
-      <div style="display:flex;flex-direction:column;gap:2px">
-        <button class="rm-btn" onclick="evCondRemove('${eid}',${ci})">✕</button>
-      </div>
+      <button class="rm-btn" onclick="evCondRemove('${eid}',${ci})">✕</button>
     </div>
   </div>`;
 }
@@ -3748,8 +3788,8 @@ function eventNew() {
   if (!b.events) b.events = [];
   const e = {
     id:'ev'+Date.now(), name:'Neues Event', aktiv:true,
-    ausloeser:'manuell', delay:5000, delay_min:3000, delay_max:10000,
     ziel:'ausloeser', zielListe:[], wiederholung:'immer', maxMal:2,
+    von:'alle', vonNummer:0,
     bedingungen:[], aktionen:[], fallbackTyp:'nichts', fallbackText:''
   };
   b.events.push(e); _saveBots(); renderEventsTab();
@@ -3901,12 +3941,13 @@ function ipickerOpenForEvAct(eid, ai) {
 }
 
 // Fire event manually from popup
-function evFire(eid) {
+function evFire(eid) { evFireImmediate(eid); }
+function evFireImmediate(eid) {
   const b = _selBot(); if (!b) return;
   if (!_connected) { showStatus('❌ Nicht verbunden','error'); return; }
   const safeId = b.id.replace(/\W/g,'_');
-  bcSend({ type:'EXEC', code:`if(window['_BCBot_${safeId}'])window['_BCBot_${safeId}'].fireEvent('${eid}');else console.warn('[Bot] Nicht aktiv – erst starten');` });
-  showStatus('▶️ Event ausgelöst','success');
+  bcSend({ type:'EXEC', code:`if(window['_BCBot_${safeId}'])window['_BCBot_${safeId}'].fireEventNow('${eid}');else console.warn('[Bot] Nicht aktiv – erst starten');` });
+  showStatus('▶️ Event sofort ausgelöst','success');
 }
 
 function renderBotTab() {
@@ -4860,12 +4901,11 @@ function _buildBotCode(bot) {
   const safeId   = bot.id.replace(/\W/g,'_');
   const safeName = bot.name.replace(/\\/g,'\\\\').replace(/`/g,'\\`');
 
-  const cfgJson  = JSON.stringify({hearChat:s.hearChat,hearEmote:s.hearEmote,hearWhisper:s.hearWhisper,nurEigene:s.nurEigene,logAktiv:s.logAktiv??true,modus:s.modus,moneyQueryCmd:s.moneyQueryCmd??''});
+  const cfgJson  = JSON.stringify({hearChat:s.hearChat,hearEmote:s.hearEmote,hearWhisper:s.hearWhisper,nurEigene:s.nurEigene,logAktiv:s.logAktiv??true,modus:s.modus,moneyQueryCmd:_money?.settings?.queryCmd??'',moneyQueryTyp:_money?.settings?.queryTyp??'whisper'});
   const trigsJson = JSON.stringify(triggers);
   const events = (bot.events||[]).filter(e=>e.aktiv).map(e => ({
     id: e.id, name: e.name,
-    ausloeser: e.ausloeser??'manuell', von: e.von??'alle', vonNummer: e.vonNummer??0,
-    delay: e.delay??5000, delay_min: e.delay_min??3000, delay_max: e.delay_max??10000,
+    von: e.von??'alle', vonNummer: e.vonNummer??0,
     ziel: e.ziel??'ausloeser', zielListe: e.zielListe??[],
     wiederholung: e.wiederholung??'immer', maxMal: e.maxMal??2,
     fallbackTyp: e.fallbackTyp??'nichts', fallbackText: e.fallbackText??'',
@@ -5052,6 +5092,15 @@ function _execAct(a,C,vars){
     else if(a.typ==='item_entf'){InventoryRemove(C,a.gruppe);CharacterRefresh(C);ChatRoomCharacterUpdate(C);ok=true;}
     else if(a.typ==='item'){_applyItemAction(a,C);ok=true;}
     else if(a.typ==='teleport'){ok=_teleport(a,C);}
+    else if(a.typ==='money'){
+      const op=a.money_op??'add';
+      const val=a.money_val??0;
+      const delta=op==='add'?val:op==='sub'?-val:0;
+      const setVal=op==='set'?val:op==='reset'?0:undefined;
+      window.__BCK_popupRef?.postMessage({app:'BCKonfigurator',type:'BOT_MONEY',
+        memberNum:C.MemberNumber,name:C.Name,delta,setVal},'*');
+      ok=true;
+    }
     else ok=true;
   }catch(ex){_log('\u26A0 Aktion '+a.typ+' Fehler:',ex.message);ok=false;}
   // Dann / Sonst Nachrichten senden
@@ -5160,29 +5209,33 @@ function _fireEv(ev){
   });
 }
 
+// Scheduling via condition types ev_timer / ev_interval
 function _scheduleEv(ev){
   if(!ev.aktiv)return;
-  if(ev.ausloeser==='timer'){
-    _evTimers[ev.id]=setTimeout(()=>{_fireEv(ev);},ev.delay??5000);
-  } else if(ev.ausloeser==='interval'){
+  const beds=ev.bedingungen??[];
+  const timerC=beds.find(c=>c.typ==='ev_timer');
+  const intC=beds.find(c=>c.typ==='ev_interval');
+  if(timerC){
+    const ms=(timerC.sek??10)*1000;
+    _evTimers[ev.id+'_t']=setTimeout(()=>{
+      _fireEv(ev);
+    },ms);
+  }
+  if(intC){
+    const lo=(intC.sek_min??20)*1000, hi=(intC.sek_max??60)*1000;
     const go=()=>{
       const cnt=_evFiredCnt[ev.id]??0;
       if(ev.wiederholung==='einmalig'&&cnt>=1)return;
       if(ev.wiederholung==='n_mal'&&cnt>=(ev.maxMal??2))return;
       _fireEv(ev);
-      const lo=ev.delay_min??3000, hi=ev.delay_max??10000;
-      _evTimers[ev.id]=setTimeout(go,lo+Math.random()*(hi-lo));
+      _evTimers[ev.id+'_i']=setTimeout(go,lo+Math.random()*(hi-lo));
     };
-    const lo=ev.delay_min??3000, hi=ev.delay_max??10000;
-    _evTimers[ev.id]=setTimeout(go,lo+Math.random()*(hi-lo));
+    _evTimers[ev.id+'_i']=setTimeout(go,lo+Math.random()*(hi-lo));
   }
-  // chat + betritt: no auto-schedule, handled by _proc and joinPoll
 }
 
-// Start alle auto-Events (timer + interval only)
-_evts.forEach(ev=>{
-  if(ev.ausloeser==='timer'||ev.ausloeser==='interval') _scheduleEv(ev);
-});
+// Start alle aktiven Events die Timer/Interval haben
+_evts.forEach(ev=>{if(ev.aktiv)_scheduleEv(ev);});
 // ──────────────────────────────────────────────────────
 
 function _pushLog(extra,vars,trig){
@@ -5299,7 +5352,8 @@ function _proc(rohText,typKey,C){
 
   // ── Chat-Events prüfen ──
   _evts.forEach(ev=>{
-    if(!ev.aktiv||ev.ausloeser!=='chat')return;
+    if(!ev.aktiv)return;
+    // Chat-Events: brauchen wort-Bedingung und KEIN ev_timer/ev_interval
     // Von-Filter: wer darf das Event auslösen?
     const vonOk=(()=>{
       if(ev.von==='bot')return C.MemberNumber===Player.MemberNumber;
@@ -5308,8 +5362,10 @@ function _proc(rohText,typKey,C){
     })();
     if(!vonOk)return;
     // Wort-Bedingungen prüfen
+    const hasTimerBed=(ev.bedingungen??[]).some(c=>c.typ==='ev_timer'||c.typ==='ev_interval'||c.typ==='player_betritt');
+    if(hasTimerBed)return; // Timer/Betritt-Events werden anders ausgelöst
     const wortConds=(ev.bedingungen??[]).filter(c=>c.typ==='wort');
-    if(!wortConds.length)return; // chat-event braucht mindestens eine wort-bedingung
+    if(!wortConds.length)return;
     ev._rohText=rohText; ev._typKey=typKey; // temp context für _okEv
     if(_okEv(ev,C,rohText,typKey)){
       // Ziel bestimmen
@@ -5451,9 +5507,19 @@ const _joinPoll=setInterval(()=>{
           _run(trig,{name:C.Name,wort:'',typ:label,x:pos.X,y:pos.Y,zone:'',C});
         }
       });
-      // ── Betritt-Events feuern ──
+      // ── Betritt-Events feuern (Events mit player_betritt Bedingung) ──
       _evts.forEach(ev=>{
-        if(!ev.aktiv||ev.ausloeser!=='betritt')return;
+        if(!ev.aktiv)return;
+        const betrittConds=(ev.bedingungen??[]).filter(c=>c.typ==='player_betritt');
+        if(!betrittConds.length)return;
+        // betritt_typ Filter
+        const bOk=betrittConds.every(c=>{
+          const bt=c.betritt_typ??'alle';
+          if(bt==='neu')return istNeu;
+          if(bt==='rejoin')return!istNeu;
+          return true;
+        });
+        if(!bOk)return;
         const vonOk=(()=>{
           if(ev.von==='bot')return C.MemberNumber===Player.MemberNumber;
           if(ev.von==='nummer')return ev.vonNummer&&C.MemberNumber===ev.vonNummer;
@@ -5621,7 +5687,7 @@ window['_BCBot_'+_BID]={
     }
     if(_msgH) ServerSocket.off('ChatRoomMessage',_msgH);
     // Events timer stoppen
-    Object.values(_evTimers).forEach(h=>clearTimeout(h));
+    Object.values(_evTimers).forEach(h=>clearTimeout(h)); // clears both _t and _i timers
     delete window['_BCBot_'+_BID];
     // State im window-Objekt + localStorage sichern (überlebt Page-Reload)
     window[_stateKey].roomEver=[..._roomEver];
@@ -5636,13 +5702,19 @@ window['_BCBot_'+_BID]={
     }catch(e){}
     console.log('\u23F9\uFE0F [Bot:${safeName}] gestoppt | States gesichert (Mem+LS)');
   },
-  // Manuelles Event feuern (aus evFire() im Popup)
-  fireEvent(eid){
+  // Sofortiges Event feuern (ignoriert Timer/Wiederholung-Check)
+  fireEventNow(eid){
     const ev=_evts.find(e=>e.id===eid);
     if(!ev){console.warn('[Bot] Event nicht gefunden:',eid);return;}
-    _log('▶️ Manuell feuern: "'+ev.name+'"');
+    _log('▶️ Sofort feuern: "'+ev.name+'"');
+    // Temporär Wiederholung ignorieren
+    const savedWdh=ev.wiederholung;
+    ev.wiederholung='immer';
     _fireEv(ev);
+    ev.wiederholung=savedWdh;
   },
+  // Kompatibilität
+  fireEvent(eid){this.fireEventNow(eid);},
   // Manuelles State-Reset (z.B. aus der Konsole: window['_BCBot_...'].clearState())
   clearState(){
     window[_stateKey]={fired:{},firedCnt:{},firedChar:{},roomEver:[]};
