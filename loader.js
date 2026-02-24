@@ -683,6 +683,7 @@ window.CurseScanner = (() => {
     window.addEventListener('message', function (ev) {
       if (!ev.data || ev.data.app !== APP) return;
       const src = ev.source;
+      window.__BCK_popupRef = src; // Bot kann damit Logs zurückschicken
       BCK.info('\u2190 postMessage:', ev.data.type, '| origin:', ev.origin);
 
       switch (ev.data.type) {

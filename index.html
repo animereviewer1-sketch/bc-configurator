@@ -2730,6 +2730,10 @@ window.addEventListener('message', function(ev) {
       }
       break;
 
+    case 'BOT_LOG':
+      logPush(ev.data.entry);
+      break;
+
     case 'EXEC_OK':
       console.log('[BCK-Popup] EXEC_OK \u2705');
       showStatus('\u2705 Ausgef\u00fchrt!', 'success');
@@ -3441,7 +3445,13 @@ function renderCond(bot, tid, c, ci) {
       ${modeBadge}
       <span style="font-size:.62rem;color:var(--text3)">muss zuerst ausgelöst worden sein</span>`;
   } else if (c.typ === 'player_betritt') {
-    inner = `<span style="font-size:.68rem;color:var(--green)">👋 Feuert einmalig wenn ein Spieler den Raum betritt</span>`;
+    const bt = c.betritt_typ ?? 'alle';
+    inner = `
+      <select class="cf" style="width:200px" onchange="condField('${tid}',${ci},'betritt_typ',this.value)">
+        <option value="alle"   ${bt==='alle'?'selected':''}>👋 Jedes Mal (auch Erstbesuch)</option>
+        <option value="neu"    ${bt==='neu'?'selected':''}>🆕 Erstes Mal in dieser Session</option>
+        <option value="rejoin" ${bt==='rejoin'?'selected':''}>🔄 Nur Rejoin (war schon da)</option>
+      </select>`;
   }
   const icons = {wort:'💬',zone:'🗺️',item_traegt:'👗',trigger_war:'🔗',player_betritt:'👋'};
   return `<div class="cond-card cond-op">
@@ -4162,19 +4172,23 @@ function _runSeq(aktionen,C,vars,trigBase,onDone,onUngueltig){
 
 
 // Sendet einen Log-Eintrag an den Tab im Index
+// Sendet Log-Eintrag via PostMessage-Brücke zurück an das Popup
 function _pushLog(extra,vars,trig){
-  if(typeof window.logPush!=='function')return;
-  window.logPush({
+  const entry={
     ts:Date.now(),
     botName:'${safeName}',
-    trigName:trig.name??'?',
-    trigId:trig.id,
-    player:(vars.name??'?')+' #'+(vars.C?.MemberNumber??'?'),
-    memberNum:vars.C?.MemberNumber,
-    x:vars.x??0,
-    y:vars.y??0,
+    trigName:trig?.name??'?',
+    trigId:trig?.id??'',
+    player:(vars?.name??'?')+' #'+(vars?.C?.MemberNumber??'?'),
+    memberNum:vars?.C?.MemberNumber,
+    x:vars?.x??0,
+    y:vars?.y??0,
     ...extra,
-  });
+  };
+  // Brücke: postMessage zurück an Popup (window.__BCK_popupRef = gespeichert in loader.js)
+  try{
+    window.__BCK_popupRef?.postMessage({app:'BCKonfigurator',type:'BOT_LOG',entry},'*');
+  }catch(e){}
 }
 
 function _run(trig,vars){
@@ -4271,6 +4285,7 @@ const _itPoll=setInterval(()=>{
 
 // ── Spieler-Betritt Polling (feuert 1x beim Betreten) ──
 const _roomPrev=new Set((ChatRoomCharacter||[]).map(c=>c.MemberNumber));
+const _roomEver=new Set([..._roomPrev]); // alle die je im Raum waren (für neu/rejoin)
 const _joinPoll=setInterval(()=>{
   const chars=ChatRoomCharacter||[];
   const cur=new Set(chars.map(c=>c.MemberNumber));
@@ -4287,10 +4302,20 @@ const _joinPoll=setInterval(()=>{
 
   for(const C of chars){
     if(!_roomPrev.has(C.MemberNumber)){
-      _log('\u{1F91D} Spieler betritt: '+C.Name+' #'+C.MemberNumber);
+      const istNeu=!_roomEver.has(C.MemberNumber);
+      const label=istNeu?'\u{1F195} Neu':'\u{1F504} Rejoin';
+      _log(label+': '+C.Name+' #'+C.MemberNumber);
+      _roomEver.add(C.MemberNumber);
       _trigs.forEach(trig=>{
-        const hasBetritt=(trig.bedingungen??[]).some(c=>c.typ==='player_betritt');
-        if(!hasBetritt)return;
+        const bConds=(trig.bedingungen??[]).filter(c=>c.typ==='player_betritt');
+        if(!bConds.length)return;
+        const bOk=bConds.every(c=>{
+          const bt=c.betritt_typ??'alle';
+          if(bt==='neu')return istNeu;
+          if(bt==='rejoin')return!istNeu;
+          return true;
+        });
+        if(!bOk)return;
         const pos={X:C.X??0,Y:C.Y??0};
         const otherOk=(trig.bedingungen??[]).every(c=>{
           if(c.typ==='player_betritt')return true;
@@ -4298,7 +4323,7 @@ const _joinPoll=setInterval(()=>{
           if(c.typ==='trigger_war'){const ref=_trigMap[c.trigId];return ref?.charSpec?!!_firedChar[c.trigId+'_'+C.MemberNumber]:!!_fired[c.trigId];}
           return true;
         });
-        if(otherOk)_run(trig,{name:C.Name,wort:'',typ:'Beitritt',x:pos.X,y:pos.Y,zone:'',C});
+        if(otherOk)_run(trig,{name:C.Name,wort:'',typ:label,x:pos.X,y:pos.Y,zone:'',C});
       });
     }
   }
