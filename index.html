@@ -560,6 +560,15 @@ textarea.outfit-code{width:100%;min-height:200px;background:var(--bg4);border:1p
 .order-btn:disabled{opacity:.25;cursor:default}
 .act-kritisch{border-color:#662222!important;background:#1a0808!important}
 .act-kritisch:hover{border-color:#aa3333!important}
+.cond-group{display:flex;flex-direction:column;gap:0}
+.cond-num{font-size:.58rem;font-weight:700;color:var(--text3);background:var(--bg3);border-radius:3px;padding:1px 5px;flex-shrink:0;min-width:18px;text-align:center}
+.logik-btn{font-size:.58rem;padding:1px 7px;border:1px solid var(--border2);background:var(--bg3);color:var(--text3);cursor:pointer;line-height:1.4}
+.logik-btn:first-child{border-radius:3px 0 0 3px}
+.logik-btn:last-child{border-radius:0 3px 3px 0;border-left:none}
+.logik-btn.active{background:var(--pd);color:var(--pl);border-color:var(--purple)}
+.tp-slot-valid{font-size:.58rem;padding:1px 6px;border-radius:3px;cursor:pointer;border:1px solid}
+.tp-slot-valid.zählt{background:#0a200a;color:#5c5;border-color:#1a4a1a}
+.tp-slot-valid.zählt-nicht{background:#200a0a;color:#e55;border-color:#4a1a1a}
 .log-entry{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:6px;border:1px solid var(--border2);background:var(--bg2);font-size:.72rem}
 .log-entry.log-ok{border-color:#1a4a1a;background:#080f08}
 .log-entry.log-ungueltig{border-color:#4a1a1a;background:#0f0808}
@@ -575,6 +584,19 @@ textarea.outfit-code{width:100%;min-height:200px;background:var(--bg4);border:1p
 .log-pos{color:var(--text3);font-size:.6rem;white-space:nowrap}
 .log-filter-btn{font-size:.65rem;padding:2px 9px;background:var(--bg3);border:1px solid var(--border2);color:var(--text3);border-radius:4px;cursor:pointer}
 .log-filter-btn.active{background:var(--pd);border-color:var(--purple);color:var(--pl)}
+.log-badge.join-neu{background:#0a1a2a;color:#5af;border:1px solid #1a4a6a}
+.log-badge.join-rejoin{background:#1a0a2a;color:#a5f;border:1px solid #4a1a6a}
+.log-badge.leave{background:#1a1a1a;color:#888;border:1px solid #333}
+.log-entry.log-join{border-color:#1a3a5a;background:#05080d}
+.log-entry.log-leave{border-color:#222;background:#080808;opacity:.7}
+.money-card{display:flex;align-items:center;gap:10px;padding:9px 12px;border:1px solid var(--border2);border-radius:7px;background:var(--bg2);margin-bottom:6px}
+.money-balance{font-size:1.1rem;font-weight:700;color:#f5c842;min-width:70px;text-align:right}
+.money-name{color:var(--text1);flex:1;font-size:.78rem}
+.money-adj{display:flex;gap:4px;align-items:center}
+.money-adj input{width:64px}
+.money-adj button{padding:3px 9px;font-size:.68rem;border:none;border-radius:4px;cursor:pointer}
+.money-plus{background:#0d2a0d;color:#5c5}
+.money-minus{background:#2a0d0d;color:#e55}
 .bot-status{padding:5px 18px;font-size:.68rem;font-family:var(--mono);display:none}
 .bot-status.running{background:#052818;border-bottom:1px solid var(--green2);color:var(--green);display:block}
 .bot-status.stopped{background:#0a0510;border-bottom:1px solid var(--border2);color:var(--text3);display:block}
@@ -632,6 +654,7 @@ textarea.outfit-code{width:100%;min-height:200px;background:var(--bg4);border:1p
   <button class="tab-btn"        id="tab-curse-btn"  onclick="switchTab('curse')">🔮 Craft &amp; Curse</button>
   <button class="tab-btn"        id="tab-bot-btn"    onclick="switchTab('bot')">🤖 Bot</button>
   <button class="tab-btn"        id="tab-log-btn"    onclick="switchTab('log')">📋 Logs</button>
+  <button class="tab-btn"        id="tab-money-btn"  onclick="switchTab('money')">💰 Money</button>
 </div>
 
 <!-- TAB 1: ITEM MANAGER -->
@@ -2196,7 +2219,7 @@ function deleteProfileByIdx(idx) {
 let _activeTab = 'items';
 function switchTab(tab) {
   _activeTab = tab;
-  ['items','outfit','curse','bot','log'].forEach(t => {
+  ['items','outfit','curse','bot','log','money'].forEach(t => {
     document.getElementById('tab-'+t)?.classList.toggle('active', t===tab);
     document.getElementById('tab-'+t+'-btn')?.classList.toggle('active', t===tab);
   });
@@ -2204,6 +2227,7 @@ function switchTab(tab) {
   if (tab === 'curse')  { renderCurseTab(); }
   if (tab === 'bot')    { renderBotTab(); }
   if (tab === 'log')    { renderLogTab(); }
+  if (tab === 'money')  { renderMoneyTab(); }
 }
 
 // ── addToOutfit patched: auto-switch + auto-code ──────
@@ -2734,6 +2758,45 @@ window.addEventListener('message', function(ev) {
       logPush(ev.data.entry);
       break;
 
+    case 'BOT_MONEY':
+      _moneyApply(ev.data.memberNum, ev.data.name, ev.data.delta, ev.data.setVal);
+      break;
+
+    case 'MONEY_QUERY': {
+      const id = 'mn_'+ev.data.memberNum;
+      const p = _money.balances[id];
+      const bal = p?.balance ?? 0;
+      const cur = _money.settings.name || 'Gold';
+      const name = ev.data.name || ('#'+ev.data.memberNum);
+      // Find any active bot to send the response
+      const actBot = _bots.find(b=>b.laufend);
+      if (actBot) {
+        const safeId = actBot.id.replace(/\W/g,'_');
+        bcSend({type:'EXEC', code:`ServerSend('ChatRoomChat',{Content:'${name}: Du hast ' + ${bal} + ' ${cur}',Type:'Chat'});`});
+      }
+      break;
+    }
+
+    case 'BOT_ROOM_EVER': {
+      // Spieler die je da waren persistieren – überlebt Konfigurator-Neustart
+      const reKey = 'BC_RoomEver_v1';
+      try {
+        const reData = JSON.parse(localStorage.getItem(reKey)||'{}');
+        reData[ev.data.botId] = ev.data.members;
+        localStorage.setItem(reKey, JSON.stringify(reData));
+      } catch {}
+      break;
+    }
+
+    case 'BOT_ROOM_EVER': {
+      // Speichere roomEver in localStorage (überlebt Konfigurator-Neustart)
+      const reKey = 'BC_RoomEver_v1';
+      const reData = JSON.parse(localStorage.getItem(reKey)||'{}');
+      reData[ev.data.botId] = ev.data.members;
+      localStorage.setItem(reKey, JSON.stringify(reData));
+      break;
+    }
+
     case 'EXEC_OK':
       console.log('[BCK-Popup] EXEC_OK \u2705');
       showStatus('\u2705 Ausgef\u00fchrt!', 'success');
@@ -3108,10 +3171,14 @@ function selectRoomMember(num) {
     <span style="font-weight:600;font-size:.85rem;color:var(--text1)">📋 Bot-Logs</span>
     <div style="display:flex;gap:8px;align-items:center">
       <span id="log-count" style="font-size:.68rem;color:var(--text3)"></span>
-      <button onclick="logFilter('')" id="logf-all"    class="log-filter-btn active">Alle</button>
-      <button onclick="logFilter('ok')"         id="logf-ok"    class="log-filter-btn">✅ Ausgelöst</button>
-      <button onclick="logFilter('ungueltig')"  id="logf-ug"    class="log-filter-btn">❌ Ungültig</button>
-      <button onclick="logFilter('skip')"       id="logf-skip"  class="log-filter-btn">⏭ Übersprungen</button>
+      <button onclick="logFilter('')"             id="logf-all"    class="log-filter-btn active">Alle</button>
+      <button onclick="logFilter('ok')"           id="logf-ok"    class="log-filter-btn">✅ Ausgelöst</button>
+      <button onclick="logFilter('ungueltig')"    id="logf-ug"    class="log-filter-btn">❌ Ungültig</button>
+      <button onclick="logFilter('skip')"         id="logf-skip"  class="log-filter-btn">⏭ Übersprungen</button>
+      <button onclick="logFilter('join')"         id="logf-join"  class="log-filter-btn">👋 Joins</button>
+      <button onclick="logFilter('leave')"        id="logf-leave" class="log-filter-btn">🚪 Verlassen</button>
+      <button onclick="logFilter('join')"       id="logf-join"  class="log-filter-btn">👋 Joins/Leaves</button>
+      <button onclick="logFilter('join')"       id="logf-join"  class="log-filter-btn">👋 Beitritte</button>
       <button onclick="logClearFiltered()" style="font-size:.68rem;padding:3px 10px;background:#2a0a0a;border:1px solid var(--red);color:var(--red);border-radius:5px;cursor:pointer">🗑 Sichtbare löschen</button>
       <button onclick="logClearAll()" style="font-size:.68rem;padding:3px 10px;background:var(--bg3);border:1px solid var(--border);color:var(--text3);border-radius:5px;cursor:pointer">Alle löschen</button>
     </div>
@@ -3119,10 +3186,33 @@ function selectRoomMember(num) {
   <div id="log-entries" style="overflow-y:auto;height:calc(100vh - 162px);padding:10px 14px;display:flex;flex-direction:column;gap:4px"></div>
 </div>
 
+<div id="tab-money" class="tab-pane">
+  <div style="display:flex;gap:18px;padding:14px 18px;border-bottom:1px solid var(--border);align-items:center;flex-wrap:wrap">
+    <span style="font-weight:600;font-size:.85rem">💰 Money System</span>
+    <label style="font-size:.7rem;color:var(--text3)">Währungsname:
+      <input id="money-name-inp" class="cf" style="width:100px;margin-left:4px" placeholder="Gold"
+        value="" oninput="moneySetName(this.value)">
+    </label>
+    <label style="font-size:.7rem;color:var(--text3)">Abfrage-Befehl (Chat):
+      <input id="money-cmd-inp" class="cf" style="width:100px;margin-left:4px" placeholder="!gold"
+        value="" oninput="moneySetCmd(this.value)">
+    </label>
+    <button onclick="moneyAddPlayer()" style="font-size:.68rem;padding:4px 11px;background:var(--pd);border:none;color:var(--pl);border-radius:5px;cursor:pointer">+ Spieler hinzufügen</button>
+    <button onclick="moneyResetAll()" style="font-size:.68rem;padding:4px 11px;background:#2a0a0a;border:1px solid var(--red);color:var(--red);border-radius:5px;cursor:pointer">Alle zurücksetzen</button>
+  </div>
+  <div id="money-entries" style="overflow-y:auto;height:calc(100vh - 162px);padding:10px 14px"></div>
+</div>
+
 <script>
 // ══ BOT ENGINE ══════════════════════════════════════════════
 
 const BOT_KEY = 'BC_Bots_v2';
+const MONEY_KEY = 'BC_Money_v1';
+
+// Money storage: { settings: {name, queryCmd}, balances: { memberNum: {name, balance} } }
+let _money = { settings: { name: 'Gold', queryCmd: '!gold' }, balances: {} };
+(()=>{ try { const s=localStorage.getItem(MONEY_KEY); if(s){ const d=JSON.parse(s); _money=Object.assign(_money,d); } } catch{} })();
+function _saveMoney() { try { localStorage.setItem(MONEY_KEY, JSON.stringify(_money)); } catch {} }
 
 let _bots      = [];
 let _selBotId  = null;
@@ -3142,14 +3232,100 @@ function _selBot() { return _bots.find(b => b.id === _selBotId) ?? null; }
 
 // ── Tab entry ─────────────────────────────────────────────────
 // ══════════════════════════════════════════════════════
+//  MONEY SYSTEM
+// ══════════════════════════════════════════════════════
+function renderMoneyTab() {
+  // Init UI values
+  document.getElementById('money-name-inp').value = _money.settings.name ?? 'Gold';
+  document.getElementById('money-cmd-inp').value  = _money.settings.queryCmd ?? '!gold';
+  const entries = Object.entries(_money.balances);
+  const cur = _money.settings.name || 'Gold';
+  if (!entries.length) {
+    document.getElementById('money-entries').innerHTML = `<div style="color:var(--text3);font-size:.75rem;text-align:center;margin-top:40px">Noch keine Spieler – „+ Spieler hinzufügen" oder wird automatisch via Bot befüllt</div>`;
+    return;
+  }
+  const html = entries.sort((a,b)=>b[1].balance-a[1].balance).map(([id, p]) => `
+    <div class="money-card" id="mcrd-${id}">
+      <span class="money-name">👤 ${escHtml(p.name||id)}</span>
+      <span class="money-balance">${p.balance ?? 0}</span>
+      <span style="font-size:.65rem;color:var(--text3)">${escHtml(cur)}</span>
+      <div class="money-adj">
+        <input class="cf" type="number" id="madj-${id}" value="0" style="width:64px">
+        <button class="money-plus" onclick="moneyAdj('${id}',+1)">+</button>
+        <button class="money-minus" onclick="moneyAdj('${id}',-1)">−</button>
+        <button onclick="moneySet('${id}',prompt('Genauen Wert setzen für ${escHtml(p.name||id)}:',${p.balance??0}))" style="font-size:.62rem;padding:3px 7px;background:var(--bg3);border:1px solid var(--border2);color:var(--text3);border-radius:4px;cursor:pointer">= Setzen</button>
+        <button onclick="moneyRemovePlayer('${id}')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.75rem;padding:2px 6px">✕</button>
+      </div>
+    </div>`).join('');
+  document.getElementById('money-entries').innerHTML = html;
+}
+
+function moneySetName(v) { _money.settings.name = v.trim()||'Gold'; _saveMoney(); }
+function moneySetCmd(v)  { _money.settings.queryCmd = v.trim(); _saveMoney(); }
+
+function moneyAdj(id, sign) {
+  const amt = +document.getElementById('madj-'+id)?.value || 0;
+  if (!amt) return;
+  const p = _money.balances[id]; if (!p) return;
+  p.balance = (p.balance??0) + sign*amt;
+  _saveMoney(); renderMoneyTab();
+}
+
+function moneySet(id, val) {
+  if (val === null || val === '') return;
+  const p = _money.balances[id]; if (!p) return;
+  p.balance = parseInt(val)||0;
+  _saveMoney(); renderMoneyTab();
+}
+
+function moneyAddPlayer() {
+  const name = prompt('Spielername oder MemberNumber:');
+  if (!name?.trim()) return;
+  const id = 'manual_'+Date.now();
+  _money.balances[id] = { name: name.trim(), balance: 0 };
+  _saveMoney(); renderMoneyTab();
+}
+
+function moneyRemovePlayer(id) {
+  delete _money.balances[id]; _saveMoney(); renderMoneyTab();
+}
+
+function moneyResetAll() {
+  if (!confirm('Alle Guthaben auf 0 zurücksetzen?')) return;
+  Object.values(_money.balances).forEach(p => p.balance = 0);
+  _saveMoney(); renderMoneyTab();
+}
+
+// Called by bot via postMessage
+function _moneyApply(memberNum, name, delta, setVal) {
+  const id = 'mn_'+memberNum;
+  if (!_money.balances[id]) _money.balances[id] = { name: name||('#'+memberNum), balance: 0 };
+  const p = _money.balances[id];
+  p.name = name || p.name;
+  if (setVal !== undefined) p.balance = parseInt(setVal)||0;
+  else p.balance = (p.balance??0) + (parseInt(delta)||0);
+  _saveMoney();
+  // Live update if tab open
+  if (document.getElementById('tab-money')?.classList.contains('active')) renderMoneyTab();
+  // Update tab badge
+  const btn = document.getElementById('tab-money-btn');
+  if (btn) btn.textContent = '💰 Money (' + Object.keys(_money.balances).length + ')';
+}
+
+// ══════════════════════════════════════════════════════
 //  BOT LOG SYSTEM
 // ══════════════════════════════════════════════════════
-window._BCBotLog = window._BCBotLog ?? []; // [{ts,botName,trigName,trigId,player,memberNum,status,x,y,msg}]
+window._BCBotLog = window._BCBotLog ?? [];
+// Logs aus localStorage laden (persistiert über Konfigurator-Neustarts)
+if (!window._BCBotLog.length) {
+  try { const s=localStorage.getItem('BCBot_Logs'); if(s) window._BCBotLog=JSON.parse(s); } catch(e) {}
+}
 let _logFilter = '';
 
 function logPush(entry) {
   window._BCBotLog.unshift(entry); // Neueste zuerst
-  if (window._BCBotLog.length > 500) window._BCBotLog.length = 500; // Max 500 Einträge
+  if (window._BCBotLog.length > 2000) window._BCBotLog.length = 2000; // Max 2000 Einträge
+  _saveLogsToStorage(); // Persistent
   // Live-Update wenn Log-Tab aktiv
   if (document.getElementById('tab-log')?.classList.contains('active')) renderLogTab();
   // Badge auf Tab-Button aktualisieren
@@ -3159,8 +3335,8 @@ function logPush(entry) {
 
 function logFilter(f) {
   _logFilter = f;
-  ['all','ok','ug','skip'].forEach(k => document.getElementById('logf-'+k)?.classList.remove('active'));
-  const map = {'':'all','ok':'ok','ungueltig':'ug','skip':'skip'};
+  ['all','ok','ug','skip','join','leave'].forEach(k => document.getElementById('logf-'+k)?.classList.remove('active'));
+  const map = {'':'all','ok':'ok','ungueltig':'ug','skip':'skip','join':'join','leave':'leave'};
   document.getElementById('logf-'+(map[f]??'all'))?.classList.add('active');
   renderLogTab();
 }
@@ -3169,8 +3345,24 @@ function _logEntries() {
   if (!_logFilter) return window._BCBotLog;
   return window._BCBotLog.filter(e => {
     if (_logFilter === 'skip') return e.status.startsWith('skip');
+    if (_logFilter === 'join') return e.status.startsWith('join') || e.status === 'leave';
     return e.status === _logFilter;
   });
+}
+
+// Gibt zurück ob ein Spieler laut Logs als "bekannt" gilt (war schon im Raum)
+function _logKnownPlayers(botId) {
+  const known = new Set();
+  // Durchsuche Logs rückwärts (älteste zuerst = letztes Element im Array)
+  const logs = [...window._BCBotLog].reverse();
+  logs.forEach(e => {
+    if (!botId || e.botId === botId) {
+      if (e.status === 'join' || e.status === 'join_rejoin') {
+        if (e.memberNum) known.add(e.memberNum);
+      }
+    }
+  });
+  return known;
 }
 
 function renderLogTab() {
@@ -3179,10 +3371,13 @@ function renderLogTab() {
   if (count) count.textContent = entries.length + ' / ' + window._BCBotLog.length + ' Einträge';
 
   const statusLabel = {
-    ok: '<span class="log-badge ok">✅ Ausgelöst</span>',
-    ungueltig: '<span class="log-badge ungueltig">❌ Ungültig</span>',
-    skip_wdh: '<span class="log-badge skip">⏭ Einmalig</span>',
-    skip_max: '<span class="log-badge skip">⏭ Max erreicht</span>',
+    ok:          '<span class="log-badge ok">✅ Ausgelöst</span>',
+    ungueltig:   '<span class="log-badge ungueltig">❌ Ungültig</span>',
+    skip_wdh:    '<span class="log-badge skip">⏭ Einmalig</span>',
+    skip_max:    '<span class="log-badge skip">⏭ Max erreicht</span>',
+    join:        '<span class="log-badge" style="background:#0a1a0a;color:#5f5;border:1px solid #1a5a1a">🆕 Erstes Mal</span>',
+    join_rejoin: '<span class="log-badge" style="background:#0a0a2a;color:#88f;border:1px solid #1a1a5a">🔄 Rejoin</span>',
+    leave:       '<span class="log-badge" style="background:#111;color:#777;border:1px solid #333">🚪 Verlassen</span>',
   };
 
   const html = entries.map((e, i) => {
@@ -3190,16 +3385,16 @@ function renderLogTab() {
     const ts = d.toLocaleTimeString('de-DE', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
     const pos = (e.x||e.y) ? `X${e.x} Y${e.y}` : '';
     const badge = statusLabel[e.status] ?? `<span class="log-badge skip">⏭ ${escHtml(e.status)}</span>`;
-    const cls = e.status === 'ok' ? 'log-ok' : e.status === 'ungueltig' ? 'log-ungueltig' : 'log-skip';
+    const isJoinLeave = ['join','join_rejoin','leave'].includes(e.status);
+    const cls = e.status === 'ok' ? 'log-ok' : e.status === 'ungueltig' ? 'log-ungueltig' : isJoinLeave ? '' : 'log-skip';
     const realIdx = window._BCBotLog.indexOf(e);
+    const trigPart = isJoinLeave ? '' : `<span style="color:var(--text3);font-size:.65rem">→</span><span class="log-trig">🎯 ${escHtml(e.trigName||'')}</span><span style="color:var(--text3);font-size:.65rem">von</span>`;
     return `<div class="log-entry ${cls}" id="loge-${realIdx}">
       <span class="log-ts">${ts}</span>
       ${badge}
-      <span class="log-bot">${escHtml(e.botName)}</span>
-      <span style="color:var(--text3);font-size:.65rem">→</span>
-      <span class="log-trig">🎯 ${escHtml(e.trigName)}</span>
-      <span style="color:var(--text3);font-size:.65rem">von</span>
-      <span class="log-player">👤 ${escHtml(e.player)}</span>
+      <span class="log-bot">${escHtml(e.botName||'')}</span>
+      ${trigPart}
+      <span class="log-player">👤 ${escHtml(e.player||'')}</span>
       ${pos ? `<span class="log-pos">📍 ${pos}</span>` : ''}
       ${e.msg ? `<span style="font-size:.62rem;color:var(--text3);font-style:italic">${escHtml(e.msg)}</span>` : ''}
       <button onclick="logDeleteEntry(${realIdx})" style="margin-left:auto;background:none;border:none;color:var(--text3);cursor:pointer;font-size:.7rem;padding:1px 5px;opacity:.5" onmouseover="this.style.opacity=1;this.style.color='var(--red)'" onmouseout="this.style.opacity=.5;this.style.color='var(--text3)'">✕</button>
@@ -3211,6 +3406,7 @@ function renderLogTab() {
 
 function logDeleteEntry(idx) {
   window._BCBotLog.splice(idx, 1);
+  _saveLogsToStorage();
   renderLogTab();
   const btn = document.getElementById('tab-log-btn');
   if (btn) btn.textContent = '📋 Logs' + (window._BCBotLog.length ? ' ('+window._BCBotLog.length+')' : '');
@@ -3222,16 +3418,19 @@ function logClearFiltered() {
     const i = window._BCBotLog.indexOf(e);
     if (i >= 0) window._BCBotLog.splice(i, 1);
   });
+  _saveLogsToStorage();
   renderLogTab();
 }
 
 function logClearAll() {
   window._BCBotLog.length = 0;
   // Auch Bot-States in BC zurücksetzen (alle laufenden Bots)
-  _bots.filter(b=>b.laufend).forEach(b=>{
+  _bots.forEach(b=>{
     const safeId = b.id.replace(/\W/g,'_');
-    bcSend({ type:'EXEC', code:`if(window['_BCBot_${safeId}'])window['_BCBot_${safeId}'].clearState();else{delete window['__BCKBotState_${safeId}'];}` });
+    if (b.laufend) bcSend({ type:'EXEC', code:`if(window['_BCBot_${safeId}'])window['_BCBot_${safeId}'].clearState();else{delete window['__BCKBotState_${safeId}'];}` });
+    // RoomEver löschen = nächstes Mal ist jeder "neu"
   });
+  try { localStorage.removeItem('BC_RoomEver_v1'); } catch {}
   renderLogTab();
   const btn = document.getElementById('tab-log-btn');
   if (btn) btn.textContent = '📋 Logs';
@@ -3463,12 +3662,27 @@ function renderCond(bot, tid, c, ci) {
       </select>`;
   }
   const icons = {wort:'💬',zone:'🗺️',item_traegt:'👗',trigger_war:'🔗',player_betritt:'👋'};
-  return `<div class="cond-card cond-op">
-    <div class="card-fields">
-      <span style="font-size:.7rem;font-weight:600;color:var(--purple);flex-shrink:0">${icons[c.typ]??'❓'}</span>
-      ${inner}
+  // Logik-Operator: verbindet diese Bedingung mit der vorherigen
+  const logik = c.logik ?? 'und';
+  const logikBadge = ci === 0 ? '' : `
+    <div style="display:flex;align-items:center;gap:0;margin:2px 0;padding-left:6px">
+      <button onclick="condLogik('${tid}',${ci},'und')" class="logik-btn ${logik==='und'?'active':''}" title="UND – beide müssen zutreffen">UND</button>
+      <button onclick="condLogik('${tid}',${ci},'oder')" class="logik-btn ${logik==='oder'?'active':''}" title="ODER – mind. eine muss zutreffen">ODER</button>
+    </div>`;
+  return `<div class="cond-group">
+    ${logikBadge}
+    <div class="cond-card cond-op" id="cond-${tid}-${ci}">
+      <div class="card-fields">
+        <span class="cond-num">${ci+1}</span>
+        <span style="font-size:.7rem;font-weight:600;color:var(--purple);flex-shrink:0">${icons[c.typ]??'❓'}</span>
+        ${inner}
+      </div>
+      <div style="display:flex;flex-direction:column;gap:2px">
+        <button class="order-btn" onclick="condMoveUp('${tid}',${ci})" ${ci===0?'disabled':''}>▲</button>
+        <button class="order-btn" onclick="condMoveDown('${tid}',${ci})" title="Nach unten">▼</button>
+        <button class="rm-btn" style="margin-top:2px" onclick="condRemove('${tid}',${ci})">✕</button>
+      </div>
     </div>
-    <button class="rm-btn" onclick="condRemove('${tid}',${ci})">✕</button>
   </div>`;
 }
 
@@ -3486,6 +3700,7 @@ function renderAct(tid, a, ai) {
     ['chat','💬 Chat senden'],['emote','✨ Emote senden'],['whisper','🤫 Whisper senden'],
     ['item','📦 Item / Curse / Profil anlegen'],['item_entf','🗑️ Item entfernen'],
     ['teleport','🌀 Teleport'],
+    ['money','💰 Money ändern'],
   ];
   const typeOpts = types.map(([v,l])=>`<option value="${v}" ${a.typ===v?'selected':''}>${l}</option>`).join('');
 
@@ -3508,21 +3723,42 @@ function renderAct(tid, a, ai) {
         oninput="actField('${tid}',${ai},'gruppe',this.value)" placeholder="Gruppe (z.B. ItemMouth, ItemArms …)">`;
   } else if (a.typ === 'teleport') {
     const slots = a.tpSlots ?? [];
-    const slotsHtml = slots.map((s, si) => `
-      <div class="tp-slot-row" id="tpslot-${tid}-${ai}-${si}">
+    const slotsHtml = slots.map((s, si) => {
+      const gueltig = s.gueltig ?? true; // Fallback zählt als Erfolg?
+      return `<div class="tp-slot-row" id="tpslot-${tid}-${ai}-${si}">
         <span class="tp-slot-badge ${si===0?'primary':'fallback'}">${si===0?'Primär':'Fallback '+(si)}</span>
         <span style="font-size:.63rem;color:var(--text3)">X</span>
         <input class="cf" type="number" style="width:54px" value="${s.x??0}" oninput="tpSlotField('${tid}',${ai},${si},'x',+this.value)" placeholder="X">
         <span style="font-size:.63rem;color:var(--text3)">Y</span>
         <input class="cf" type="number" style="width:54px" value="${s.y??0}" oninput="tpSlotField('${tid}',${ai},${si},'y',+this.value)" placeholder="Y">
+        <button class="tp-slot-valid ${gueltig?'zählt':'zählt-nicht'}"
+          onclick="tpSlotField('${tid}',${ai},${si},'gueltig',!${gueltig});actRerender('${tid}',${ai})"
+          title="${gueltig?'Dieser Slot zählt als Erfolg – klicken um zu ändern':'Dieser Slot gilt als Fehler (bei_fehler greift) – klicken um zu ändern'}">
+          ${gueltig?'✅ Gültig':'❌ Fehler'}
+        </button>
         <button onclick="tpSlotRemove('${tid}',${ai},${si})" style="margin-left:auto;background:none;border:none;color:var(--red);cursor:pointer;font-size:.7rem;padding:1px 4px" title="Entfernen">✕</button>
-      </div>`).join('');
+      </div>`;
+    }).join('');
     extra = `
       <div style="font-size:.63rem;color:var(--text3);margin-top:5px">
         🌀 Teleportiert den Auslöser. Wenn alle Positionen belegt sind → gilt als Fehler.
       </div>
       <div class="tp-slot-list" id="tpslots-${tid}-${ai}">${slotsHtml}</div>
       <button class="tp-slot-add-btn" onclick="tpSlotAdd('${tid}',${ai})">+ Position / Fallback hinzufügen</button>`;
+  } else if (a.typ === 'money') {
+    const moneyName = _money?.settings?.name || 'Gold';
+    const mop = a.money_op ?? 'add';
+    extra = `<div style="display:flex;gap:8px;align-items:center;margin-top:5px;flex-wrap:wrap">
+      <select class="cf" style="width:130px" onchange="actField('${tid}',${ai},'money_op',this.value);actRerender('${tid}',${ai})">
+        <option value="add"   ${mop==='add'?'selected':''}>➕ Hinzufügen</option>
+        <option value="sub"   ${mop==='sub'?'selected':''}>➖ Abziehen</option>
+        <option value="set"   ${mop==='set'?'selected':''}>= Setzen auf</option>
+        <option value="reset" ${mop==='reset'?'selected':''}>🔄 Zurücksetzen (0)</option>
+      </select>
+      ${mop!=='reset'?`<input class="cf cf-w80" type="number" value="${a.money_val??1}" oninput="actField('${tid}',${ai},'money_val',+this.value)">
+      <span style="font-size:.68rem;color:var(--text3)">${escHtml(moneyName)}</span>`:''}
+      <span style="font-size:.62rem;color:var(--text3)">Ziel: Auslöser</span>
+    </div>`;
   }
 
   // Chat/Emote/Whisper sind immer erfolgreich → kein Dann/Sonst
@@ -3676,6 +3912,28 @@ function condField(tid, ci, field, val) {
   const t = b.triggers.find(x=>x.id===tid); if (!t) return;
   if (!t.bedingungen[ci]) return;
   t.bedingungen[ci][field] = val; _saveBots();
+}
+
+function condLogik(tid, ci, logik) {
+  const b = _selBot(); if (!b) return;
+  const t = b.triggers.find(x=>x.id===tid); if (!t) return;
+  if (!t.bedingungen[ci]) return;
+  t.bedingungen[ci].logik = logik; _saveBots();
+  condRerender(tid);
+}
+
+function condMoveUp(tid, ci) {
+  const b = _selBot(); if (!b) return;
+  const t = b.triggers.find(x=>x.id===tid); if (!t || ci<=0) return;
+  [t.bedingungen[ci-1], t.bedingungen[ci]] = [t.bedingungen[ci], t.bedingungen[ci-1]];
+  _saveBots(); condRerender(tid);
+}
+
+function condMoveDown(tid, ci) {
+  const b = _selBot(); if (!b) return;
+  const t = b.triggers.find(x=>x.id===tid); if (!t || ci>=t.bedingungen.length-1) return;
+  [t.bedingungen[ci], t.bedingungen[ci+1]] = [t.bedingungen[ci+1], t.bedingungen[ci]];
+  _saveBots(); condRerender(tid);
 }
 
 function condRemove(tid, ci) {
@@ -4007,12 +4265,15 @@ function _cancelTrigPending() {
 // ── Config Export / Import ────────────────────────────────────
 function botExportConfig() {
   const b = _selBot(); if (!b) { showStatus('❌ Kein Bot ausgewählt','error'); return; }
-  const blob = new Blob([JSON.stringify(b,null,2)],{type:'application/json'});
+  // Include logs for this bot + system events
+  const botLogs = (window._BCBotLog||[]).filter(e => e.botName === b.name || e.trigId === '__system__');
+  const pkg = { ...b, _exportedLogs: botLogs, _exportedAt: new Date().toISOString() };
+  const blob = new Blob([JSON.stringify(pkg,null,2)],{type:'application/json'});
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href=url; a.download='BCBot_'+b.name.replace(/\W+/g,'_')+'_'+new Date().toISOString().slice(0,10)+'.json';
   a.click(); URL.revokeObjectURL(url);
-  showStatus('✅ Bot exportiert','success');
+  showStatus('✅ Bot + Logs exportiert','success');
 }
 
 function botImportConfig() {
@@ -4023,6 +4284,17 @@ function botImportConfig() {
     r.onload = ev => {
       try {
         const d = JSON.parse(ev.target.result);
+        // Restore logs if present
+        if (Array.isArray(d._exportedLogs) && d._exportedLogs.length) {
+          window._BCBotLog = window._BCBotLog ?? [];
+          // Merge: add imported logs that aren't already present (by ts+player)
+          const existing = new Set(window._BCBotLog.map(l=>l.ts+'_'+l.player));
+          d._exportedLogs.forEach(l => { if (!existing.has(l.ts+'_'+l.player)) window._BCBotLog.push(l); });
+          window._BCBotLog.sort((a,b)=>b.ts-a.ts);
+          // Rebuild _roomEver from logs
+          _rebuildRoomEverFromLogs(d.id);
+        }
+        delete d._exportedLogs; delete d._exportedAt;
         const cur = _selBot();
         if (cur && confirm('Aktuellen Bot überschreiben?\n(Abbrechen = Als neuen Bot importieren)')) {
           Object.assign(cur, d, {id:cur.id}); _selBotId = cur.id;
@@ -4036,6 +4308,51 @@ function botImportConfig() {
     r.readAsText(e.target.files[0]);
   };
   inp.click();
+}
+
+// Gibt Set<memberNum> aller Spieler zurück die laut Logs je da waren
+function _getKnownMembersFromLogs(botId) {
+  const known = new Set();
+  (window._BCBotLog||[]).forEach(e => {
+    if (e.memberNum && (e.botId === botId || !botId)) known.add(e.memberNum);
+  });
+  return known;
+}
+
+// Gibt Set<memberNum> zurück die laut Logs im Raum sind (joined aber nicht verlassen)
+function _getPresentMembersFromLogs(botId) {
+  // Replay join/leave events chronologically
+  const entries = (window._BCBotLog||[]).filter(e => e.botId === botId && (e.status==='join'||e.status==='leave'));
+  entries.sort((a,b) => a.ts - b.ts);
+  const present = new Set();
+  entries.forEach(e => {
+    if (e.status === 'join') present.add(e.memberNum);
+    else if (e.status === 'leave') present.delete(e.memberNum);
+  });
+  return present;
+}
+
+// Rebuild roomEver from log entries (called after log import)
+function _rebuildRoomEverFromLogs(botId) {
+  if (!_connected) return;
+  const known = _getKnownMembersFromLogs(botId);
+  const present = _getPresentMembersFromLogs(botId);
+  const b = _bots.find(x=>x.id===botId) ?? _selBot();
+  if (!b) return;
+  const safeId = b.id.replace(/\W/g,'_');
+  const everArr = JSON.stringify([...known]);
+  bcSend({type:'EXEC', code:`(()=>{const s=window['__BCKBotState_${safeId}']??{};s.roomEver=${everArr};window['__BCKBotState_${safeId}']=s;try{const ls=JSON.parse(localStorage.getItem('__BCKBotStates')||'{}');ls['${safeId}']=s;localStorage.setItem('__BCKBotStates',JSON.stringify(ls));}catch(e){}console.log('[Bot] roomEver aus Logs: ',${everArr}.length,' bekannt');})();`});
+}
+
+// Logs in localStorage persistieren
+function _saveLogsToStorage() {
+  try { localStorage.setItem('BCBot_Logs', JSON.stringify(window._BCBotLog||[])); } catch(e) {}
+}
+function _loadLogsFromStorage() {
+  try {
+    const s = localStorage.getItem('BCBot_Logs');
+    if (s) window._BCBotLog = JSON.parse(s);
+  } catch(e) {}
 }
 
 // ── Deploy ────────────────────────────────────────────────────
@@ -4056,21 +4373,39 @@ function _buildBotCode(bot) {
   const safeId   = bot.id.replace(/\W/g,'_');
   const safeName = bot.name.replace(/\\/g,'\\\\').replace(/`/g,'\\`');
 
-  const cfgJson  = JSON.stringify({hearChat:s.hearChat,hearEmote:s.hearEmote,hearWhisper:s.hearWhisper,nurEigene:s.nurEigene,logAktiv:s.logAktiv??true,modus:s.modus});
+  const cfgJson  = JSON.stringify({hearChat:s.hearChat,hearEmote:s.hearEmote,hearWhisper:s.hearWhisper,nurEigene:s.nurEigene,logAktiv:s.logAktiv??true,modus:s.modus,moneyQueryCmd:s.moneyQueryCmd??''});
   const trigsJson = JSON.stringify(triggers);
+  // Build roomEver from logs – members who joined and haven't left yet
+  // This is the authoritative source: Log löschen = Erstes Mal joinen
+  const persistedRoomEver = (() => {
+    const logs = window._BCBotLog || [];
+    const botLogs = logs.filter(e => e.botId === bot.id && (e.status==='join'||e.status==='join_rejoin'||e.status==='leave'));
+    botLogs.sort((a,b) => a.ts - b.ts);
+    const ever = new Set();
+    botLogs.forEach(e => {
+      if (e.status === 'join' || e.status === 'join_rejoin') ever.add(e.memberNum);
+      // leave doesn't remove from roomEver – only from present
+    });
+    return [...ever];
+  })();
+  const roomEverJson = JSON.stringify(persistedRoomEver);
 
   return `(function(){
 const _BID='${safeId}';
 if(window['_BCBot_'+_BID]){console.warn('[Bot] Bereits aktiv – erst stoppen!');return;}
 const _cfg=${cfgJson};
+const _moneyCfg={queryCmd:_cfg.moneyQueryCmd??''};
 const _trigs=${trigsJson};
 // State-Persistenz: beim Sync (Stop+Start) bleiben Fired-States erhalten
 const _stateKey='__BCKBotState_${safeId}';
-const _savedState=window[_stateKey]??{};
+// Priorität: window (Sync) > localStorage (Reload) > leer
+const _lsSaved=(()=>{try{return JSON.parse(localStorage.getItem('__BCKBotStates')||'{}')['${safeId}']??{};}catch(e){return {};}})();
+const _savedState=window[_stateKey]??_lsSaved;
 const _fired    =_savedState.fired    ??{}; // trigId -> last timestamp (global latch)
 const _firedCnt =_savedState.firedCnt ??{}; // trigId -> fire count
 const _firedChar=_savedState.firedChar??{}; // trigId_memberNum -> timestamp
-const _roomEver =new Set(_savedState.roomEver??[]); // wer je im Raum war
+// roomEver: merge window-state + popup-persisted (build-time injected) + log-based
+const _roomEver=new Set([...(_savedState.roomEver??[]),...(${roomEverJson})]);
 // State sofort zurückschreiben damit Referenz live ist
 window[_stateKey]={fired:_fired,firedCnt:_firedCnt,firedChar:_firedChar,roomEver:_roomEver};
 // Quick lookup: trigId -> trigger config (for charSpec)
@@ -4086,38 +4421,42 @@ function _log(...a){if(_cfg.logAktiv)console.log('[Bot:${safeName}]',...a);}
 
 function _ok(trig,rohText,typKey,C){
   const cx=C.X??-999,cy=C.Y??-999;
-  for(const c of(trig.bedingungen??[])){
+  const beds=trig.bedingungen??[];
+  if(!beds.length)return true;
+  // AND/OR Auswertung: logik-Feld pro Bedingung verbindet mit vorheriger
+  // Ablauf: Bedingungen in OR-Gruppen aufteilen (trennend bei "oder"), dann alle Gruppen mit AND prüfen
+  function checkOne(c){
     if(c.typ==='wort'){
       const m=c.typ_msg||'any';
       if(m!=='any'&&m!==typKey)return false;
-      if(c.wort&&!rohText.toLowerCase().includes(c.wort.toLowerCase()))return false;
+      return!c.wort||rohText.toLowerCase().includes(c.wort.toLowerCase());
     }
-    else if(c.typ==='zone'){
+    if(c.typ==='zone'){
       const p=c.puffer??1;
-      if(!(cx>=c.x-p&&cx<=c.x+p&&cy>=c.y-p&&cy<=c.y+p)){
-        _log('Zone miss: X='+cx+' Y='+cy+' | erwartet X='+c.x+' Y='+c.y+' ±'+p);
-        return false;
-      }
+      const ok=cx>=c.x-p&&cx<=c.x+p&&cy>=c.y-p&&cy<=c.y+p;
+      if(!ok)_log('Zone miss: X='+cx+' Y='+cy+' erwartet X='+c.x+' Y='+c.y+'±'+p);
+      return ok;
     }
-    else if(c.typ==='item_traegt'){
+    if(c.typ==='item_traegt'){
       const Cf=ChatRoomCharacter.find(x=>x.MemberNumber===C.MemberNumber)??C;
-      if(!(Cf.Appearance??[]).some(a=>a.Asset?.Name===c.item))return false;
+      return(Cf.Appearance??[]).some(a=>a.Asset?.Name===c.item);
     }
-    else if(c.typ==='trigger_war'){
+    if(c.typ==='trigger_war'){
       const ref=_trigMap[c.trigId];
-      if(ref?.charSpec){
-        // Pro-Spieler: jeder braucht eigenen Auslöser
-        if(!_firedChar[c.trigId+'_'+C.MemberNumber])return false;
-      }else{
-        // Global: einmal reicht für alle
-        if(!_fired[c.trigId])return false;
-      }
+      return ref?.charSpec?!!_firedChar[c.trigId+'_'+C.MemberNumber]:!!_fired[c.trigId];
     }
-    // player_betritt & item_traegt (edge) handled by polling – skip in message _ok
+    if(c.typ==='player_betritt')return true; // handled by poll
+    return true;
   }
-  return true;
+  // Split into OR-groups
+  const groups=[[]];
+  for(const c of beds){
+    if(c.logik==='oder')groups.push([]);
+    groups[groups.length-1].push(c);
+  }
+  // At least one group (OR) must be fully satisfied (AND within group)
+  return groups.some(g=>g.every(c=>checkOne(c)));
 }
-
 function _istBesetzt(x,y,ausschliessen){
   // Ignore target positions at 0,0 — BC hasn't synced position yet
   if(x===0&&y===0)return false;
@@ -4130,20 +4469,24 @@ function _istBesetzt(x,y,ausschliessen){
 
 function _teleport(a,C){
   const allSlots=a.tpSlots??[];
-  if(!allSlots.length){_log('⚠️ Keine TP-Slots konfiguriert');return false;}
+  if(!allSlots.length){_log('⚠️ Keine TP-Slots');return false;}
+  // Find first free slot (respecting gueltig flag for return value)
   const ziel=allSlots.find(s=>!_istBesetzt(s.x,s.y,[C.MemberNumber]));
   if(!ziel){
-    _log('⚠️ Alle TP-Positionen belegt für '+C.Name);
-    return false; // → bei_fehler greift
+    _log('⚠️ Alle TP-Slots belegt für '+C.Name);
+    return false;
   }
-  const fb=allSlots.indexOf(ziel);
+  const si=allSlots.indexOf(ziel);
   ServerSend('ChatRoomChat',{
     Content:'ChatRoomMapViewTeleport',Type:'Hidden',
     Dictionary:[{Tag:'MapViewTeleport',Position:{X:ziel.x,Y:ziel.y}}],
     Target:C.MemberNumber,
   });
-  _log('🌀 TP '+C.Name+' → X='+ziel.x+' Y='+ziel.y+(fb>0?' (Fallback '+fb+')':''));
-  return true;
+  _log('🌀 TP '+C.Name+' → X='+ziel.x+' Y='+ziel.y+(si>0?' [Fallback '+si+']':''));
+  // Gültig-Flag: wenn Slot auf ❌ Fehler gesetzt → Aktion gilt als fehlgeschlagen
+  const gueltig=ziel.gueltig??true;
+  if(!gueltig)_log('⚠️ Slot '+si+' hat gueltig=false → gilt als Fehler');
+  return gueltig;
 }
 
 function _applyItemAction(a, C){
@@ -4236,6 +4579,7 @@ function _runSeq(aktionen,C,vars,trigBase,onDone,onUngueltig){
 function _pushLog(extra,vars,trig){
   const entry={
     ts:Date.now(),
+    botId:'${safeId}',
     botName:'${safeName}',
     trigName:trig?.name??'?',
     trigId:trig?.id??'',
@@ -4248,6 +4592,13 @@ function _pushLog(extra,vars,trig){
   // Brücke: postMessage zurück an Popup (window.__BCK_popupRef = gespeichert in loader.js)
   try{
     window.__BCK_popupRef?.postMessage({app:'BCKonfigurator',type:'BOT_LOG',entry},'*');
+  }catch(e){}
+}
+
+// Sendet roomEver ans Popup zur Persistenz
+function _syncRoomEver(){
+  try{
+    window.__BCK_popupRef?.postMessage({app:'BCKonfigurator',type:'BOT_ROOM_EVER',botId:'${safeId}',members:[..._roomEver]},'*');
   }catch(e){}
 }
 
@@ -4282,6 +4633,7 @@ function _run(trig,vars){
         _firedCnt[trig.id]=(cnt+1);
         _log('\u2705 Trigger "'+trig.name+'" abgeschlossen #'+_firedCnt[trig.id]+(trig.charSpec?' [pro Spieler]':' [global]'));
         _pushLog({status:'ok'},vars,trig);
+        _syncRoomEver();
       },
       // onUngueltig – eine Aktion hat ❌ Trigger ungültig ausgelöst
       ()=>{
@@ -4300,6 +4652,12 @@ function _tpl(s,v){return(s??'').replace(/{name}/gi,v.name??'').replace(/{wort}/
 
 function _proc(rohText,typKey,C){
   if(!rohText)return;
+  // Money query command
+  const qCmd=(_moneyCfg?.queryCmd||'').trim().toLowerCase();
+  if(qCmd&&rohText.trim().toLowerCase()===qCmd){
+    window.__BCK_popupRef?.postMessage({app:'BCKonfigurator',type:'MONEY_QUERY',memberNum:C.MemberNumber,name:C.Name},'*');
+    return; // handled separately
+  }
   const pos={X:C.X??0,Y:C.Y??0}; // direkt vom Character
   const typLabel={chat:'\u{1F4AC} Chat',emote:'\u{2728} Emote',whisper:'\u{1F917} Whisper'}[typKey]??typKey;
   _trigs.forEach(trig=>{
@@ -4341,7 +4699,7 @@ const _itPoll=setInterval(()=>{
       _itState[key]=allWorn;
     });
   });
-},2000);
+},100);
 
 // ── Spieler-Betritt Polling (feuert 1x beim Betreten) ──
 const _roomPrev=new Set((ChatRoomCharacter||[]).map(c=>c.MemberNumber));
@@ -4354,6 +4712,8 @@ const _joinPoll=setInterval(()=>{
   for(const prevNum of _roomPrev){
     if(!cur.has(prevNum)){
       _log('\u{1F6AA} #'+prevNum+' verlassen');
+      _pushLog({status:'leave', trigName:'Verlassen', trigId:'__system__',
+        player:'#'+prevNum, memberNum:prevNum, x:0, y:0, msg:'Raum verlassen'}, {name:'#'+prevNum,x:0,y:0,C:{MemberNumber:prevNum}}, {name:'System',id:'__system__'});
       // _zoneState zurücksetzen (Spieler nicht mehr im Raum)
       for(const k of Object.keys(_zoneState)){
         if(k.startsWith(prevNum+'_'))delete _zoneState[k];
@@ -4373,7 +4733,10 @@ const _joinPoll=setInterval(()=>{
       const istNeu=!_roomEver.has(C.MemberNumber);
       const label=istNeu?'\u{1F195} Neu':'\u{1F504} Rejoin';
       _log(label+': '+C.Name+' #'+C.MemberNumber);
+      _pushLog({status:istNeu?'join':'join_rejoin',trigName:'',msg:istNeu?'Erstes Mal':'Rejoin'},
+        {name:C.Name+' #'+C.MemberNumber,x:C.X??0,y:C.Y??0,C},{id:'__system__',name:'System'});
       _roomEver.add(C.MemberNumber);
+      _syncRoomEver();
       _trigs.forEach(trig=>{
         const bConds=(trig.bedingungen??[]).filter(c=>c.typ==='player_betritt');
         if(!bConds.length)return;
@@ -4397,7 +4760,7 @@ const _joinPoll=setInterval(()=>{
   }
   _roomPrev.clear();
   for(const n of cur)_roomPrev.add(n);
-},3000);
+},400);
 
 // ── Zonen-Betreten Polling – direkt C.X/C.Y (wie ZoneMonitor-Pattern) ──
 const _zoneState={}; // 'memberNum_trigId' -> bool (war zuletzt drin)
@@ -4435,7 +4798,7 @@ const _zonePoll=setInterval(()=>{
       _zoneState[key]=inZone;
     });
   });
-},500);
+},100);
 
 // Eigene Nachrichten via hookFunction – Mod bekommt unique Namen (Timestamp) um Kollisionen beim Live-Sync zu vermeiden
 let _mod = null;
@@ -4503,16 +4866,28 @@ window['_BCBot_'+_BID]={
     }
     if(_msgH) ServerSocket.off('ChatRoomMessage',_msgH);
     delete window['_BCBot_'+_BID];
-    // State im window-Objekt belassen – wird beim nächsten Start wiederverwendet
-    // (window[_stateKey] bleibt erhalten → Sync-safe)
-    // _roomEver auch persistieren
+    // State im window-Objekt + localStorage sichern (überlebt Page-Reload)
     window[_stateKey].roomEver=[..._roomEver];
-    console.log('\u23F9\uFE0F [Bot:${safeName}] gestoppt | States gesichert');
+    try{
+      const ls=JSON.parse(localStorage.getItem('__BCKBotStates')||'{}');
+      ls['${safeId}']={
+        fired:_fired, firedCnt:_firedCnt,
+        firedChar:_firedChar, roomEver:[..._roomEver],
+        ts:Date.now()
+      };
+      localStorage.setItem('__BCKBotStates',JSON.stringify(ls));
+    }catch(e){}
+    console.log('\u23F9\uFE0F [Bot:${safeName}] gestoppt | States gesichert (Mem+LS)');
   },
   // Manuelles State-Reset (z.B. aus der Konsole: window['_BCBot_...'].clearState())
   clearState(){
     window[_stateKey]={fired:{},firedCnt:{},firedChar:{},roomEver:[]};
-    console.log('\u{1F9F9} [Bot:${safeName}] States zurückgesetzt');
+    try{const ls=JSON.parse(localStorage.getItem('__BCKBotStates')||'{}');delete ls['${safeId}'];localStorage.setItem('__BCKBotStates',JSON.stringify(ls));}catch(e){}
+    Object.keys(_fired).forEach(k=>delete _fired[k]);
+    Object.keys(_firedCnt).forEach(k=>delete _firedCnt[k]);
+    Object.keys(_firedChar).forEach(k=>delete _firedChar[k]);
+    _roomEver.clear();
+    console.log('\u{1F9F9} [Bot:${safeName}] States zurückgesetzt (Mem+LS)');
   }
 };
 console.log('\u25B6\uFE0F [Bot:${safeName}] | Trigger:',_trigs.length,'| Modus:',_cfg.nurEigene?'Nur eigene':'Alle Spieler');
