@@ -573,6 +573,8 @@ textarea.outfit-code{width:100%;min-height:200px;background:var(--bg4);border:1p
 .ev-type-badge.manual{background:#0a1040;border-color:var(--purple);color:var(--pl)}
 .ev-type-badge.auto{background:#0a2a0a;border-color:var(--green);color:var(--green)}
 .ev-type-badge.interval{background:#2a1a00;border-color:#884400;color:#c87030}
+.ev-type-badge.chat-ev{background:#0a1a0a;border-color:#1a5a1a;color:#5f5}
+.ev-type-badge.betritt-ev{background:#1a0a1a;border-color:#5a1a5a;color:#f5f}
 .be-addevent{display:block;width:100%;padding:8px;text-align:center;background:none;border:1px dashed #442266;border-radius:6px;color:#884499;font-size:.7rem;cursor:pointer;margin-top:4px}
 .be-addevent:hover{border-color:var(--purple);color:var(--pl)}
 /* ── Condition group visuals ── */
@@ -3499,14 +3501,15 @@ function renderEventsTab() {
 function renderEventCard(bot, e, i) {
   const total = (bot.events||[]).length;
   const ausloeser = e.ausloeser ?? 'manuell';
-  const typeBadgeClass = {manuell:'manual', timer:'auto', interval:'interval'}[ausloeser] ?? 'manual';
-  const typeLabel = {manuell:'🖱 Manuell', timer:'⏱ Timer', interval:'🔁 Intervall'}[ausloeser] ?? '?';
+  const typeBadgeClass = {manuell:'manual', timer:'auto', interval:'interval', chat:'chat-ev', betritt:'betritt-ev'}[ausloeser] ?? 'manual';
+  const typeLabel = {manuell:'🖱 Manuell', timer:'⏱ Timer', interval:'🔁 Intervall', chat:'💬 Chat', betritt:'🚪 Betritt'}[ausloeser] ?? '?';
   const actN = (e.aktionen||[]).length;
   const condN = (e.bedingungen||[]).length;
   const bodyOpen = document.getElementById('evb-'+e.id)?.classList.contains('open');
   const ziel = e.ziel ?? 'ausloeser';
   const wdh = e.wiederholung ?? 'immer';
 
+  const evVon = e.von ?? 'alle';
   let scheduleHtml = '';
   if (ausloeser === 'timer') {
     scheduleHtml = `<label style="font-size:.65rem;color:var(--text3)">Nach:
@@ -3519,6 +3522,17 @@ function renderEventCard(bot, e, i) {
     <label style="font-size:.65rem;color:var(--text3)">Max:
       <input class="cf cf-w80" type="number" value="${e.delay_max??10000}" oninput="evField('${e.id}','delay_max',+this.value)"> ms
     </label>`;
+  } else if (ausloeser === 'chat' || ausloeser === 'betritt') {
+    const vonNumVal = e.vonNummer ?? '';
+    scheduleHtml = `<label style="font-size:.65rem;color:var(--text3)">Von:
+      <select class="cf" style="margin-left:4px" onchange="evField('${e.id}','von',this.value);evRerender('${e.id}')">
+        <option value="alle"   ${evVon==='alle'?'selected':''}>👥 Alle</option>
+        <option value="bot"    ${evVon==='bot'?'selected':''}>🤖 Bot (ich)</option>
+        <option value="nummer" ${evVon==='nummer'?'selected':''}>🔢 Nummer…</option>
+      </select>
+    </label>
+    ${evVon==='nummer'?`<input class="cf cf-w80" type="number" placeholder="MemberNr" value="${vonNumVal}"
+      oninput="evField('${e.id}','vonNummer',+this.value)" title="MemberNumber des Spielers">`:''}`;
   }
 
   return `<div class="event-card ${e.aktiv?'ev-on':''}" id="ec-${e.id}">
@@ -3544,6 +3558,8 @@ function renderEventCard(bot, e, i) {
             <option value="manuell"  ${ausloeser==='manuell'?'selected':''}>🖱 Manuell</option>
             <option value="timer"    ${ausloeser==='timer'?'selected':''}>⏱ Timer (einmalig nach X ms)</option>
             <option value="interval" ${ausloeser==='interval'?'selected':''}>🔁 Intervall (wiederholt)</option>
+            <option value="chat"     ${ausloeser==='chat'?'selected':''}>💬 Chat / Wort</option>
+            <option value="betritt"  ${ausloeser==='betritt'?'selected':''}>🚪 Spieler betritt</option>
           </select>
         </label>
         ${scheduleHtml}
@@ -4848,7 +4864,7 @@ function _buildBotCode(bot) {
   const trigsJson = JSON.stringify(triggers);
   const events = (bot.events||[]).filter(e=>e.aktiv).map(e => ({
     id: e.id, name: e.name,
-    ausloeser: e.ausloeser??'manuell',
+    ausloeser: e.ausloeser??'manuell', von: e.von??'alle', vonNummer: e.vonNummer??0,
     delay: e.delay??5000, delay_min: e.delay_min??3000, delay_max: e.delay_max??10000,
     ziel: e.ziel??'ausloeser', zielListe: e.zielListe??[],
     wiederholung: e.wiederholung??'immer', maxMal: e.maxMal??2,
@@ -4860,7 +4876,7 @@ function _buildBotCode(bot) {
       return a;
     }),
   }));
-  const eventsJson = JSON.stringify(events);
+  const eventsJson = JSON.stringify(events).replace(/`/g,'\\`').replace(/\${/g,'\\${');
   // Build roomEver from logs – members who joined and haven't left yet
   // This is the authoritative source: Log löschen = Erstes Mal joinen
   const persistedRoomEver = (() => {
@@ -4897,7 +4913,8 @@ window[_stateKey]={fired:_fired,firedCnt:_firedCnt,firedChar:_firedChar,roomEver
 // Quick lookup: trigId -> trigger config (for charSpec)
 const _trigMap=Object.fromEntries(_trigs.map(t=>[t.id,t]));
 // Rejoin-Fenster: memberNum → true – schließt wenn Nicht-Rejoin-Trigger feuert
-const _rejoinWindow=new Set();
+const _rejoinWindow=new Map(); // memberNum → timestamp when opened
+const _REJOIN_GRACE=1000; // ms window stays open regardless of other triggers
 const _evts=${eventsJson};
 
 function _log(...a){if(_cfg.logAktiv)console.log('[Bot:${safeName}]',...a);}
@@ -5078,12 +5095,17 @@ const _evTimers={};
 const _evFiredCnt={};  // evId -> fire count
 const _evState={}; // for interval state
 
-function _okEv(ev,C){
+function _okEv(ev,C,rohText,typKey){
   const beds=ev.bedingungen??[];
   if(!beds.length)return true;
   const cx=C.X??-999,cy=C.Y??-999;
   function checkOne(c){
-    if(c.typ==='wort')return true; // wort conditions don't apply to events without chat
+    if(c.typ==='wort'){
+      if(!rohText)return true; // no chat context → skip wort check (timer/interval)
+      const m=c.typ_msg||'any';
+      if(m!=='any'&&m!==typKey)return false;
+      return!c.wort||rohText.toLowerCase().includes(c.wort.toLowerCase());
+    }
     if(c.typ==='zone'){const p=c.puffer??1;return cx>=c.x-p&&cx<=c.x+p&&cy>=c.y-p&&cy<=c.y+p;}
     if(c.typ==='zone_rect'){return cx>=Math.min(c.x1,c.x2)&&cx<=Math.max(c.x1,c.x2)&&cy>=Math.min(c.y1,c.y2)&&cy<=Math.max(c.y1,c.y2);}
     if(c.typ==='item_traegt'){return(C.Appearance??[]).some(a=>a.Asset?.Name===c.item);}
@@ -5111,15 +5133,15 @@ function _fireEv(ev){
   if(ev.ziel==='alle'){targets=allChars;}
   else if(ev.ziel==='liste'){targets=allChars.filter(C=>(ev.zielListe||[]).includes(C.MemberNumber));}
   else{// ausloeser / random
-    const eligible=allChars.filter(C=>_okEv(ev,C));
+    const eligible=allChars.filter(C=>_okEv(ev,C,ev._rohText,ev._typKey));
     if(eligible.length)targets=[eligible[Math.floor(Math.random()*eligible.length)]];
   }
   if(!targets.length){_log('⚠️ Event "'+ev.name+'" – kein gültiges Ziel');return;}
 
   _log('⚡ Event "'+ev.name+'" → '+targets.length+' Ziel(e)');
   targets.forEach(C=>{
-    if(!_okEv(ev,C)){_log('⏭ Event "'+ev.name+'" Bed. nicht erfüllt für '+C.Name);return;}
-    const vars={name:C.Name,wort:'',typ:'Event',x:C.X??0,y:C.Y??0,zone:'',C};
+    if(!_okEv(ev,C,ev._rohText,ev._typKey)){_log('⏭ Event "'+ev.name+'" Bed. nicht erfüllt für '+C.Name);return;}
+    const vars={name:C.Name,wort:ev._rohText||'',typ:'Event',x:C.X??0,y:C.Y??0,zone:'',C};
     _runSeq(ev.aktionen??[],C,vars,ev,
       ()=>{
         _evFiredCnt[ev.id]=(cnt+1);
@@ -5141,9 +5163,7 @@ function _fireEv(ev){
 function _scheduleEv(ev){
   if(!ev.aktiv)return;
   if(ev.ausloeser==='timer'){
-    _evTimers[ev.id]=setTimeout(()=>{
-      _fireEv(ev);
-    },ev.delay??5000);
+    _evTimers[ev.id]=setTimeout(()=>{_fireEv(ev);},ev.delay??5000);
   } else if(ev.ausloeser==='interval'){
     const go=()=>{
       const cnt=_evFiredCnt[ev.id]??0;
@@ -5156,10 +5176,13 @@ function _scheduleEv(ev){
     const lo=ev.delay_min??3000, hi=ev.delay_max??10000;
     _evTimers[ev.id]=setTimeout(go,lo+Math.random()*(hi-lo));
   }
+  // chat + betritt: no auto-schedule, handled by _proc and joinPoll
 }
 
-// Start alle auto-Events
-_evts.forEach(ev=>{if(ev.ausloeser!=='manuell')_scheduleEv(ev);});
+// Start alle auto-Events (timer + interval only)
+_evts.forEach(ev=>{
+  if(ev.ausloeser==='timer'||ev.ausloeser==='interval') _scheduleEv(ev);
+});
 // ──────────────────────────────────────────────────────
 
 function _pushLog(extra,vars,trig){
@@ -5194,13 +5217,17 @@ function _run(trig,vars){
   // ── Rejoin-Fenster: schließen wenn Nicht-Rejoin-Trigger feuert ──
   const _isRejoinTrig=(trig.bedingungen??[]).some(c=>c.typ==='player_betritt'&&c.betritt_typ==='rejoin');
   if(!_isRejoinTrig && _rejoinWindow.has(C.MemberNumber)){
-    _rejoinWindow.delete(C.MemberNumber);
-    _log('\u{1F6AA} Rejoin-Fenster für #'+C.MemberNumber+' geschlossen (Nicht-Rejoin Trigger "'+trig.name+'" ausgelöst)');
+    const openedAt=_rejoinWindow.get(C.MemberNumber);
+    if(Date.now()-openedAt >= _REJOIN_GRACE){
+      _rejoinWindow.delete(C.MemberNumber);
+      _log('\u{1F6AA} Rejoin-Fenster für #'+C.MemberNumber+' geschlossen (Nicht-Rejoin Trigger "'+trig.name+'")');
+    } else {
+      _log('\u{1F6AA} Rejoin-Gnadenfrist aktiv für #'+C.MemberNumber+' – Fenster noch '+((_REJOIN_GRACE-(Date.now()-openedAt))|0)+'ms offen');
+    }
   }
-  // Rejoin-Trigger nur ausführen wenn Fenster noch offen ODER direkt vom joinPoll
-  // (joinPoll setzt _rejoinWindow.add vor _run, also ist Fenster immer offen beim ersten Aufruf)
+  // Rejoin-Trigger: nur überspringen wenn Fenster geschlossen (nach Gnadenfrist)
   if(_isRejoinTrig && !_rejoinWindow.has(C.MemberNumber)){
-    _log('\u23ED [Rejoin] "'+trig.name+'" – Fenster bereits geschlossen, übersprungen');
+    _log('\u23ED [Rejoin] "'+trig.name+'" – Fenster geschlossen (Gnadenfrist abgelaufen), übersprungen');
     return;
   }
 
@@ -5269,6 +5296,42 @@ function _proc(rohText,typKey,C){
     // Alle anderen: _ok prueft Bedingungen (wort, zone, vortrigger)
     if(_ok(trig,rohText,typKey,C))_run(trig,{name:C.Name,wort:rohText,typ:typLabel,x:pos.X,y:pos.Y,zone:'',C});
   });
+
+  // ── Chat-Events prüfen ──
+  _evts.forEach(ev=>{
+    if(!ev.aktiv||ev.ausloeser!=='chat')return;
+    // Von-Filter: wer darf das Event auslösen?
+    const vonOk=(()=>{
+      if(ev.von==='bot')return C.MemberNumber===Player.MemberNumber;
+      if(ev.von==='nummer')return ev.vonNummer&&C.MemberNumber===ev.vonNummer;
+      return true; // 'alle'
+    })();
+    if(!vonOk)return;
+    // Wort-Bedingungen prüfen
+    const wortConds=(ev.bedingungen??[]).filter(c=>c.typ==='wort');
+    if(!wortConds.length)return; // chat-event braucht mindestens eine wort-bedingung
+    ev._rohText=rohText; ev._typKey=typKey; // temp context für _okEv
+    if(_okEv(ev,C,rohText,typKey)){
+      // Ziel bestimmen
+      const allChars=[Player,...(ChatRoomCharacter||[])];
+      let targets=[];
+      if(ev.ziel==='alle')targets=allChars;
+      else if(ev.ziel==='liste')targets=allChars.filter(ch=>(ev.zielListe||[]).includes(ch.MemberNumber));
+      else targets=[C]; // ausloeser = der der schrieb
+      _log('💬 Chat-Event "'+ev.name+'" von '+C.Name+' → '+targets.length+' Ziel(e)');
+      targets.forEach(ch=>{
+        const vars={name:ch.Name,wort:rohText,typ:typLabel,x:ch.X??0,y:ch.Y??0,zone:'',C:ch};
+        const cnt=_evFiredCnt[ev.id]??0;
+        if(ev.wiederholung==='einmalig'&&cnt>=1)return;
+        if(ev.wiederholung==='n_mal'&&cnt>=(ev.maxMal??2))return;
+        _runSeq(ev.aktionen??[],ch,vars,ev,
+          ()=>{_evFiredCnt[ev.id]=(cnt+1);_pushLog({status:'ok'},vars,{name:ev.name,id:ev.id});},
+          ()=>{_pushLog({status:'ungueltig'},vars,{name:ev.name,id:ev.id});}
+        );
+      });
+    }
+    delete ev._rohText; delete ev._typKey;
+  });
 }
 
 // ── Item-Trägt Polling (edge-triggered: feuert 1x wenn Item erscheint) ──
@@ -5315,7 +5378,7 @@ const _joinPoll=setInterval(()=>{
   for(const prevNum of _roomPrev){
     if(!cur.has(prevNum)){
       _log('\u{1F6AA} #'+prevNum+' verlassen');
-      _rejoinWindow.delete(prevNum); // Fenster beim Verlassen schließen
+      _rejoinWindow.delete(prevNum); // Fenster beim Verlassen schließen (Map)
       _pushLog({status:'leave', trigName:'Verlassen', trigId:'__system__',
         player:'#'+prevNum, memberNum:prevNum, x:0, y:0, msg:'Raum verlassen'}, {name:'#'+prevNum,x:0,y:0,C:{MemberNumber:prevNum}}, {name:'System',id:'__system__'});
       // _zoneState zurücksetzen (Spieler nicht mehr im Raum)
@@ -5346,7 +5409,9 @@ const _joinPoll=setInterval(()=>{
       _roomEver.add(C.MemberNumber);
       _syncRoomEver();
       // ── Rejoin-Fenster öffnen (nur bei echtem Rejoin) ──
-      if(!istNeu) _rejoinWindow.add(C.MemberNumber);
+      if(!istNeu) _rejoinWindow.set(C.MemberNumber, Date.now());
+      // Auto-close window after grace period
+      if(!istNeu) setTimeout(()=>{ _rejoinWindow.delete(C.MemberNumber); _log('\u{1F6AA} Rejoin-Fenster für #'+C.MemberNumber+' automatisch geschlossen (1s)'); },_REJOIN_GRACE);
 
       // ── Alle passenden Trigger sammeln (Rejoin separat) ──
       const pos={X:C.X??0,Y:C.Y??0};
@@ -5386,6 +5451,33 @@ const _joinPoll=setInterval(()=>{
           _run(trig,{name:C.Name,wort:'',typ:label,x:pos.X,y:pos.Y,zone:'',C});
         }
       });
+      // ── Betritt-Events feuern ──
+      _evts.forEach(ev=>{
+        if(!ev.aktiv||ev.ausloeser!=='betritt')return;
+        const vonOk=(()=>{
+          if(ev.von==='bot')return C.MemberNumber===Player.MemberNumber;
+          if(ev.von==='nummer')return ev.vonNummer&&C.MemberNumber===ev.vonNummer;
+          return true;
+        })();
+        if(!vonOk)return;
+        const evVars={name:C.Name,wort:'',typ:label,x:C.X??0,y:C.Y??0,zone:'',C};
+        const allChars=[Player,...(ChatRoomCharacter||[])];
+        let targets=[];
+        if(ev.ziel==='alle')targets=allChars;
+        else if(ev.ziel==='liste')targets=allChars.filter(ch=>(ev.zielListe||[]).includes(ch.MemberNumber));
+        else targets=[C];
+        const cnt=_evFiredCnt[ev.id]??0;
+        if(ev.wiederholung==='einmalig'&&cnt>=1)return;
+        if(ev.wiederholung==='n_mal'&&cnt>=(ev.maxMal??2))return;
+        targets.forEach(ch=>{
+          const vars={name:ch.Name,wort:'',typ:label,x:ch.X??0,y:ch.Y??0,zone:'',C:ch};
+          _runSeq(ev.aktionen??[],ch,vars,ev,
+            ()=>{_evFiredCnt[ev.id]=(cnt+1);_pushLog({status:'ok'},vars,{name:ev.name,id:ev.id});},
+            ()=>{_pushLog({status:'ungueltig'},vars,{name:ev.name,id:ev.id});}
+          );
+        });
+      });
+
       // Alle Rejoin-Trigger feuern (keine gegenseitige Blockade)
       // Trigger MIT Item-Bedingungen: verzögert – BC-Appearance ist beim Join noch nicht geladen
       // Trigger OHNE Item-Bedingungen: sofort
