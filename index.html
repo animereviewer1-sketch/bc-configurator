@@ -3679,9 +3679,10 @@ function renderEvAct(eid, a, ai) {
         oninput="evActField('${eid}',${ai},'text',this.value)">${escHtml(a.text||'')}</textarea>
       <div style="font-size:.59rem;color:var(--text3);margin-top:2px">Variablen: {name} {wort} {x} {y}</div>`;
   } else if (a.typ === 'item') {
-    const label = a.itemConfig ? `📦 ${a.itemConfig.group}/${a.itemConfig.asset}` : a.item ? `📦 ${a.gruppe||'?'}/${a.item}` : '– nichts gewählt –';
-    extra = `<div style="display:flex;gap:6px;align-items:center;margin-top:4px">
-        <span style="font-size:.7rem;color:var(--text2);flex:1">${escHtml(label)}</span>
+    const cfgInfo = a.itemConfig ? ` <span style="font-size:.58rem;background:var(--gd);color:var(--green);padding:1px 4px;border-radius:3px">✓ Konfig</span>` : '';
+    const label = a.itemConfig ? `📦 ${a.itemConfig.group}/${a.itemConfig.asset}` : a.profilName ? `👗 ${a.profilName}` : a.curseName ? `🔮 ${a.curseName}` : a.item ? `📦 ${a.gruppe||'?'}/${a.item}` : '– nichts gewählt –';
+    extra = `<div style="display:flex;gap:6px;align-items:center;margin-top:4px;flex-wrap:wrap">
+        <span style="font-size:.7rem;color:var(--text2);flex:1">${escHtml(label)}${cfgInfo}</span>
         <button onclick="ipickerOpenForEvAct('${eid}',${ai})" style="font-size:.63rem;padding:3px 9px;background:var(--pd);border:none;color:var(--pl);border-radius:5px;cursor:pointer">📂 Wählen</button>
       </div>`;
   } else if (a.typ === 'item_entf') {
@@ -3852,13 +3853,32 @@ function evTpField(eid, ai, si, key, val) {
   if (slots[si]) slots[si][key]=val; _saveBots();
 }
 function ipickerOpenForEvAct(eid, ai) {
-  _trigPending = {eid, ai};
   ipickerOpen('item', v => {
     const b = _selBot(); if (!b) return;
     const e = b.events?.find(x=>x.id===eid); if (!e) return;
     const a = e.aktionen[ai]; if (!a) return;
-    if (v.type==='item') { a.item=v.asset||v.name; a.gruppe=v.group; }
-    else if (v.type==='profil') { a.profilName=v.name; a.profilItems=PROFILES[v.name]?.items??[]; }
+    // Clear old type data (same as trigger)
+    delete a.item; delete a.gruppe; delete a.farbe;
+    delete a.curseKey; delete a.curseName; delete a.curseEntry;
+    delete a.profilName; delete a.profilItems; delete a.itemConfig;
+    if (v.type === 'item') {
+      if (v.itemConfig) {
+        a.itemConfig = v.itemConfig;
+        a.item   = v.itemConfig.asset;
+        a.gruppe = v.itemConfig.group;
+      } else {
+        a.item   = v.asset || v.name;
+        a.gruppe = v.group;
+        a.farbe  = '#ffffff';
+      }
+    } else if (v.type === 'curse') {
+      a.curseKey   = v.key;
+      a.curseName  = v.name;
+      a.curseEntry = v.entry;
+    } else if (v.type === 'profil') {
+      a.profilName  = v.name;
+      a.profilItems = PROFILES[v.name]?.items ?? [];
+    }
     _saveBots();
     document.getElementById('evacts-'+eid).innerHTML = (e.aktionen||[]).map((a2,ai2)=>renderEvAct(eid,a2,ai2)).join('');
   });
@@ -4876,6 +4896,8 @@ const _roomEver=new Set([...(_savedState.roomEver??[]),...(${roomEverJson})]);
 window[_stateKey]={fired:_fired,firedCnt:_firedCnt,firedChar:_firedChar,roomEver:_roomEver};
 // Quick lookup: trigId -> trigger config (for charSpec)
 const _trigMap=Object.fromEntries(_trigs.map(t=>[t.id,t]));
+// Rejoin-Fenster: memberNum → true – schließt wenn Nicht-Rejoin-Trigger feuert
+const _rejoinWindow=new Set();
 const _evts=${eventsJson};
 
 function _log(...a){if(_cfg.logAktiv)console.log('[Bot:${safeName}]',...a);}
@@ -5169,6 +5191,19 @@ function _syncRoomEver(){
 function _run(trig,vars){
   const C=vars.C??Player;
 
+  // ── Rejoin-Fenster: schließen wenn Nicht-Rejoin-Trigger feuert ──
+  const _isRejoinTrig=(trig.bedingungen??[]).some(c=>c.typ==='player_betritt'&&c.betritt_typ==='rejoin');
+  if(!_isRejoinTrig && _rejoinWindow.has(C.MemberNumber)){
+    _rejoinWindow.delete(C.MemberNumber);
+    _log('\u{1F6AA} Rejoin-Fenster für #'+C.MemberNumber+' geschlossen (Nicht-Rejoin Trigger "'+trig.name+'" ausgelöst)');
+  }
+  // Rejoin-Trigger nur ausführen wenn Fenster noch offen ODER direkt vom joinPoll
+  // (joinPoll setzt _rejoinWindow.add vor _run, also ist Fenster immer offen beim ersten Aufruf)
+  if(_isRejoinTrig && !_rejoinWindow.has(C.MemberNumber)){
+    _log('\u23ED [Rejoin] "'+trig.name+'" – Fenster bereits geschlossen, übersprungen');
+    return;
+  }
+
   // ── Wiederholung prüfen ──────────────────────────────────
   const wdh=trig.wiederholung??'immer';
   const cnt=_firedCnt[trig.id]??0;
@@ -5280,6 +5315,7 @@ const _joinPoll=setInterval(()=>{
   for(const prevNum of _roomPrev){
     if(!cur.has(prevNum)){
       _log('\u{1F6AA} #'+prevNum+' verlassen');
+      _rejoinWindow.delete(prevNum); // Fenster beim Verlassen schließen
       _pushLog({status:'leave', trigName:'Verlassen', trigId:'__system__',
         player:'#'+prevNum, memberNum:prevNum, x:0, y:0, msg:'Raum verlassen'}, {name:'#'+prevNum,x:0,y:0,C:{MemberNumber:prevNum}}, {name:'System',id:'__system__'});
       // _zoneState zurücksetzen (Spieler nicht mehr im Raum)
@@ -5309,9 +5345,16 @@ const _joinPoll=setInterval(()=>{
       }
       _roomEver.add(C.MemberNumber);
       _syncRoomEver();
+      // ── Rejoin-Fenster öffnen (nur bei echtem Rejoin) ──
+      if(!istNeu) _rejoinWindow.add(C.MemberNumber);
+
+      // ── Alle passenden Trigger sammeln (Rejoin separat) ──
+      const pos={X:C.X??0,Y:C.Y??0};
+      const rejoinBatch=[]; // Rejoin-Trigger: alle sammeln, dann zusammen feuern
       _trigs.forEach(trig=>{
         const bConds=(trig.bedingungen??[]).filter(c=>c.typ==='player_betritt');
         if(!bConds.length)return;
+        const isRejoinTrig=bConds.some(c=>c.betritt_typ==='rejoin');
         const bOk=bConds.every(c=>{
           const bt=c.betritt_typ??'alle';
           if(bt==='neu')return istNeu;
@@ -5319,14 +5362,60 @@ const _joinPoll=setInterval(()=>{
           return true;
         });
         if(!bOk)return;
-        const pos={X:C.X??0,Y:C.Y??0};
         const otherOk=(trig.bedingungen??[]).every(c=>{
           if(c.typ==='player_betritt')return true;
           if(c.typ==='zone'){const p=c.puffer??1;return pos.X>=c.x-p&&pos.X<=c.x+p&&pos.Y>=c.y-p&&pos.Y<=c.y+p;}
-          if(c.typ==='trigger_war'){const ref=_trigMap[c.trigId];return ref?.charSpec?!!_firedChar[c.trigId+'_'+C.MemberNumber]:!!_fired[c.trigId];}
+          if(c.typ==='zone_rect'){return pos.X>=Math.min(c.x1,c.x2)&&pos.X<=Math.max(c.x1,c.x2)&&pos.Y>=Math.min(c.y1,c.y2)&&pos.Y<=Math.max(c.y1,c.y2);}
+          if(c.typ==='trigger_war'){
+            // Rejoin-Trigger blockieren sich NICHT gegenseitig:
+            // trigger_war auf anderen Rejoin-Trigger → immer true (feuern zusammen)
+            if(isRejoinTrig){
+              const refTrig=_trigMap[c.trigId];
+              const refIsRejoin=(refTrig?.bedingungen??[]).some(bc=>bc.typ==='player_betritt'&&bc.betritt_typ==='rejoin');
+              if(refIsRejoin)return true;
+            }
+            const ref=_trigMap[c.trigId];
+            return ref?.charSpec?!!_firedChar[c.trigId+'_'+C.MemberNumber]:!!_fired[c.trigId];
+          }
           return true;
         });
-        if(otherOk)_run(trig,{name:C.Name,wort:'',typ:label,x:pos.X,y:pos.Y,zone:'',C});
+        if(!otherOk)return;
+        if(isRejoinTrig){
+          rejoinBatch.push(trig); // Rejoin: gesammelt feuern
+        } else {
+          _run(trig,{name:C.Name,wort:'',typ:label,x:pos.X,y:pos.Y,zone:'',C});
+        }
+      });
+      // Alle Rejoin-Trigger feuern (keine gegenseitige Blockade)
+      // Trigger MIT Item-Bedingungen: verzögert – BC-Appearance ist beim Join noch nicht geladen
+      // Trigger OHNE Item-Bedingungen: sofort
+      const ITEM_SYNC_DELAY = 800; // ms warten bis BC Appearance synchronisiert hat
+      rejoinBatch.forEach(trig=>{
+        const hasItemCond=(trig.bedingungen??[]).some(c=>c.typ==='item_traegt'||c.typ==='item_traegt_nicht');
+        if(hasItemCond){
+          // Verzögert feuern + Bedingung nochmal prüfen mit frischen Daten
+          setTimeout(()=>{
+            if(!_rejoinWindow.has(C.MemberNumber)){
+              _log('⏭ [Rejoin] "'+trig.name+'" – Fenster geschlossen vor Appearance-Sync');
+              return;
+            }
+            // Frische Appearance-Daten aus ChatRoomCharacter holen
+            const Cfresh=ChatRoomCharacter.find(x=>x.MemberNumber===C.MemberNumber)??C;
+            // Item-Bedingungen nochmal prüfen
+            const itemOk=(trig.bedingungen??[]).every(c=>{
+              if(c.typ==='item_traegt')return(Cfresh.Appearance??[]).some(a=>a.Asset?.Name===c.item);
+              if(c.typ==='item_traegt_nicht')return!(Cfresh.Appearance??[]).some(a=>a.Asset?.Name===c.item);
+              return true;
+            });
+            if(!itemOk){
+              _log('⏭ [Rejoin] "'+trig.name+'" – Item-Bedingung nach Sync nicht erfüllt (Appearance jetzt geladen)');
+              return;
+            }
+            _run(trig,{name:Cfresh.Name,wort:'',typ:label,x:Cfresh.X??pos.X,y:Cfresh.Y??pos.Y,zone:'',C:Cfresh});
+          }, ITEM_SYNC_DELAY);
+        } else {
+          _run(trig,{name:C.Name,wort:'',typ:label,x:pos.X,y:pos.Y,zone:'',C});
+        }
       });
     }
   }
