@@ -4975,7 +4975,7 @@ function _ok(trig,rohText,typKey,C){
     if(c.typ==='wort'){
       const m=c.typ_msg||'any';
       if(m!=='any'&&m!==typKey)return false;
-      return!c.wort||rohText.toLowerCase().includes(c.wort.toLowerCase());
+      return!c.wort||(rohText||'').toLowerCase().includes((c.wort||'').toLowerCase());
     }
     if(c.typ==='zone'){
       const p=c.puffer??1;
@@ -5043,8 +5043,37 @@ function _teleport(a,C){
   return gueltig;
 }
 
+// Tiefkopie eines Appearance-Items für Snapshot
+function _snapItem(i){return{Asset:i.Asset,Group:i.Asset?.Group?.Name??'',Color:JSON.parse(JSON.stringify(i.Color??'#ffffff')),Craft:i.Craft??null,Property:JSON.parse(JSON.stringify(i.Property??{}))};}
+
+// Nach InventoryWear: alle Items wiederherstellen die durch Block/Conflict entfernt wurden
+// Ausnahme: der absichtlich geänderte Slot (targetGroup) wird nicht berührt
+function _restoreDisplaced(C, snapshot, targetGroup){
+  setTimeout(()=>{
+    snapshot.forEach(snap=>{
+      if(snap.Group===targetGroup)return; // dieser Slot wurde absichtlich geändert
+      const stillThere=InventoryGet(C,snap.Group);
+      if(!stillThere&&snap.Asset){
+        // Item wurde durch InventoryWear verdrängt → wiederherstellen
+        _log('♻️ Wiederherstellen: '+snap.Group+'/'+snap.Asset.Name+' (verdrängt durch '+targetGroup+')');
+        try{
+          InventoryWear(C,snap.Asset.Name,snap.Group,snap.Color,0,Player.MemberNumber,snap.Craft);
+          const restored=InventoryGet(C,snap.Group);
+          if(restored&&snap.Property&&Object.keys(snap.Property).length){
+            restored.Property=snap.Property;
+          }
+        }catch(e){_log('⚠️ Wiederherstellen fehlgeschlagen für '+snap.Group+': '+e.message);}
+      }
+    });
+    CharacterRefresh(C);ChatRoomCharacterUpdate(C);
+  },150);
+}
+
 function _applyItemAction(a, C){
   try{
+    // Snapshot ALLER aktuellen Items vor dem Anlegen
+    const snapshot=(C.Appearance??[]).filter(i=>i.Asset?.Group?.Name).map(_snapItem);
+
     if(a.itemConfig){
       // Full Item Manager config: colors, TypeRecord, props
       const ic=a.itemConfig;
@@ -5052,6 +5081,7 @@ function _applyItemAction(a, C){
       if(typeof col==='string'&&col.includes(','))col=col.split(',');
       InventoryWear(C,ic.asset,ic.group,col,0,Player.MemberNumber,null);
       CharacterRefresh(C);
+      _restoreDisplaced(C,snapshot,ic.group);
       setTimeout(()=>{
         const item=InventoryGet(C,ic.group);
         if(!item)return;
@@ -5067,8 +5097,9 @@ function _applyItemAction(a, C){
     }else if(a.curseEntry){
       let col=a.curseEntry.Farbe;if(typeof col==='string'&&col.includes(','))col=col.split(',');
       InventoryWear(C,a.curseEntry.ItemName,a.curseEntry.Gruppe,col,0,Player.MemberNumber,a.curseEntry.Craft);
-      CharacterRefresh(C);ChatRoomCharacterUpdate(C);
+      _restoreDisplaced(C,snapshot,a.curseEntry.Gruppe);
     }else if(a.profilName){
+      // Profil: alle Items nacheinander anlegen, kein Restore (Profil setzt bewusst mehrere Slots)
       (a.profilItems??[]).forEach(item=>{
         let col=item.colors??item.cfg?.Color??'#ffffff';
         if(typeof col==='string'&&col.includes(','))col=col.split(',');
@@ -5077,7 +5108,7 @@ function _applyItemAction(a, C){
       ChatRoomCharacterUpdate(C);
     }else if(a.item){
       InventoryWear(C,a.item,a.gruppe,a.farbe??'#ffffff',0,Player.MemberNumber);
-      CharacterRefresh(C);ChatRoomCharacterUpdate(C);
+      _restoreDisplaced(C,snapshot,a.gruppe);
     }
   }catch(ex){_log('item Fehler:',ex.message);}
 }
@@ -5153,7 +5184,7 @@ function _okEv(ev,C,rohText,typKey){
       if(!rohText)return true; // no chat context → skip wort check (timer/interval)
       const m=c.typ_msg||'any';
       if(m!=='any'&&m!==typKey)return false;
-      return!c.wort||rohText.toLowerCase().includes(c.wort.toLowerCase());
+      return!c.wort||(rohText||'').toLowerCase().includes((c.wort||'').toLowerCase());
     }
     if(c.typ==='zone'){const p=c.puffer??1;return cx>=c.x-p&&cx<=c.x+p&&cy>=c.y-p&&cy<=c.y+p;}
     if(c.typ==='zone_rect'){return cx>=Math.min(c.x1,c.x2)&&cx<=Math.max(c.x1,c.x2)&&cy>=Math.min(c.y1,c.y2)&&cy<=Math.max(c.y1,c.y2);}
@@ -5333,7 +5364,7 @@ function _proc(rohText,typKey,C){
   if(!rohText)return;
   // Money query command
   const qCmd=(_moneyCfg?.queryCmd||'').trim().toLowerCase();
-  if(qCmd&&rohText.trim().toLowerCase()===qCmd){
+  if(qCmd&&rohText.trim().toLowerCase()===qCmd.toLowerCase()){
     window.__BCK_popupRef?.postMessage({app:'BCKonfigurator',type:'MONEY_QUERY',memberNum:C.MemberNumber,name:C.Name},'*');
     return; // handled separately
   }
@@ -5351,6 +5382,10 @@ function _proc(rohText,typKey,C){
   });
 
   // ── Chat-Events prüfen ──
+  _procEvents(rohText,typKey,C);
+}
+
+function _procEvents(rohText,typKey,C){
   _evts.forEach(ev=>{
     if(!ev.aktiv)return;
     // Chat-Events: brauchen wort-Bedingung und KEIN ev_timer/ev_interval
@@ -5520,10 +5555,11 @@ const _joinPoll=setInterval(()=>{
           return true;
         });
         if(!bOk)return;
+        // Von-Filter: wer darf das Event auslösen (= wer muss der Beitretende sein)?
         const vonOk=(()=>{
           if(ev.von==='bot')return C.MemberNumber===Player.MemberNumber;
-          if(ev.von==='nummer')return ev.vonNummer&&C.MemberNumber===ev.vonNummer;
-          return true;
+          if(ev.von==='nummer')return ev.vonNummer&&C.MemberNumber===+ev.vonNummer;
+          return true; // 'alle' → jeder
         })();
         if(!vonOk)return;
         const evVars={name:C.Name,wort:'',typ:label,x:C.X??0,y:C.Y??0,zone:'',C};
@@ -5531,7 +5567,7 @@ const _joinPoll=setInterval(()=>{
         let targets=[];
         if(ev.ziel==='alle')targets=allChars;
         else if(ev.ziel==='liste')targets=allChars.filter(ch=>(ev.zielListe||[]).includes(ch.MemberNumber));
-        else targets=[C];
+        else targets=[C]; // ausloeser = der beitretende Spieler
         const cnt=_evFiredCnt[ev.id]??0;
         if(ev.wiederholung==='einmalig'&&cnt>=1)return;
         if(ev.wiederholung==='n_mal'&&cnt>=(ev.maxMal??2))return;
@@ -5627,14 +5663,19 @@ try {
   const _modName = 'BCBot_${safeId}_' + Date.now();
   _mod = bcModSdk.registerMod({name: _modName, fullName:'${safeName}', version:'1.0'});
   _mod.hookFunction('ChatRoomSendChat', 0, (args, next) => {
-    const raw = document.getElementById('InputChat')?.value?.trim() ?? '';
+    // BC löscht InputChat.value vor dem Hook → args[0].Content ist zuverlässiger
+    const msgData = args[0];
+    const raw = (typeof msgData === 'object' ? msgData?.Content : null)
+             ?? document.getElementById('InputChat')?.value?.trim()
+             ?? '';
     if (raw) {
-      const isE = raw.startsWith('*') && raw.endsWith('*');
-      const isW = raw.startsWith('/w ') || raw.startsWith('/whisper ');
+      const msgType = (typeof msgData === 'object' ? msgData?.Type : null) ?? '';
+      const isE = msgType === 'Emote' || (!msgType && raw.startsWith('*') && raw.endsWith('*'));
+      const isW = msgType === 'Whisper' || (!msgType && (raw.startsWith('/w ') || raw.startsWith('/whisper ')));
       const tk = isE ? 'emote' : isW ? 'whisper' : 'chat';
-      if ((_cfg.hearChat && tk==='chat') || (_cfg.hearEmote && tk==='emote') || (_cfg.hearWhisper && tk==='whisper')) {
-        _proc(raw, tk, Player);
-      }
+      const hearOk=(_cfg.hearChat && tk==='chat')||(_cfg.hearEmote && tk==='emote')||(_cfg.hearWhisper && tk==='whisper');
+      if(hearOk)_proc(raw,tk,Player);
+      else _procEvents(raw,tk,Player); // Events immer prüfen
     }
     return next(args);
   });
@@ -5650,7 +5691,8 @@ try {
       if (channel === 'ChatRoomChat' && data?.Content && ['Chat','Emote','Whisper'].includes(data?.Type ?? 'Chat')) {
         const tk = (data.Type||'Chat').toLowerCase();
         if ((_cfg.hearChat && tk==='chat') || (_cfg.hearEmote && tk==='emote') || (_cfg.hearWhisper && tk==='whisper')) {
-          setTimeout(() => _proc(data.Content, tk, Player), 0);
+          const ssHearOk=(_cfg.hearChat&&tk==='chat')||(_cfg.hearEmote&&tk==='emote')||(_cfg.hearWhisper&&tk==='whisper');
+          setTimeout(() => { if(ssHearOk)_proc(data.Content,tk,Player); else _procEvents(data.Content,tk,Player); }, 0);
         }
       }
       return _origSend.call(this, channel, data, ...rest);
@@ -5664,13 +5706,13 @@ const _msgH=function(data){
   if(!['Chat','Emote','Whisper'].includes(data.Type))return;
   if(data.Sender===Player.MemberNumber)return; // eigene via hookFunction abgefangen
   const tk=data.Type.toLowerCase();
-  if(tk==='chat'&&!_cfg.hearChat)return;
-  if(tk==='emote'&&!_cfg.hearEmote)return;
-  if(tk==='whisper'&&!_cfg.hearWhisper)return;
-  // Absender finden (alle Spieler + Player selbst, wie im Original ChatMonitor)
   const C=ChatRoomCharacter.find(c=>c.MemberNumber===data.Sender)
         ??(Player.MemberNumber===data.Sender?Player:null);
-  if(C)_proc(data.Content,tk,C);
+  if(!C)return;
+  // Trigger: nur wenn hear* aktiv; Events: immer (eigene Einstellung via Von-Filter)
+  const hearOk=(tk==='chat'&&_cfg.hearChat)||(tk==='emote'&&_cfg.hearEmote)||(tk==='whisper'&&_cfg.hearWhisper);
+  if(hearOk)_proc(data.Content,tk,C);
+  else _procEvents(data.Content,tk,C); // Events trotzdem prüfen
 };
 ServerSocket.on('ChatRoomMessage',_msgH);
 
