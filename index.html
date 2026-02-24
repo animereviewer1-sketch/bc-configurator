@@ -3368,10 +3368,14 @@ function renderTrigCard(bot, t, i) {
         </select>
         ${wdh==='n_mal'?`<input class="cf cf-w80" type="number" min="1" value="${t.maxMal??2}" oninput="trigField('${t.id}','maxMal',+this.value)" title="Wie oft max. feuern">× max.`:''}
         <label style="font-size:.65rem;color:var(--text3);margin-left:8px">🔑 Als Vorbedingung:</label>
-        <select class="cf" style="width:170px" title="Wie zählt dieser Trigger als Vorbedingung für andere Trigger?" onchange="trigField('${t.id}','charSpec',this.value==='true')">
+        <select class="cf" style="width:170px" title="Wie zählt dieser Trigger als Vorbedingung für andere Trigger?" onchange="trigField('${t.id}','charSpec',this.value==='true');trigRerender('${t.id}')">
           <option value="false" ${!t.charSpec?'selected':''}>🌐 Global – einmal gilt für alle</option>
           <option value="true"  ${t.charSpec?'selected':''}>👤 Pro Spieler – jeder selbst</option>
         </select>
+        ${t.charSpec?`<label style="font-size:.65rem;color:var(--text3);display:flex;align-items:center;gap:4px;cursor:pointer;margin-left:4px" title="Wenn aktiviert: Beim Verlassen des Raums wird der State zurückgesetzt – Rejoin-Vortrigger greifen dann nicht mehr">
+          <input type="checkbox" ${t.resetOnLeave?'checked':''} onchange="trigField('${t.id}','resetOnLeave',this.checked)" style="accent-color:var(--purple)">
+          <span>↩️ Reset bei Verlassen</span>
+        </label>`:''}
       </div>
 
       <div class="te-section">
@@ -4006,7 +4010,7 @@ function _buildBotCode(bot) {
     id: t.id, name: t.name, delay: t.delay??0,
       wiederholung: t.wiederholung??'immer', maxMal: t.maxMal??2,
       fallbackTyp: t.fallbackTyp??'nichts', fallbackText: t.fallbackText??'',
-      charSpec: !!t.charSpec,
+      charSpec: !!t.charSpec, resetOnLeave: !!t.resetOnLeave,
     bedingungen: (t.bedingungen||[]),
     aktionen: (t.aktionen||[]).map(a => {
       if (a.typ==='item' && a.curseKey && !a.curseEntry) return {...a, curseEntry: CURSE_DB[a.curseKey]??null};
@@ -4290,13 +4294,21 @@ const _joinPoll=setInterval(()=>{
   const chars=ChatRoomCharacter||[];
   const cur=new Set(chars.map(c=>c.MemberNumber));
 
-  // Spieler verlassen → pro-Spieler States zurücksetzen
+  // Spieler verlassen → nur loggen; _firedChar bleibt erhalten damit Rejoin-Vortrigger noch greifen
   for(const prevNum of _roomPrev){
     if(!cur.has(prevNum)){
-      _log('\u{1F6AA} #'+prevNum+' verlassen – pro-Spieler States gelöscht');
-      for(const k of Object.keys(_firedChar)){
-        if(k.endsWith('_'+prevNum))delete _firedChar[k];
+      _log('\u{1F6AA} #'+prevNum+' verlassen');
+      // _zoneState zurücksetzen (Spieler nicht mehr im Raum)
+      for(const k of Object.keys(_zoneState)){
+        if(k.startsWith(prevNum+'_'))delete _zoneState[k];
       }
+      // _firedChar nur bei Triggern mit resetOnLeave=true zurücksetzen
+      _trigs.forEach(trig=>{
+        if(trig.charSpec&&trig.resetOnLeave){
+          delete _firedChar[trig.id+'_'+prevNum];
+          _log('\u{1F504} State von "'+trig.name+'" für #'+prevNum+' zurückgesetzt');
+        }
+      });
     }
   }
 
