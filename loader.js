@@ -377,9 +377,6 @@
       allowedCraftProps: assetObj.Crafting?.Property ?? ["Normal"],
       hasLock:           !!(assetObj.AllowLock ?? extCfg.AllowLock),
       functions,
-      // Asset-level Block/Hide: welche Gruppen werden durch dieses Item blockiert/versteckt
-      block: assetObj.Block?.length  ? [...assetObj.Block]  : [],
-      hide:  assetObj.Hide?.length   ? [...assetObj.Hide]   : [],
     };
     total++;
   }
@@ -516,61 +513,30 @@ window.CurseScanner = (() => {
     return terms.some(b => name.includes(b) || desc.includes(b));
   }
 
-  // ── Hilfsfunktion: Diff zwischen zwei Einträgen ────────────────────────────
-  function _diffEntry(alt, neu) {
-    const changes = [];
-    if (alt.IstCursed     !== neu.IstCursed)      changes.push({ feld: 'Cursed',      alt: alt.IstCursed,     neu: neu.IstCursed });
-    if (alt.IstLSCGCurse  !== neu.IstLSCGCurse)   changes.push({ feld: 'LSCG-Curse',  alt: alt.IstLSCGCurse,  neu: neu.IstLSCGCurse });
-    if (alt.Property      !== neu.Property)        changes.push({ feld: 'Property',    alt: alt.Property,      neu: neu.Property });
-    if (alt.Description   !== neu.Description)     changes.push({ feld: 'Description', alt: alt.Description,   neu: neu.Description });
-    if (alt.Private       !== neu.Private)         changes.push({ feld: 'Private',     alt: alt.Private,       neu: neu.Private });
-    const farbAlt = Array.isArray(alt.Farbe) ? alt.Farbe.join(',') : (alt.Farbe ?? '');
-    const farbNeu = Array.isArray(neu.Farbe) ? neu.Farbe.join(',') : (neu.Farbe ?? '');
-    if (farbAlt !== farbNeu)                       changes.push({ feld: 'Farbe',       alt: farbAlt,           neu: farbNeu });
-    if (alt.LSCG && neu.LSCG) {
-      if (alt.LSCG.Enabled       !== neu.LSCG.Enabled)      changes.push({ feld: 'LSCG.Enabled',   alt: alt.LSCG.Enabled,      neu: neu.LSCG.Enabled });
-      if (alt.LSCG.Speed         !== neu.LSCG.Speed)         changes.push({ feld: 'LSCG.Speed',     alt: alt.LSCG.Speed,        neu: neu.LSCG.Speed });
-      if (alt.LSCG.OutfitKey     !== neu.LSCG.OutfitKey)     changes.push({ feld: 'LSCG.OutfitKey', alt: alt.LSCG.OutfitKey,    neu: neu.LSCG.OutfitKey });
-      if (alt.LSCG.Inexhaustable !== neu.LSCG.Inexhaustable) changes.push({ feld: 'LSCG.Inexh.',    alt: alt.LSCG.Inexhaustable, neu: neu.LSCG.Inexhaustable });
-    } else if (!alt.LSCG && neu.LSCG) {
-      changes.push({ feld: 'LSCG', alt: null, neu: neu.LSCG.Name ?? '?' });
-    } else if (alt.LSCG && !neu.LSCG) {
-      changes.push({ feld: 'LSCG', alt: alt.LSCG.Name ?? '?', neu: null });
-    }
-    if (alt.LSCGAusCache && !neu.LSCGAusCache && neu.LSCG)
-      changes.push({ feld: 'LSCG-Quelle', alt: 'cache', neu: 'live' });
-    return changes;
-  }
-
   function scan() {
+    // Nur Raum-Charaktere scannen (nicht Player.Crafting – das ist die gesamte Garderobe)
     // Vor dem Scan: craftCache in database laden (historische Einträge verfügbar halten)
     Object.entries(craftCache).forEach(([k, e]) => { if (!database[k]) database[k] = { ...e, _fromCache: true }; });
     const raumChars = ChatRoomCharacter ?? [];
     _snapshotAllLSCG(Player);
     const spieler = raumChars;
     let neuDB = 0, aktualisiert = 0, neuLSCG = 0;
-
-    // Detailliertes Diff für Change-Detection im UI
-    const added     = [];   // neue Einträge (noch nie gesehen)
-    const updated   = [];   // bekannte Einträge mit Änderungen
-    const unchanged = [];   // bekannte Einträge ohne Änderung
-
     spieler.forEach(C => {
       _snapshotAllLSCG(C);
       (C.Crafting ?? []).forEach(craft => {
         if (!craft?.Item) return;
-        const gruppe    = findeGruppe(craft.Item);
-        const key       = C.MemberNumber + ':' + craft.Item + ':' + craft.Name;
-        const altEintrag = database[key] ?? null;
-        const istNeu    = altEintrag === null;
-
+        const gruppe = findeGruppe(craft.Item);
+        const key    = C.MemberNumber + ':' + craft.Item + ':' + craft.Name;
+        const istNeu = !database[key];
+        // LSCG: erst live schauen, dann in eigenem persistenten Cache nachschlagen
         const liveCursedItems = C.LSCG?.CursedItemModule?.CursedItems ?? [];
         const lscgLive = liveCursedItems.find(ci => ci.Name?.toLowerCase() === craft.Name?.toLowerCase()) ?? null;
-        if (lscgLive) _cacheLSCGWithCraftAlias(C.MemberNumber, lscgLive, craft.Name);
+        if (lscgLive) _cacheLSCGWithCraftAlias(C.MemberNumber, lscgLive, craft.Name); // immer cachen
         const lscg = lscgLive ?? _getLSCGFromCache(C.MemberNumber, craft.Name);
         const lscgIsFromCache = lscg !== null && lscgLive === null;
 
         const cursed = isCursed(craft);
+        // R125: craft.Property kann jetzt ein Objekt/Array sein (multiple craft properties)
         const craftProperty = (() => {
           const p = craft.Property;
           if (!p) return '';
@@ -595,24 +561,11 @@ window.CurseScanner = (() => {
           LSCG:           lscg,
           LSCGAusCache:   lscgIsFromCache,
         };
-
-        if (istNeu) {
-          neuDB++;
-          added.push({ key, eintrag });
-        } else {
-          const changes = _diffEntry(altEintrag, eintrag);
-          if (changes.length > 0) {
-            aktualisiert++;
-            updated.push({ key, eintrag, changes });
-          } else {
-            unchanged.push(key);
-          }
-        }
-
-        database[key]   = eintrag;
+        if (istNeu) neuDB++; else aktualisiert++;
+        database[key] = eintrag;
+        // Persistenter Craft-Cache: immer aktualisieren wenn live-Daten vorhanden
         craftCache[key] = eintrag;
         _persistCraftCache();
-
         if (lscg !== null) {
           const lscgKey = C.MemberNumber + ':' + craft.Name;
           if (!lscgTable[lscgKey]) neuLSCG++;
@@ -626,8 +579,7 @@ window.CurseScanner = (() => {
         }
       });
     });
-
-    return { database, lscgTable, lscgCache, neuDB, aktualisiert, neuLSCG, added, updated, unchanged };
+    return { database, lscgTable, lscgCache, neuDB, aktualisiert, neuLSCG };
   }
 
   function _finde(indexOderName) {
@@ -794,8 +746,7 @@ window.CurseScanner = (() => {
           break;
 
         case 'SCAN_CURSES': {
-          const isAuto = ev.data._auto === true;
-          BCK.info('SCAN_CURSES' + (isAuto ? ' [auto]' : ''));
+          BCK.info('SCAN_CURSES');
           try {
             const result = window.CurseScanner.scan();
             src.postMessage({
@@ -803,13 +754,8 @@ window.CurseScanner = (() => {
               database:  result.database,
               lscgTable: result.lscgTable,
               lscgCache: result.lscgCache,
-              // Diff-Daten für Change-Detection im Popup
-              added:     result.added,
-              updated:   result.updated,
-              unchanged: result.unchanged,
-              _auto:     isAuto,
             }, ALLOWED_ORIGIN);
-            BCK.ok('CURSE_DATA: +' + result.added.length + ' neu, ' + result.updated.length + ' geändert, ' + result.unchanged.length + ' unverändert');
+            BCK.ok('CURSE_DATA gesendet: ' + Object.keys(result.database).length + ' Crafts');
           } catch (ex) {
             BCK.err('SCAN_CURSES Fehler:', ex.message);
             src.postMessage({ app: APP, type: 'CURSE_DATA', err: ex.message }, ALLOWED_ORIGIN);

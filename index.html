@@ -675,13 +675,6 @@ textarea.outfit-code { width: 100%; min-height: 210px; background: rgba(0,0,0,0.
 /* ═══════════════════════════════════════════════
    CURSE TAB
 ═══════════════════════════════════════════════ */
-@keyframes pulse-border {
-  0%,100% { box-shadow: 0 0 0 0 rgba(123,94,167,0.5); }
-  50%      { box-shadow: 0 0 0 4px rgba(123,94,167,0); }
-}
-.btn.active-pulse { animation: pulse-border 1.5s ease-in-out infinite; border-color: var(--accent,#7b5ea7) !important; }
-.change-added   { color: #6fcf97; }
-.change-updated { color: #f2994a; }
 .curse-topbar { display: flex; align-items: center; gap: 9px; padding: 12px 18px; background: rgba(255,255,255,0.01); border-bottom: 1px solid rgba(255,255,255,0.07); flex-wrap: wrap; }
 .curse-stats { display: flex; gap: 7px; flex-wrap: wrap; flex: 1; }
 .curse-stat { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 99px; padding: 4px 14px; font-size: 0.72rem; white-space: nowrap; }
@@ -701,10 +694,6 @@ textarea.outfit-code { width: 100%; min-height: 210px; background: rgba(0,0,0,0.
 .curse-owner-block.open .curse-rows { display: table; width: 100%; border-collapse: collapse; }
 
 .curse-row { border-top: 1px solid rgba(255,255,255,0.06); }
-.curse-row.fav { background: rgba(251,191,36,0.04); }
-.curse-row.fav:hover { background: rgba(251,191,36,0.08); }
-.fav-cell { width: 28px; text-align: center; cursor: pointer; user-select: none; padding: 6px 4px !important; font-size: 1rem; transition: transform .15s; }
-.fav-cell:hover { transform: scale(1.3); }
 .curse-row td { padding: 7px 12px; font-size: 0.75rem; vertical-align: top; }
 .curse-row:hover { background: rgba(139,92,246,0.04); }
 .curse-row.lscg { background: rgba(52,211,153,0.04); }
@@ -829,11 +818,6 @@ textarea.outfit-code { width: 100%; min-height: 210px; background: rgba(0,0,0,0.
 .ev-type-badge.manual { background: rgba(139,92,246,0.12); border-color: rgba(139,92,246,0.3); color: #c4b5fd; }
 .ev-type-badge.auto { background: rgba(52,211,153,0.1); border-color: rgba(52,211,153,0.3); color: #6ee7b7; }
 .ev-type-badge.interval { background: rgba(251,146,60,0.1); border-color: rgba(251,146,60,0.3); color: #fb923c; }
-.ev-type-badge.interval.running { animation: pulse-interval 2s ease-in-out infinite; }
-@keyframes pulse-interval {
-  0%,100% { box-shadow: 0 0 0 0 rgba(251,146,60,0.4); }
-  50%      { box-shadow: 0 0 0 5px rgba(251,146,60,0); }
-}
 .ev-type-badge.chat-ev { background: rgba(52,211,153,0.06); border-color: rgba(52,211,153,0.18); color: #5f5; }
 .ev-type-badge.betritt-ev { background: rgba(244,114,182,0.08); border-color: rgba(244,114,182,0.22); color: #f472b6; }
 .be-addevent { display: block; width: 100%; padding: 10px; text-align: center; background: none; border: 1px dashed rgba(139,92,246,0.2); border-radius: 9px; color: rgba(139,92,246,0.6); font-size: 0.73rem; cursor: pointer; margin-top: 5px; transition: all 0.18s; font-family: var(--font-ui); font-weight: 600; }
@@ -2291,85 +2275,6 @@ function addToOutfit() {
   if (!CURRENT) return;
   const { group, asset, cfg } = CURRENT;
 
-  // ── Sammle alle Gruppen die dieses Item blockieren würde ──────────────
-  // 1. Asset-Level Block (immer aktiv)
-  const blockedByAsset = new Set(cfg.block || []);
-
-  // 2. Optionen-Level Block (aktiv wenn diese Option ausgewählt)
-  const blockedByOptions = new Set();
-  for (const key in (cfg.typeKeys || {})) {
-    for (const idx of (dimSelected[key] || new Set())) {
-      const opt = cfg.typeKeys[key][idx];
-      for (const b of (opt?.block || [])) blockedByOptions.add(b);
-    }
-  }
-
-  const allBlocked = new Set([...blockedByAsset, ...blockedByOptions]);
-
-  // ── Prüfe ob bereits im Outfit Items in geblockten Gruppen sind ───────
-  const conflicts = OUTFIT.filter(item => allBlocked.has(item.group));
-
-  if (conflicts.length > 0) {
-    const conflictLines = conflicts.map(item =>
-      `  • ${item.group}  →  „${item.asset}" würde entfernt`
-    ).join('\n');
-
-    const blockedSource = [...blockedByAsset].length > 0
-      ? `Asset-Block (immer aktiv)`
-      : `Optionen-Block (aktuell gewählte Option)`;
-
-    const msg =
-      `⚠️ Slot-Konflikt!\n\n` +
-      `Das Item „${asset}" (${group})\n` +
-      `hat folgende Block-Gruppen [${blockedSource}]:\n` +
-      `${[...allBlocked].map(b=>`  • ${b}`).join('\n')}\n\n` +
-      `Folgende Items im Outfit würden dadurch von BC automatisch entfernt:\n` +
-      `${conflictLines}\n\n` +
-      `→ OK        = Trotzdem hinzufügen (Items werden entfernt)\n` +
-      `→ Abbrechen = Nichts ändern`;
-
-    if (!confirm(msg)) return;
-  }
-
-  // ── Prüfe auch ob existing Outfit-Items dieses Item blocken würden ────
-  const blockedByExisting = [];
-  for (const existing of OUTFIT) {
-    const existBlocked = new Set(existing.cfg?.block || []);
-    // auch Options-blocks der bereits im Outfit gespeicherten Items prüfen
-    for (const key in (existing.cfg?.typeKeys || {})) {
-      const existingSel = existing.tr || {};
-      // tr ist ein key→value Objekt; wir brauchen den Index
-      const selVal = existingSel[key];
-      if (selVal != null) {
-        const opts = existing.cfg.typeKeys[key] || [];
-        for (let idx = 0; idx < opts.length; idx++) {
-          // Bei Single: selVal === idx; bei Multi: bit check
-          const isSel = (selVal & Math.pow(2, idx)) > 0 || selVal === idx;
-          if (isSel) for (const b of (opts[idx]?.block || [])) existBlocked.add(b);
-        }
-      }
-    }
-    if (existBlocked.has(group)) {
-      blockedByExisting.push(existing);
-    }
-  }
-
-  if (blockedByExisting.length > 0) {
-    const existLines = blockedByExisting.map(item =>
-      `  • „${item.asset}" (${item.group}) blockt Gruppe ${group}`
-    ).join('\n');
-
-    const msg =
-      `⚠️ Umgekehrter Konflikt!\n\n` +
-      `Folgende Items im Outfit würden „${asset}" (${group}) blockieren:\n` +
-      `${existLines}\n\n` +
-      `Das bedeutet: „${asset}" würde von BC automatisch wieder entfernt.\n\n` +
-      `→ OK        = Trotzdem hinzufügen\n` +
-      `→ Abbrechen = Nichts ändern`;
-
-    if (!confirm(msg)) return;
-  }
-
   const tr = {};
   for (const key in (cfg.typeKeys||{})) {
     const sel = [...dimSelected[key]].sort((a,b)=>a-b);
@@ -2567,20 +2472,6 @@ function loadProfile(name) {
   }
 
   OUTFIT = restored;
-
-  // ── Konflikt-Check: doppelte Gruppen im Profil selbst warnen ──
-  const groupCounts = {};
-  restored.forEach(item => { groupCounts[item.group] = (groupCounts[item.group] || 0) + 1; });
-  const dupes = Object.entries(groupCounts).filter(([,cnt]) => cnt > 1);
-  if (dupes.length > 0) {
-    const dupeList = dupes.map(([g, cnt]) => {
-      const names = restored.filter(i => i.group === g).map(i => i.asset).join(', ');
-      return `  • ${g}: ${names} (${cnt}×)`;
-    }).join('\n');
-    showStatus(`⚠️ Profil hat ${dupes.length} Slot-Konflikt(e) – nur das letzte Item pro Gruppe wird angelegt`, 'error');
-    console.warn('[BCK] Profil-Konflikte:\n' + dupeList);
-  }
-
   switchTab('outfit');
   renderOutfitList();
   _autoOutfitCode();
@@ -2688,39 +2579,8 @@ let CURSE_LSCG  = {};   // key → entry (from CurseScanner.lscgTable)
 let CURSE_CACHE_LSCG = {}; // from lscgCache
 
 // Comments: persisted in localStorage
-// ── Intervall-Event Laufzeit-Status (Countdown-Anzeige) ──────────────────
-let _evIntervalStatus = {};  // evId → { nextFireAt, minSek, maxSek, firedCount }
-function _evIntervalStatusUpdate(evId, nextMs, lo, hi, cnt) {
-  _evIntervalStatus[evId] = { nextFireAt: Date.now() + nextMs, lo, hi, cnt };
-  if (_activeTab === 'events') _renderIntervalCountdowns();
-}
-function _renderIntervalCountdowns() {
-  Object.entries(_evIntervalStatus).forEach(([evId, s]) => {
-    const el = document.getElementById('ev-countdown-' + evId);
-    if (!el) return;
-    const rem = Math.max(0, Math.ceil((s.nextFireAt - Date.now()) / 1000));
-    el.textContent = '⏱ ' + rem + 's | 🔥 ' + s.cnt + '×';
-  });
-}
-// Countdown-Timer im Popup (aktualisiert alle 1s)
-setInterval(() => {
-  if (_activeTab === 'events' && Object.keys(_evIntervalStatus).length) _renderIntervalCountdowns();
-}, 1000);
-
 let CURSE_COMMENTS = {};
 try { CURSE_COMMENTS = JSON.parse(localStorage.getItem('BC_CURSE_COMMENTS_v1') || '{}'); } catch {}
-
-let CURSE_FAVOURITES = new Set();
-try { CURSE_FAVOURITES = new Set(JSON.parse(localStorage.getItem('BC_CURSE_FAV_v1') || '[]')); } catch {}
-function _saveCurseFavourites() {
-  try { localStorage.setItem('BC_CURSE_FAV_v1', JSON.stringify([...CURSE_FAVOURITES])); } catch {}
-}
-function toggleCurseFavourite(dbKey) {
-  if (CURSE_FAVOURITES.has(dbKey)) CURSE_FAVOURITES.delete(dbKey);
-  else CURSE_FAVOURITES.add(dbKey);
-  _saveCurseFavourites();
-  renderCurseTab();
-}
 
 function _saveCurseComments() {
   try { localStorage.setItem('BC_CURSE_COMMENTS_v1', JSON.stringify(CURSE_COMMENTS)); } catch {}
@@ -2739,84 +2599,17 @@ function curseScan() {
 // called from postMessage handler
 function _handleCurseData(data) {
   if (data.err) { showStatus('❌ Curse-Scan: ' + data.err, 'error'); return; }
-
-  // ── Change-Detection ────────────────────────────────
-  const added   = data.added   ?? [];
-  const updated = data.updated ?? [];
-
   CURSE_DB         = data.database    ?? {};
   CURSE_LSCG       = data.lscgTable   ?? {};
   CURSE_CACHE_LSCG = data.lscgCache   ?? {};
   _updateCurseStats();
   _populateSlotFilter();
   if (_activeTab === 'curse') renderCurseTab();
-
   const total = Object.keys(CURSE_DB).length;
-  const isAuto = data._auto === true;
-
-  // ── Status-Anzeige ──────────────────────────────────
-  let statusText = '✅ ' + total + ' Crafts';
-  if (added.length > 0 || updated.length > 0) {
-    statusText += ' | +' + added.length + ' neu, ' + updated.length + ' geändert';
-    _showChangeBadge(added, updated);
-  } else if (!isAuto) {
-    statusText += ' | keine Änderungen';
-  }
-  document.getElementById('csScanStatus').textContent = isAuto
-    ? '🔄 ' + new Date().toLocaleTimeString() + ' — ' + statusText.replace('✅ ', '')
-    : statusText;
-
-  if (!isAuto || added.length > 0 || updated.length > 0) {
-    showStatus(statusText, added.length + updated.length > 0 ? 'success' : 'info');
-  }
+  document.getElementById('csScanStatus').textContent = '✅ ' + total + ' Crafts';
+  showStatus('✅ Curse-Scan: ' + total + ' Crafts', 'success');
   // persist
   try { localStorage.setItem('BC_CURSE_DB_v1', JSON.stringify({database:CURSE_DB,lscgTable:CURSE_LSCG,lscgCache:CURSE_CACHE_LSCG})); } catch {}
-}
-
-// ── Änderungs-Badge im UI anzeigen ───────────────────
-function _showChangeBadge(added, updated) {
-  const el = document.getElementById('csChangeBadge');
-  if (!el) return;
-  const lines = [];
-  for (const { eintrag } of added) {
-    lines.push('<span class="change-added">+ ' + escHtml(eintrag.CraftName) + ' (' + escHtml(eintrag.Besitzer.Name) + ')</span>');
-  }
-  for (const { eintrag, changes } of updated) {
-    const chStr = changes.map(c => {
-      const a = c.alt === null ? 'null' : String(c.alt);
-      const n = c.neu === null ? 'null' : String(c.neu);
-      return escHtml(c.feld) + ': <s>' + escHtml(a) + '</s> → <b>' + escHtml(n) + '</b>';
-    }).join(', ');
-    lines.push('<span class="change-updated">↻ ' + escHtml(eintrag.CraftName) + ' (' + escHtml(eintrag.Besitzer.Name) + '): ' + chStr + '</span>');
-  }
-  el.innerHTML = lines.join('<br>');
-  el.style.display = lines.length > 0 ? 'block' : 'none';
-  // Auto-ausblenden nach 15s
-  clearTimeout(el._hideTimer);
-  el._hideTimer = setTimeout(() => { el.style.display = 'none'; }, 15000);
-}
-
-// ── Auto-Scan ─────────────────────────────────────────
-let _autoCurseScanInterval = null;
-let _autoCurseScanEnabled  = false;
-
-function toggleAutoCurseScan() {
-  _autoCurseScanEnabled = !_autoCurseScanEnabled;
-  const btn = document.getElementById('csAutoScanBtn');
-  if (_autoCurseScanEnabled) {
-    _autoCurseScanInterval = setInterval(() => {
-      if (_connected) bcSend({ type: 'SCAN_CURSES', _auto: true });
-    }, 30000);
-    if (btn) { btn.textContent = '⏹ Auto-Scan'; btn.classList.add('active-pulse'); }
-    // Sofort einmal scannen
-    if (_connected) bcSend({ type: 'SCAN_CURSES', _auto: true });
-    showStatus('🔄 Auto-Scan gestartet (alle 30s)', 'info');
-  } else {
-    clearInterval(_autoCurseScanInterval);
-    _autoCurseScanInterval = null;
-    if (btn) { btn.textContent = '🔁 Auto-Scan'; btn.classList.remove('active-pulse'); }
-    showStatus('⏹ Auto-Scan gestoppt', 'info');
-  }
 }
 
 
@@ -2833,7 +2626,7 @@ function toggleCacheFilter() {
 
 function setCurseFilter(f) {
   _curseFilter = f;
-  ['all','cursed','lscg','fav'].forEach(k => {
+  ['all','cursed','lscg'].forEach(k => {
     const el = document.getElementById('fc-' + k);
     if (el) el.classList.toggle('on', k === f);
   });
@@ -2871,12 +2664,6 @@ function renderCurseTab() {
   let entries = Object.values(CURSE_DB);
   if (_curseFilter === 'cursed') entries = entries.filter(e => !!e.IstCursed);
   if (_curseFilter === 'lscg')   entries = entries.filter(e => !!e.IstLSCGCurse);
-  if (_curseFilter === 'fav') {
-    entries = entries.filter(e => {
-      const k = (e.Besitzer?.Nummer ?? '') + ':' + e.ItemName + ':' + e.CraftName;
-      return CURSE_FAVOURITES.has(k);
-    });
-  }
   if (cacheOnly)   entries = entries.filter(e => !!e.IstLSCGCurse);
   if (slotFilter)  entries = entries.filter(e => e.Gruppe === slotFilter);
   if (searchTerm)  entries = entries.filter(e =>
@@ -2917,23 +2704,17 @@ function renderCurseTab() {
 
     const lscgCount = owner.items.filter(i => i.IstLSCGCurse).length;
     const cursedCount = owner.items.filter(i => i.IstCursed).length;
-    const favCount = owner.items.filter(i => {
-      const k = (i.Besitzer?.Nummer ?? '') + ':' + i.ItemName + ':' + i.CraftName;
-      return CURSE_FAVOURITES.has(k);
-    }).length;
 
     block.innerHTML =
       '<div class="curse-owner-hdr" onclick="toggleCurseOwner(\'' + blockId + '\')">'+
         '<span class="curse-owner-name">'+escHtml(owner.name)+'</span>'+
         '<span class="curse-owner-num">#'+owner.num+'</span>'+
-        (favCount ? '<span class="curse-owner-count" style="background:rgba(251,191,36,.15);color:#fbbf24">⭐ '+favCount+'</span>' : '')+
         (lscgCount ? '<span class="curse-owner-count" style="background:var(--gd);color:var(--green)">🧿 '+lscgCount+'</span>' : '')+
         (cursedCount ? '<span class="curse-owner-count">🔮 '+cursedCount+'</span>' : '')+
         '<span class="curse-owner-count" style="background:var(--bg3);color:var(--text2)">'+owner.items.length+'</span>'+
         '<span class="curse-owner-chevron">▶</span>'+
       '</div>'+
       '<table class="curse-rows"><thead><tr style="background:var(--bg3)">'+
-        '<th style="padding:4px 10px;font-size:.63rem;color:var(--text3);text-align:center;font-weight:500">⭐</th>'+
         '<th style="padding:4px 10px;font-size:.63rem;color:var(--text3);text-align:left;font-weight:500">Name</th>'+
         '<th style="padding:4px 10px;font-size:.63rem;color:var(--text3);text-align:left;font-weight:500">Item</th>'+
         '<th style="padding:4px 10px;font-size:.63rem;color:var(--text3);text-align:left;font-weight:500">Gruppe</th>'+
@@ -2955,9 +2736,8 @@ function renderCurseTab() {
       const isLSCG  = entry.IstLSCGCurse;
       const isCursed = entry.IstCursed;
 
-      const isFav = CURSE_FAVOURITES.has(dbKey);
       const tr = document.createElement('tr');
-      tr.className = 'curse-row' + (isLSCG ? ' lscg' : '') + (isFav ? ' fav' : '');
+      tr.className = 'curse-row' + (isLSCG ? ' lscg' : '');
       tr.id = rowId;
 
       const lscgText = isLSCG
@@ -2966,9 +2746,6 @@ function renderCurseTab() {
         : '<span style="color:var(--text3)">–</span>';
 
       tr.innerHTML =
-        '<td class="fav-cell" onclick="toggleCurseFavourite(\'' + dbKey + '\')" title="Favorit togglen">'+
-          (isFav ? '⭐' : '<span style="opacity:.25;font-size:.85em">☆</span>')+
-        '</td>'+
         '<td class="cn"><span class="cursor-detail-toggle" onclick="toggleCurseDetail(\'' + detId + '\',\'' + rowId + '\')">▶</span>'+escHtml(entry.CraftName)+'</td>'+
         '<td class="item">'+escHtml(entry.ItemName)+'</td>'+
         '<td class="grp">'+escHtml(entry.Gruppe)+'</td>'+
@@ -3013,7 +2790,7 @@ function renderCurseTab() {
       detTr.className = 'curse-detail-row';
       detTr.id = detId;
       detTr.innerHTML =
-        '<td class="curse-detail-cell" colspan="8">'+
+        '<td class="curse-detail-cell" colspan="7">'+
         '<div style="font-size:.63rem;color:var(--text3);margin-bottom:4px">Details für '+escHtml(entry.CraftName)+'</div>'+
         '<div class="curse-detail-grid">'+
         detailFields.map(([label, val]) =>
@@ -3089,7 +2866,6 @@ function _tryFinishExport() {
     lscgTable: CURSE_LSCG,
     lscgCache: mergedLscg,
     comments: CURSE_COMMENTS,
-    favourites: [...CURSE_FAVOURITES],
   };
   _exportLscgCache = null; _exportCraftCache = null;
   const blob = new Blob([JSON.stringify(payload, null, 2)], {type:'application/json'});
@@ -3128,7 +2904,6 @@ function curseImport() {
         CURSE_LSCG = d.lscgTable ?? {};
         CURSE_CACHE_LSCG = d.lscgCache ?? {};
         if (d.comments) Object.assign(CURSE_COMMENTS, d.comments);
-        if (d.favourites) { d.favourites.forEach(k => CURSE_FAVOURITES.add(k)); _saveCurseFavourites(); }
         _saveCurseComments();
         try { localStorage.setItem('BC_CURSE_DB_v1', JSON.stringify({database:CURSE_DB,lscgTable:CURSE_LSCG,lscgCache:CURSE_CACHE_LSCG})); } catch {}
         if (_connected && Object.keys(CURSE_DB).length > 0) {
@@ -3308,11 +3083,6 @@ window.addEventListener('message', function(ev) {
       logPush(ev.data.entry);
       break;
 
-    case 'BOT_EV_STATUS':
-      // Interval-Status: Update Countdown-Anzeige im Events-Tab
-      _evIntervalStatusUpdate(ev.data.evId, ev.data.nextMs, ev.data.lo, ev.data.hi, ev.data.cnt);
-      break;
-
     case 'BOT_MONEY':
       _moneyApply(ev.data.memberNum, ev.data.name, ev.data.delta, ev.data.setVal);
       break;
@@ -3444,27 +3214,7 @@ function showStatus(msg, type) {
 function executeCode() {
   const code = document.getElementById('codeOut').value.trim();
   if (!code) return;
-
-  // ── Warnung: Item blockt andere Gruppen ──────────────────────────────
-  if (CURRENT) {
-    const { asset, group, cfg } = CURRENT;
-    const allBlocked = new Set(cfg.block || []);
-    for (const key in (cfg.typeKeys || {})) {
-      for (const idx of (dimSelected[key] || new Set())) {
-        for (const b of (cfg.typeKeys[key][idx]?.block || [])) allBlocked.add(b);
-      }
-    }
-    if (allBlocked.size > 0) {
-      const warn =
-        `⚠️ Hinweis: „${asset}" (${group})\n` +
-        `blockt folgende Gruppen – Items dort werden von BC automatisch entfernt:\n` +
-        `${[...allBlocked].map(b => `  • ${b}`).join('\n')}\n\n` +
-        `Trotzdem ausführen?`;
-      if (!confirm(warn)) return;
-    }
-  }
-
-  showStatus('⏳ Wird ausgeführt…', 'info');
+  showStatus('\u23f3 Wird ausgef\u00fchrt\u2026', 'info');
   bcSend({ type: 'EXEC', code });
 }
 
@@ -3507,12 +3257,6 @@ function startRoomScan() {
     if (_connected) scanRoom();
   }, 5000);
   console.log('[BCK-Popup] Raum-Scanner gestartet (alle 5s)');
-}
-
-function botStopAll() {
-  // Bot gestoppt → Interval-Status zurücksetzen
-  _evIntervalStatus = {};
-  if (_activeTab === 'events') renderEventsTab();
 }
 
 function stopRoomScan() {
@@ -3689,7 +3433,6 @@ function selectRoomMember(num) {
   <div class="curse-topbar">
     <button class="btn btn-green" onclick="curseScan()">🔍 Scannen</button>
     <button class="btn btn-green" onclick="curseClearAndScan()" title="Alte Einträge löschen und frisch scannen">🔄 Neu scannen</button>
-    <button class="btn btn-primary" id="csAutoScanBtn" onclick="toggleAutoCurseScan()" title="Scannt den Raum alle 30s automatisch und zeigt Änderungen">🔁 Auto-Scan</button>
     <button class="btn btn-primary" onclick="curseExport()">⬇️ Export</button>
     <button class="btn btn-primary" onclick="curseImport()">⬆️ Import</button>
     <button class="btn btn-red" onclick="curseClear()" title="Alle gespeicherten Einträge löschen">🗑️ Leeren</button>
@@ -3701,9 +3444,6 @@ function selectRoomMember(num) {
     </div>
     <span id="csScanStatus" style="font-size:.7rem;color:var(--text3)"></span>
   </div>
-  <div id="csChangeBadge" style="display:none;padding:4px 8px;margin:4px 0;background:var(--bg3,#2a2a3a);border-left:3px solid var(--accent,#7b5ea7);border-radius:4px;font-size:.7rem;line-height:1.6;color:var(--text1);max-height:120px;overflow-y:auto" title="Klicken zum Schließen" onclick="this.style.display='none'">
-  </div>
-  </div><!-- /csChangeBadge -->
   <!-- Filter bar -->
   <div class="curse-filter-bar" id="curseFilterBar">
     <input class="curse-search" id="curseSearch" placeholder="🔍 Name, Item, Gruppe..." oninput="renderCurseTab()">
@@ -3711,7 +3451,6 @@ function selectRoomMember(num) {
     <span class="filter-chip on" id="fc-all"      onclick="setCurseFilter('all')"     >Alle</span>
     <span class="filter-chip"    id="fc-cursed"   onclick="setCurseFilter('cursed')"  >🔮 Cursed</span>
     <span class="filter-chip"    id="fc-lscg"     onclick="setCurseFilter('lscg')"   >🧿 LSCG</span>
-    <span class="filter-chip"    id="fc-fav"      onclick="setCurseFilter('fav')"    >⭐ Favoriten</span>
     <div class="filter-sep"></div>
     <span class="filter-chip" id="fc-cache" onclick="toggleCacheFilter()" title="Nur Einträge mit LSCG-Daten anzeigen">💾 Im Cache</span>
     <div class="filter-sep"></div>
@@ -4077,7 +3816,7 @@ function renderEventsTab() {
 function _evBadge(e) {
   const beds = e.bedingungen ?? [];
   if (!e.aktiv) return {cls:'manual', lbl:'⏸ Pausiert'};
-  if (beds.some(c=>c.typ==='ev_interval')) { const running = !!_evIntervalStatus[e.id]; return {cls:'interval'+(running?' running':''), lbl:'🔁 Intervall'+(running?' ●':'')}; }
+  if (beds.some(c=>c.typ==='ev_interval')) return {cls:'interval', lbl:'🔁 Intervall'};
   if (beds.some(c=>c.typ==='ev_timer'))    return {cls:'auto',     lbl:'⏱ Timer'};
   if (beds.some(c=>c.typ==='player_betritt')) return {cls:'betritt-ev', lbl:'🚪 Betritt'};
   if (beds.some(c=>c.typ==='wort'))        return {cls:'chat-ev',  lbl:'💬 Chat'};
@@ -4123,8 +3862,7 @@ function renderEventCard(bot, e, i) {
         ${vonHtml}
         <label style="font-size:.65rem;color:var(--text3)">Ziel:
           <select class="cf" style="margin-left:4px" onchange="evField('${e.id}','ziel',this.value);evRerender('${e.id}')">
-            <option value="ausloeser" ${ziel==='ausloeser'?'selected':''}>👤 Auslöser (Chat-Events)</option>
-            <option value="zufaellig" ${ziel==='zufaellig'?'selected':''}>🎲 Zufälliger Spieler</option>
+            <option value="ausloeser" ${ziel==='ausloeser'?'selected':''}>👤 Player (Auslöser/Random)</option>
             <option value="alle"      ${ziel==='alle'?'selected':''}>👥 Alle im Raum</option>
             <option value="liste"     ${ziel==='liste'?'selected':''}>📋 Liste</option>
           </select>
@@ -4197,21 +3935,17 @@ function renderEvCond(bot, eid, c, ci) {
       </div></div>`;
   }
   if (c.typ === 'ev_interval') {
-    const statusHtml = _evIntervalStatus[eid]
-      ? `<span id="ev-countdown-${eid}" style="font-size:.6rem;color:#fb923c;margin-left:6px;font-family:monospace">⏱ …</span>`
-      : `<span id="ev-countdown-${eid}" style="font-size:.6rem;color:var(--text3);margin-left:6px">▶️ Startet mit Bot</span>`;
     return `<div class="cond-group" id="evcond-${eid}-${ci}">
       <div class="cond-when-lbl">🔁 Intervall</div>
       <div class="cond-card" style="background:#0a1a2a;border-color:#1a3a5a">
         <div class="card-fields">
           <span style="font-size:.65rem;color:var(--text3)">Alle</span>
-          <input class="cf cf-w70" type="number" min="1" value="${c.sek_min??30}"
+          <input class="cf cf-w70" type="number" min="1" value="${c.sek_min??20}"
             oninput="evCondField('${eid}',${ci},'sek_min',+this.value)">
           <span style="font-size:.62rem;color:var(--text3)">–</span>
-          <input class="cf cf-w70" type="number" min="1" value="${c.sek_max??180}"
+          <input class="cf cf-w70" type="number" min="1" value="${c.sek_max??60}"
             oninput="evCondField('${eid}',${ci},'sek_max',+this.value)">
-          <span style="font-size:.65rem;color:var(--text3)">Sek (zufällig)</span>
-          ${statusHtml}
+          <span style="font-size:.65rem;color:var(--text3)">Sek</span>
         </div>
         <button class="rm-btn" onclick="evCondRemove('${eid}',${ci})">✕</button>
       </div></div>`;
@@ -5772,55 +5506,32 @@ function _okEv(ev,C,rohText,typKey){
   return groups.some(g=>g.every(c=>checkOne(c)));
 }
 
-function _fireEv(ev,onDone){
-  onDone=onDone??null;
+function _fireEv(ev){
   // Wiederholung check
   const cnt=_evFiredCnt[ev.id]??0;
-  if(ev.wiederholung==='einmalig'&&cnt>=1){_log('⏭ Event "'+ev.name+'" bereits (1×)');onDone&&onDone();return;}
-  if(ev.wiederholung==='n_mal'&&cnt>=(ev.maxMal??2)){_log('⏭ Event "'+ev.name+'" max erreicht');onDone&&onDone();return;}
+  if(ev.wiederholung==='einmalig'&&cnt>=1){_log('⏭ Event "'+ev.name+'" bereits (1×)');return;}
+  if(ev.wiederholung==='n_mal'&&cnt>=(ev.maxMal??2)){_log('⏭ Event "'+ev.name+'" max erreicht');return;}
 
-  // Targets bestimmen
+  // Targets
   const allChars=[Player,...(ChatRoomCharacter||[])];
   let targets=[];
-  if(ev.ziel==='alle'){
-    targets=allChars;
-  } else if(ev.ziel==='liste'){
-    targets=allChars.filter(C=>(ev.zielListe||[]).includes(C.MemberNumber));
-  } else if(ev.ziel==='zufaellig'){
-    // Explizit zufälliger Spieler – alle Chars außer Bot selbst bevorzugen
-    const others=allChars.filter(C=>C.MemberNumber!==Player.MemberNumber);
-    const pool=others.length?others:allChars;
-    const eligible=pool.filter(C=>_okEv(ev,C,ev._rohText,ev._typKey));
+  if(ev.ziel==='alle'){targets=allChars;}
+  else if(ev.ziel==='liste'){targets=allChars.filter(C=>(ev.zielListe||[]).includes(C.MemberNumber));}
+  else{// ausloeser / random
+    const eligible=allChars.filter(C=>_okEv(ev,C,ev._rohText,ev._typKey));
     if(eligible.length)targets=[eligible[Math.floor(Math.random()*eligible.length)]];
-  } else {
-    // ausloeser / default: falls kein rohText vorhanden, zufällig wie 'zufaellig'
-    if(!ev._rohText){
-      const others=allChars.filter(C=>C.MemberNumber!==Player.MemberNumber);
-      const pool=others.length?others:allChars;
-      const eligible=pool.filter(C=>_okEv(ev,C,ev._rohText,ev._typKey));
-      if(eligible.length)targets=[eligible[Math.floor(Math.random()*eligible.length)]];
-    } else {
-      const eligible=allChars.filter(C=>_okEv(ev,C,ev._rohText,ev._typKey));
-      if(eligible.length)targets=[eligible[Math.floor(Math.random()*eligible.length)]];
-    }
   }
-  if(!targets.length){
-    _log('⚠️ Event "'+ev.name+'" – kein gültiges Ziel ('+allChars.length+' im Raum)');
-    onDone&&onDone(); // trotzdem callback damit Interval weiterläuft
-    return;
-  }
+  if(!targets.length){_log('⚠️ Event "'+ev.name+'" – kein gültiges Ziel');return;}
 
-  _log('⚡ Event "'+ev.name+'" → '+targets.map(C=>C.Name).join(', '));
-  let done=0;
+  _log('⚡ Event "'+ev.name+'" → '+targets.length+' Ziel(e)');
   targets.forEach(C=>{
-    if(!_okEv(ev,C,ev._rohText,ev._typKey)){_log('⏭ Event "'+ev.name+'" Bed. nicht erfüllt für '+C.Name);done++;if(done===targets.length)onDone&&onDone();return;}
+    if(!_okEv(ev,C,ev._rohText,ev._typKey)){_log('⏭ Event "'+ev.name+'" Bed. nicht erfüllt für '+C.Name);return;}
     const vars={name:C.Name,wort:ev._rohText||'',typ:'Event',x:C.X??0,y:C.Y??0,zone:'',C};
     _runSeq(ev.aktionen??[],C,vars,ev,
       ()=>{
-        _evFiredCnt[ev.id]=((_evFiredCnt[ev.id]??0)+1);
+        _evFiredCnt[ev.id]=(cnt+1);
         _log('✅ Event "'+ev.name+'" abgeschlossen für '+C.Name+' #'+_evFiredCnt[ev.id]);
         _pushLog({status:'ok'},vars,{name:ev.name,id:ev.id});
-        done++;if(done===targets.length)onDone&&onDone();
       },
       ()=>{
         _log('❌ Event "'+ev.name+'" ungültig für '+C.Name);
@@ -5829,7 +5540,6 @@ function _fireEv(ev,onDone){
           const typ={chat:'Chat',emote:'Emote'}[ev.fallbackTyp]??'Chat';
           ServerSend('ChatRoomChat',{Content:_tpl(ev.fallbackText,vars),Type:typ});
         }
-        done++;if(done===targets.length)onDone&&onDone();
       }
     );
   });
@@ -5844,41 +5554,19 @@ function _scheduleEv(ev){
   if(timerC){
     const ms=(timerC.sek??10)*1000;
     _evTimers[ev.id+'_t']=setTimeout(()=>{
-      _fireEv(ev,()=>{});
+      _fireEv(ev);
     },ms);
   }
   if(intC){
-    const lo=(intC.sek_min??30)*1000, hi=(intC.sek_max??180)*1000;
+    const lo=(intC.sek_min??20)*1000, hi=(intC.sek_max??60)*1000;
     const go=()=>{
-      // Wdh-Check HIER (sync, vor _fireEv) damit das Loop wirklich stoppt
       const cnt=_evFiredCnt[ev.id]??0;
-      if(ev.wiederholung==='einmalig'&&cnt>=1){
-        _log('⏹ Interval "'+ev.name+'" gestoppt (einmalig)');
-        return; // kein weiteres setTimeout
-      }
-      if(ev.wiederholung==='n_mal'&&cnt>=(ev.maxMal??2)){
-        _log('⏹ Interval "'+ev.name+'" gestoppt ('+ev.maxMal+'×)');
-        return;
-      }
-      _fireEv(ev,()=>{
-        // onDone-Callback: nächstes Interval ERST nach erfolgreichem Fire planen
-        const delay=lo+Math.random()*(hi-lo);
-        _log('⏱ Nächstes "'+ev.name+'" in '+(delay/1000|0)+'s');
-        // Status ans Popup melden
-        try{window.__BCK_popupRef?.postMessage({
-          app:'BCKonfigurator',type:'BOT_EV_STATUS',
-          evId:ev.id,nextMs:delay,lo,hi,cnt:(_evFiredCnt[ev.id]??0)
-        },'*');}catch(e){}
-        _evTimers[ev.id+'_i']=setTimeout(go,delay);
-      });
+      if(ev.wiederholung==='einmalig'&&cnt>=1)return;
+      if(ev.wiederholung==='n_mal'&&cnt>=(ev.maxMal??2))return;
+      _fireEv(ev);
+      _evTimers[ev.id+'_i']=setTimeout(go,lo+Math.random()*(hi-lo));
     };
-    const firstDelay=lo+Math.random()*(hi-lo);
-    _log('🔁 Interval "'+ev.name+'" startet in '+(firstDelay/1000|0)+'s ('+lo/1000+'–'+hi/1000+'s)');
-    try{window.__BCK_popupRef?.postMessage({
-      app:'BCKonfigurator',type:'BOT_EV_STATUS',
-      evId:ev.id,nextMs:firstDelay,lo,hi,cnt:0
-    },'*');}catch(e){}
-    _evTimers[ev.id+'_i']=setTimeout(go,firstDelay);
+    _evTimers[ev.id+'_i']=setTimeout(go,lo+Math.random()*(hi-lo));
   }
 }
 
