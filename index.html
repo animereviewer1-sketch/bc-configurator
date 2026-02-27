@@ -2715,11 +2715,33 @@ try { CURSE_FAVOURITES = new Set(JSON.parse(localStorage.getItem('BC_CURSE_FAV_v
 function _saveCurseFavourites() {
   try { localStorage.setItem('BC_CURSE_FAV_v1', JSON.stringify([...CURSE_FAVOURITES])); } catch {}
 }
-function toggleCurseFavourite(dbKey) {
-  if (CURSE_FAVOURITES.has(dbKey)) CURSE_FAVOURITES.delete(dbKey);
+function toggleCurseFavourite(dbKey, cellEl) {
+  const wasFav = CURSE_FAVOURITES.has(dbKey);
+  if (wasFav) CURSE_FAVOURITES.delete(dbKey);
   else CURSE_FAVOURITES.add(dbKey);
   _saveCurseFavourites();
-  renderCurseTab();
+
+  // In-place update: nur die Zelle und die Zeile updaten, kein komplettes re-render
+  if (cellEl) {
+    const isFav = !wasFav;
+    cellEl.innerHTML = isFav ? '⭐' : '<span style="opacity:.25;font-size:.85em">☆</span>';
+    const row = cellEl.closest('tr');
+    if (row) row.classList.toggle('fav', isFav);
+
+    // Owner-Badge updaten (Anzahl Favs in diesem Block)
+    const block = cellEl.closest('.curse-owner-block');
+    if (block) {
+      const favBadge = block.querySelector('.curse-owner-fav-badge');
+      const favCount = block.querySelectorAll('.curse-row.fav').length;
+      if (favBadge) {
+        if (favCount > 0) { favBadge.textContent = '⭐ ' + favCount; favBadge.style.display = ''; }
+        else favBadge.style.display = 'none';
+      }
+    }
+  } else {
+    // Fallback: re-render wenn kein Element
+    renderCurseTab();
+  }
 }
 
 function _saveCurseComments() {
@@ -2926,7 +2948,7 @@ function renderCurseTab() {
       '<div class="curse-owner-hdr" onclick="toggleCurseOwner(\'' + blockId + '\')">'+
         '<span class="curse-owner-name">'+escHtml(owner.name)+'</span>'+
         '<span class="curse-owner-num">#'+owner.num+'</span>'+
-        (favCount ? '<span class="curse-owner-count" style="background:rgba(251,191,36,.15);color:#fbbf24">⭐ '+favCount+'</span>' : '')+
+        (favCount ? '<span class="curse-owner-count curse-owner-fav-badge" style="background:rgba(251,191,36,.15);color:#fbbf24">⭐ '+favCount+'</span>' : (''+'<span class="curse-owner-count curse-owner-fav-badge" style="display:none">⭐ 0</span>'))+
         (lscgCount ? '<span class="curse-owner-count" style="background:var(--gd);color:var(--green)">🧿 '+lscgCount+'</span>' : '')+
         (cursedCount ? '<span class="curse-owner-count">🔮 '+cursedCount+'</span>' : '')+
         '<span class="curse-owner-count" style="background:var(--bg3);color:var(--text2)">'+owner.items.length+'</span>'+
@@ -2966,7 +2988,7 @@ function renderCurseTab() {
         : '<span style="color:var(--text3)">–</span>';
 
       tr.innerHTML =
-        '<td class="fav-cell" onclick="toggleCurseFavourite(\'' + dbKey + '\')" title="Favorit togglen">'+
+        '<td class="fav-cell" onclick="toggleCurseFavourite(\'' + dbKey + '\',this)" title="Favorit togglen">'+
           (isFav ? '⭐' : '<span style="opacity:.25;font-size:.85em">☆</span>')+
         '</td>'+
         '<td class="cn"><span class="cursor-detail-toggle" onclick="toggleCurseDetail(\'' + detId + '\',\'' + rowId + '\')">▶</span>'+escHtml(entry.CraftName)+'</td>'+
@@ -4053,6 +4075,40 @@ function logClearAll() {
 //  EVENTS SYSTEM
 // ══════════════════════════════════════════════════════
 
+// ── Event-Engine: eigenständig, unabhängig vom Bot ──────────────────────
+// Läuft als eigenes Skript in BC, hat eigenen Message-Listener
+let _evEngineRunning = false;  // ist die Engine gerade aktiv?
+
+function evEngineIsRunning() {
+  // Prüfe ob das Skript in BC noch aktiv ist (über EXEC)
+  return _evEngineRunning;
+}
+
+function evEngineDeploy() {
+  const bot = _selBot(); if (!bot) { showStatus('❌ Kein Bot ausgewählt','error'); return; }
+  if (!_connected) { showStatus('❌ Nicht verbunden','error'); return; }
+  const code = _buildEventsCode(bot);
+  bcSend({ type:'EXEC', code });
+  _evEngineRunning = true;
+  _saveBots();
+  renderEventsTab();
+  showStatus('▶️ Event-Engine gestartet','success');
+}
+
+function evEngineStop() {
+  const bot = _selBot(); if (!bot) return;
+  const safeId = bot.id.replace(/\W/g,'_');
+  bcSend({ type:'EXEC', code:`if(window['_BCEvEng_${safeId}'])window['_BCEvEng_${safeId}'].stop();else console.warn('[EvEng] Nicht aktiv');` });
+  _evEngineRunning = false;
+  _saveBots();
+  renderEventsTab();
+  showStatus('⏹ Event-Engine gestoppt','info');
+}
+
+function evEngineToggle() {
+  if (_evEngineRunning) evEngineStop(); else evEngineDeploy();
+}
+
 function renderEventsTab() {
   const bot = _selBot();
   const container = document.getElementById('events-container');
@@ -4062,10 +4118,19 @@ function renderEventsTab() {
     return;
   }
   const events = bot.events ?? [];
+  const isRunning = _evEngineRunning;
   const html = `
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
       <span style="font-weight:600;font-size:.85rem">⚡ Events — Bot: <span style="color:var(--pl)">${escHtml(bot.name)}</span></span>
       <button class="be-addevent" onclick="eventNew()" style="width:auto;padding:4px 14px;display:inline-block">+ Event hinzufügen</button>
+      <div style="margin-left:auto;display:flex;align-items:center;gap:8px">
+        <span style="font-size:.65rem;color:${isRunning?'#6ee7b7':'var(--text3)'}">
+          ${isRunning ? '🟢 Engine läuft' : '⭕ Engine gestoppt'}
+        </span>
+        <button onclick="evEngineToggle()" style="font-size:.7rem;padding:4px 14px;background:${isRunning?'rgba(239,68,68,.15)':'rgba(52,211,153,.12)'};border:1px solid ${isRunning?'rgba(239,68,68,.4)':'rgba(52,211,153,.3)'};color:${isRunning?'#fca5a5':'#6ee7b7'};border-radius:8px;cursor:pointer">
+          ${isRunning ? '⏹ Stopp' : '▶ Starten'}
+        </button>
+      </div>
     </div>
     ${events.map((e,i)=>renderEventCard(bot,e,i)).join('')}
     ${events.length ? '' : '<div style="color:var(--text3);font-size:.73rem;text-align:center;margin-top:30px">Noch keine Events.<br>Events feuern Aktionen manuell oder automatisch auf Spieler im Raum.</div>'}
@@ -4511,7 +4576,13 @@ function evFireImmediate(eid) {
   const b = _selBot(); if (!b) return;
   if (!_connected) { showStatus('❌ Nicht verbunden','error'); return; }
   const safeId = b.id.replace(/\W/g,'_');
-  bcSend({ type:'EXEC', code:`if(window['_BCBot_${safeId}'])window['_BCBot_${safeId}'].fireEventNow('${eid}');else console.warn('[Bot] Nicht aktiv – erst starten');` });
+  // Priorität: Event-Engine → Bot → Fehler
+  const code = `
+    if(window['_BCEvEng_${safeId}']) window['_BCEvEng_${safeId}'].fireNow('${eid}');
+    else if(window['_BCBot_${safeId}']) window['_BCBot_${safeId}'].fireEventNow('${eid}');
+    else console.warn('[EvEng/Bot] Nicht aktiv – erst starten');
+  `;
+  bcSend({ type:'EXEC', code });
   showStatus('▶️ Event sofort ausgelöst','success');
 }
 
@@ -6325,7 +6396,9 @@ window['_BCBot_'+_BID]={
     }
     if(_msgH) ServerSocket.off('ChatRoomMessage',_msgH);
     // Events timer stoppen
-    Object.values(_evTimers).forEach(h=>clearTimeout(h)); // clears both _t and _i timers
+    Object.values(_evTimers).forEach(h=>clearTimeout(h));
+    // Event-Engine auch stoppen falls sie läuft
+    if(window['_BCEvEng_'+_BID])window['_BCEvEng_'+_BID].stop();
     delete window['_BCBot_'+_BID];
     // State im window-Objekt + localStorage sichern (überlebt Page-Reload)
     window[_stateKey].roomEver=[..._roomEver];
@@ -6369,6 +6442,341 @@ window['_BCBot_'+_BID]={
 console.log('\u25B6\uFE0F [Bot:${safeName}] | Trigger:',_trigs.length,'| Modus:',_cfg.nurEigene?'Nur eigene':'Alle Spieler');
 })();`;
 }
+
+// ══════════════════════════════════════════════════════════════════
+//  EVENT-ENGINE: Eigenständiges Skript, unabhängig vom Bot
+//  - Eigener MessageListener für Chat/Emote/Whisper
+//  - Eigene Intervall-Timer
+//  - Läuft auch ohne Bot, hat aber Zugriff auf alle Bot-Aktionen
+// ══════════════════════════════════════════════════════════════════
+function _buildEventsCode(bot) {
+  const events = (bot.events||[]).filter(e=>e.aktiv).map(e => ({
+    id: e.id, name: e.name,
+    von: e.von??'alle', vonNummer: e.vonNummer??0,
+    ziel: e.ziel??'ausloeser', zielListe: e.zielListe??[],
+    wiederholung: e.wiederholung??'immer', maxMal: e.maxMal??2,
+    fallbackTyp: e.fallbackTyp??'nichts', fallbackText: e.fallbackText??'',
+    bedingungen: e.bedingungen??[],
+    aktionen: (e.aktionen||[]).map(a => {
+      if (a.typ==='item' && a.curseKey && !a.curseEntry) return {...a, curseEntry: CURSE_DB[a.curseKey]??null};
+      if (a.typ==='item' && a.profilName && (!a.profilItems||!a.profilItems.length)) return {...a, profilItems: PROFILES[a.profilName]?.items??[]};
+      return a;
+    }),
+  }));
+  const safeId   = bot.id.replace(/\W/g,'_');
+  const safeName = (bot.name||'Events').replace(/\\/g,'\\\\').replace(/`/g,'\\`');
+  const evJson   = JSON.stringify(events).replace(/`/g,'\\`').replace(/\${/g,'\\${');
+  const cfgJson  = JSON.stringify({ logAktiv: bot.settings?.logAktiv??true });
+
+  return `(function(){
+const _EID='${safeId}';
+if(window['_BCEvEng_'+_EID]){
+  window['_BCEvEng_'+_EID].stop();
+  console.log('[EvEng] Neustart...');
+}
+const _cfg=${cfgJson};
+const _evts=${evJson};
+const _evFiredCnt={};
+const _evTimers={};
+function _log(...a){if(_cfg.logAktiv)console.log('[EvEng:${safeName}]',...a);}
+
+// ── Hilfsfunktionen ──────────────────────────────────────────────
+
+function _tpl(s,v){return(s??'').replace(/{name}/gi,v.name??'').replace(/{wort}/gi,v.wort??'').replace(/{x}/gi,v.x??'').replace(/{y}/gi,v.y??'').replace(/{zone}/gi,v.zone??'');}
+
+function _okEv(ev,C,rohText,typKey){
+  const beds=ev.bedingungen??[];
+  if(!beds.length)return true;
+  function checkOne(c){
+    if(c.typ==='wort'){
+      if(rohText==null)return true;
+      const m=c.typ_msg||'any';
+      if(m!=='any'&&m!==typKey)return false;
+      return!c.wort||(rohText||'').toLowerCase().includes((c.wort||'').toLowerCase());
+    }
+    if(c.typ==='zone'){const p=c.puffer??1;const cx=C.X??-999,cy=C.Y??-999;return cx>=c.x-p&&cx<=c.x+p&&cy>=c.y-p&&cy<=c.y+p;}
+    if(c.typ==='zone_rect'){const cx=C.X??-999,cy=C.Y??-999;return cx>=Math.min(c.x1,c.x2)&&cx<=Math.max(c.x1,c.x2)&&cy>=Math.min(c.y1,c.y2)&&cy<=Math.max(c.y1,c.y2);}
+    if(c.typ==='item_traegt'){return(C.Appearance??[]).some(a=>a.Asset?.Name===c.item);}
+    if(c.typ==='item_traegt_nicht'){return!(C.Appearance??[]).some(a=>a.Asset?.Name===c.item);}
+    // ev_timer/ev_interval/player_betritt: nie im Chat prüfen
+    return true;
+  }
+  const groups=[[]]
+  for(const c of beds){
+    if(c.logik==='oder'||c.logik==='und_oder')groups.push([]);
+    groups[groups.length-1].push(c);
+  }
+  return groups.some(g=>g.every(c=>checkOne(c)));
+}
+
+function _runAkt(aktionen,C,vars,ev,onDone,onUngueltig){
+  if(!aktionen.length){onDone&&onDone();return;}
+  let i=0;
+  function next(){
+    if(i>=aktionen.length){onDone&&onDone();return;}
+    const a=aktionen[i++];
+    const delay=a.delay??0;
+    setTimeout(()=>{
+      try{
+        if(a.typ==='chat'||a.typ==='emote'||a.typ==='whisper'){
+          const txt=_tpl(a.text||'',vars);
+          if(a.typ==='whisper')ServerSend('ChatRoomChat',{Content:txt,Type:'Whisper',Target:C.MemberNumber});
+          else if(a.typ==='emote')ServerSend('ChatRoomChat',{Content:txt,Type:'Emote'});
+          else ServerSend('ChatRoomChat',{Content:txt,Type:'Chat'});
+          next();
+        } else if(a.typ==='warte'){
+          setTimeout(next, (a.sek??1)*1000);
+        } else if(a.typ==='ungueltig'){
+          onUngueltig&&onUngueltig();
+        } else if(a.typ==='item'){
+          const gruppe=a.gruppe,itemName=a.item;
+          if(!gruppe||!itemName){next();return;}
+          const target=C;
+          const craft=a.curseEntry??null;
+          const profilItems=a.profilItems??[];
+          if(profilItems.length){
+            profilItems.forEach(pi=>{
+              const g=pi.group,n=pi.asset;
+              if(!g||!n)return;
+              InventoryWear(target,n,g,pi.color??'#ffffff',0,Player.MemberNumber,null);
+            });
+            CharacterRefresh(target);ChatRoomCharacterUpdate(target);
+          } else {
+            const color=a.color??craft?.Farbe??'#ffffff';
+            InventoryWear(target,itemName,gruppe,color,0,Player.MemberNumber,craft?.Craft??null);
+            CharacterRefresh(target);ChatRoomCharacterUpdate(target);
+          }
+          next();
+        } else if(a.typ==='remove_item'){
+          if(a.gruppe){InventoryRemove(C,a.gruppe,false);}
+          CharacterRefresh(C);ChatRoomCharacterUpdate(C);
+          next();
+        } else {
+          next();
+        }
+      }catch(ex){_log('\u26A0 Aktion Fehler:',ex.message);next();}
+    }, delay);
+  }
+  next();
+}
+
+function _fireEv(ev,triggerC,rohText,typKey){
+  const cnt=_evFiredCnt[ev.id]??0;
+  if(ev.wiederholung==='einmalig'&&cnt>=1){_log('\u23ed '+ev.name+' (einmalig, bereits ausgelöst)');return null;}
+  if(ev.wiederholung==='n_mal'&&cnt>=(ev.maxMal??2)){_log('\u23ed '+ev.name+' (max '+ev.maxMal+'×)');return null;}
+
+  const allChars=[Player,...(ChatRoomCharacter||[])];
+  let targets=[];
+  if(ev.ziel==='alle'){
+    targets=allChars;
+  } else if(ev.ziel==='zufaellig'){
+    const pool=allChars.filter(C=>C.MemberNumber!==Player.MemberNumber);
+    const src=pool.length?pool:allChars;
+    if(src.length)targets=[src[Math.floor(Math.random()*src.length)]];
+  } else if(ev.ziel==='liste'){
+    targets=allChars.filter(C=>(ev.zielListe||[]).includes(C.MemberNumber));
+  } else {
+    // ausloeser: wer hat den Event getriggert?
+    targets=triggerC ? [triggerC] : (()=>{
+      const pool=allChars.filter(C=>C.MemberNumber!==Player.MemberNumber);
+      return pool.length?[pool[Math.floor(Math.random()*pool.length)]]:allChars.slice(0,1);
+    })();
+  }
+
+  if(!targets.length){_log('\u26A0 '+ev.name+' – kein Ziel');return null;}
+  _log('\u26A1 '+ev.name+' \u2192 '+targets.map(C=>C.Name).join(', '));
+
+  let done=0;
+  const finish=()=>{
+    done++;
+    if(done>=targets.length){
+      _evFiredCnt[ev.id]=((_evFiredCnt[ev.id]??0)+1);
+      try{window.__BCK_popupRef?.postMessage({app:'BCKonfigurator',type:'BOT_LOG',entry:{
+        ts:Date.now(),botId:'ev_${safeId}',botName:'${safeName} [Events]',
+        trigName:ev.name,trigId:ev.id,
+        player:targets[0]?.Name+' #'+targets[0]?.MemberNumber,
+        memberNum:targets[0]?.MemberNumber,x:0,y:0,status:'ok'
+      }},'*');}catch(e){}
+    }
+  };
+  targets.forEach(C=>{
+    const vars={name:C.Name,wort:rohText||'',typ:'Event',x:C.X??0,y:C.Y??0,zone:'',C};
+    _runAkt(ev.aktionen??[],C,vars,ev,finish,()=>{
+      _log('\u274C '+ev.name+' ungültig für '+C.Name);
+      if(ev.fallbackTyp&&ev.fallbackTyp!=='nichts'&&ev.fallbackText){
+        const typ={chat:'Chat',emote:'Emote'}[ev.fallbackTyp]??'Chat';
+        ServerSend('ChatRoomChat',{Content:_tpl(ev.fallbackText,vars),Type:typ});
+      }
+      done++;
+    });
+  });
+  return finish;
+}
+
+// ── Chat-Events: Reaktion auf Nachrichten ────────────────────────
+function _procChat(rohText,typKey,C){
+  _evts.forEach(ev=>{
+    if(!ev.aktiv)return;
+    // Von-Filter
+    const vonOk=(()=>{
+      if(ev.von==='bot')return C.MemberNumber===Player.MemberNumber;
+      if(ev.von==='nummer')return ev.vonNummer&&C.MemberNumber===ev.vonNummer;
+      return true;
+    })();
+    if(!vonOk)return;
+    // Nur Chat-Events (haben Wort-Bedingung, kein Timer/Interval/Betritt)
+    const beds=ev.bedingungen??[];
+    const hasTimer=beds.some(c=>c.typ==='ev_timer'||c.typ==='ev_interval'||c.typ==='player_betritt');
+    if(hasTimer)return;
+    const hasWort=beds.some(c=>c.typ==='wort');
+    if(!hasWort)return;
+    if(_okEv(ev,C,rohText,typKey)){
+      _log('\u{1F4AC} Chat-Event "'+ev.name+'" von '+C.Name);
+      _fireEv(ev,C,rohText,typKey);
+    }
+  });
+}
+
+// ── Timer/Intervall-Events: automatisch beim Start ────────────────
+function _scheduleAll(){
+  _evts.forEach(ev=>{
+    if(!ev.aktiv)return;
+    const beds=ev.bedingungen??[];
+    const timerC=beds.find(c=>c.typ==='ev_timer');
+    const intC=beds.find(c=>c.typ==='ev_interval');
+    if(timerC){
+      const ms=(timerC.sek??10)*1000;
+      _evTimers[ev.id+'_t']=setTimeout(()=>{
+        _log('\u23F1 Timer-Event "'+ev.name+'"');
+        _fireEv(ev,null,null,null);
+      },ms);
+      _log('\u23F1 "'+ev.name+'" feuert in '+(timerC.sek??10)+'s');
+    }
+    if(intC){
+      const lo=(intC.sek_min??30)*1000, hi=(intC.sek_max??180)*1000;
+      const go=()=>{
+        const cnt=_evFiredCnt[ev.id]??0;
+        if(ev.wiederholung==='einmalig'&&cnt>=1){_log('\u23f9 Interval "'+ev.name+'" fertig');return;}
+        if(ev.wiederholung==='n_mal'&&cnt>=(ev.maxMal??2)){_log('\u23f9 Interval "'+ev.name+'" fertig');return;}
+        _log('\u{1F501} Interval-Event "'+ev.name+'"');
+        _fireEv(ev,null,null,null);
+        const delay=lo+Math.random()*(hi-lo);
+        _log('\u23F1 Nächstes "'+ev.name+'" in '+(delay/1000|0)+'s');
+        try{window.__BCK_popupRef?.postMessage({
+          app:'BCKonfigurator',type:'BOT_EV_STATUS',
+          evId:ev.id,nextMs:delay,lo,hi,cnt:(_evFiredCnt[ev.id]??0)
+        },'*');}catch(e){}
+        _evTimers[ev.id+'_i']=setTimeout(go,delay);
+      };
+      const first=lo+Math.random()*(hi-lo);
+      _log('\u{1F501} "'+ev.name+'" startet in '+(first/1000|0)+'s ('+lo/1000+'–'+hi/1000+'s)');
+      try{window.__BCK_popupRef?.postMessage({
+        app:'BCKonfigurator',type:'BOT_EV_STATUS',
+        evId:ev.id,nextMs:first,lo,hi,cnt:0
+      },'*');}catch(e){}
+      _evTimers[ev.id+'_i']=setTimeout(go,first);
+    }
+  });
+}
+
+// ── Betritt-Events ────────────────────────────────────────────────
+const _joinSeen=new Set((ChatRoomCharacter||[]).map(c=>c.MemberNumber));
+const _joinPoll=setInterval(()=>{
+  const cur=new Set((ChatRoomCharacter||[]).map(c=>c.MemberNumber));
+  for(const C of (ChatRoomCharacter||[])){
+    if(!_joinSeen.has(C.MemberNumber)){
+      _joinSeen.add(C.MemberNumber);
+      _evts.forEach(ev=>{
+        if(!ev.aktiv)return;
+        const bConds=(ev.bedingungen??[]).filter(c=>c.typ==='player_betritt');
+        if(!bConds.length)return;
+        const vonOk=(()=>{
+          if(ev.von==='bot')return C.MemberNumber===Player.MemberNumber;
+          if(ev.von==='nummer')return ev.vonNummer&&C.MemberNumber===+ev.vonNummer;
+          return true;
+        })();
+        if(!vonOk)return;
+        _log('\u{1F6AA} Betritt-Event "'+ev.name+'" für '+C.Name);
+        _fireEv(ev,C,'','join');
+      });
+    }
+  }
+  for(const num of [..._joinSeen]){if(!cur.has(num))_joinSeen.delete(num);}
+},2000);
+
+// ── Nachrichten-Listener ─────────────────────────────────────────
+// Eigene Nachrichten (via hookFunction oder ServerSend-Patch)
+let _evMod=null;
+try{
+  _evMod=bcModSdk.registerMod({name:'BCEvEng_${safeId}_'+Date.now(),fullName:'${safeName} Events',version:'1.0'});
+  _evMod.hookFunction('ChatRoomSendChat',0,(args,next)=>{
+    const d=args[0];
+    const raw=(typeof d==='object'?d?.Content:null)??document.getElementById('InputChat')?.value?.trim()??'';
+    if(raw){
+      const isE=d?.Type==='Emote'||raw.startsWith('*');
+      const isW=d?.Type==='Whisper'||raw.startsWith('/w ');
+      const tk=isE?'emote':isW?'whisper':'chat';
+      _procChat(raw,tk,Player);
+    }
+    return next(args);
+  });
+  _log('\u2705 hookFunction (eigene Nachrichten) aktiv');
+}catch(e){
+  _log('\u26A0 hookFunction nicht verfügbar, nutze ServerSend-Patch');
+  const _orig=window.ServerSend;
+  if(typeof _orig==='function'){
+    window.__BCEvEng_origSend_${safeId}=_orig;
+    window.ServerSend=function(ch,data,...r){
+      if(ch==='ChatRoomChat'&&data?.Content&&['Chat','Emote','Whisper'].includes(data?.Type??'Chat')){
+        const tk=(data.Type||'Chat').toLowerCase();
+        setTimeout(()=>_procChat(data.Content,tk,Player),0);
+      }
+      return _orig.call(this,ch,data,...r);
+    };
+  }
+}
+
+// Andere Spieler via ServerSocket
+const _evMsgH=function(data){
+  if(!['Chat','Emote','Whisper'].includes(data.Type))return;
+  if(data.Sender===Player.MemberNumber)return;
+  const C=ChatRoomCharacter.find(c=>c.MemberNumber===data.Sender)??null;
+  if(!C)return;
+  const tk=data.Type.toLowerCase();
+  _procChat(data.Content,tk,C);
+};
+ServerSocket.on('ChatRoomMessage',_evMsgH);
+
+// Timer/Intervall-Events starten
+_scheduleAll();
+_log('\u25B6\uFE0F Event-Engine aktiv | '+_evts.length+' Events');
+
+window['_BCEvEng_'+_EID]={
+  stop(){
+    clearInterval(_joinPoll);
+    Object.values(_evTimers).forEach(h=>clearTimeout(h));
+    ServerSocket.off('ChatRoomMessage',_evMsgH);
+    try{if(_evMod)_evMod.removePatches();}catch(e){}
+    if(window.__BCEvEng_origSend_${safeId}){
+      window.ServerSend=window.__BCEvEng_origSend_${safeId};
+      delete window.__BCEvEng_origSend_${safeId};
+    }
+    delete window['_BCEvEng_'+_EID];
+    _log('\u23F9 Event-Engine gestoppt');
+  },
+  fireNow(eid){
+    const ev=_evts.find(e=>e.id===eid);
+    if(!ev){console.warn('[EvEng] Event nicht gefunden:',eid);return;}
+    const savedWdh=ev.wiederholung;ev.wiederholung='immer';
+    _fireEv(ev,null,null,null);
+    ev.wiederholung=savedWdh;
+  },
+  get evts(){return _evts;},
+  get firedCnt(){return _evFiredCnt;}
+};
+})();`;
+}
+
 
 function botDeployById(id) {
   const b = _bots.find(x=>x.id===id); if (!b) return;
