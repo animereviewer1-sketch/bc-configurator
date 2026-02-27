@@ -2923,7 +2923,7 @@ function renderCurseTab() {
         : '<span style="color:var(--text3)">–</span>';
 
       tr.innerHTML =
-        '<td class="fav-cell" onclick="toggleCurseFavourite(\\'' + dbKey + '\\',this)" title="Favorit">'+
+        '<td class="fav-cell" onclick="toggleCurseFavourite(\'' + dbKey.replace(/'/g,"&apos;") + '\',this)" title="Favorit">'+
           (isFav ? '⭐' : '<span style="opacity:.25;font-size:.85em">☆</span>')+
         '</td>'+
         '<td class="cn"><span class="cursor-detail-toggle" onclick="toggleCurseDetail(\'' + detId + '\',\'' + rowId + '\')">▶</span>'+escHtml(entry.CraftName)+'</td>'+
