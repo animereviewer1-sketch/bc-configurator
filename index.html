@@ -675,13 +675,6 @@ textarea.outfit-code { width: 100%; min-height: 210px; background: rgba(0,0,0,0.
 /* ═══════════════════════════════════════════════
    CURSE TAB
 ═══════════════════════════════════════════════ */
-@keyframes pulse-border {
-  0%,100% { box-shadow: 0 0 0 0 rgba(123,94,167,0.5); }
-  50%      { box-shadow: 0 0 0 4px rgba(123,94,167,0); }
-}
-.btn.active-pulse { animation: pulse-border 1.5s ease-in-out infinite; border-color: var(--accent,#7b5ea7) !important; }
-.change-added   { color: #6fcf97; }
-.change-updated { color: #f2994a; }
 .curse-topbar { display: flex; align-items: center; gap: 9px; padding: 12px 18px; background: rgba(255,255,255,0.01); border-bottom: 1px solid rgba(255,255,255,0.07); flex-wrap: wrap; }
 .curse-stats { display: flex; gap: 7px; flex-wrap: wrap; flex: 1; }
 .curse-stat { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 99px; padding: 4px 14px; font-size: 0.72rem; white-space: nowrap; }
@@ -701,10 +694,6 @@ textarea.outfit-code { width: 100%; min-height: 210px; background: rgba(0,0,0,0.
 .curse-owner-block.open .curse-rows { display: table; width: 100%; border-collapse: collapse; }
 
 .curse-row { border-top: 1px solid rgba(255,255,255,0.06); }
-.curse-row.fav { background: rgba(251,191,36,0.04); }
-.curse-row.fav:hover { background: rgba(251,191,36,0.08); }
-.fav-cell { width: 28px; text-align: center; cursor: pointer; user-select: none; padding: 6px 4px !important; font-size: 1rem; transition: transform .15s; }
-.fav-cell:hover { transform: scale(1.3); }
 .curse-row td { padding: 7px 12px; font-size: 0.75rem; vertical-align: top; }
 .curse-row:hover { background: rgba(139,92,246,0.04); }
 .curse-row.lscg { background: rgba(52,211,153,0.04); }
@@ -829,11 +818,6 @@ textarea.outfit-code { width: 100%; min-height: 210px; background: rgba(0,0,0,0.
 .ev-type-badge.manual { background: rgba(139,92,246,0.12); border-color: rgba(139,92,246,0.3); color: #c4b5fd; }
 .ev-type-badge.auto { background: rgba(52,211,153,0.1); border-color: rgba(52,211,153,0.3); color: #6ee7b7; }
 .ev-type-badge.interval { background: rgba(251,146,60,0.1); border-color: rgba(251,146,60,0.3); color: #fb923c; }
-.ev-type-badge.interval.running { animation: pulse-interval 2s ease-in-out infinite; }
-@keyframes pulse-interval {
-  0%,100% { box-shadow: 0 0 0 0 rgba(251,146,60,0.4); }
-  50%      { box-shadow: 0 0 0 5px rgba(251,146,60,0); }
-}
 .ev-type-badge.chat-ev { background: rgba(52,211,153,0.06); border-color: rgba(52,211,153,0.18); color: #5f5; }
 .ev-type-badge.betritt-ev { background: rgba(244,114,182,0.08); border-color: rgba(244,114,182,0.22); color: #f472b6; }
 .be-addevent { display: block; width: 100%; padding: 10px; text-align: center; background: none; border: 1px dashed rgba(139,92,246,0.2); border-radius: 9px; color: rgba(139,92,246,0.6); font-size: 0.73rem; cursor: pointer; margin-top: 5px; transition: all 0.18s; font-family: var(--font-ui); font-weight: 600; }
@@ -2291,85 +2275,6 @@ function addToOutfit() {
   if (!CURRENT) return;
   const { group, asset, cfg } = CURRENT;
 
-  // ── Sammle alle Gruppen die dieses Item blockieren würde ──────────────
-  // 1. Asset-Level Block (immer aktiv)
-  const blockedByAsset = new Set(cfg.block || []);
-
-  // 2. Optionen-Level Block (aktiv wenn diese Option ausgewählt)
-  const blockedByOptions = new Set();
-  for (const key in (cfg.typeKeys || {})) {
-    for (const idx of (dimSelected[key] || new Set())) {
-      const opt = cfg.typeKeys[key][idx];
-      for (const b of (opt?.block || [])) blockedByOptions.add(b);
-    }
-  }
-
-  const allBlocked = new Set([...blockedByAsset, ...blockedByOptions]);
-
-  // ── Prüfe ob bereits im Outfit Items in geblockten Gruppen sind ───────
-  const conflicts = OUTFIT.filter(item => allBlocked.has(item.group));
-
-  if (conflicts.length > 0) {
-    const conflictLines = conflicts.map(item =>
-      `  • ${item.group}  →  „${item.asset}" würde entfernt`
-    ).join('\n');
-
-    const blockedSource = [...blockedByAsset].length > 0
-      ? `Asset-Block (immer aktiv)`
-      : `Optionen-Block (aktuell gewählte Option)`;
-
-    const msg =
-      `⚠️ Slot-Konflikt!\n\n` +
-      `Das Item „${asset}" (${group})\n` +
-      `hat folgende Block-Gruppen [${blockedSource}]:\n` +
-      `${[...allBlocked].map(b=>`  • ${b}`).join('\n')}\n\n` +
-      `Folgende Items im Outfit würden dadurch von BC automatisch entfernt:\n` +
-      `${conflictLines}\n\n` +
-      `→ OK        = Trotzdem hinzufügen (Items werden entfernt)\n` +
-      `→ Abbrechen = Nichts ändern`;
-
-    if (!confirm(msg)) return;
-  }
-
-  // ── Prüfe auch ob existing Outfit-Items dieses Item blocken würden ────
-  const blockedByExisting = [];
-  for (const existing of OUTFIT) {
-    const existBlocked = new Set(existing.cfg?.block || []);
-    // auch Options-blocks der bereits im Outfit gespeicherten Items prüfen
-    for (const key in (existing.cfg?.typeKeys || {})) {
-      const existingSel = existing.tr || {};
-      // tr ist ein key→value Objekt; wir brauchen den Index
-      const selVal = existingSel[key];
-      if (selVal != null) {
-        const opts = existing.cfg.typeKeys[key] || [];
-        for (let idx = 0; idx < opts.length; idx++) {
-          // Bei Single: selVal === idx; bei Multi: bit check
-          const isSel = (selVal & Math.pow(2, idx)) > 0 || selVal === idx;
-          if (isSel) for (const b of (opts[idx]?.block || [])) existBlocked.add(b);
-        }
-      }
-    }
-    if (existBlocked.has(group)) {
-      blockedByExisting.push(existing);
-    }
-  }
-
-  if (blockedByExisting.length > 0) {
-    const existLines = blockedByExisting.map(item =>
-      `  • „${item.asset}" (${item.group}) blockt Gruppe ${group}`
-    ).join('\n');
-
-    const msg =
-      `⚠️ Umgekehrter Konflikt!\n\n` +
-      `Folgende Items im Outfit würden „${asset}" (${group}) blockieren:\n` +
-      `${existLines}\n\n` +
-      `Das bedeutet: „${asset}" würde von BC automatisch wieder entfernt.\n\n` +
-      `→ OK        = Trotzdem hinzufügen\n` +
-      `→ Abbrechen = Nichts ändern`;
-
-    if (!confirm(msg)) return;
-  }
-
   const tr = {};
   for (const key in (cfg.typeKeys||{})) {
     const sel = [...dimSelected[key]].sort((a,b)=>a-b);
@@ -2567,20 +2472,6 @@ function loadProfile(name) {
   }
 
   OUTFIT = restored;
-
-  // ── Konflikt-Check: doppelte Gruppen im Profil selbst warnen ──
-  const groupCounts = {};
-  restored.forEach(item => { groupCounts[item.group] = (groupCounts[item.group] || 0) + 1; });
-  const dupes = Object.entries(groupCounts).filter(([,cnt]) => cnt > 1);
-  if (dupes.length > 0) {
-    const dupeList = dupes.map(([g, cnt]) => {
-      const names = restored.filter(i => i.group === g).map(i => i.asset).join(', ');
-      return `  • ${g}: ${names} (${cnt}×)`;
-    }).join('\n');
-    showStatus(`⚠️ Profil hat ${dupes.length} Slot-Konflikt(e) – nur das letzte Item pro Gruppe wird angelegt`, 'error');
-    console.warn('[BCK] Profil-Konflikte:\n' + dupeList);
-  }
-
   switchTab('outfit');
   renderOutfitList();
   _autoOutfitCode();
@@ -2688,61 +2579,8 @@ let CURSE_LSCG  = {};   // key → entry (from CurseScanner.lscgTable)
 let CURSE_CACHE_LSCG = {}; // from lscgCache
 
 // Comments: persisted in localStorage
-// ── Intervall-Event Laufzeit-Status (Countdown-Anzeige) ──────────────────
-let _evIntervalStatus = {};  // evId → { nextFireAt, minSek, maxSek, firedCount }
-function _evIntervalStatusUpdate(evId, nextMs, lo, hi, cnt) {
-  _evIntervalStatus[evId] = { nextFireAt: Date.now() + nextMs, lo, hi, cnt };
-  if (_activeTab === 'events') _renderIntervalCountdowns();
-}
-function _renderIntervalCountdowns() {
-  Object.entries(_evIntervalStatus).forEach(([evId, s]) => {
-    const el = document.getElementById('ev-countdown-' + evId);
-    if (!el) return;
-    const rem = Math.max(0, Math.ceil((s.nextFireAt - Date.now()) / 1000));
-    el.textContent = '⏱ ' + rem + 's | 🔥 ' + s.cnt + '×';
-  });
-}
-// Countdown-Timer im Popup (aktualisiert alle 1s)
-setInterval(() => {
-  if (_activeTab === 'events' && Object.keys(_evIntervalStatus).length) _renderIntervalCountdowns();
-}, 1000);
-
 let CURSE_COMMENTS = {};
 try { CURSE_COMMENTS = JSON.parse(localStorage.getItem('BC_CURSE_COMMENTS_v1') || '{}'); } catch {}
-
-let CURSE_FAVOURITES = new Set();
-try { CURSE_FAVOURITES = new Set(JSON.parse(localStorage.getItem('BC_CURSE_FAV_v1') || '[]')); } catch {}
-function _saveCurseFavourites() {
-  try { localStorage.setItem('BC_CURSE_FAV_v1', JSON.stringify([...CURSE_FAVOURITES])); } catch {}
-}
-function toggleCurseFavourite(dbKey, cellEl) {
-  const wasFav = CURSE_FAVOURITES.has(dbKey);
-  if (wasFav) CURSE_FAVOURITES.delete(dbKey);
-  else CURSE_FAVOURITES.add(dbKey);
-  _saveCurseFavourites();
-
-  // In-place update: nur die Zelle und die Zeile updaten, kein komplettes re-render
-  if (cellEl) {
-    const isFav = !wasFav;
-    cellEl.innerHTML = isFav ? '⭐' : '<span style="opacity:.25;font-size:.85em">☆</span>';
-    const row = cellEl.closest('tr');
-    if (row) row.classList.toggle('fav', isFav);
-
-    // Owner-Badge updaten (Anzahl Favs in diesem Block)
-    const block = cellEl.closest('.curse-owner-block');
-    if (block) {
-      const favBadge = block.querySelector('.curse-owner-fav-badge');
-      const favCount = block.querySelectorAll('.curse-row.fav').length;
-      if (favBadge) {
-        if (favCount > 0) { favBadge.textContent = '⭐ ' + favCount; favBadge.style.display = ''; }
-        else favBadge.style.display = 'none';
-      }
-    }
-  } else {
-    // Fallback: re-render wenn kein Element
-    renderCurseTab();
-  }
-}
 
 function _saveCurseComments() {
   try { localStorage.setItem('BC_CURSE_COMMENTS_v1', JSON.stringify(CURSE_COMMENTS)); } catch {}
@@ -2761,84 +2599,17 @@ function curseScan() {
 // called from postMessage handler
 function _handleCurseData(data) {
   if (data.err) { showStatus('❌ Curse-Scan: ' + data.err, 'error'); return; }
-
-  // ── Change-Detection ────────────────────────────────
-  const added   = data.added   ?? [];
-  const updated = data.updated ?? [];
-
   CURSE_DB         = data.database    ?? {};
   CURSE_LSCG       = data.lscgTable   ?? {};
   CURSE_CACHE_LSCG = data.lscgCache   ?? {};
   _updateCurseStats();
   _populateSlotFilter();
   if (_activeTab === 'curse') renderCurseTab();
-
   const total = Object.keys(CURSE_DB).length;
-  const isAuto = data._auto === true;
-
-  // ── Status-Anzeige ──────────────────────────────────
-  let statusText = '✅ ' + total + ' Crafts';
-  if (added.length > 0 || updated.length > 0) {
-    statusText += ' | +' + added.length + ' neu, ' + updated.length + ' geändert';
-    _showChangeBadge(added, updated);
-  } else if (!isAuto) {
-    statusText += ' | keine Änderungen';
-  }
-  document.getElementById('csScanStatus').textContent = isAuto
-    ? '🔄 ' + new Date().toLocaleTimeString() + ' — ' + statusText.replace('✅ ', '')
-    : statusText;
-
-  if (!isAuto || added.length > 0 || updated.length > 0) {
-    showStatus(statusText, added.length + updated.length > 0 ? 'success' : 'info');
-  }
+  document.getElementById('csScanStatus').textContent = '✅ ' + total + ' Crafts';
+  showStatus('✅ Curse-Scan: ' + total + ' Crafts', 'success');
   // persist
   try { localStorage.setItem('BC_CURSE_DB_v1', JSON.stringify({database:CURSE_DB,lscgTable:CURSE_LSCG,lscgCache:CURSE_CACHE_LSCG})); } catch {}
-}
-
-// ── Änderungs-Badge im UI anzeigen ───────────────────
-function _showChangeBadge(added, updated) {
-  const el = document.getElementById('csChangeBadge');
-  if (!el) return;
-  const lines = [];
-  for (const { eintrag } of added) {
-    lines.push('<span class="change-added">+ ' + escHtml(eintrag.CraftName) + ' (' + escHtml(eintrag.Besitzer.Name) + ')</span>');
-  }
-  for (const { eintrag, changes } of updated) {
-    const chStr = changes.map(c => {
-      const a = c.alt === null ? 'null' : String(c.alt);
-      const n = c.neu === null ? 'null' : String(c.neu);
-      return escHtml(c.feld) + ': <s>' + escHtml(a) + '</s> → <b>' + escHtml(n) + '</b>';
-    }).join(', ');
-    lines.push('<span class="change-updated">↻ ' + escHtml(eintrag.CraftName) + ' (' + escHtml(eintrag.Besitzer.Name) + '): ' + chStr + '</span>');
-  }
-  el.innerHTML = lines.join('<br>');
-  el.style.display = lines.length > 0 ? 'block' : 'none';
-  // Auto-ausblenden nach 15s
-  clearTimeout(el._hideTimer);
-  el._hideTimer = setTimeout(() => { el.style.display = 'none'; }, 15000);
-}
-
-// ── Auto-Scan ─────────────────────────────────────────
-let _autoCurseScanInterval = null;
-let _autoCurseScanEnabled  = false;
-
-function toggleAutoCurseScan() {
-  _autoCurseScanEnabled = !_autoCurseScanEnabled;
-  const btn = document.getElementById('csAutoScanBtn');
-  if (_autoCurseScanEnabled) {
-    _autoCurseScanInterval = setInterval(() => {
-      if (_connected) bcSend({ type: 'SCAN_CURSES', _auto: true });
-    }, 30000);
-    if (btn) { btn.textContent = '⏹ Auto-Scan'; btn.classList.add('active-pulse'); }
-    // Sofort einmal scannen
-    if (_connected) bcSend({ type: 'SCAN_CURSES', _auto: true });
-    showStatus('🔄 Auto-Scan gestartet (alle 30s)', 'info');
-  } else {
-    clearInterval(_autoCurseScanInterval);
-    _autoCurseScanInterval = null;
-    if (btn) { btn.textContent = '🔁 Auto-Scan'; btn.classList.remove('active-pulse'); }
-    showStatus('⏹ Auto-Scan gestoppt', 'info');
-  }
 }
 
 
@@ -2855,7 +2626,7 @@ function toggleCacheFilter() {
 
 function setCurseFilter(f) {
   _curseFilter = f;
-  ['all','cursed','lscg','fav'].forEach(k => {
+  ['all','cursed','lscg'].forEach(k => {
     const el = document.getElementById('fc-' + k);
     if (el) el.classList.toggle('on', k === f);
   });
@@ -2893,12 +2664,6 @@ function renderCurseTab() {
   let entries = Object.values(CURSE_DB);
   if (_curseFilter === 'cursed') entries = entries.filter(e => !!e.IstCursed);
   if (_curseFilter === 'lscg')   entries = entries.filter(e => !!e.IstLSCGCurse);
-  if (_curseFilter === 'fav') {
-    entries = entries.filter(e => {
-      const k = (e.Besitzer?.Nummer ?? '') + ':' + e.ItemName + ':' + e.CraftName;
-      return CURSE_FAVOURITES.has(k);
-    });
-  }
   if (cacheOnly)   entries = entries.filter(e => !!e.IstLSCGCurse);
   if (slotFilter)  entries = entries.filter(e => e.Gruppe === slotFilter);
   if (searchTerm)  entries = entries.filter(e =>
@@ -2939,23 +2704,17 @@ function renderCurseTab() {
 
     const lscgCount = owner.items.filter(i => i.IstLSCGCurse).length;
     const cursedCount = owner.items.filter(i => i.IstCursed).length;
-    const favCount = owner.items.filter(i => {
-      const k = (i.Besitzer?.Nummer ?? '') + ':' + i.ItemName + ':' + i.CraftName;
-      return CURSE_FAVOURITES.has(k);
-    }).length;
 
     block.innerHTML =
       '<div class="curse-owner-hdr" onclick="toggleCurseOwner(\'' + blockId + '\')">'+
         '<span class="curse-owner-name">'+escHtml(owner.name)+'</span>'+
         '<span class="curse-owner-num">#'+owner.num+'</span>'+
-        (favCount ? '<span class="curse-owner-count curse-owner-fav-badge" style="background:rgba(251,191,36,.15);color:#fbbf24">⭐ '+favCount+'</span>' : (''+'<span class="curse-owner-count curse-owner-fav-badge" style="display:none">⭐ 0</span>'))+
         (lscgCount ? '<span class="curse-owner-count" style="background:var(--gd);color:var(--green)">🧿 '+lscgCount+'</span>' : '')+
         (cursedCount ? '<span class="curse-owner-count">🔮 '+cursedCount+'</span>' : '')+
         '<span class="curse-owner-count" style="background:var(--bg3);color:var(--text2)">'+owner.items.length+'</span>'+
         '<span class="curse-owner-chevron">▶</span>'+
       '</div>'+
       '<table class="curse-rows"><thead><tr style="background:var(--bg3)">'+
-        '<th style="padding:4px 10px;font-size:.63rem;color:var(--text3);text-align:center;font-weight:500">⭐</th>'+
         '<th style="padding:4px 10px;font-size:.63rem;color:var(--text3);text-align:left;font-weight:500">Name</th>'+
         '<th style="padding:4px 10px;font-size:.63rem;color:var(--text3);text-align:left;font-weight:500">Item</th>'+
         '<th style="padding:4px 10px;font-size:.63rem;color:var(--text3);text-align:left;font-weight:500">Gruppe</th>'+
@@ -2977,9 +2736,8 @@ function renderCurseTab() {
       const isLSCG  = entry.IstLSCGCurse;
       const isCursed = entry.IstCursed;
 
-      const isFav = CURSE_FAVOURITES.has(dbKey);
       const tr = document.createElement('tr');
-      tr.className = 'curse-row' + (isLSCG ? ' lscg' : '') + (isFav ? ' fav' : '');
+      tr.className = 'curse-row' + (isLSCG ? ' lscg' : '');
       tr.id = rowId;
 
       const lscgText = isLSCG
@@ -2988,9 +2746,6 @@ function renderCurseTab() {
         : '<span style="color:var(--text3)">–</span>';
 
       tr.innerHTML =
-        '<td class="fav-cell" onclick="toggleCurseFavourite(\'' + dbKey + '\',this)" title="Favorit togglen">'+
-          (isFav ? '⭐' : '<span style="opacity:.25;font-size:.85em">☆</span>')+
-        '</td>'+
         '<td class="cn"><span class="cursor-detail-toggle" onclick="toggleCurseDetail(\'' + detId + '\',\'' + rowId + '\')">▶</span>'+escHtml(entry.CraftName)+'</td>'+
         '<td class="item">'+escHtml(entry.ItemName)+'</td>'+
         '<td class="grp">'+escHtml(entry.Gruppe)+'</td>'+
@@ -3035,7 +2790,7 @@ function renderCurseTab() {
       detTr.className = 'curse-detail-row';
       detTr.id = detId;
       detTr.innerHTML =
-        '<td class="curse-detail-cell" colspan="8">'+
+        '<td class="curse-detail-cell" colspan="7">'+
         '<div style="font-size:.63rem;color:var(--text3);margin-bottom:4px">Details für '+escHtml(entry.CraftName)+'</div>'+
         '<div class="curse-detail-grid">'+
         detailFields.map(([label, val]) =>
@@ -3111,7 +2866,6 @@ function _tryFinishExport() {
     lscgTable: CURSE_LSCG,
     lscgCache: mergedLscg,
     comments: CURSE_COMMENTS,
-    favourites: [...CURSE_FAVOURITES],
   };
   _exportLscgCache = null; _exportCraftCache = null;
   const blob = new Blob([JSON.stringify(payload, null, 2)], {type:'application/json'});
@@ -3150,7 +2904,6 @@ function curseImport() {
         CURSE_LSCG = d.lscgTable ?? {};
         CURSE_CACHE_LSCG = d.lscgCache ?? {};
         if (d.comments) Object.assign(CURSE_COMMENTS, d.comments);
-        if (d.favourites) { d.favourites.forEach(k => CURSE_FAVOURITES.add(k)); _saveCurseFavourites(); }
         _saveCurseComments();
         try { localStorage.setItem('BC_CURSE_DB_v1', JSON.stringify({database:CURSE_DB,lscgTable:CURSE_LSCG,lscgCache:CURSE_CACHE_LSCG})); } catch {}
         if (_connected && Object.keys(CURSE_DB).length > 0) {
@@ -3330,11 +3083,6 @@ window.addEventListener('message', function(ev) {
       logPush(ev.data.entry);
       break;
 
-    case 'BOT_EV_STATUS':
-      // Interval-Status: Update Countdown-Anzeige im Events-Tab
-      _evIntervalStatusUpdate(ev.data.evId, ev.data.nextMs, ev.data.lo, ev.data.hi, ev.data.cnt);
-      break;
-
     case 'BOT_MONEY':
       _moneyApply(ev.data.memberNum, ev.data.name, ev.data.delta, ev.data.setVal);
       break;
@@ -3466,27 +3214,7 @@ function showStatus(msg, type) {
 function executeCode() {
   const code = document.getElementById('codeOut').value.trim();
   if (!code) return;
-
-  // ── Warnung: Item blockt andere Gruppen ──────────────────────────────
-  if (CURRENT) {
-    const { asset, group, cfg } = CURRENT;
-    const allBlocked = new Set(cfg.block || []);
-    for (const key in (cfg.typeKeys || {})) {
-      for (const idx of (dimSelected[key] || new Set())) {
-        for (const b of (cfg.typeKeys[key][idx]?.block || [])) allBlocked.add(b);
-      }
-    }
-    if (allBlocked.size > 0) {
-      const warn =
-        `⚠️ Hinweis: „${asset}" (${group})\n` +
-        `blockt folgende Gruppen – Items dort werden von BC automatisch entfernt:\n` +
-        `${[...allBlocked].map(b => `  • ${b}`).join('\n')}\n\n` +
-        `Trotzdem ausführen?`;
-      if (!confirm(warn)) return;
-    }
-  }
-
-  showStatus('⏳ Wird ausgeführt…', 'info');
+  showStatus('\u23f3 Wird ausgef\u00fchrt\u2026', 'info');
   bcSend({ type: 'EXEC', code });
 }
 
@@ -3529,12 +3257,6 @@ function startRoomScan() {
     if (_connected) scanRoom();
   }, 5000);
   console.log('[BCK-Popup] Raum-Scanner gestartet (alle 5s)');
-}
-
-function botStopAll() {
-  // Bot gestoppt → Interval-Status zurücksetzen
-  _evIntervalStatus = {};
-  if (_activeTab === 'events') renderEventsTab();
 }
 
 function stopRoomScan() {
@@ -3711,7 +3433,6 @@ function selectRoomMember(num) {
   <div class="curse-topbar">
     <button class="btn btn-green" onclick="curseScan()">🔍 Scannen</button>
     <button class="btn btn-green" onclick="curseClearAndScan()" title="Alte Einträge löschen und frisch scannen">🔄 Neu scannen</button>
-    <button class="btn btn-primary" id="csAutoScanBtn" onclick="toggleAutoCurseScan()" title="Scannt den Raum alle 30s automatisch und zeigt Änderungen">🔁 Auto-Scan</button>
     <button class="btn btn-primary" onclick="curseExport()">⬇️ Export</button>
     <button class="btn btn-primary" onclick="curseImport()">⬆️ Import</button>
     <button class="btn btn-red" onclick="curseClear()" title="Alle gespeicherten Einträge löschen">🗑️ Leeren</button>
@@ -3723,8 +3444,6 @@ function selectRoomMember(num) {
     </div>
     <span id="csScanStatus" style="font-size:.7rem;color:var(--text3)"></span>
   </div>
-  <div id="csChangeBadge" style="display:none;padding:4px 8px;margin:4px 0;background:var(--bg3,#2a2a3a);border-left:3px solid var(--accent,#7b5ea7);border-radius:4px;font-size:.7rem;line-height:1.6;color:var(--text1);max-height:120px;overflow-y:auto" title="Klicken zum Schließen" onclick="this.style.display='none'">
-  </div>
   <!-- Filter bar -->
   <div class="curse-filter-bar" id="curseFilterBar">
     <input class="curse-search" id="curseSearch" placeholder="🔍 Name, Item, Gruppe..." oninput="renderCurseTab()">
@@ -3732,7 +3451,6 @@ function selectRoomMember(num) {
     <span class="filter-chip on" id="fc-all"      onclick="setCurseFilter('all')"     >Alle</span>
     <span class="filter-chip"    id="fc-cursed"   onclick="setCurseFilter('cursed')"  >🔮 Cursed</span>
     <span class="filter-chip"    id="fc-lscg"     onclick="setCurseFilter('lscg')"   >🧿 LSCG</span>
-    <span class="filter-chip"    id="fc-fav"      onclick="setCurseFilter('fav')"    >⭐ Favoriten</span>
     <div class="filter-sep"></div>
     <span class="filter-chip" id="fc-cache" onclick="toggleCacheFilter()" title="Nur Einträge mit LSCG-Daten anzeigen">💾 Im Cache</span>
     <div class="filter-sep"></div>
@@ -3807,17 +3525,8 @@ function selectRoomMember(num) {
 </div>
 
 <div id="tab-events" class="tab-pane">
-  <div class="bot-wrap">
-    <div class="bot-sidebar">
-      <div class="bs-head">
-        <span>⚡ Event-Sets</span>
-        <button class="btn btn-green" onclick="evSetNew()" style="font-size:.65rem;padding:3px 8px">+ Neu</button>
-      </div>
-      <div class="bot-list" id="evSetList"></div>
-    </div>
-    <div class="bot-main" id="evSetEditor">
-      <div class="be-empty"><div class="be-empty-icon">⚡</div>Wähle ein Event-Set aus oder erstelle eines.</div>
-    </div>
+  <div id="events-container" style="padding:12px 18px;overflow-y:auto;height:calc(100vh - 108px)">
+    <div style="color:var(--text3);font-size:.72rem">Lade...</div>
   </div>
 </div>
 
@@ -4084,190 +3793,106 @@ function logClearAll() {
 //  EVENTS SYSTEM
 // ══════════════════════════════════════════════════════
 
-// ── Event-Engine: eigenständig, unabhängig vom Bot ──────────────────────
-// Läuft als eigenes Skript in BC, hat eigenen Message-Listener
-let _evEngineRunning = false;  // ist die Engine gerade aktiv?
-
-// ══════════════════════════════════════════════════════════════════
-//  EVENT-SETS — eigenständiges System, aufgebaut wie Bot
-//  Eigene localStorage-Persistenz, eigene Deploy/Stop/Sync Logik
-// ══════════════════════════════════════════════════════════════════
-const EV_KEY = 'BC_EvSets_v1';
-let _evSets     = [];
-let _selEvSetId = null;
-
-function _saveEvSets() { try { localStorage.setItem(EV_KEY, JSON.stringify(_evSets)); } catch {} }
-function _loadEvSets() { try { const s = localStorage.getItem(EV_KEY); if (s) _evSets = JSON.parse(s); } catch {} }
-function _selEvSet()   { return _evSets.find(s => s.id === _selEvSetId) ?? null; }
-
-// ── Tab entry ─────────────────────────────────────────────────
 function renderEventsTab() {
-  _loadEvSets();
-  renderEvSetList();
-  if (_selEvSetId) renderEvSetEditor();
-}
-
-// ── Sidebar ───────────────────────────────────────────────────
-function renderEvSetList() {
-  const el = document.getElementById('evSetList');
-  if (!el) return;
-  if (!_evSets.length) {
-    el.innerHTML = '<div style="padding:20px;color:var(--text3);font-size:.71rem;text-align:center">Noch keine Event-Sets.<br>+ Neu klicken.</div>';
+  const bot = _selBot();
+  const container = document.getElementById('events-container');
+  if (!container) return;
+  if (!bot) {
+    container.innerHTML = `<div style="color:var(--text3);font-size:.75rem;text-align:center;margin-top:40px">Wähle zuerst einen Bot im 🤖 Bot-Tab.</div>`;
     return;
   }
-  el.innerHTML = _evSets.map(s => `
-    <div class="bot-item${s.id===_selEvSetId?' sel':''}" onclick="evSetSelect('${s.id}')">
-      <div style="flex:1">
-        <div class="bi-name">${escHtml(s.name)}</div>
-        <div class="bi-stat">${(s.events||[]).filter(e=>e.aktiv).length} Events aktiv</div>
-      </div>
-      <button class="bot-toggle ${s.laufend?'on':'off'}" onclick="event.stopPropagation();evSetToggleLaufend('${s.id}')" title="${s.laufend?'Läuft':'Gestoppt'}"></button>
-      <button onclick="event.stopPropagation();evSetDelete('${s.id}')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.75rem;padding:2px 4px">✕</button>
-    </div>`).join('');
-}
-
-function evSetNew() {
-  const s = {
-    id: 'es' + Date.now(), name: 'Neues Event-Set', laufend: false,
-    settings: { hearChat:true, hearEmote:true, hearWhisper:true, logAktiv:true },
-    events: [],
-  };
-  _evSets.push(s); _selEvSetId = s.id; _saveEvSets();
-  renderEvSetList(); renderEvSetEditor();
-}
-
-function evSetSelect(id) { _selEvSetId = id; renderEvSetList(); renderEvSetEditor(); }
-
-function evSetToggleLaufend(id) {
-  const s = _evSets.find(x => x.id === id); if (!s) return;
-  if (s.laufend) evSetStopById(id); else evSetDeployById(id);
-}
-
-function evSetDelete(id) {
-  const s = _evSets.find(x => x.id === id);
-  if (!s || !confirm(`Event-Set "${s.name}" löschen?`)) return;
-  if (s.laufend) evSetStopById(id);
-  _evSets = _evSets.filter(x => x.id !== id);
-  if (_selEvSetId === id) { _selEvSetId = _evSets[0]?.id ?? null; }
-  _saveEvSets(); renderEvSetList();
-  if (_selEvSetId) renderEvSetEditor();
-  else { const ed=document.getElementById('evSetEditor'); if(ed) ed.innerHTML='<div class="be-empty"><div class="be-empty-icon">⚡</div>Wähle ein Event-Set aus oder erstelle eines.</div>'; }
-}
-
-// ── Editor ────────────────────────────────────────────────────
-function renderEvSetEditor() {
-  const s = _selEvSet(); if (!s) return;
-  const cfg = s.settings;
-  const statusCls = s.laufend ? 'running' : 'stopped';
-  const statusTxt = s.laufend ? '▶️ Läuft · <span style="font-size:.62rem;opacity:.7">Änderungen → 🔄 Sync klicken</span>' : '⏹ Nicht gestartet';
+  const events = bot.events ?? [];
   const html = `
-    <div class="be-topbar">
-      <input value="${escHtml(s.name)}" oninput="evSetField('name',this.value)" style="width:180px;font-size:.78rem;font-weight:600;background:var(--bg3);border:1px solid var(--border2);border-radius:5px;color:var(--text);padding:4px 10px;font-family:var(--mono)">
-      <div style="flex:1"></div>
-      <label class="bot-cfg-label"><input type="checkbox" ${cfg.hearChat?'checked':''} onchange="evSetSetting('hearChat',this.checked)"> Chat</label>
-      <label class="bot-cfg-label"><input type="checkbox" ${cfg.hearEmote?'checked':''} onchange="evSetSetting('hearEmote',this.checked)"> *Emote*</label>
-      <label class="bot-cfg-label"><input type="checkbox" ${cfg.hearWhisper?'checked':''} onchange="evSetSetting('hearWhisper',this.checked)"> Whisper</label>
-      <label class="bot-cfg-label"><input type="checkbox" ${cfg.logAktiv?'checked':''} onchange="evSetSetting('logAktiv',this.checked)"> Log</label>
-      ${s.laufend
-        ? `<button class="btn btn-red" onclick="evSetStop()" style="font-size:.68rem;padding:4px 12px">⏹ Stoppen</button>
-           <button class="btn btn-sync" id="evSyncBtn" onclick="evSetSync()" style="font-size:.68rem;padding:4px 12px">🔄 Sync</button>`
-        : `<button class="btn btn-green" onclick="evSetDeploy()" style="font-size:.68rem;padding:4px 12px">▶️ Starten</button>`
-      }
-      <button class="btn btn-primary" onclick="evSetExport()" style="font-size:.65rem;padding:4px 8px" title="Export">⬇️</button>
-      <button class="btn btn-primary" onclick="evSetImport()" style="font-size:.65rem;padding:4px 8px" title="Import">⬆️</button>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+      <span style="font-weight:600;font-size:.85rem">⚡ Events — Bot: <span style="color:var(--pl)">${escHtml(bot.name)}</span></span>
+      <button class="be-addevent" onclick="eventNew()" style="width:auto;padding:4px 14px;display:inline-block">+ Event hinzufügen</button>
     </div>
-    <div class="bot-status ${statusCls}" id="evset-status-bar">${statusTxt}</div>
-    <div class="be-body">
-      <div id="ev-list">${(s.events||[]).map((e,i)=>renderEvCard(s,e,i)).join('')}</div>
-      <button class="be-addtrig" onclick="evNew()">+ Event hinzufügen</button>
-    </div>`;
-  document.getElementById('evSetEditor').innerHTML = html;
+    ${events.map((e,i)=>renderEventCard(bot,e,i)).join('')}
+    ${events.length ? '' : '<div style="color:var(--text3);font-size:.73rem;text-align:center;margin-top:30px">Noch keine Events.<br>Events feuern Aktionen manuell oder automatisch auf Spieler im Raum.</div>'}
+  `;
+  container.innerHTML = html;
 }
 
-function evSetField(field, val) {
-  const s = _selEvSet(); if (!s) return;
-  s[field] = val; _saveEvSets();
-  if (field === 'name') renderEvSetList();
-}
-function evSetSetting(key, val) {
-  const s = _selEvSet(); if (!s) return;
-  s.settings[key] = val; _saveEvSets();
+function _evBadge(e) {
+  const beds = e.bedingungen ?? [];
+  if (!e.aktiv) return {cls:'manual', lbl:'⏸ Pausiert'};
+  if (beds.some(c=>c.typ==='ev_interval')) return {cls:'interval', lbl:'🔁 Intervall'};
+  if (beds.some(c=>c.typ==='ev_timer'))    return {cls:'auto',     lbl:'⏱ Timer'};
+  if (beds.some(c=>c.typ==='player_betritt')) return {cls:'betritt-ev', lbl:'🚪 Betritt'};
+  if (beds.some(c=>c.typ==='wort'))        return {cls:'chat-ev',  lbl:'💬 Chat'};
+  return {cls:'manual', lbl:'🖱 Manuell'};
 }
 
-// ── Event Card (wie Trigger-Card) ─────────────────────────────
-function renderEvCard(evSet, e, i) {
-  const total = (evSet.events||[]).length;
-  const actN  = (e.aktionen||[]).length;
+function renderEventCard(bot, e, i) {
+  const total = (bot.events||[]).length;
+  const actN = (e.aktionen||[]).length;
   const condN = (e.bedingungen||[]).length;
-  const wdh   = e.wiederholung ?? 'immer';
-  const ziel  = e.ziel ?? 'ausloeser';
-  const von   = e.von  ?? 'alle';
-  const wdh_lbl   = wdh==='einmalig'?'1x':wdh==='n_mal'?(e.maxMal??2)+'x':'∞';
-  const wdh_color = wdh==='immer'?'var(--text3)':'var(--pl)';
-  const vonHtml = `
-    <label style="font-size:.65rem;color:var(--text3)">Von:
-      <select class="cf" style="margin-left:4px" onchange="evField('${e.id}','von',this.value);evRerender('${e.id}')">
-        <option value="alle"   ${von==='alle'  ?'selected':''}>👥 Alle</option>
-        <option value="bot"    ${von==='bot'   ?'selected':''}>🤖 Ich (Bot)</option>
-        <option value="nummer" ${von==='nummer'?'selected':''}>🔢 Nummer…</option>
-      </select>
-    </label>
-    ${von==='nummer'?`<input class="cf cf-w80" type="number" placeholder="MemberNr" value="${e.vonNummer??''}" oninput="evField('${e.id}','vonNummer',+this.value)">`:``}`;
-  const zielOpts = `
-    <option value="ausloeser" ${ziel==='ausloeser'?'selected':''}>👤 Auslöser</option>
-    <option value="zufaellig" ${ziel==='zufaellig'?'selected':''}>🎲 Zufällig</option>
-    <option value="alle"      ${ziel==='alle'     ?'selected':''}>👥 Alle im Raum</option>
-    <option value="liste"     ${ziel==='liste'    ?'selected':''}>📋 Liste</option>`;
-  return `<div class="trig-card ${e.aktiv?'trig-on':''}" id="ec-${e.id}">
-    <div class="trig-head" onclick="evToggleBody('${e.id}')">
-      <span class="trig-order-num">${i+1}</span>
-      <span style="display:flex;flex-direction:column;gap:1px;margin-right:2px">
-        <button class="order-btn" onclick="event.stopPropagation();evMoveUp('${e.id}')"   ${i===0?'disabled':''}>▲</button>
+  const bodyOpen = document.getElementById('evb-'+e.id)?.classList.contains('open');
+  const ziel = e.ziel ?? 'ausloeser';
+  const wdh = e.wiederholung ?? 'immer';
+  const evVon = e.von ?? 'alle';
+  const badge = _evBadge(e);
+
+  const vonHtml = `<label style="font-size:.65rem;color:var(--text3)">Von:
+    <select class="cf" style="margin-left:4px" onchange="evField('${e.id}','von',this.value);evRerender('${e.id}')">
+      <option value="alle"   ${evVon==='alle'?'selected':''}>👥 Alle</option>
+      <option value="bot"    ${evVon==='bot'?'selected':''}>🤖 Bot (ich)</option>
+      <option value="nummer" ${evVon==='nummer'?'selected':''}>🔢 Nummer…</option>
+    </select></label>
+  ${evVon==='nummer'?`<input class="cf cf-w80" type="number" placeholder="MemberNr" value="${e.vonNummer??''}" oninput="evField('${e.id}','vonNummer',+this.value)">`:``}`;
+
+  return `<div class="event-card ${e.aktiv?'ev-on':''}" id="ec-${e.id}">
+    <div class="event-head" onclick="evToggleBody('${e.id}')">
+      <span style="display:flex;flex-direction:column;gap:1px">
+        <button class="order-btn" onclick="event.stopPropagation();evMoveUp('${e.id}')" ${i===0?'disabled':''}>▲</button>
         <button class="order-btn" onclick="event.stopPropagation();evMoveDown('${e.id}')" ${i===total-1?'disabled':''}>▼</button>
       </span>
       <input type="checkbox" ${e.aktiv?'checked':''} onclick="event.stopPropagation();evField('${e.id}','aktiv',this.checked)" style="accent-color:var(--purple)">
-      <span class="trig-label" id="elabel-${e.id}">${escHtml(e.name||'Event')}</span>
-      <span class="trig-meta">${condN} Bed. · ${actN} Akt. · <span style="color:${wdh_color}">${wdh_lbl}</span></span>
-      <button onclick="event.stopPropagation();evFireNow('${e.id}')" style="font-size:.62rem;padding:2px 9px;background:var(--pd);border:none;color:var(--pl);border-radius:4px;cursor:pointer" title="Jetzt auslösen">▶️</button>
+      <span class="ev-type-badge ${badge.cls}">${badge.lbl}</span>
+      <span class="ev-label">${escHtml(e.name||'Event')}</span>
+      <span class="ev-meta">${condN} Bed. · ${actN} Akt.</span>
+      <button onclick="event.stopPropagation();evFireImmediate('${e.id}')" style="font-size:.62rem;padding:2px 9px;background:var(--pd);border:none;color:var(--pl);border-radius:4px;cursor:pointer" title="Sofort auslösen (ignoriert Timer/Wdh)">▶️ Feuern</button>
       <button onclick="event.stopPropagation();evDelete('${e.id}')" class="rm-btn">✕</button>
     </div>
-    <div class="trig-body" id="eb-${e.id}">
+    <div class="event-body ${bodyOpen?'open':''}" id="evb-${e.id}">
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
-        <label style="font-size:.65rem;color:var(--text3)">Name:</label>
-        <input class="cf cf-w160" value="${escHtml(e.name||'')}" oninput="evField('${e.id}','name',this.value)" placeholder="Event-Name">
-        <label style="font-size:.65rem;color:var(--text3)">Delay:</label>
-        <input class="cf cf-w80" type="number" value="${e.delay??0}" oninput="evField('${e.id}','delay',+this.value)"> ms
-        <label style="font-size:.65rem;color:var(--text3)">🔁 Wdh.:</label>
-        <select class="cf" onchange="evField('${e.id}','wiederholung',this.value);evRerender('${e.id}')">
-          <option value="immer"    ${wdh==='immer'   ?'selected':''}>∞ Unbegrenzt</option>
-          <option value="einmalig" ${wdh==='einmalig'?'selected':''}>1× Einmalig</option>
-          <option value="n_mal"    ${wdh==='n_mal'   ?'selected':''}>N× N-mal</option>
-        </select>
-        ${wdh==='n_mal'?`<input class="cf cf-w80" type="number" min="1" value="${e.maxMal??2}" oninput="evField('${e.id}','maxMal',+this.value)">× max.`:''}
+        <label style="font-size:.65rem;color:var(--text3)">Name:
+          <input class="cf cf-w160" style="margin-left:4px" value="${escHtml(e.name||'')}" oninput="evField('${e.id}','name',this.value)">
+        </label>
         ${vonHtml}
         <label style="font-size:.65rem;color:var(--text3)">Ziel:
           <select class="cf" style="margin-left:4px" onchange="evField('${e.id}','ziel',this.value);evRerender('${e.id}')">
-            ${zielOpts}
+            <option value="ausloeser" ${ziel==='ausloeser'?'selected':''}>👤 Player (Auslöser/Random)</option>
+            <option value="alle"      ${ziel==='alle'?'selected':''}>👥 Alle im Raum</option>
+            <option value="liste"     ${ziel==='liste'?'selected':''}>📋 Liste</option>
           </select>
         </label>
         ${ziel==='liste'?`<input class="cf" style="width:180px;font-size:.65rem" placeholder="MemberNr: 1234,5678"
           value="${escHtml((e.zielListe||[]).join(','))}"
           oninput="evField('${e.id}','zielListe',this.value.split(',').map(x=>+x.trim()).filter(Boolean))">`:``}
+        <label style="font-size:.65rem;color:var(--text3)">🔁 Wdh.:
+          <select class="cf" style="margin-left:4px" onchange="evField('${e.id}','wiederholung',this.value);evRerender('${e.id}')">
+            <option value="immer"    ${wdh==='immer'?'selected':''}>∞ Unbegrenzt</option>
+            <option value="einmalig" ${wdh==='einmalig'?'selected':''}>1× Einmalig</option>
+            <option value="n_mal"    ${wdh==='n_mal'?'selected':''}>N× N-mal</option>
+          </select>
+        </label>
+        ${wdh==='n_mal'?`<input class="cf cf-w80" type="number" min="1" value="${e.maxMal??2}" oninput="evField('${e.id}','maxMal',+this.value)">×`:''}
       </div>
 
       <div class="te-section">
         <div class="te-section-title">🔎 Bedingungen
-          <button onclick="evAddCond('${e.id}','ev_timer')">⏱ Timer</button>
-          <button onclick="evAddCond('${e.id}','ev_interval')">🔁 Intervall</button>
-          <button onclick="evAddCond('${e.id}','player_betritt')">🚪 Betritt</button>
-          <button onclick="evAddCond('${e.id}','wort')">+ Wort/Chat</button>
+          <button onclick="evAddCond('${e.id}','ev_timer')" title="Einmalig nach X Sekunden">⏱ Timer</button>
+          <button onclick="evAddCond('${e.id}','ev_interval')" title="Wiederholt alle X-Y Sekunden">🔁 Intervall</button>
+          <button onclick="evAddCond('${e.id}','player_betritt')" title="Wenn Spieler den Raum betritt">🚪 Betritt</button>
+          <button onclick="evAddCond('${e.id}','wort')">+ Wort</button>
           <button onclick="evAddCond('${e.id}','zone_rect')">+ Zone Bereich</button>
           <button onclick="evAddCond('${e.id}','zone')">+ Zone Punkt</button>
           <button onclick="evAddCond('${e.id}','item_traegt')">+ Item trägt</button>
           <button onclick="evAddCond('${e.id}','item_traegt_nicht')">+ Item trägt NICHT</button>
-          <button onclick="evAddCond('${e.id}','event_war')">+ Vorevent</button>
+          <button onclick="evAddCond('${e.id}','trigger_war')">+ Vortrigger</button>
         </div>
-        <div id="evconds-${e.id}">${(e.bedingungen||[]).map((c,ci)=>renderEvCond(evSet,e.id,c,ci)).join('')}</div>
+        <div id="evconds-${e.id}">${(e.bedingungen||[]).map((c,ci)=>renderEvCond(bot,e.id,c,ci)).join('')}</div>
       </div>
 
       <div class="te-section">
@@ -4278,31 +3903,33 @@ function renderEvCard(evSet, e, i) {
       </div>
 
       <div class="te-section">
-        <div class="te-section-title">🔙 Fallback <small style="font-weight:normal;text-transform:none;letter-spacing:0">(läuft wenn eine Aktion ❌ Ungültig auslöst – Event zählt dann nicht)</small></div>
+        <div class="te-section-title">🔙 Fallback
+          <small style="font-weight:normal;text-transform:none">(bei ❌ Trigger ungültig)</small>
+        </div>
         <div style="display:flex;gap:6px;align-items:center">
           <select class="cf" style="width:140px" onchange="evField('${e.id}','fallbackTyp',this.value);evRerender('${e.id}')">
-            <option value="nichts" ${(!e.fallbackTyp||e.fallbackTyp==='nichts')?'selected':''}>Nichts (still)</option>
-            <option value="chat"   ${e.fallbackTyp==='chat' ?'selected':''}>💬 Chat-Nachricht</option>
+            <option value="nichts" ${(!e.fallbackTyp||e.fallbackTyp==='nichts')?'selected':''}>Nichts</option>
+            <option value="chat"   ${e.fallbackTyp==='chat'?'selected':''}>💬 Chat</option>
             <option value="emote"  ${e.fallbackTyp==='emote'?'selected':''}>✨ Emote</option>
           </select>
-          ${e.fallbackTyp&&e.fallbackTyp!=='nichts'?`<input class="cf cf-flex" value="${escHtml(e.fallbackText||'')}" oninput="evField('${e.id}','fallbackText',this.value)" placeholder="Nachricht… {name} {wort} {x} {y}">`:``}
+          ${e.fallbackTyp&&e.fallbackTyp!=='nichts'?`<input class="cf cf-flex" value="${escHtml(e.fallbackText||'')}" oninput="evField('${e.id}','fallbackText',this.value)" placeholder="Nachricht…">`:``}
         </div>
       </div>
     </div>
   </div>`;
 }
 
-// ── Conditions (identisch zu Bot, plus Timer/Interval/Betritt) ─
-function renderEvCond(evSet, eid, c, ci) {
-  // ── Spezielle Standalone-Bedingungen ──
+function renderEvCond(bot, eid, c, ci) {
+  // Special standalone conditions (timer, interval, betritt)
   if (c.typ === 'ev_timer') {
     return `<div class="cond-group" id="evcond-${eid}-${ci}">
       <div class="cond-when-lbl">⏱ Timer</div>
       <div class="cond-card" style="background:#0a2a0a;border-color:#1a5a1a">
         <div class="card-fields">
           <span style="font-size:.65rem;color:var(--text3)">Einmalig nach</span>
-          <input class="cf cf-w80" type="number" min="1" value="${c.sek??10}" oninput="evCondField('${eid}',${ci},'sek',+this.value)">
-          <span style="font-size:.65rem;color:var(--text3)">Sekunden</span>
+          <input class="cf cf-w80" type="number" min="0.1" step="0.1" value="${c.sek??10}"
+            oninput="evCondField('${eid}',${ci},'sek',+this.value)">
+          <span style="font-size:.65rem;color:var(--text3)">Sek</span>
         </div>
         <button class="rm-btn" onclick="evCondRemove('${eid}',${ci})">✕</button>
       </div></div>`;
@@ -4313,10 +3940,12 @@ function renderEvCond(evSet, eid, c, ci) {
       <div class="cond-card" style="background:#0a1a2a;border-color:#1a3a5a">
         <div class="card-fields">
           <span style="font-size:.65rem;color:var(--text3)">Alle</span>
-          <input class="cf cf-w70" type="number" min="1" value="${c.sek_min??30}" oninput="evCondField('${eid}',${ci},'sek_min',+this.value)">
+          <input class="cf cf-w70" type="number" min="1" value="${c.sek_min??20}"
+            oninput="evCondField('${eid}',${ci},'sek_min',+this.value)">
           <span style="font-size:.62rem;color:var(--text3)">–</span>
-          <input class="cf cf-w70" type="number" min="1" value="${c.sek_max??180}" oninput="evCondField('${eid}',${ci},'sek_max',+this.value)">
-          <span style="font-size:.65rem;color:var(--text3)">Sek (zufällig)</span>
+          <input class="cf cf-w70" type="number" min="1" value="${c.sek_max??60}"
+            oninput="evCondField('${eid}',${ci},'sek_max',+this.value)">
+          <span style="font-size:.65rem;color:var(--text3)">Sek</span>
         </div>
         <button class="rm-btn" onclick="evCondRemove('${eid}',${ci})">✕</button>
       </div></div>`;
@@ -4327,453 +3956,299 @@ function renderEvCond(evSet, eid, c, ci) {
       <div class="cond-when-lbl">🚪 Betritt</div>
       <div class="cond-card" style="background:#1a0a2a;border-color:#5a1a7a">
         <div class="card-fields">
-          <select class="cf" style="width:220px" onchange="evCondField('${eid}',${ci},'betritt_typ',this.value)">
-            <option value="alle"   ${bt==='alle'  ?'selected':''}>👋 Jedes Mal (auch Erstbesuch)</option>
-            <option value="neu"    ${bt==='neu'   ?'selected':''}>🆕 Erstes Mal in dieser Session</option>
-            <option value="rejoin" ${bt==='rejoin'?'selected':''}>🔄 Nur Rejoin (war schon da)</option>
+          <select class="cf" onchange="evCondField('${eid}',${ci},'betritt_typ',this.value)">
+            <option value="alle"   ${bt==='alle'?'selected':''}>Alle Spieler</option>
+            <option value="neu"    ${bt==='neu'?'selected':''}>🆕 Nur Neue</option>
+            <option value="rejoin" ${bt==='rejoin'?'selected':''}>🔄 Nur Rejoin</option>
           </select>
         </div>
         <button class="rm-btn" onclick="evCondRemove('${eid}',${ci})">✕</button>
       </div></div>`;
   }
-  // ── Standard-Bedingungen (1:1 wie Bot-Trigger) ──
-  const icons = {wort:'💬',zone:'🗺️',zone_rect:'📐',item_traegt:'👗',item_traegt_nicht:'🚫',event_war:'🔗'};
+  // Standard conditions (same as trigger, different callbacks)
+  const icons = {wort:'💬',zone:'🗺️',zone_rect:'📐',item_traegt:'👗',item_traegt_nicht:'🚫',trigger_war:'🔗'};
   let inner = '';
   if (c.typ === 'wort') {
-    inner = `
-      <input class="cf cf-w120" value="${escHtml(c.wort||'')}" oninput="evCondField('${eid}',${ci},'wort',this.value)" placeholder="Triggerwort (lowercase)">
+    inner = `<input class="cf cf-w120" value="${escHtml(c.wort||'')}" oninput="evCondField('${eid}',${ci},'wort',this.value)" placeholder="Triggerwort">
       <select class="cf" onchange="evCondField('${eid}',${ci},'typ_msg',this.value)">
-        <option value="any"     ${(!c.typ_msg||c.typ_msg==='any')   ?'selected':''}>Chat+Emote+Whisper</option>
-        <option value="chat"    ${c.typ_msg==='chat'                ?'selected':''}>Nur Chat</option>
-        <option value="emote"   ${c.typ_msg==='emote'               ?'selected':''}>Nur Emote</option>
-        <option value="whisper" ${c.typ_msg==='whisper'             ?'selected':''}>Nur Whisper</option>
+        <option value="any" ${(!c.typ_msg||c.typ_msg==='any')?'selected':''}>Chat+Emote+Whisper</option>
+        <option value="chat" ${c.typ_msg==='chat'?'selected':''}>Nur Chat</option>
+        <option value="emote" ${c.typ_msg==='emote'?'selected':''}>Nur Emote</option>
+        <option value="whisper" ${c.typ_msg==='whisper'?'selected':''}>Nur Whisper</option>
       </select>`;
   } else if (c.typ === 'zone') {
-    inner = `
-      <input class="cf cf-w100" value="${escHtml(c.name||'')}" oninput="evCondField('${eid}',${ci},'name',this.value)" placeholder="Zonenname (optional)">
+    inner = `<input class="cf cf-w100" value="${escHtml(c.name||'')}" oninput="evCondField('${eid}',${ci},'name',this.value)" placeholder="Zonenname">
       X<input class="cf" style="width:46px" type="number" value="${c.x??0}" oninput="evCondField('${eid}',${ci},'x',+this.value)">
       Y<input class="cf" style="width:46px" type="number" value="${c.y??0}" oninput="evCondField('${eid}',${ci},'y',+this.value)">
-      ±<input class="cf" style="width:38px" type="number" value="${c.puffer??1}" oninput="evCondField('${eid}',${ci},'puffer',+this.value)" title="Puffer">`;
+      ±<input class="cf" style="width:38px" type="number" value="${c.puffer??1}" oninput="evCondField('${eid}',${ci},'puffer',+this.value)">`;
   } else if (c.typ === 'zone_rect') {
-    inner = `
-      <span style="font-size:.62rem;color:var(--text3)">Von</span>
+    inner = `<span style="font-size:.62rem;color:var(--text3)">Von</span>
       X<input class="cf" style="width:44px" type="number" value="${c.x1??0}" oninput="evCondField('${eid}',${ci},'x1',+this.value)">
       Y<input class="cf" style="width:44px" type="number" value="${c.y1??0}" oninput="evCondField('${eid}',${ci},'y1',+this.value)">
       <span style="font-size:.62rem;color:var(--text3)">Bis</span>
       X<input class="cf" style="width:44px" type="number" value="${c.x2??2}" oninput="evCondField('${eid}',${ci},'x2',+this.value)">
       Y<input class="cf" style="width:44px" type="number" value="${c.y2??2}" oninput="evCondField('${eid}',${ci},'y2',+this.value)">`;
   } else if (c.typ === 'item_traegt' || c.typ === 'item_traegt_nicht') {
-    const neg = c.typ==='item_traegt_nicht' ? '<span style="color:#e55;font-size:.65rem;font-weight:600;margin-right:4px">🚫 NICHT</span>' : '';
-    inner = `${neg}<span style="font-size:.68rem;color:var(--text2)">${c.gruppe?escHtml(c.gruppe)+' / ':''}<b>${escHtml(c.item||'–')}</b></span>
+    const negLabel = c.typ === 'item_traegt_nicht' ? '<span style="color:#e55;font-size:.65rem;font-weight:600;margin-right:4px">🚫 NICHT</span>' : '';
+    inner = `${negLabel}<span style="font-size:.68rem;color:var(--text2)">${c.gruppe?escHtml(c.gruppe)+' / ':''}<b>${escHtml(c.item||'–')}</b></span>
       <button onclick="ipickerOpen('item',v=>{evCondField('${eid}',${ci},'item',v.asset||v.name);evCondField('${eid}',${ci},'gruppe',v.group);evCondRerender('${eid}');})" style="font-size:.62rem;padding:2px 7px;background:var(--pd);border:none;color:var(--pl);border-radius:4px;cursor:pointer">📦 Wählen</button>`;
-  } else if (c.typ === 'event_war') {
-    const evts = evSet?.events ?? [];
-    const opts = evts.filter(x=>x.id!==eid).map(x=>`<option value="${x.id}" ${c.evId===x.id?'selected':''}>${escHtml(x.name||x.id)}</option>`).join('');
-    inner = `<select class="cf cf-w160" onchange="evCondField('${eid}',${ci},'evId',this.value)">
-        <option value="">– Event wählen –</option>${opts}
+  } else if (c.typ === 'trigger_war') {
+    const trigs = bot?.triggers ?? [];
+    const opts = trigs.map(t=>`<option value="${t.id}" ${c.trigId===t.id?'selected':''}>${escHtml(t.name||t.id)}</option>`).join('');
+    inner = `<select class="cf cf-w160" onchange="evCondField('${eid}',${ci},'trigId',this.value)">
+        <option value="">– Trigger wählen –</option>${opts}
       </select>
-      <span style="font-size:.62rem;color:var(--text3)">muss vorher ausgelöst worden sein</span>`;
+      <span style="font-size:.62rem;color:var(--text3)">muss ausgelöst worden sein</span>`;
   }
   const logik = c.logik ?? 'und';
   const logikBadge = ci === 0
     ? `<div class="cond-when-lbl">WENN</div>`
     : `<div style="display:flex;align-items:center;gap:0;margin:2px 0;padding-left:6px">
-        <button onclick="evCondLogik('${eid}',${ci},'und')"      class="logik-btn ${logik==='und'     ?'active':''}" title="UND">UND</button>
-        <button onclick="evCondLogik('${eid}',${ci},'oder')"     class="logik-btn ${logik==='oder'    ?'active':''}" title="ODER">ODER</button>
-        <button onclick="evCondLogik('${eid}',${ci},'und_oder')" class="logik-btn ${logik==='und_oder'?'active':''}" style="border-radius:0 3px 3px 0" title="Egal">UND/ODER</button>
+        <button onclick="evCondLogik('${eid}',${ci},'und')" class="logik-btn ${logik==='und'?'active':''}">UND</button>
+        <button onclick="evCondLogik('${eid}',${ci},'oder')" class="logik-btn ${logik==='oder'?'active':''}">ODER</button>
       </div>`;
   return `<div class="cond-group ${logik==='oder'?'cond-group-oder':''}" id="evcond-${eid}-${ci}">
     ${logikBadge}
     <div class="cond-card cond-op">
       <div class="card-fields">
         <span class="cond-num">${ci+1}</span>
-        <span style="font-size:.7rem;font-weight:600;color:var(--purple);flex-shrink:0">${icons[c.typ]??'❓'}</span>
+        <span style="font-size:.7rem;font-weight:600;color:var(--purple)">${icons[c.typ]??'❓'}</span>
         ${inner}
       </div>
-      <div style="display:flex;flex-direction:column;gap:2px">
-        <button class="order-btn" onclick="evCondMoveUp('${eid}',${ci})"   ${ci===0?'disabled':''}>▲</button>
-        <button class="order-btn" onclick="evCondMoveDown('${eid}',${ci})">▼</button>
-        <button class="rm-btn"    onclick="evCondRemove('${eid}',${ci})" style="margin-top:2px">✕</button>
-      </div>
+      <button class="rm-btn" onclick="evCondRemove('${eid}',${ci})">✕</button>
     </div>
   </div>`;
 }
 
-// ── Actions (identisch zu Bot renderAct, nur ev-Callbacks) ────
+// Event actions reuse renderAct but with ev-specific field update
 function renderEvAct(eid, a, ai) {
-  const s   = _selEvSet();
-  const e   = s?.events.find(x=>x.id===eid);
-  const tot = e?.aktionen?.length ?? 0;
+  // Temporarily set context for renderAct to use ev callbacks
+  // Simple approach: render a stripped-down action card for events
   const types = [
-    ['chat','💬 Chat senden'],['emote','✨ Emote senden'],['whisper','🤫 Whisper senden'],
-    ['item','📦 Item / Curse / Profil'],['item_entf','🗑️ Item entfernen'],
-    ['teleport','🌀 Teleport'],['money','💰 Money ändern'],
+    ['chat','💬 Chat'],['emote','✨ Emote'],['whisper','🤫 Whisper'],
+    ['item','📦 Item'],['item_entf','🗑️ Item entf.'],['teleport','🌀 TP'],['money','💰 Money'],
   ];
   const typeOpts = types.map(([v,l])=>`<option value="${v}" ${a.typ===v?'selected':''}>${l}</option>`).join('');
   let extra = '';
   if (['chat','emote','whisper'].includes(a.typ)) {
-    extra = `<textarea class="cf" style="width:100%;resize:vertical;min-height:44px;margin-top:4px" rows="2"
-        oninput="evActField('${eid}',${ai},'text',this.value)"
-        placeholder="{name} schrieb: {wort} – Pos: {x}/{y}">${escHtml(a.text||'')}</textarea>
-      <div style="font-size:.59rem;color:var(--text3);margin-top:2px">Variablen: {name} {wort} {typ} {x} {y}</div>`;
+    extra = `<textarea class="cf" style="width:100%;resize:vertical;min-height:38px;margin-top:4px" rows="2"
+        oninput="evActField('${eid}',${ai},'text',this.value)">${escHtml(a.text||'')}</textarea>
+      <div style="font-size:.59rem;color:var(--text3);margin-top:2px">Variablen: {name} {wort} {x} {y}</div>`;
   } else if (a.typ === 'item') {
     const cfgInfo = a.itemConfig ? ` <span style="font-size:.58rem;background:var(--gd);color:var(--green);padding:1px 4px;border-radius:3px">✓ Konfig</span>` : '';
     const label = a.itemConfig ? `📦 ${a.itemConfig.group}/${a.itemConfig.asset}` : a.profilName ? `👗 ${a.profilName}` : a.curseName ? `🔮 ${a.curseName}` : a.item ? `📦 ${a.gruppe||'?'}/${a.item}` : '– nichts gewählt –';
     extra = `<div style="display:flex;gap:6px;align-items:center;margin-top:4px;flex-wrap:wrap">
         <span style="font-size:.7rem;color:var(--text2);flex:1">${escHtml(label)}${cfgInfo}</span>
-        <button onclick="evIpickerForAct('${eid}',${ai})" style="font-size:.63rem;padding:3px 9px;background:var(--pd);border:none;color:var(--pl);border-radius:5px;cursor:pointer">📂 Auswählen…</button>
-        ${a.item && !a.itemConfig ? `<input class="cf" type="color" value="${a.farbe||'#ffffff'}" oninput="evActField('${eid}',${ai},'farbe',this.value)" style="width:28px;padding:1px;cursor:pointer" title="Farbe">` : ''}
+        <button onclick="ipickerOpenForEvAct('${eid}',${ai})" style="font-size:.63rem;padding:3px 9px;background:var(--pd);border:none;color:var(--pl);border-radius:5px;cursor:pointer">📂 Wählen</button>
       </div>`;
   } else if (a.typ === 'item_entf') {
     extra = `<input class="cf" style="width:100%;margin-top:4px" value="${escHtml(a.gruppe||'')}"
-        oninput="evActField('${eid}',${ai},'gruppe',this.value)" placeholder="Gruppe (z.B. ItemMouth, ItemArms …)">`;
+        oninput="evActField('${eid}',${ai},'gruppe',this.value)" placeholder="Gruppe (z.B. ItemMouth)">`;
   } else if (a.typ === 'teleport') {
     const slots = a.tpSlots ?? [];
-    const slotsHtml = slots.map((sl, si) => {
-      const gueltig = sl.gueltig ?? true;
-      return `<div class="tp-slot-row">
-        <span class="tp-slot-badge ${si===0?'primary':'fallback'}">${si===0?'Primär':'Fallback '+(si)}</span>
-        X<input class="cf" type="number" style="width:54px" value="${sl.x??0}" oninput="evTpField('${eid}',${ai},${si},'x',+this.value)">
-        Y<input class="cf" type="number" style="width:54px" value="${sl.y??0}" oninput="evTpField('${eid}',${ai},${si},'y',+this.value)">
-        <button class="tp-slot-valid ${gueltig?'zählt':'zählt-nicht'}"
-          onclick="evTpField('${eid}',${ai},${si},'gueltig',!${gueltig});evActRerender('${eid}',${ai})">${gueltig?'✅ Gültig':'❌ Fehler'}</button>
-        <button onclick="evTpRemove('${eid}',${ai},${si})" style="margin-left:auto;background:none;border:none;color:var(--red);cursor:pointer;font-size:.7rem;padding:1px 4px">✕</button>
-      </div>`;
-    }).join('');
-    extra = `<div class="tp-slot-list" id="evtpslots-${eid}-${ai}">${slotsHtml}</div>
-      <button class="tp-slot-add-btn" onclick="evTpAdd('${eid}',${ai})">+ Position / Fallback hinzufügen</button>`;
+    const slotsHtml = slots.map((s,si) => `<div class="tp-slot-row">
+      <span class="tp-slot-badge ${si===0?'primary':'fallback'}">${si===0?'Primär':'FB '+(si)}</span>
+      X<input class="cf" type="number" style="width:50px" value="${s.x??0}" oninput="evTpField('${eid}',${ai},${si},'x',+this.value)">
+      Y<input class="cf" type="number" style="width:50px" value="${s.y??0}" oninput="evTpField('${eid}',${ai},${si},'y',+this.value)">
+      <button onclick="evTpRemove('${eid}',${ai},${si})" style="background:none;border:none;color:var(--red);cursor:pointer">✕</button>
+    </div>`).join('');
+    extra = `<div class="tp-slot-list">${slotsHtml}</div>
+      <button class="tp-slot-add-btn" onclick="evTpAdd('${eid}',${ai})">+ Position/Fallback</button>`;
   } else if (a.typ === 'money') {
-    const moneyName = _money?.settings?.name || 'Gold';
     const mop = a.money_op ?? 'add';
+    const moneyName = _money?.settings?.name || 'Gold';
     extra = `<div style="display:flex;gap:8px;align-items:center;margin-top:5px;flex-wrap:wrap">
-      <select class="cf" style="width:130px" onchange="evActField('${eid}',${ai},'money_op',this.value);evActRerender('${eid}',${ai})">
-        <option value="add"   ${mop==='add'  ?'selected':''}>➕ Hinzufügen</option>
-        <option value="sub"   ${mop==='sub'  ?'selected':''}>➖ Abziehen</option>
-        <option value="set"   ${mop==='set'  ?'selected':''}>= Setzen auf</option>
-        <option value="reset" ${mop==='reset'?'selected':''}>🔄 Zurücksetzen (0)</option>
+      <select class="cf" style="width:130px" onchange="evActField('${eid}',${ai},'money_op',this.value)">
+        <option value="add" ${mop==='add'?'selected':''}>➕ Hinzufügen</option>
+        <option value="sub" ${mop==='sub'?'selected':''}>➖ Abziehen</option>
+        <option value="set" ${mop==='set'?'selected':''}>= Setzen auf</option>
+        <option value="reset" ${mop==='reset'?'selected':''}>🔄 Zurücksetzen</option>
       </select>
       ${mop!=='reset'?`<input class="cf cf-w80" type="number" value="${a.money_val??1}" oninput="evActField('${eid}',${ai},'money_val',+this.value)">
-      <span style="font-size:.68rem;color:var(--text3)">${escHtml(moneyName)}</span>`:''}
+        <span style="font-size:.68rem;color:var(--text3)">${escHtml(moneyName)}</span>`:''}
     </div>`;
   }
-  const canBranch = ['teleport','item','item_entf'].includes(a.typ);
-  function rMsg(field, label, color) {
-    const val=a[field]??'', tf=field+'_typ', mt=a[tf]??'chat';
-    if (!canBranch) return '';
-    return `<div style="display:flex;gap:5px;align-items:center;margin-top:4px">
-      <span style="font-size:.62rem;font-weight:600;color:${color};white-space:nowrap;min-width:42px">${label}</span>
-      <select class="cf" style="width:86px;font-size:.62rem" onchange="evActField('${eid}',${ai},'${tf}',this.value);evActRerender('${eid}',${ai})">
-        <option value="nichts"  ${mt==='nichts' ?'selected':''}>– nichts</option>
-        <option value="chat"    ${mt==='chat'   ?'selected':''}>💬 Chat</option>
-        <option value="emote"   ${mt==='emote'  ?'selected':''}>✨ Emote</option>
-        <option value="whisper" ${mt==='whisper'?'selected':''}>🤫 Whisper</option>
-      </select>
-      ${mt!=='nichts'?`<input class="cf cf-flex" style="font-size:.68rem" value="${escHtml(val)}" oninput="evActField('${eid}',${ai},'${field}',this.value)">`:``}
-    </div>`;
-  }
-  const branchSection = canBranch ? `<div style="margin-top:6px;padding-top:6px;border-top:1px dashed var(--border2)">
-    ${rMsg('dann_msg','✅ Dann:','#5c5')}${rMsg('sonst_msg','❌ Sonst:','#e55')}
-  </div>` : '';
   const bf = a.bei_fehler ?? 'ignorieren';
-  const bfColors = {ignorieren:'var(--text3)',kette_stoppen:'#e8a020',trigger_ungueltig:'#e05050'};
-  const bfRow = canBranch ? `<div style="display:flex;gap:6px;align-items:center;margin-top:4px">
-    <span style="font-size:.6rem;color:var(--text3);white-space:nowrap">Wenn fehlschlägt:</span>
-    <select class="cf" style="flex:1;color:${bfColors[bf]??'var(--text3)'}" onchange="evActField('${eid}',${ai},'bei_fehler',this.value);evActRerender('${eid}',${ai})">
-      <option value="ignorieren"        ${bf==='ignorieren'       ?'selected':''}>⬇️ Weiter mit nächster Aktion</option>
-      <option value="kette_stoppen"     ${bf==='kette_stoppen'    ?'selected':''}>⏹ Kette stoppen (Event zählt)</option>
-      <option value="trigger_ungueltig" ${bf==='trigger_ungueltig'?'selected':''}>❌ Event ungültig (Fallback)</option>
-    </select>
-  </div>` : '';
-  const bfBorder = {kette_stoppen:'#664400',trigger_ungueltig:'#660000'}[bf] ?? '';
-  return `<div class="act-card" id="evact-${eid}-${ai}" style="${bfBorder?'border-color:'+bfBorder+';background:#0d0906;':''}">
+  return `<div class="act-card" id="evact-${eid}-${ai}">
     <div style="flex:1">
-      <div style="display:flex;gap:4px;align-items:center">
-        <span style="display:flex;flex-direction:column;gap:1px;flex-shrink:0">
-          <button class="order-btn" onclick="evActMoveUp('${eid}',${ai})"   ${ai===0?'disabled':''}>▲</button>
-          <button class="order-btn" onclick="evActMoveDown('${eid}',${ai})" ${ai===tot-1?'disabled':''}>▼</button>
-        </span>
-        <span class="trig-order-num" style="margin-right:2px">${ai+1}</span>
+      <div style="display:flex;gap:6px;align-items:center">
+        <span class="trig-order-num">${ai+1}</span>
         <select class="cf" style="flex:1" onchange="evActChangeType('${eid}',${ai},this.value)">${typeOpts}</select>
-        <input class="cf cf-w80" type="number" value="${a.delay??0}" oninput="evActField('${eid}',${ai},'delay',+this.value)" title="Delay (ms)"> ms
+        <input class="cf cf-w80" type="number" value="${a.delay??0}" oninput="evActField('${eid}',${ai},'delay',+this.value)"> ms
       </div>
       ${extra}
-      ${branchSection}
-      ${bfRow}
     </div>
     <button class="rm-btn" onclick="evActRemove('${eid}',${ai})">✕</button>
   </div>`;
 }
 
-// ── Event CRUD ────────────────────────────────────────────────
-function evNew() {
-  const s = _selEvSet(); if (!s) return;
+// ── Event CRUD ───────────────────────────────────────────────
+function eventNew() {
+  const b = _selBot(); if (!b) return;
+  if (!b.events) b.events = [];
   const e = {
-    id:'ev'+Date.now(), name:'Neues Event', aktiv:true, delay:0,
+    id:'ev'+Date.now(), name:'Neues Event', aktiv:true,
     ziel:'ausloeser', zielListe:[], wiederholung:'immer', maxMal:2,
-    von:'alle', vonNummer:0, bedingungen:[], aktionen:[],
-    fallbackTyp:'nichts', fallbackText:'',
+    von:'alle', vonNummer:0,
+    bedingungen:[], aktionen:[], fallbackTyp:'nichts', fallbackText:''
   };
-  s.events.push(e); _saveEvSets();
-  const list = document.getElementById('ev-list'); if (!list) return;
-  const tmp = document.createElement('div');
-  tmp.innerHTML = renderEvCard(s, e, s.events.length - 1);
-  list.appendChild(tmp.firstElementChild);
-  setTimeout(()=>{ document.getElementById('eb-'+e.id)?.classList.add('open'); document.getElementById('ec-'+e.id)?.scrollIntoView({behavior:'smooth',block:'start'}); }, 30);
+  b.events.push(e); _saveBots(); renderEventsTab();
+  setTimeout(()=>document.getElementById('evb-'+e.id)?.classList.add('open'),50);
 }
 
 function evDelete(eid) {
-  const s = _selEvSet(); if (!s) return;
-  const e = s.events.find(x=>x.id===eid);
-  if (!e || !confirm(`Event "${e.name||eid}" löschen?`)) return;
-  s.events = s.events.filter(x=>x.id!==eid); _saveEvSets();
-  document.getElementById('ec-'+eid)?.remove();
+  const b = _selBot(); if (!b) return;
+  b.events = (b.events||[]).filter(e=>e.id!==eid); _saveBots(); renderEventsTab();
 }
 
-function evToggleBody(eid) { document.getElementById('eb-'+eid)?.classList.toggle('open'); }
+function evToggleBody(eid) {
+  document.getElementById('evb-'+eid)?.classList.toggle('open');
+}
 
 function evRerender(eid) {
-  const s = _selEvSet(); if (!s) return;
-  const e = s.events.find(x=>x.id===eid); if (!e) return;
-  const i = s.events.indexOf(e);
+  const b = _selBot(); if (!b) return;
+  const e = b.events?.find(x=>x.id===eid); if (!e) return;
+  const i = b.events.indexOf(e);
   const el = document.getElementById('ec-'+eid); if (!el) return;
-  const wasOpen = document.getElementById('eb-'+eid)?.classList.contains('open');
+  const wasOpen = document.getElementById('evb-'+eid)?.classList.contains('open');
   const tmp = document.createElement('div');
-  tmp.innerHTML = renderEvCard(s, e, i);
-  if (wasOpen) tmp.firstElementChild.querySelector('.trig-body')?.classList.add('open');
+  tmp.innerHTML = renderEventCard(b, e, i);
+  if (wasOpen) tmp.firstElementChild.querySelector('.event-body')?.classList.add('open');
   el.replaceWith(tmp.firstElementChild);
 }
 
 function evField(eid, key, val) {
-  const s = _selEvSet(); if (!s) return;
-  const e = s.events.find(x=>x.id===eid); if (!e) return;
-  e[key] = val; _saveEvSets();
-  if (key === 'aktiv') document.getElementById('ec-'+eid)?.classList.toggle('trig-on', !!val);
-  if (key === 'name') { const el=document.getElementById('elabel-'+eid); if(el) el.textContent=val||'Event'; }
+  const b = _selBot(); if (!b) return;
+  const e = b.events?.find(x=>x.id===eid); if (!e) return;
+  e[key] = val; _saveBots();
+  if (key === 'name') evRerender(eid);
 }
 
 function evMoveUp(eid) {
-  const s = _selEvSet(); if (!s) return;
-  const i = s.events.findIndex(x=>x.id===eid); if (i<=0) return;
-  [s.events[i-1],s.events[i]]=[s.events[i],s.events[i-1]]; _saveEvSets();
-  const wasOpen = document.getElementById('eb-'+eid)?.classList.contains('open');
-  renderEvSetEditor();
-  if (wasOpen) setTimeout(()=>document.getElementById('eb-'+eid)?.classList.add('open'),10);
+  const b = _selBot(); if (!b) return;
+  const i = b.events.findIndex(e=>e.id===eid); if (i<=0) return;
+  [b.events[i-1],b.events[i]]=[b.events[i],b.events[i-1]]; _saveBots(); renderEventsTab();
 }
 function evMoveDown(eid) {
-  const s = _selEvSet(); if (!s) return;
-  const i = s.events.findIndex(x=>x.id===eid); if (i<0||i>=s.events.length-1) return;
-  [s.events[i],s.events[i+1]]=[s.events[i+1],s.events[i]]; _saveEvSets();
-  const wasOpen = document.getElementById('eb-'+eid)?.classList.contains('open');
-  renderEvSetEditor();
-  if (wasOpen) setTimeout(()=>document.getElementById('eb-'+eid)?.classList.add('open'),10);
+  const b = _selBot(); if (!b) return;
+  const i = b.events.findIndex(e=>e.id===eid); if (i<0||i>=b.events.length-1) return;
+  [b.events[i],b.events[i+1]]=[b.events[i+1],b.events[i]]; _saveBots(); renderEventsTab();
 }
 
-// Conditions CRUD
+// Condition CRUD for events
 function evAddCond(eid, typ) {
-  const s = _selEvSet(); if (!s) return;
-  const e = s.events.find(x=>x.id===eid); if (!e) return;
-  const defs = {
-    wort:             {typ:'wort',             wort:'',  typ_msg:'any', logik:'und'},
-    zone:             {typ:'zone',             name:'',  x:0, y:0, puffer:1, logik:'und'},
-    zone_rect:        {typ:'zone_rect',        x1:0, y1:0, x2:2, y2:2, logik:'und'},
-    item_traegt:      {typ:'item_traegt',      item:'',  gruppe:'', logik:'und'},
-    item_traegt_nicht:{typ:'item_traegt_nicht',item:'',  gruppe:'', logik:'und'},
-    event_war:        {typ:'event_war',        evId:'',  logik:'und'},
-    player_betritt:   {typ:'player_betritt',   betritt_typ:'alle'},
-    ev_timer:         {typ:'ev_timer',         sek:10},
-    ev_interval:      {typ:'ev_interval',      sek_min:30, sek_max:180},
-  };
-  e.bedingungen = e.bedingungen ?? [];
-  e.bedingungen.push(defs[typ]??{typ,logik:'und'});
-  _saveEvSets(); evCondRerender(eid);
-  document.getElementById('eb-'+eid)?.classList.add('open');
+  const b = _selBot(); if (!b) return;
+  const e = b.events?.find(x=>x.id===eid); if (!e) return;
+  e.bedingungen = e.bedingungen || [];
+  const def = {wort:{typ:'wort',wort:'',logik:'und'},zone:{typ:'zone',x:0,y:0,puffer:1,logik:'und'},item_traegt:{typ:'item_traegt',item:'',gruppe:'',logik:'und'},trigger_war:{typ:'trigger_war',trigId:'',logik:'und'}};
+  e.bedingungen.push(def[typ]||{typ,logik:'und'}); _saveBots();
+  evCondRerender(eid);
 }
 function evCondRemove(eid, ci) {
-  const s = _selEvSet(); if (!s) return;
-  const e = s.events.find(x=>x.id===eid); if (!e) return;
-  e.bedingungen.splice(ci,1); _saveEvSets(); evCondRerender(eid);
+  const b = _selBot(); if (!b) return;
+  const e = b.events?.find(x=>x.id===eid); if (!e) return;
+  e.bedingungen.splice(ci,1); _saveBots(); evCondRerender(eid);
 }
 function evCondField(eid, ci, key, val) {
-  const s = _selEvSet(); if (!s) return;
-  const e = s.events.find(x=>x.id===eid); if (!e) return;
-  if (e.bedingungen[ci]) e.bedingungen[ci][key]=val; _saveEvSets();
+  const b = _selBot(); if (!b) return;
+  const e = b.events?.find(x=>x.id===eid); if (!e) return;
+  if (e.bedingungen[ci]) e.bedingungen[ci][key]=val; _saveBots();
 }
-function evCondLogik(eid, ci, val)  { evCondField(eid,ci,'logik',val); evCondRerender(eid); }
-function evCondMoveUp(eid, ci) {
-  const s = _selEvSet(); if (!s) return;
-  const e = s.events.find(x=>x.id===eid); if (!e||ci<=0) return;
-  [e.bedingungen[ci-1],e.bedingungen[ci]]=[e.bedingungen[ci],e.bedingungen[ci-1]];
-  _saveEvSets(); evCondRerender(eid);
-}
-function evCondMoveDown(eid, ci) {
-  const s = _selEvSet(); if (!s) return;
-  const e = s.events.find(x=>x.id===eid); if (!e||ci>=e.bedingungen.length-1) return;
-  [e.bedingungen[ci],e.bedingungen[ci+1]]=[e.bedingungen[ci+1],e.bedingungen[ci]];
-  _saveEvSets(); evCondRerender(eid);
+function evCondLogik(eid, ci, val) {
+  evCondField(eid, ci, 'logik', val); evCondRerender(eid);
 }
 function evCondRerender(eid) {
-  const s = _selEvSet(); if (!s) return;
-  const e = s.events.find(x=>x.id===eid); if (!e) return;
+  const b = _selBot(); if (!b) return;
+  const e = b.events?.find(x=>x.id===eid); if (!e) return;
   const el = document.getElementById('evconds-'+eid); if (!el) return;
-  el.innerHTML = (e.bedingungen||[]).map((c,ci)=>renderEvCond(s,eid,c,ci)).join('');
+  el.innerHTML = (e.bedingungen||[]).map((c,ci)=>renderEvCond(b,eid,c,ci)).join('');
 }
 
-// Actions CRUD
+// Action CRUD for events
 function evAddAct(eid) {
-  const s = _selEvSet(); if (!s) return;
-  const e = s.events.find(x=>x.id===eid); if (!e) return;
-  e.aktionen = e.aktionen ?? [];
-  e.aktionen.push({typ:'chat', delay:0, text:''}); _saveEvSets();
-  const el = document.getElementById('evacts-'+eid); if (!el) return;
-  el.innerHTML = e.aktionen.map((a,ai)=>renderEvAct(eid,a,ai)).join('');
-  document.getElementById('eb-'+eid)?.classList.add('open');
+  const b = _selBot(); if (!b) return;
+  const e = b.events?.find(x=>x.id===eid); if (!e) return;
+  e.aktionen = e.aktionen || [];
+  e.aktionen.push({typ:'chat', text:'', delay:0}); _saveBots();
+  document.getElementById('evacts-'+eid).innerHTML = (e.aktionen||[]).map((a,ai)=>renderEvAct(eid,a,ai)).join('');
 }
 function evActRemove(eid, ai) {
-  const s = _selEvSet(); if (!s) return;
-  const e = s.events.find(x=>x.id===eid); if (!e) return;
-  e.aktionen.splice(ai,1); _saveEvSets();
-  const el=document.getElementById('evacts-'+eid); if(el) el.innerHTML=e.aktionen.map((a,i)=>renderEvAct(eid,a,i)).join('');
+  const b = _selBot(); if (!b) return;
+  const e = b.events?.find(x=>x.id===eid); if (!e) return;
+  e.aktionen.splice(ai,1); _saveBots();
+  document.getElementById('evacts-'+eid).innerHTML = (e.aktionen||[]).map((a,ai2)=>renderEvAct(eid,a,ai2)).join('');
 }
 function evActField(eid, ai, key, val) {
-  const s = _selEvSet(); if (!s) return;
-  const e = s.events.find(x=>x.id===eid); if (!e) return;
-  if (e.aktionen[ai]) e.aktionen[ai][key]=val; _saveEvSets();
+  const b = _selBot(); if (!b) return;
+  const e = b.events?.find(x=>x.id===eid); if (!e) return;
+  if (e.aktionen[ai]) e.aktionen[ai][key]=val; _saveBots();
 }
 function evActChangeType(eid, ai, typ) {
-  const s = _selEvSet(); if (!s) return;
-  const e = s.events.find(x=>x.id===eid); if (!e) return;
-  e.aktionen[ai] = {typ, delay:e.aktionen[ai]?.delay??0}; _saveEvSets();
-  const el=document.getElementById('evacts-'+eid); if(el) el.innerHTML=e.aktionen.map((a,i)=>renderEvAct(eid,a,i)).join('');
-}
-function evActRerender(eid, ai) {
-  const s = _selEvSet(); if (!s) return;
-  const e = s.events.find(x=>x.id===eid); if (!e||!e.aktionen[ai]) return;
-  const el = document.getElementById('evact-'+eid+'-'+ai); if (!el) return;
-  const tmp = document.createElement('div');
-  tmp.innerHTML = renderEvAct(eid, e.aktionen[ai], ai);
-  el.replaceWith(tmp.firstElementChild);
-}
-function evActMoveUp(eid, ai) {
-  const s = _selEvSet(); if (!s) return;
-  const e = s.events.find(x=>x.id===eid); if (!e||ai<=0) return;
-  [e.aktionen[ai-1],e.aktionen[ai]]=[e.aktionen[ai],e.aktionen[ai-1]]; _saveEvSets();
-  const el=document.getElementById('evacts-'+eid); if(el) el.innerHTML=e.aktionen.map((a,i)=>renderEvAct(eid,a,i)).join('');
-}
-function evActMoveDown(eid, ai) {
-  const s = _selEvSet(); if (!s) return;
-  const e = s.events.find(x=>x.id===eid); if (!e||ai>=e.aktionen.length-1) return;
-  [e.aktionen[ai],e.aktionen[ai+1]]=[e.aktionen[ai+1],e.aktionen[ai]]; _saveEvSets();
-  const el=document.getElementById('evacts-'+eid); if(el) el.innerHTML=e.aktionen.map((a,i)=>renderEvAct(eid,a,i)).join('');
+  const b = _selBot(); if (!b) return;
+  const e = b.events?.find(x=>x.id===eid); if (!e) return;
+  e.aktionen[ai] = {typ, delay:e.aktionen[ai]?.delay??0}; _saveBots();
+  document.getElementById('evacts-'+eid).innerHTML = (e.aktionen||[]).map((a,ai2)=>renderEvAct(eid,a,ai2)).join('');
 }
 function evTpAdd(eid, ai) {
-  const s = _selEvSet(); if (!s) return;
-  const e = s.events.find(x=>x.id===eid); if (!e) return;
+  const b = _selBot(); if (!b) return;
+  const e = b.events?.find(x=>x.id===eid); if (!e) return;
   e.aktionen[ai].tpSlots = e.aktionen[ai].tpSlots||[];
-  e.aktionen[ai].tpSlots.push({x:0,y:0,gueltig:true}); _saveEvSets(); evActRerender(eid,ai);
+  e.aktionen[ai].tpSlots.push({x:0,y:0,gueltig:true}); _saveBots();
+  document.getElementById('evacts-'+eid).innerHTML = (e.aktionen||[]).map((a,ai2)=>renderEvAct(eid,a,ai2)).join('');
 }
 function evTpRemove(eid, ai, si) {
-  const s = _selEvSet(); if (!s) return;
-  const e = s.events.find(x=>x.id===eid); if (!e) return;
-  e.aktionen[ai].tpSlots?.splice(si,1); _saveEvSets(); evActRerender(eid,ai);
+  const b = _selBot(); if (!b) return;
+  const e = b.events?.find(x=>x.id===eid); if (!e) return;
+  e.aktionen[ai].tpSlots?.splice(si,1); _saveBots();
+  document.getElementById('evacts-'+eid).innerHTML = (e.aktionen||[]).map((a,ai2)=>renderEvAct(eid,a,ai2)).join('');
 }
 function evTpField(eid, ai, si, key, val) {
-  const s = _selEvSet(); if (!s) return;
-  const e = s.events.find(x=>x.id===eid); if (!e) return;
+  const b = _selBot(); if (!b) return;
+  const e = b.events?.find(x=>x.id===eid); if (!e) return;
   const slots = e.aktionen[ai].tpSlots||[];
-  if (slots[si]) slots[si][key]=val; _saveEvSets();
+  if (slots[si]) slots[si][key]=val; _saveBots();
 }
-function evIpickerForAct(eid, ai) {
+function ipickerOpenForEvAct(eid, ai) {
   ipickerOpen('item', v => {
-    const s = _selEvSet(); if (!s) return;
-    const e = s.events.find(x=>x.id===eid); if (!e) return;
+    const b = _selBot(); if (!b) return;
+    const e = b.events?.find(x=>x.id===eid); if (!e) return;
     const a = e.aktionen[ai]; if (!a) return;
+    // Clear old type data (same as trigger)
     delete a.item; delete a.gruppe; delete a.farbe;
     delete a.curseKey; delete a.curseName; delete a.curseEntry;
     delete a.profilName; delete a.profilItems; delete a.itemConfig;
-    if (v.type==='item') {
-      if (v.itemConfig) { a.itemConfig=v.itemConfig; a.item=v.itemConfig.asset; a.gruppe=v.itemConfig.group; }
-      else { a.item=v.asset||v.name; a.gruppe=v.group; a.farbe='#ffffff'; }
-    } else if (v.type==='curse') {
-      a.curseKey=v.key; a.curseName=v.name; a.curseEntry=v.entry;
-    } else if (v.type==='profil') {
-      a.profilName=v.name; a.profilItems=PROFILES[v.name]?.items??[];
+    if (v.type === 'item') {
+      if (v.itemConfig) {
+        a.itemConfig = v.itemConfig;
+        a.item   = v.itemConfig.asset;
+        a.gruppe = v.itemConfig.group;
+      } else {
+        a.item   = v.asset || v.name;
+        a.gruppe = v.group;
+        a.farbe  = '#ffffff';
+      }
+    } else if (v.type === 'curse') {
+      a.curseKey   = v.key;
+      a.curseName  = v.name;
+      a.curseEntry = v.entry;
+    } else if (v.type === 'profil') {
+      a.profilName  = v.name;
+      a.profilItems = PROFILES[v.name]?.items ?? [];
     }
-    _saveEvSets(); evActRerender(eid, ai);
+    _saveBots();
+    document.getElementById('evacts-'+eid).innerHTML = (e.aktionen||[]).map((a2,ai2)=>renderEvAct(eid,a2,ai2)).join('');
   });
 }
 
-// ── Deploy / Stop / Sync / Export / Import ─────────────────────
-function evSetDeploy()  { const s=_selEvSet(); if(s) evSetDeployById(s.id); }
-function evSetStop()    { const s=_selEvSet(); if(s) evSetStopById(s.id);   }
-function evFireNow(eid) {
-  const s = _selEvSet(); if (!s) return;
+// Fire event manually from popup
+function evFire(eid) { evFireImmediate(eid); }
+function evFireImmediate(eid) {
+  const b = _selBot(); if (!b) return;
   if (!_connected) { showStatus('❌ Nicht verbunden','error'); return; }
-  const safeId = s.id.replace(/\W/g,'_');
-  bcSend({ type:'EXEC', code:`if(window['_BCEvSet_${safeId}'])window['_BCEvSet_${safeId}'].fireNow('${eid}');else showStatus('Event-Set nicht aktiv','error');` });
-  showStatus('▶️ Event ausgelöst','success');
+  const safeId = b.id.replace(/\W/g,'_');
+  bcSend({ type:'EXEC', code:`if(window['_BCBot_${safeId}'])window['_BCBot_${safeId}'].fireEventNow('${eid}');else console.warn('[Bot] Nicht aktiv – erst starten');` });
+  showStatus('▶️ Event sofort ausgelöst','success');
 }
-
-function evSetDeployById(id) {
-  const s = _evSets.find(x=>x.id===id); if (!s) return;
-  if (!_connected) { showStatus('❌ Nicht mit BC verbunden','error'); return; }
-  bcSend({ type:'EXEC', code: _buildEvSetCode(s) });
-  s.laufend = true; _saveEvSets(); renderEvSetList();
-  if (_selEvSetId === id) renderEvSetEditor();
-  showStatus('▶️ Event-Set "'+s.name+'" gestartet!','success');
-}
-
-function evSetStopById(id) {
-  const s = _evSets.find(x=>x.id===id); if (!s) return;
-  if (!_connected) { showStatus('❌ Nicht verbunden','error'); return; }
-  const safeId = s.id.replace(/\W/g,'_');
-  bcSend({ type:'EXEC', code:`if(window['_BCEvSet_${safeId}'])window['_BCEvSet_${safeId}'].stop();` });
-  s.laufend = false; _saveEvSets(); renderEvSetList();
-  if (_selEvSetId === id) renderEvSetEditor();
-  showStatus('⏹ Event-Set "'+s.name+'" gestoppt','success');
-}
-
-function evSetSync() {
-  const s = _selEvSet(); if (!s) return;
-  if (!_connected) { showStatus('❌ Nicht verbunden','error'); return; }
-  if (!s.laufend) { showStatus('ℹ️ Nicht gestartet – Starten klicken','info'); return; }
-  const btn = document.getElementById('evSyncBtn');
-  if (btn) { btn.disabled=true; btn.textContent='⏳ Sync…'; }
-  const safeId = s.id.replace(/\W/g,'_');
-  bcSend({ type:'EXEC', code:`if(window['_BCEvSet_${safeId}'])window['_BCEvSet_${safeId}'].stop();` });
-  setTimeout(() => {
-    const latest = _selEvSet(); if (!latest) return;
-    bcSend({ type:'EXEC', code: _buildEvSetCode(latest) });
-    latest.laufend = true; _saveEvSets(); renderEvSetList(); renderEvSetEditor();
-    showStatus('✅ Event-Set synchronisiert','success');
-  }, 700);
-}
-
-function evSetExport() {
-  const s = _selEvSet(); if (!s) return;
-  const blob = new Blob([JSON.stringify(s,null,2)], {type:'application/json'});
-  const a = document.createElement('a'); a.href=URL.createObjectURL(blob);
-  a.download=(s.name||'evset')+'.json'; a.click();
-}
-function evSetImport() {
-  const inp = document.createElement('input'); inp.type='file'; inp.accept='.json';
-  inp.onchange = e => {
-    const r = new FileReader();
-    r.onload = ev => {
-      try {
-        const d = JSON.parse(ev.target.result); d.laufend=false;
-        const idx = _evSets.findIndex(x=>x.id===d.id);
-        if (idx>=0) { if(!confirm(`"${d.name}" überschreiben?`)) return; _evSets[idx]=d; }
-        else { d.id='es'+Date.now(); _evSets.push(d); _selEvSetId=d.id; }
-        _saveEvSets(); renderEvSetList(); renderEvSetEditor();
-        showStatus('✅ Importiert','success');
-      } catch(err) { showStatus('❌ '+err.message,'error'); }
-    };
-    r.readAsText(e.target.files[0]);
-  };
-  inp.click();
-}
-
-
 
 function renderBotTab() {
   _loadBots();
@@ -6031,55 +5506,32 @@ function _okEv(ev,C,rohText,typKey){
   return groups.some(g=>g.every(c=>checkOne(c)));
 }
 
-function _fireEv(ev,onDone){
-  onDone=onDone??null;
+function _fireEv(ev){
   // Wiederholung check
   const cnt=_evFiredCnt[ev.id]??0;
-  if(ev.wiederholung==='einmalig'&&cnt>=1){_log('⏭ Event "'+ev.name+'" bereits (1×)');onDone&&onDone();return;}
-  if(ev.wiederholung==='n_mal'&&cnt>=(ev.maxMal??2)){_log('⏭ Event "'+ev.name+'" max erreicht');onDone&&onDone();return;}
+  if(ev.wiederholung==='einmalig'&&cnt>=1){_log('⏭ Event "'+ev.name+'" bereits (1×)');return;}
+  if(ev.wiederholung==='n_mal'&&cnt>=(ev.maxMal??2)){_log('⏭ Event "'+ev.name+'" max erreicht');return;}
 
-  // Targets bestimmen
+  // Targets
   const allChars=[Player,...(ChatRoomCharacter||[])];
   let targets=[];
-  if(ev.ziel==='alle'){
-    targets=allChars;
-  } else if(ev.ziel==='liste'){
-    targets=allChars.filter(C=>(ev.zielListe||[]).includes(C.MemberNumber));
-  } else if(ev.ziel==='zufaellig'){
-    // Explizit zufälliger Spieler – alle Chars außer Bot selbst bevorzugen
-    const others=allChars.filter(C=>C.MemberNumber!==Player.MemberNumber);
-    const pool=others.length?others:allChars;
-    const eligible=pool.filter(C=>_okEv(ev,C,ev._rohText,ev._typKey));
+  if(ev.ziel==='alle'){targets=allChars;}
+  else if(ev.ziel==='liste'){targets=allChars.filter(C=>(ev.zielListe||[]).includes(C.MemberNumber));}
+  else{// ausloeser / random
+    const eligible=allChars.filter(C=>_okEv(ev,C,ev._rohText,ev._typKey));
     if(eligible.length)targets=[eligible[Math.floor(Math.random()*eligible.length)]];
-  } else {
-    // ausloeser: der Spieler der das Event getriggert hat (Chat/Betritt)
-    // Falls kein Auslöser bekannt (Timer/Interval): zufälliger Spieler
-    if(ev._triggerC){
-      targets=[ev._triggerC]; // explizit gesetzter Auslöser
-    } else {
-      // Kein Auslöser → zufälliger Spieler (für Timer/Interval Events)
-      const others=allChars.filter(C=>C.MemberNumber!==Player.MemberNumber);
-      const pool=others.length?others:allChars;
-      if(pool.length)targets=[pool[Math.floor(Math.random()*pool.length)]];
-    }
   }
-  if(!targets.length){
-    _log('⚠️ Event "'+ev.name+'" – kein gültiges Ziel ('+allChars.length+' im Raum)');
-    onDone&&onDone(); // trotzdem callback damit Interval weiterläuft
-    return;
-  }
+  if(!targets.length){_log('⚠️ Event "'+ev.name+'" – kein gültiges Ziel');return;}
 
-  _log('⚡ Event "'+ev.name+'" → '+targets.map(C=>C.Name).join(', '));
-  let done=0;
+  _log('⚡ Event "'+ev.name+'" → '+targets.length+' Ziel(e)');
   targets.forEach(C=>{
-    if(!_okEv(ev,C,ev._rohText,ev._typKey)){_log('⏭ Event "'+ev.name+'" Bed. nicht erfüllt für '+C.Name);done++;if(done===targets.length)onDone&&onDone();return;}
+    if(!_okEv(ev,C,ev._rohText,ev._typKey)){_log('⏭ Event "'+ev.name+'" Bed. nicht erfüllt für '+C.Name);return;}
     const vars={name:C.Name,wort:ev._rohText||'',typ:'Event',x:C.X??0,y:C.Y??0,zone:'',C};
     _runSeq(ev.aktionen??[],C,vars,ev,
       ()=>{
-        _evFiredCnt[ev.id]=((_evFiredCnt[ev.id]??0)+1);
+        _evFiredCnt[ev.id]=(cnt+1);
         _log('✅ Event "'+ev.name+'" abgeschlossen für '+C.Name+' #'+_evFiredCnt[ev.id]);
         _pushLog({status:'ok'},vars,{name:ev.name,id:ev.id});
-        done++;if(done===targets.length)onDone&&onDone();
       },
       ()=>{
         _log('❌ Event "'+ev.name+'" ungültig für '+C.Name);
@@ -6088,7 +5540,6 @@ function _fireEv(ev,onDone){
           const typ={chat:'Chat',emote:'Emote'}[ev.fallbackTyp]??'Chat';
           ServerSend('ChatRoomChat',{Content:_tpl(ev.fallbackText,vars),Type:typ});
         }
-        done++;if(done===targets.length)onDone&&onDone();
       }
     );
   });
@@ -6103,41 +5554,19 @@ function _scheduleEv(ev){
   if(timerC){
     const ms=(timerC.sek??10)*1000;
     _evTimers[ev.id+'_t']=setTimeout(()=>{
-      _fireEv(ev,()=>{});
+      _fireEv(ev);
     },ms);
   }
   if(intC){
-    const lo=(intC.sek_min??30)*1000, hi=(intC.sek_max??180)*1000;
+    const lo=(intC.sek_min??20)*1000, hi=(intC.sek_max??60)*1000;
     const go=()=>{
-      // Wdh-Check HIER (sync, vor _fireEv) damit das Loop wirklich stoppt
       const cnt=_evFiredCnt[ev.id]??0;
-      if(ev.wiederholung==='einmalig'&&cnt>=1){
-        _log('⏹ Interval "'+ev.name+'" gestoppt (einmalig)');
-        return; // kein weiteres setTimeout
-      }
-      if(ev.wiederholung==='n_mal'&&cnt>=(ev.maxMal??2)){
-        _log('⏹ Interval "'+ev.name+'" gestoppt ('+ev.maxMal+'×)');
-        return;
-      }
-      _fireEv(ev,()=>{
-        // onDone-Callback: nächstes Interval ERST nach erfolgreichem Fire planen
-        const delay=lo+Math.random()*(hi-lo);
-        _log('⏱ Nächstes "'+ev.name+'" in '+(delay/1000|0)+'s');
-        // Status ans Popup melden
-        try{window.__BCK_popupRef?.postMessage({
-          app:'BCKonfigurator',type:'BOT_EV_STATUS',
-          evId:ev.id,nextMs:delay,lo,hi,cnt:(_evFiredCnt[ev.id]??0)
-        },'*');}catch(e){}
-        _evTimers[ev.id+'_i']=setTimeout(go,delay);
-      });
+      if(ev.wiederholung==='einmalig'&&cnt>=1)return;
+      if(ev.wiederholung==='n_mal'&&cnt>=(ev.maxMal??2))return;
+      _fireEv(ev);
+      _evTimers[ev.id+'_i']=setTimeout(go,lo+Math.random()*(hi-lo));
     };
-    const firstDelay=lo+Math.random()*(hi-lo);
-    _log('🔁 Interval "'+ev.name+'" startet in '+(firstDelay/1000|0)+'s ('+lo/1000+'–'+hi/1000+'s)');
-    try{window.__BCK_popupRef?.postMessage({
-      app:'BCKonfigurator',type:'BOT_EV_STATUS',
-      evId:ev.id,nextMs:firstDelay,lo,hi,cnt:0
-    },'*');}catch(e){}
-    _evTimers[ev.id+'_i']=setTimeout(go,firstDelay);
+    _evTimers[ev.id+'_i']=setTimeout(go,lo+Math.random()*(hi-lo));
   }
 }
 
@@ -6280,12 +5709,27 @@ function _procEvents(rohText,typKey,C){
     const wortConds=(ev.bedingungen??[]).filter(c=>c.typ==='wort');
     if(!wortConds.length)return;
     ev._rohText=rohText; ev._typKey=typKey; // temp context für _okEv
-    ev._triggerC=C; // wer hat das Event ausgelöst (für ausloeser-Ziel)
     if(_okEv(ev,C,rohText,typKey)){
-      _log('💬 Chat-Event "'+ev.name+'" von '+C.Name);
-      _fireEv(ev,null); // _fireEv kümmert sich um ziel (inkl. zufaellig, alle, liste, ausloeser)
+      // Ziel bestimmen
+      const allChars=[Player,...(ChatRoomCharacter||[])];
+      let targets=[];
+      if(ev.ziel==='alle')targets=allChars;
+      else if(ev.ziel==='liste')targets=allChars.filter(ch=>(ev.zielListe||[]).includes(ch.MemberNumber));
+      else targets=[C]; // ausloeser = der der schrieb
+      _log('💬 Chat-Event "'+ev.name+'" von '+C.Name+' → '+targets.length+' Ziel(e)');
+      targets.forEach(ch=>{
+        const vars={name:ch.Name,wort:rohText,typ:typLabel,x:ch.X??0,y:ch.Y??0,zone:'',C:ch};
+        // FIX: Read cnt inside callback to avoid all targets writing the same stale value
+        const cntNow=_evFiredCnt[ev.id]??0;
+        if(ev.wiederholung==='einmalig'&&cntNow>=1)return;
+        if(ev.wiederholung==='n_mal'&&cntNow>=(ev.maxMal??2))return;
+        _runSeq(ev.aktionen??[],ch,vars,ev,
+          ()=>{_evFiredCnt[ev.id]=(_evFiredCnt[ev.id]??0)+1;_pushLog({status:'ok'},vars,{name:ev.name,id:ev.id});},
+          ()=>{_pushLog({status:'ungueltig'},vars,{name:ev.name,id:ev.id});}
+        );
+      });
     }
-    delete ev._rohText; delete ev._typKey; delete ev._triggerC;
+    delete ev._rohText; delete ev._typKey;
   });
 }
 
@@ -6420,20 +5864,30 @@ const _joinPoll=setInterval(()=>{
           return true;
         });
         if(!bOk)return;
-        // Von-Filter
+        // Von-Filter: wer darf das Event auslösen (= wer muss der Beitretende sein)?
         const vonOk=(()=>{
           if(ev.von==='bot')return C.MemberNumber===Player.MemberNumber;
           if(ev.von==='nummer')return ev.vonNummer&&C.MemberNumber===+ev.vonNummer;
-          return true;
+          return true; // 'alle' → jeder
         })();
         if(!vonOk)return;
-        // Auslöser setzen damit _fireEv das richtige Ziel wählen kann
-        ev._triggerC=C;
-        ev._rohText='';
-        ev._typKey='join';
-        _log('🚪 Betritt-Event "'+ev.name+'" für '+C.Name+(istNeu?' (neu)':' (rejoin)'));
-        _fireEv(ev,null);
-        delete ev._triggerC; delete ev._rohText; delete ev._typKey;
+        const evVars={name:C.Name,wort:'',typ:label,x:C.X??0,y:C.Y??0,zone:'',C};
+        const allChars=[Player,...(ChatRoomCharacter||[])];
+        let targets=[];
+        if(ev.ziel==='alle')targets=allChars;
+        else if(ev.ziel==='liste')targets=allChars.filter(ch=>(ev.zielListe||[]).includes(ch.MemberNumber));
+        else targets=[C]; // ausloeser = der beitretende Spieler
+        const cnt=_evFiredCnt[ev.id]??0;
+        if(ev.wiederholung==='einmalig'&&cnt>=1)return;
+        if(ev.wiederholung==='n_mal'&&cnt>=(ev.maxMal??2))return;
+        targets.forEach(ch=>{
+          const vars={name:ch.Name,wort:'',typ:label,x:ch.X??0,y:ch.Y??0,zone:'',C:ch};
+          // FIX: Read cnt inside callback so each target increments independently
+          _runSeq(ev.aktionen??[],ch,vars,ev,
+            ()=>{_evFiredCnt[ev.id]=(_evFiredCnt[ev.id]??0)+1;_pushLog({status:'ok'},vars,{name:ev.name,id:ev.id});},
+            ()=>{_pushLog({status:'ungueltig'},vars,{name:ev.name,id:ev.id});}
+          );
+        });
       });
 
       // Alle Rejoin-Trigger feuern (keine gegenseitige Blockade)
@@ -6585,9 +6039,7 @@ window['_BCBot_'+_BID]={
     }
     if(_msgH) ServerSocket.off('ChatRoomMessage',_msgH);
     // Events timer stoppen
-    Object.values(_evTimers).forEach(h=>clearTimeout(h));
-    // Event-Engine auch stoppen falls sie läuft
-    if(window['_BCEvEng_'+_BID])window['_BCEvEng_'+_BID].stop();
+    Object.values(_evTimers).forEach(h=>clearTimeout(h)); // clears both _t and _i timers
     delete window['_BCBot_'+_BID];
     // State im window-Objekt + localStorage sichern (überlebt Page-Reload)
     window[_stateKey].roomEver=[..._roomEver];
@@ -6631,511 +6083,6 @@ window['_BCBot_'+_BID]={
 console.log('\u25B6\uFE0F [Bot:${safeName}] | Trigger:',_trigs.length,'| Modus:',_cfg.nurEigene?'Nur eigene':'Alle Spieler');
 })();`;
 }
-
-// ══════════════════════════════════════════════════════════════════
-//  EVENT-ENGINE: Eigenständiges Skript, unabhängig vom Bot
-//  - Eigener MessageListener für Chat/Emote/Whisper
-//  - Eigene Intervall-Timer
-//  - Läuft auch ohne Bot, hat aber Zugriff auf alle Bot-Aktionen
-// ══════════════════════════════════════════════════════════════════
-function _buildEvSetCode(evSet) {
-  // ── Aktionen aufbereiten: curseEntry + profilItems einbetten ──
-  const events = (evSet.events||[]).filter(e=>e.aktiv).map(e => ({
-    id: e.id, name: e.name,
-    von: e.von??'alle', vonNummer: e.vonNummer??0,
-    ziel: e.ziel??'ausloeser', zielListe: e.zielListe??[],
-    wiederholung: e.wiederholung??'immer', maxMal: e.maxMal??2,
-    fallbackTyp: e.fallbackTyp??'nichts', fallbackText: e.fallbackText??'',
-    bedingungen: e.bedingungen??[],
-    aktionen: (e.aktionen||[]).map(a => {
-      if (a.typ==='item' && a.curseKey && !a.curseEntry) return {...a, curseEntry: CURSE_DB[a.curseKey]??null};
-      if (a.typ==='item' && a.profilName && (!a.profilItems||!a.profilItems.length)) return {...a, profilItems: PROFILES[a.profilName]?.items??[]};
-      return a;
-    }),
-  }));
-
-  const safeId   = evSet.id.replace(/\W/g,'_');
-  const safeName = (evSet.name||'Events').replace(/\\/g,'\\\\').replace(/`/g,'\\`');
-  const evJson   = JSON.stringify(events).replace(/`/g,'\\`').replace(/\${/g,'\\${');
-  const cfgJson  = JSON.stringify({
-    hearChat:    evSet.settings?.hearChat    ?? true,
-    hearEmote:   evSet.settings?.hearEmote   ?? true,
-    hearWhisper: evSet.settings?.hearWhisper ?? true,
-    logAktiv:    evSet.settings?.logAktiv    ?? true,
-  });
-
-  return `(function(){
-// ═══════════════════════════════════════════════════
-//  BC Konfigurator – Event-Set Engine: "${safeName}"
-//  Eigenständig, unabhängig vom Bot
-// ═══════════════════════════════════════════════════
-const _EID='${safeId}';
-// Stoppe alte Instanz falls schon läuft (Sync)
-if(window['_BCEvSet_'+_EID]){
-  try{window['_BCEvSet_'+_EID].stop();}catch(e){}
-  console.log('[EvSet:${safeName}] Neustart...');
-}
-
-const _cfg=${cfgJson};
-const _evts=${evJson};
-const _evFiredCnt = {}; // evId -> Anzahl Auslösungen
-const _evState    = {}; // evId -> { nextFireAt, cnt } für UI-Countdown
-
-function _log(...a){if(_cfg.logAktiv)console.log('[EvSet:${safeName}]',...a);}
-
-// ── Template-Ersatz ──────────────────────────────────────────────
-function _tpl(s, v) {
-  return (s??'')
-    .replace(/{name}/gi, v.name??'')
-    .replace(/{wort}/gi, v.wort??'')
-    .replace(/{x}/gi,    String(v.x??0))
-    .replace(/{y}/gi,    String(v.y??0))
-    .replace(/{typ}/gi,  v.typ??'')
-    .replace(/{zone}/gi, v.zone??'');
-}
-
-// ── Item anlegen (1:1 aus Bot kopiert) ───────────────────────────
-function _snapItem(i){ return{Asset:i.Asset,Group:i.Asset?.Group?.Name??'',Color:JSON.parse(JSON.stringify(i.Color??'#ffffff')),Craft:i.Craft??null,Property:JSON.parse(JSON.stringify(i.Property??{}))}; }
-
-function _restoreDisplaced(C, snapshot, targetGroup){
-  setTimeout(()=>{
-    snapshot.forEach(snap=>{
-      if(snap.Group===targetGroup)return;
-      const stillThere=InventoryGet(C,snap.Group);
-      if(!stillThere&&snap.Asset){
-        try{ InventoryWear(C,snap.Asset.Name,snap.Group,snap.Color,0,Player.MemberNumber,snap.Craft);
-          const restored=InventoryGet(C,snap.Group);
-          if(restored&&snap.Property&&Object.keys(snap.Property).length){
-            restored.Property=snap.Property; CharacterRefresh(C); ChatRoomCharacterUpdate(C);
-          }
-        }catch(e){}
-      }
-    });
-  },400);
-}
-
-function _applyItem(a, C){
-  try{
-    const snapshot=(C.Appearance??[]).filter(i=>i.Asset?.Group?.Name).map(_snapItem);
-    if(a.itemConfig){
-      const ic=a.itemConfig;
-      let col=ic.colors??['#ffffff'];
-      if(typeof col==='string'&&col.includes(','))col=col.split(',');
-      InventoryWear(C,ic.asset,ic.group,col,0,Player.MemberNumber,null);
-      CharacterRefresh(C); _restoreDisplaced(C,snapshot,ic.group);
-      setTimeout(()=>{
-        const item=InventoryGet(C,ic.group); if(!item)return;
-        item.Color=ic.colors; item.Property=item.Property??{};
-        if(ic.tr&&Object.keys(ic.tr).length){item.Property.TypeRecord=ic.tr;item.Property.Type=ic.typeStr??'';}
-        if(ic.props)Object.assign(item.Property,ic.props);
-        CharacterRefresh(C);ChatRoomCharacterUpdate(C);
-      },600);
-    } else if(a.curseEntry){
-      let col=a.curseEntry.Farbe;if(typeof col==='string'&&col.includes(','))col=col.split(',');
-      InventoryWear(C,a.curseEntry.ItemName,a.curseEntry.Gruppe,col,0,Player.MemberNumber,a.curseEntry.Craft);
-      _restoreDisplaced(C,snapshot,a.curseEntry.Gruppe);
-    } else if(a.profilName){
-      (a.profilItems??[]).forEach(item=>{
-        let col=item.colors??item.cfg?.Color??'#ffffff';
-        if(typeof col==='string'&&col.includes(','))col=col.split(',');
-        InventoryWear(C,item.asset,item.group,col,0,Player.MemberNumber); CharacterRefresh(C);
-      });
-      ChatRoomCharacterUpdate(C);
-    } else if(a.item){
-      InventoryWear(C,a.item,a.gruppe,a.farbe??'#ffffff',0,Player.MemberNumber);
-      _restoreDisplaced(C,snapshot,a.gruppe);
-    }
-  }catch(ex){ _log('\\u26A0 item Fehler:',ex.message); }
-}
-
-// ── Einzelne Aktion ausführen → true=ok, false=fehler ────────────
-function _execAkt(a, C, vars){
-  let ok=false;
-  try{
-    if(a.typ==='chat'){
-      ServerSend('ChatRoomChat',{Content:_tpl(a.text,vars),Type:'Chat'}); ok=true;
-    } else if(a.typ==='emote'){
-      ServerSend('ChatRoomChat',{Content:_tpl(a.text,vars),Type:'Emote'}); ok=true;
-    } else if(a.typ==='whisper'){
-      if(!C?.MemberNumber){_log('\\u26A0 Whisper: kein Ziel');ok=false;}
-      else{ServerSend('ChatRoomChat',{Content:_tpl(a.text,vars),Type:'Whisper',Target:C.MemberNumber});ok=true;}
-    } else if(a.typ==='item_entf'){
-      InventoryRemove(C,a.gruppe); CharacterRefresh(C); ChatRoomCharacterUpdate(C); ok=true;
-    } else if(a.typ==='item'){
-      _applyItem(a,C); ok=true;
-    } else if(a.typ==='teleport'){
-      const slots=a.tpSlots??[]; if(!slots.length){ok=false;}
-      else{
-        const allC=[Player,...(ChatRoomCharacter||[])].filter(Boolean);
-        const ziel=slots.find(s=>{
-          return !allC.some(ch=>ch!==C&&ch.X===s.x&&ch.Y===s.y);
-        });
-        if(!ziel){ok=false;}
-        else{
-          ServerSend('ChatRoomChat',{Content:'ChatRoomMapViewTeleport',Type:'Hidden',
-            Dictionary:[{Tag:'MapViewTeleport',Position:{X:ziel.x,Y:ziel.y}}],
-            Target:C.MemberNumber});
-          ok=ziel.gueltig??true;
-        }
-      }
-    } else if(a.typ==='money'){
-      const op=a.money_op??'add', val=a.money_val??0;
-      const delta=op==='add'?val:op==='sub'?-val:0;
-      const setVal=op==='set'?val:op==='reset'?0:undefined;
-      try{window.__BCK_popupRef?.postMessage({app:'BCKonfigurator',type:'BOT_MONEY',
-        memberNum:C.MemberNumber,name:C.Name,delta,setVal},'*');}catch(e){}
-      ok=true;
-    } else { ok=true; }
-  }catch(ex){ _log('\\u26A0 Aktion '+a.typ+' Fehler:',ex.message); ok=false; }
-
-  // Dann/Sonst Nachricht
-  const msgField=ok?'dann_msg':'sonst_msg', msgTyp=a[msgField+'_typ']??'nichts', msgText=a[msgField];
-  if(msgText&&msgTyp!=='nichts'){
-    setTimeout(()=>{
-      const txt=_tpl(msgText,vars);
-      if(msgTyp==='whisper'&&C?.MemberNumber)ServerSend('ChatRoomChat',{Content:txt,Type:'Whisper',Target:C.MemberNumber});
-      else if(msgTyp==='emote')ServerSend('ChatRoomChat',{Content:txt,Type:'Emote'});
-      else ServerSend('ChatRoomChat',{Content:txt,Type:'Chat'});
-    },200);
-  }
-  return ok;
-}
-
-// ── Aktionskette sequenziell ausführen ───────────────────────────
-function _runSeq(aktionen, C, vars, onDone, onUngueltig){
-  if(!aktionen||!aktionen.length){ if(onDone)onDone(); return; }
-  const [a,...rest]=aktionen;
-  setTimeout(()=>{
-    const ok=_execAkt(a,C,vars);
-    if(!ok){
-      const bf=a.bei_fehler??'ignorieren';
-      _log('\\u26A0 Aktion '+a.typ+' fehlschl. \\u2192 '+bf);
-      if(bf==='kette_stoppen'){ if(onDone)onDone(); return; }
-      if(bf==='trigger_ungueltig'){ if(onUngueltig)onUngueltig(); return; }
-    }
-    _runSeq(rest,C,vars,onDone,onUngueltig);
-  }, a.delay??0);
-}
-
-// ── Bedingungen prüfen (1:1 aus Bot) ─────────────────────────────
-function _okEv(ev, C, rohText, typKey){
-  if(!C)return false;
-  const beds=ev.bedingungen??[];
-  if(!beds.length)return true;
-  const cx=C.X??-999, cy=C.Y??-999;
-  function checkOne(c){
-    if(c.typ==='wort'){
-      if(!rohText)return true; // Timer/Interval haben keinen Text → skip
-      const m=c.typ_msg||'any';
-      if(m!=='any'&&m!==typKey)return false;
-      return !c.wort||(rohText||'').toLowerCase().includes((c.wort||'').toLowerCase());
-    }
-    if(c.typ==='zone'){ const p=c.puffer??1; return cx>=c.x-p&&cx<=c.x+p&&cy>=c.y-p&&cy<=c.y+p; }
-    if(c.typ==='zone_rect'){ return cx>=Math.min(c.x1,c.x2)&&cx<=Math.max(c.x1,c.x2)&&cy>=Math.min(c.y1,c.y2)&&cy<=Math.max(c.y1,c.y2); }
-    if(c.typ==='item_traegt')    { return (C.Appearance??[]).some(a=>a.Asset?.Name===c.item); }
-    if(c.typ==='item_traegt_nicht'){ return !(C.Appearance??[]).some(a=>a.Asset?.Name===c.item); }
-    if(c.typ==='event_war'){
-      // event_war: wurde dieses Event schon gefeuert?
-      return (_evFiredCnt[c.evId]??0) > 0;
-    }
-    // ev_timer / ev_interval / player_betritt werden separat behandelt
-    return true;
-  }
-  // Gruppen: UND innerhalb, ODER zwischen Gruppen
-  const groups=[[]];
-  for(const c of beds){
-    if(c.logik==='oder'||c.logik==='und_oder') groups.push([]);
-    groups[groups.length-1].push(c);
-  }
-  return groups.some(g=>g.every(c=>checkOne(c)));
-}
-
-// ── Event auslösen ────────────────────────────────────────────────
-function _fireEv(ev, triggerC, rohText, typKey, onDone){
-  // Wiederholung prüfen
-  const cnt=_evFiredCnt[ev.id]??0;
-  if(ev.wiederholung==='einmalig'&&cnt>=1){ _log('\\u23ed "'+ev.name+'" einmalig (bereits)'); if(onDone)onDone(); return false; }
-  if(ev.wiederholung==='n_mal'&&cnt>=(ev.maxMal??2)){ _log('\\u23ed "'+ev.name+'" max ('+ev.maxMal+'\\u00d7)'); if(onDone)onDone(); return false; }
-
-  // Ziele ermitteln (alle gültigen Chars)
-  const allChars=[Player,...(ChatRoomCharacter||[])].filter(Boolean);
-  let targets=[];
-  if(ev.ziel==='alle'){
-    targets=allChars.filter(C=>_okEv(ev,C,rohText,typKey));
-  } else if(ev.ziel==='liste'){
-    targets=allChars.filter(C=>(ev.zielListe||[]).includes(C.MemberNumber)&&_okEv(ev,C,rohText,typKey));
-  } else if(ev.ziel==='zufaellig'){
-    const pool=allChars.filter(C=>C.MemberNumber!==Player.MemberNumber&&_okEv(ev,C,rohText,typKey));
-    const src=pool.length?pool:allChars.filter(C=>_okEv(ev,C,rohText,typKey));
-    if(src.length) targets=[src[Math.floor(Math.random()*src.length)]];
-  } else {
-    // ausloeser
-    const C=triggerC&&allChars.some(c=>c.MemberNumber===triggerC.MemberNumber)?triggerC:null;
-    if(C&&_okEv(ev,C,rohText,typKey)){
-      targets=[C];
-    } else if(!C){
-      // Kein Auslöser (timer/interval) → zufälliger Spieler
-      const pool=allChars.filter(c=>c.MemberNumber!==Player.MemberNumber&&_okEv(ev,c,rohText,typKey));
-      if(pool.length) targets=[pool[Math.floor(Math.random()*pool.length)]];
-    }
-  }
-
-  if(!targets.length){ _log('\\u26A0 "'+ev.name+'" – kein Ziel gefunden'); if(onDone)onDone(); return false; }
-  _log('\\u26A1 "'+ev.name+'" \\u2192 '+targets.map(C=>C.Name).join(', '));
-
-  let pending=targets.length;
-  const fired=()=>{
-    pending--;
-    if(pending<=0){
-      _evFiredCnt[ev.id]=(_evFiredCnt[ev.id]??0)+1;
-      // Log ans Popup
-      try{ window.__BCK_popupRef?.postMessage({
-        app:'BCKonfigurator', type:'BOT_LOG',
-        entry:{ ts:Date.now(), botId:'evset_${safeId}', botName:'${safeName}',
-          trigName:ev.name, trigId:ev.id,
-          player:(targets[0]?.Name??'?')+' #'+(targets[0]?.MemberNumber??''),
-          memberNum:targets[0]?.MemberNumber, x:0, y:0, status:'ok' }
-      },'*'); }catch(e){}
-      if(onDone)onDone();
-    }
-  };
-
-  targets.forEach(C=>{
-    const vars={name:C.Name,wort:rohText||'',typ:typKey||'',x:C.X??0,y:C.Y??0,zone:'',C};
-    _runSeq(ev.aktionen??[], C, vars,
-      fired, // onDone
-      ()=>{  // onUngueltig (bei_fehler=trigger_ungueltig)
-        _log('\\u274C "'+ev.name+'" ungültig für '+C.Name);
-        if(ev.fallbackTyp&&ev.fallbackTyp!=='nichts'&&ev.fallbackText){
-          const ft={chat:'Chat',emote:'Emote'}[ev.fallbackTyp]??'Chat';
-          ServerSend('ChatRoomChat',{Content:_tpl(ev.fallbackText,vars),Type:ft});
-        }
-        pending--;
-        if(pending<=0&&onDone)onDone();
-      }
-    );
-  });
-  return true;
-}
-
-// ════════════════════════════════════════════════════════════════
-//  TIMER-SYSTEM (aus bereitgestelltem Timer-Pattern)
-// ════════════════════════════════════════════════════════════════
-const Timer=(()=>{
-  const aktive={};
-  function _fmt(ms){ return (ms/1000).toFixed(1)+'s'; }
-  function in_(sek,cb,name){ const ms=sek*1000; _log('\\u23F1 ['+name+'] in '+_fmt(ms));
-    const id=setTimeout(()=>{ _log('\\u{1F514} ['+name+'] gefeuert'); delete aktive[name]; cb(); },ms);
-    aktive[name]={id,typ:'timeout',ms}; return name; }
-  function alle(sek,cb,name){ const ms=sek*1000; _log('\\u{1F501} ['+name+'] alle '+_fmt(ms));
-    const id=setInterval(()=>{ _log('\\u{1F514} ['+name+'] gefeuert'); cb(); },ms);
-    aktive[name]={id,typ:'interval',ms}; return name; }
-  function zwischen(minSek,maxSek,cb,name){
-    _log('\\u{1F3B2} ['+name+'] '+minSek+'s–'+maxSek+'s');
-    function _next(){ const ms=Math.floor(Math.random()*(maxSek-minSek+1)+minSek)*1000;
-      _log('\\u23F3 ['+name+'] nächstes in '+_fmt(ms));
-      const id=setTimeout(()=>{ _log('\\u{1F514} ['+name+'] gefeuert'); cb(); _next(); },ms);
-      aktive[name]={id,typ:'random',min:minSek,max:maxSek}; }
-    _next(); return name; }
-  function stop(name){ const t=aktive[name]; if(!t)return;
-    clearTimeout(t.id); clearInterval(t.id); delete aktive[name]; _log('\\u23F9 ['+name+'] gestoppt'); }
-  function stopAlle(){ Object.keys(aktive).forEach(stop); }
-  return {in:in_,alle,zwischen,stop,stopAlle,aktive};
-})();
-
-// ════════════════════════════════════════════════════════════════
-//  CHAT-EVENTS: Eigene + fremde Nachrichten hören
-// ════════════════════════════════════════════════════════════════
-function _procChat(rohText, typKey, C){
-  if(!C?.MemberNumber)return; // Null-Guard gegen MemberNumber-Fehler
-
-  // Von-Filter
-  _evts.forEach(ev=>{
-    if(!ev.aktiv)return;
-    const beds=ev.bedingungen??[];
-
-    // Nur Chat-Events: mindestens eine 'wort'-Bedingung, kein Timer/Interval/Betritt
-    const hasWort   =beds.some(c=>c.typ==='wort');
-    const hasAuto   =beds.some(c=>c.typ==='ev_timer'||c.typ==='ev_interval'||c.typ==='player_betritt');
-    if(!hasWort&&beds.length>0)return; // kein Wort → nicht für Chat
-    if(hasAuto)return;                  // Timer/Betritt → nicht hier
-
-    // Von-Filter
-    if(ev.von==='bot'&&C.MemberNumber!==Player.MemberNumber)return;
-    if(ev.von==='nummer'&&C.MemberNumber!==+ev.vonNummer)return;
-    // 'alle' → kein Filter
-
-    // Hear-Filter
-    if(typKey==='chat'&&!_cfg.hearChat)return;
-    if(typKey==='emote'&&!_cfg.hearEmote)return;
-    if(typKey==='whisper'&&!_cfg.hearWhisper)return;
-
-    if(_okEv(ev,C,rohText,typKey)){
-      _log('\\u{1F4AC} Chat-Event "'+ev.name+'" von '+C.Name+': '+rohText.substring(0,30));
-      _fireEv(ev,C,rohText,typKey,null);
-    }
-  });
-}
-
-// ════════════════════════════════════════════════════════════════
-//  TIMER + INTERVALL EVENTS: Automatisch beim Start
-// ════════════════════════════════════════════════════════════════
-function _scheduleTimerEvents(){
-  _evts.forEach(ev=>{
-    if(!ev.aktiv)return;
-    const beds=ev.bedingungen??[];
-    const timerC=beds.find(c=>c.typ==='ev_timer');
-    const intC  =beds.find(c=>c.typ==='ev_interval');
-
-    if(timerC){
-      const sek=timerC.sek??10;
-      Timer.in(sek,()=>{
-        _log('\\u23F1 Timer-Event "'+ev.name+'"');
-        _fireEv(ev,null,null,'timer',null);
-      },'ev_t_'+ev.id);
-    }
-
-    if(intC){
-      const minSek=intC.sek_min??30, maxSek=intC.sek_max??180;
-      // Zufälliges Intervall mit Wiederholungs-Check
-      const name='ev_i_'+ev.id;
-      function _next(){
-        const cnt=_evFiredCnt[ev.id]??0;
-        if(ev.wiederholung==='einmalig'&&cnt>=1){ _log('\\u23F9 Interval "'+ev.name+'" fertig'); Timer.stop(name); return; }
-        if(ev.wiederholung==='n_mal'&&cnt>=(ev.maxMal??2)){ _log('\\u23F9 Interval "'+ev.name+'" max'); Timer.stop(name); return; }
-        const ms=Math.floor(Math.random()*(maxSek-minSek+1)+minSek)*1000;
-        _log('\\u{1F501} Interval "'+ev.name+'" in '+(ms/1000|0)+'s');
-        // Status ans Popup
-        try{ window.__BCK_popupRef?.postMessage({app:'BCKonfigurator',type:'BOT_EV_STATUS',
-          evId:ev.id, nextMs:ms, lo:minSek*1000, hi:maxSek*1000, cnt},'*'); }catch(e){}
-        const id=setTimeout(()=>{
-          _log('\\u{1F501} Interval-Event "'+ev.name+'" feuert!');
-          _fireEv(ev,null,null,'interval',()=>_next());
-          // _next wird in onDone aufgerufen → nach Abschluss neu planen
-        }, ms);
-        Timer.aktive[name]={id,typ:'random',min:minSek,max:maxSek};
-      }
-      _next();
-    }
-  });
-}
-
-// ════════════════════════════════════════════════════════════════
-//  BETRITT-EVENTS: Spieler tritt dem Raum bei
-// ════════════════════════════════════════════════════════════════
-const _joinSeen=new Set(
-  (ChatRoomCharacter||[]).filter(c=>c?.MemberNumber).map(c=>c.MemberNumber)
-);
-const _joinPollId=setInterval(()=>{
-  const cur=(ChatRoomCharacter||[]).filter(c=>c?.MemberNumber);
-  const curSet=new Set(cur.map(c=>c.MemberNumber));
-
-  for(const C of cur){
-    if(!C?.MemberNumber)continue; // Null-Guard
-    if(!_joinSeen.has(C.MemberNumber)){
-      _joinSeen.add(C.MemberNumber);
-      _evts.forEach(ev=>{
-        if(!ev.aktiv)return;
-        const hasBetritt=(ev.bedingungen??[]).some(c=>c.typ==='player_betritt');
-        if(!hasBetritt)return;
-        if(ev.von==='bot'&&C.MemberNumber!==Player.MemberNumber)return;
-        if(ev.von==='nummer'&&C.MemberNumber!==+ev.vonNummer)return;
-        _log('\\u{1F6AA} Betritt-Event "'+ev.name+'" \\u2192 '+C.Name);
-        _fireEv(ev,C,'','betritt',null);
-      });
-    }
-  }
-  // Gesehene bereinigen (Leaver entfernen)
-  for(const num of [..._joinSeen]){
-    if(!curSet.has(num)) _joinSeen.delete(num);
-  }
-}, 2000);
-
-// ════════════════════════════════════════════════════════════════
-//  NACHRICHTEN-HOOK: Eigene + fremde Nachrichten abfangen
-// ════════════════════════════════════════════════════════════════
-let _evMod=null;
-try{
-  const modName='BCEvSet_${safeId}_'+Date.now();
-  _evMod=bcModSdk.registerMod({name:modName,fullName:'${safeName} Events',version:'1.0'});
-  _evMod.hookFunction('ChatRoomSendChat',0,(args,next)=>{
-    try{
-      const d=args[0];
-      const raw=(typeof d==='object'?d?.Content:null)
-             ??document.getElementById('InputChat')?.value?.trim()??'';
-      if(raw){
-        const isE=d?.Type==='Emote'||(!d?.Type&&raw.startsWith('*')&&raw.endsWith('*'));
-        const isW=d?.Type==='Whisper'||(!d?.Type&&(raw.startsWith('/w ')||raw.startsWith('/whisper ')));
-        const tk=isE?'emote':isW?'whisper':'chat';
-        _procChat(raw,tk,Player);
-      }
-    }catch(hookEx){ _log('\\u26A0 Hook Fehler:',hookEx.message); }
-    return next(args);
-  });
-  _log('\\u2705 hookFunction aktiv (eigene Nachrichten)');
-}catch(e){
-  _log('\\u26A0 hookFunction n/v, nutze ServerSend-Patch');
-  const _orig=window.ServerSend;
-  if(typeof _orig==='function'){
-    window.__BCEvSet_origSend_${safeId}=_orig;
-    window.ServerSend=function(ch,data,...r){
-      if(ch==='ChatRoomChat'&&data?.Content&&['Chat','Emote','Whisper'].includes(data?.Type??'Chat')){
-        const tk=(data.Type||'Chat').toLowerCase();
-        setTimeout(()=>{ try{_procChat(data.Content,tk,Player);}catch(e){} },0);
-      }
-      return _orig.call(this,ch,data,...r);
-    };
-  }
-}
-
-// Andere Spieler via ServerSocket
-const _msgH=function(data){
-  try{
-    if(!['Chat','Emote','Whisper'].includes(data.Type))return;
-    if(data.Sender===Player.MemberNumber)return; // eigene via hookFunction
-    const C=(ChatRoomCharacter||[]).find(c=>c?.MemberNumber===data.Sender)??null;
-    if(!C?.MemberNumber)return; // Null-Guard!
-    const tk=data.Type.toLowerCase();
-    _procChat(data.Content,tk,C);
-  }catch(e){ _log('\\u26A0 msgH Fehler:',e.message); }
-};
-ServerSocket.on('ChatRoomMessage',_msgH);
-
-// ════════════════════════════════════════════════════════════════
-//  START
-// ════════════════════════════════════════════════════════════════
-_scheduleTimerEvents();
-_log('\\u25B6\\uFE0F Event-Set aktiv | '+_evts.length+' Events geladen');
-
-// ── API (Stopp, manuelles Auslösen) ──────────────────────────────
-window['_BCEvSet_'+_EID]={
-  stop(){
-    clearInterval(_joinPollId);
-    Timer.stopAlle();
-    ServerSocket.off('ChatRoomMessage',_msgH);
-    try{ if(_evMod)_evMod.removePatches(); }catch(e){}
-    if(window.__BCEvSet_origSend_${safeId}){
-      window.ServerSend=window.__BCEvSet_origSend_${safeId};
-      delete window.__BCEvSet_origSend_${safeId};
-    }
-    delete window['_BCEvSet_'+_EID];
-    _log('\\u23F9 Event-Set gestoppt');
-  },
-  // Event sofort auslösen (ignoriert Wiederholung)
-  fireNow(eid){
-    const ev=_evts.find(e=>e.id===eid);
-    if(!ev){ console.warn('[EvSet] Event nicht gefunden:',eid); return; }
-    const saved=ev.wiederholung; ev.wiederholung='immer';
-    _fireEv(ev,null,null,'manuell',null);
-    ev.wiederholung=saved;
-  },
-  get evts(){ return _evts; },
-  get firedCnt(){ return _evFiredCnt; },
-  get timer(){ return Timer; }
-};
-})();`;
-}
-
 
 function botDeployById(id) {
   const b = _bots.find(x=>x.id===id); if (!b) return;
