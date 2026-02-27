@@ -929,6 +929,14 @@ button { cursor: pointer; }
 .section { animation: sectionIn .2s ease; }
 
 
+
+.curse-row.fav { background: rgba(251,191,36,0.04); }
+.curse-row.fav:hover { background: rgba(251,191,36,0.08); }
+.fav-cell { width: 28px; text-align: center; cursor: pointer; user-select: none; padding: 6px 4px !important; font-size: 1rem; transition: transform .15s; }
+.fav-cell:hover { transform: scale(1.3); }
+
+.change-added   { color: #6fcf97; }
+.change-updated { color: #f2994a; }
 </style>
 </head>
 <body>
@@ -963,7 +971,6 @@ button { cursor: pointer; }
   <button class="tab-btn"        id="tab-curse-btn"  onclick="switchTab('curse')">🔮 Craft &amp; Curse</button>
   <button class="tab-btn"        id="tab-bot-btn"    onclick="switchTab('bot')">🤖 Bot</button>
   <button class="tab-btn"        id="tab-log-btn"    onclick="switchTab('log')">📋 Logs</button>
-  <button class="tab-btn"        id="tab-events-btn" onclick="switchTab('events')">⚡ Events</button>
   <button class="tab-btn"        id="tab-money-btn"  onclick="switchTab('money')">💰 Money</button>
 </div>
 
@@ -2323,6 +2330,62 @@ function addToOutfit() {
   const isOther   = document.getElementById('targetMode').value === 'other';
   const memberNum = parseInt(document.getElementById('targetMember')?.value)||0;
 
+
+  // ── Konflikt-Check: Neues Item blockt existierende Outfit-Slots ──────────
+  if (cfg) {
+    const blockedByAsset = new Set(cfg.block || []);
+
+    // Optionen-Block: aktiv für gerade gewählte Optionen
+    const blockedByOptions = new Set();
+    for (const key in (cfg.typeKeys || {})) {
+      for (const idx of (dimSelected[key] || new Set())) {
+        const opt = cfg.typeKeys[key][idx];
+        for (const b of (opt?.block || [])) blockedByOptions.add(b);
+      }
+    }
+    const allBlocked = new Set([...blockedByAsset, ...blockedByOptions]);
+
+    // Vorhandene Items die durch das neue blockiert würden
+    const conflicts = OUTFIT.filter(item => allBlocked.has(item.group));
+    if (conflicts.length > 0) {
+      const src = blockedByAsset.size ? 'Asset-Block' : 'Options-Block';
+      const msg =
+        `⚠️ Slot-Konflikt!\n\n` +
+        `„${asset}" (${group}) hat Block-Gruppen [${src}]:\n` +
+        `${[...allBlocked].map(b => '  • ' + b).join('\n')}\n\n` +
+        `Folgende Items würden dadurch entfernt:\n` +
+        `${conflicts.map(i => `  • ${i.group}  →  „${i.asset}"`).join('\n')}\n\n` +
+        `→ OK = Trotzdem hinzufügen   → Abbrechen = Nichts ändern`;
+      if (!confirm(msg)) return;
+    }
+
+    // Umgekehrter Check: existierende Items blocken das neue
+    const blockedByExisting = [];
+    for (const existing of OUTFIT) {
+      const eb = new Set(existing.cfg?.block || []);
+      for (const key in (existing.cfg?.typeKeys || {})) {
+        const selVal = (existing.tr || {})[key];
+        if (selVal != null) {
+          const opts = existing.cfg.typeKeys[key] || [];
+          for (let idx = 0; idx < opts.length; idx++) {
+            const isSel = (selVal & Math.pow(2, idx)) > 0 || selVal === idx;
+            if (isSel) for (const b of (opts[idx]?.block || [])) eb.add(b);
+          }
+        }
+      }
+      if (eb.has(group)) blockedByExisting.push(existing);
+    }
+    if (blockedByExisting.length > 0) {
+      const msg =
+        `⚠️ Umgekehrter Konflikt!\n\n` +
+        `Folgende Outfit-Items blockieren „${asset}" (${group}):\n` +
+        `${blockedByExisting.map(i => `  • „${i.asset}" (${i.group})`).join('\n')}\n\n` +
+        `Das bedeutet: „${asset}" würde von BC wieder entfernt.\n\n` +
+        `→ OK = Trotzdem hinzufügen   → Abbrechen = Nichts ändern`;
+      if (!confirm(msg)) return;
+    }
+  }
+
   OUTFIT.push({
     group, asset, cfg, colors, tr, trStr, typeStr, propCode, craftStr,
     lock, lockParams,
@@ -2552,7 +2615,7 @@ function switchTab(tab) {
   if (tab === 'bot')    { renderBotTab(); }
   if (tab === 'log')    { renderLogTab(); }
   if (tab === 'money')  { renderMoneyTab(); }
-  if (tab === 'events') { renderEventsTab(); }
+
 }
 
 // ── addToOutfit: auto-switch tab + auto-generate code after adding ──
@@ -2574,6 +2637,60 @@ function _autoOutfitCode() {
 // ══════════════════════════════════════════════════════
 //  CURSE STATE
 // ══════════════════════════════════════════════════════
+
+// ── Intervall-Event Laufzeit-Status (Countdown im UI) ────────────────────
+let _evIntervalStatus = {};
+function _evIntervalStatusUpdate(evId, nextMs, lo, hi, cnt) {
+  _evIntervalStatus[evId] = { nextFireAt: Date.now() + nextMs, lo, hi, cnt };
+  if (_activeTab === 'bot') _renderIntervalCountdowns();
+}
+function _renderIntervalCountdowns() {
+  Object.entries(_evIntervalStatus).forEach(([evId, s]) => {
+    const el = document.getElementById('trig-countdown-' + evId);
+    if (!el) return;
+    const rem = Math.max(0, Math.ceil((s.nextFireAt - Date.now()) / 1000));
+    el.textContent = '⏱ ' + rem + 's | 🔥 ' + s.cnt + '×';
+  });
+}
+setInterval(() => {
+  if (_activeTab === 'bot' && Object.keys(_evIntervalStatus).length) _renderIntervalCountdowns();
+}, 1000);
+
+// ── Auto-Curse-Scan ───────────────────────────────────────────
+let _autoCurseScanTimer = null;
+function toggleAutoCurseScan() {
+  const btn = document.getElementById('csAutoScanBtn');
+  if (_autoCurseScanTimer) {
+    clearInterval(_autoCurseScanTimer);
+    _autoCurseScanTimer = null;
+    if (btn) { btn.textContent = '⏰ Auto-Scan'; btn.classList.remove('on'); }
+    showStatus('⏰ Auto-Scan deaktiviert', 'info');
+  } else {
+    _autoCurseScanTimer = setInterval(() => {
+      if (_connected) {
+        const prevDb = JSON.stringify(CURSE_DB);
+        bcSend({ type: 'SCAN_CURSES', _auto: true });
+        bcSend({ type: 'GET_CACHE' });
+      }
+    }, 30000);
+    if (btn) { btn.textContent = '⏰ Auto (30s)'; btn.classList.add('on'); }
+    showStatus('⏰ Auto-Scan aktiv – alle 30s', 'success');
+  }
+}
+
+// ── Change-Detection für Curse-Scan ──────────────────────────
+function _showChangeBadge(added, updated) {
+  const el = document.getElementById('csChangeBadge');
+  if (!el) return;
+  if (!added.length && !updated.length) { el.style.display = 'none'; return; }
+  const parts = [];
+  if (added.length)   parts.push(`<span class="change-added">+${added.length} neu</span>`);
+  if (updated.length) parts.push(`<span class="change-updated">~${updated.length} geändert</span>`);
+  el.innerHTML = '🔔 Änderungen: ' + parts.join(' · ');
+  el.style.display = '';
+  setTimeout(() => { el.style.display = 'none'; }, 15000);
+}
+
 let CURSE_DB    = {};   // key → entry (from CurseScanner.database)
 let CURSE_LSCG  = {};   // key → entry (from CurseScanner.lscgTable)
 let CURSE_CACHE_LSCG = {}; // from lscgCache
@@ -2585,6 +2702,37 @@ try { CURSE_COMMENTS = JSON.parse(localStorage.getItem('BC_CURSE_COMMENTS_v1') |
 function _saveCurseComments() {
   try { localStorage.setItem('BC_CURSE_COMMENTS_v1', JSON.stringify(CURSE_COMMENTS)); } catch {}
 }
+// ── Favoriten ────────────────────────────────────────────────
+let CURSE_FAVOURITES = new Set();
+try { CURSE_FAVOURITES = new Set(JSON.parse(localStorage.getItem('BC_CURSE_FAV_v1') || '[]')); } catch {}
+function _saveCurseFavourites() {
+  try { localStorage.setItem('BC_CURSE_FAV_v1', JSON.stringify([...CURSE_FAVOURITES])); } catch {}
+}
+function toggleCurseFavourite(dbKey, cellEl) {
+  const wasFav = CURSE_FAVOURITES.has(dbKey);
+  if (wasFav) CURSE_FAVOURITES.delete(dbKey); else CURSE_FAVOURITES.add(dbKey);
+  _saveCurseFavourites();
+  if (cellEl) {
+    const isFav = !wasFav;
+    cellEl.innerHTML = isFav ? '⭐' : '<span style="opacity:.25;font-size:.85em">☆</span>';
+    const row = cellEl.closest('tr');
+    if (row) row.classList.toggle('fav', isFav);
+    // Fav-Zähler im Owner-Block aktualisieren
+    const block = cellEl.closest('.curse-owner-block');
+    if (block) {
+      const badge = block.querySelector('.curse-owner-fav-badge');
+      const cnt = block.querySelectorAll('.curse-row.fav').length;
+      if (badge) {
+        badge.textContent = '⭐ ' + cnt;
+        badge.style.display = cnt > 0 ? '' : 'none';
+      }
+    }
+  } else {
+    renderCurseTab();
+  }
+}
+
+
 
 // ── Scan ─────────────────────────────────────────────
 function curseScan() {
@@ -2599,6 +2747,7 @@ function curseScan() {
 // called from postMessage handler
 function _handleCurseData(data) {
   if (data.err) { showStatus('❌ Curse-Scan: ' + data.err, 'error'); return; }
+  const prevDB = {...CURSE_DB};
   CURSE_DB         = data.database    ?? {};
   CURSE_LSCG       = data.lscgTable   ?? {};
   CURSE_CACHE_LSCG = data.lscgCache   ?? {};
@@ -2606,10 +2755,25 @@ function _handleCurseData(data) {
   _populateSlotFilter();
   if (_activeTab === 'curse') renderCurseTab();
   const total = Object.keys(CURSE_DB).length;
-  document.getElementById('csScanStatus').textContent = '✅ ' + total + ' Crafts';
-  showStatus('✅ Curse-Scan: ' + total + ' Crafts', 'success');
+  const isAuto = data._auto === true;
+  // Change-Detection
+  const added   = Object.keys(CURSE_DB).filter(k => !prevDB[k]);
+  const updated = Object.keys(CURSE_DB).filter(k => prevDB[k] && JSON.stringify(prevDB[k]) !== JSON.stringify(CURSE_DB[k]));
+  let statusText = '✅ ' + total + ' Crafts';
+  if (added.length || updated.length) {
+    statusText += ' | +' + added.length + ' neu, ' + updated.length + ' geändert';
+    _showChangeBadge(added, updated);
+  } else if (!isAuto) {
+    statusText += ' | keine Änderungen';
+  }
+  document.getElementById('csScanStatus').textContent = isAuto
+    ? '🔄 ' + new Date().toLocaleTimeString() + ' — ' + total + ' Crafts'
+    : statusText;
+  if (!isAuto || added.length || updated.length) {
+    showStatus(statusText, added.length + updated.length > 0 ? 'success' : 'info');
+  }
   // persist
-  try { localStorage.setItem('BC_CURSE_DB_v1', JSON.stringify({database:CURSE_DB,lscgTable:CURSE_LSCG,lscgCache:CURSE_CACHE_LSCG})); } catch {}
+  try { localStorage.setItem('BC_CURSE_DB_v1', JSON.stringify({database:CURSE_DB,lscgTable:CURSE_LSCG,lscgCache:CURSE_CACHE_LSCG,favourites:[...CURSE_FAVOURITES]})); } catch {}
 }
 
 
@@ -2626,7 +2790,7 @@ function toggleCacheFilter() {
 
 function setCurseFilter(f) {
   _curseFilter = f;
-  ['all','cursed','lscg'].forEach(k => {
+  ['all','cursed','lscg','fav'].forEach(k => {
     const el = document.getElementById('fc-' + k);
     if (el) el.classList.toggle('on', k === f);
   });
@@ -2664,6 +2828,12 @@ function renderCurseTab() {
   let entries = Object.values(CURSE_DB);
   if (_curseFilter === 'cursed') entries = entries.filter(e => !!e.IstCursed);
   if (_curseFilter === 'lscg')   entries = entries.filter(e => !!e.IstLSCGCurse);
+  if (_curseFilter === 'fav') {
+    entries = entries.filter(e => {
+      const k = (e.Besitzer?.Nummer ?? '') + ':' + e.ItemName + ':' + e.CraftName;
+      return CURSE_FAVOURITES.has(k);
+    });
+  }
   if (cacheOnly)   entries = entries.filter(e => !!e.IstLSCGCurse);
   if (slotFilter)  entries = entries.filter(e => e.Gruppe === slotFilter);
   if (searchTerm)  entries = entries.filter(e =>
@@ -2704,6 +2874,10 @@ function renderCurseTab() {
 
     const lscgCount = owner.items.filter(i => i.IstLSCGCurse).length;
     const cursedCount = owner.items.filter(i => i.IstCursed).length;
+    const ownerFavCount = owner.items.filter(i => {
+      const k2 = (i.Besitzer?.Nummer ?? '') + ':' + i.ItemName + ':' + i.CraftName;
+      return CURSE_FAVOURITES.has(k2);
+    }).length;
 
     block.innerHTML =
       '<div class="curse-owner-hdr" onclick="toggleCurseOwner(\'' + blockId + '\')">'+
@@ -2712,9 +2886,11 @@ function renderCurseTab() {
         (lscgCount ? '<span class="curse-owner-count" style="background:var(--gd);color:var(--green)">🧿 '+lscgCount+'</span>' : '')+
         (cursedCount ? '<span class="curse-owner-count">🔮 '+cursedCount+'</span>' : '')+
         '<span class="curse-owner-count" style="background:var(--bg3);color:var(--text2)">'+owner.items.length+'</span>'+
+        (ownerFavCount ? '<span class="curse-owner-count curse-owner-fav-badge" style="background:rgba(251,191,36,.12);color:#fbbf24;border-color:rgba(251,191,36,.3)">⭐ '+ownerFavCount+'</span>' : '<span class="curse-owner-fav-badge" style="display:none"></span>')+
         '<span class="curse-owner-chevron">▶</span>'+
       '</div>'+
       '<table class="curse-rows"><thead><tr style="background:var(--bg3)">'+
+        '<th style="padding:4px 4px;font-size:.63rem;color:var(--text3);text-align:center;font-weight:500" title="Favorit">⭐</th>'+
         '<th style="padding:4px 10px;font-size:.63rem;color:var(--text3);text-align:left;font-weight:500">Name</th>'+
         '<th style="padding:4px 10px;font-size:.63rem;color:var(--text3);text-align:left;font-weight:500">Item</th>'+
         '<th style="padding:4px 10px;font-size:.63rem;color:var(--text3);text-align:left;font-weight:500">Gruppe</th>'+
@@ -2737,7 +2913,8 @@ function renderCurseTab() {
       const isCursed = entry.IstCursed;
 
       const tr = document.createElement('tr');
-      tr.className = 'curse-row' + (isLSCG ? ' lscg' : '');
+      const isFav = CURSE_FAVOURITES.has(dbKey);
+    tr.className = 'curse-row' + (isLSCG ? ' lscg' : '') + (isFav ? ' fav' : '');
       tr.id = rowId;
 
       const lscgText = isLSCG
@@ -2746,6 +2923,9 @@ function renderCurseTab() {
         : '<span style="color:var(--text3)">–</span>';
 
       tr.innerHTML =
+        '<td class="fav-cell" onclick="toggleCurseFavourite(\\'' + dbKey + '\\',this)" title="Favorit">'+
+          (isFav ? '⭐' : '<span style="opacity:.25;font-size:.85em">☆</span>')+
+        '</td>'+
         '<td class="cn"><span class="cursor-detail-toggle" onclick="toggleCurseDetail(\'' + detId + '\',\'' + rowId + '\')">▶</span>'+escHtml(entry.CraftName)+'</td>'+
         '<td class="item">'+escHtml(entry.ItemName)+'</td>'+
         '<td class="grp">'+escHtml(entry.Gruppe)+'</td>'+
@@ -2859,7 +3039,7 @@ function _tryFinishExport() {
   const mergedCraft = Object.assign({}, CURSE_DB, _exportCraftCache);
   Object.assign(CURSE_CACHE_LSCG, _exportLscgCache);
   Object.assign(CURSE_DB, _exportCraftCache);
-  try { localStorage.setItem('BC_CURSE_DB_v1', JSON.stringify({database:CURSE_DB,lscgTable:CURSE_LSCG,lscgCache:CURSE_CACHE_LSCG})); } catch {}
+  try { localStorage.setItem('BC_CURSE_DB_v1', JSON.stringify({database:CURSE_DB,lscgTable:CURSE_LSCG,lscgCache:CURSE_CACHE_LSCG,favourites:[...CURSE_FAVOURITES]})); } catch {}
   const payload = {
     _meta: { exportedAt: new Date().toISOString(), version: 3 },
     database: mergedCraft,
@@ -2905,7 +3085,7 @@ function curseImport() {
         CURSE_CACHE_LSCG = d.lscgCache ?? {};
         if (d.comments) Object.assign(CURSE_COMMENTS, d.comments);
         _saveCurseComments();
-        try { localStorage.setItem('BC_CURSE_DB_v1', JSON.stringify({database:CURSE_DB,lscgTable:CURSE_LSCG,lscgCache:CURSE_CACHE_LSCG})); } catch {}
+        try { localStorage.setItem('BC_CURSE_DB_v1', JSON.stringify({database:CURSE_DB,lscgTable:CURSE_LSCG,lscgCache:CURSE_CACHE_LSCG,favourites:[...CURSE_FAVOURITES]})); } catch {}
         if (_connected && Object.keys(CURSE_DB).length > 0) {
           bcSend({ type: 'LOAD_CURSE_DB', database: CURSE_DB }, true);
           if (Object.keys(CURSE_CACHE_LSCG).length > 0) {
@@ -2916,7 +3096,8 @@ function curseImport() {
         }
         _updateCurseStats();
         if (_activeTab === 'curse') renderCurseTab();
-        showStatus('✅ Import: ' + Object.keys(CURSE_DB).length + ' Crafts', 'success');
+        if (d.favourites) { d.favourites.forEach(k => CURSE_FAVOURITES.add(k)); _saveCurseFavourites(); }
+                showStatus('✅ Import: ' + Object.keys(CURSE_DB).length + ' Crafts', 'success');
       } catch (err) { showStatus('❌ Import fehlgeschlagen: ' + err.message, 'error'); }
     };
     r.readAsText(e.target.files[0]);
@@ -3079,6 +3260,9 @@ window.addEventListener('message', function(ev) {
       }
       break;
 
+    case 'BOT_EV_STATUS':
+      _evIntervalStatusUpdate(ev.data.evId, ev.data.nextMs, ev.data.lo, ev.data.hi, ev.data.cnt);
+      break;
     case 'BOT_LOG':
       logPush(ev.data.entry);
       break;
@@ -3433,6 +3617,7 @@ function selectRoomMember(num) {
   <div class="curse-topbar">
     <button class="btn btn-green" onclick="curseScan()">🔍 Scannen</button>
     <button class="btn btn-green" onclick="curseClearAndScan()" title="Alte Einträge löschen und frisch scannen">🔄 Neu scannen</button>
+    <button class="btn btn-primary" id="csAutoScanBtn" onclick="toggleAutoCurseScan()" title="Automatisch alle 30s scannen">⏰ Auto-Scan</button>
     <button class="btn btn-primary" onclick="curseExport()">⬇️ Export</button>
     <button class="btn btn-primary" onclick="curseImport()">⬆️ Import</button>
     <button class="btn btn-red" onclick="curseClear()" title="Alle gespeicherten Einträge löschen">🗑️ Leeren</button>
@@ -3444,6 +3629,8 @@ function selectRoomMember(num) {
     </div>
     <span id="csScanStatus" style="font-size:.7rem;color:var(--text3)"></span>
   </div>
+  <div id="csChangeBadge" style="display:none;padding:4px 10px;font-size:.68rem;background:var(--bg3);border-bottom:1px solid var(--border);color:var(--text2)">
+  </div>
   <!-- Filter bar -->
   <div class="curse-filter-bar" id="curseFilterBar">
     <input class="curse-search" id="curseSearch" placeholder="🔍 Name, Item, Gruppe..." oninput="renderCurseTab()">
@@ -3451,6 +3638,8 @@ function selectRoomMember(num) {
     <span class="filter-chip on" id="fc-all"      onclick="setCurseFilter('all')"     >Alle</span>
     <span class="filter-chip"    id="fc-cursed"   onclick="setCurseFilter('cursed')"  >🔮 Cursed</span>
     <span class="filter-chip"    id="fc-lscg"     onclick="setCurseFilter('lscg')"   >🧿 LSCG</span>
+    <div class="filter-sep"></div>
+    <span class="filter-chip" id="fc-fav" onclick="setCurseFilter('fav')" title="Nur Favoriten">⭐ Favoriten</span>
     <div class="filter-sep"></div>
     <span class="filter-chip" id="fc-cache" onclick="toggleCacheFilter()" title="Nur Einträge mit LSCG-Daten anzeigen">💾 Im Cache</span>
     <div class="filter-sep"></div>
@@ -3524,11 +3713,7 @@ function selectRoomMember(num) {
   <div id="log-entries" style="overflow-y:auto;height:calc(100vh - 162px);padding:10px 14px;display:flex;flex-direction:column;gap:4px"></div>
 </div>
 
-<div id="tab-events" class="tab-pane">
-  <div id="events-container" style="padding:12px 18px;overflow-y:auto;height:calc(100vh - 108px)">
-    <div style="color:var(--text3);font-size:.72rem">Lade...</div>
-  </div>
-</div>
+
 
 <div id="tab-money" class="tab-pane">
   <div style="display:flex;gap:18px;padding:14px 18px;border-bottom:1px solid var(--border);align-items:center;flex-wrap:wrap">
@@ -4405,6 +4590,8 @@ function renderTrigCard(bot, t, i) {
           <button onclick="trigAddCond('${t.id}','item_traegt_nicht')">+ Item trägt NICHT</button>
           <button onclick="trigAddCond('${t.id}','trigger_war')">+ Vortrigger</button>
           <button onclick="trigAddCond('${t.id}','player_betritt')">+ Spieler betritt</button>
+          <button onclick="trigAddCond('${t.id}','ev_timer')" title="Einmalig nach X Sekunden automatisch feuern">⏱ Timer</button>
+          <button onclick="trigAddCond('${t.id}','ev_interval')" title="Wiederholt alle X–Y Sekunden feuern">🔁 Intervall</button>
         </div>
         <div id="conds-${t.id}">${(t.bedingungen||[]).map((c,ci)=>renderCond(bot,t.id,c,ci)).join('')}</div>
       </div>
@@ -4487,7 +4674,21 @@ function renderCond(bot, tid, c, ci) {
         <option value="rejoin" ${bt==='rejoin'?'selected':''}>🔄 Nur Rejoin (war schon da)</option>
       </select>`;
   }
-  const icons = {wort:'💬',zone:'🗺️',zone_rect:'📐',item_traegt:'👗',item_traegt_nicht:'🚫',trigger_war:'🔗',player_betritt:'👋'};
+  if (c.typ === 'ev_timer') {
+    inner = `<span style="font-size:.65rem;color:var(--text3)">Einmalig nach</span>
+      <input class="cf cf-w80" type="number" min="1" step="1" value="${c.sek??10}"
+        oninput="condField('${tid}',${ci},'sek',+this.value)">
+      <span style="font-size:.65rem;color:var(--text3)">Sekunden automatisch feuern</span>`;
+  } else if (c.typ === 'ev_interval') {
+    inner = `<span style="font-size:.65rem;color:var(--text3)">Alle</span>
+      <input class="cf cf-w70" type="number" min="1" value="${c.sek_min??30}"
+        oninput="condField('${tid}',${ci},'sek_min',+this.value)">
+      <span style="font-size:.62rem;color:var(--text3)">–</span>
+      <input class="cf cf-w70" type="number" min="1" value="${c.sek_max??180}"
+        oninput="condField('${tid}',${ci},'sek_max',+this.value)">
+      <span style="font-size:.65rem;color:var(--text3)">Sekunden wiederholt feuern</span>`;
+  }
+  const icons = {wort:'💬',zone:'🗺️',zone_rect:'📐',item_traegt:'👗',item_traegt_nicht:'🚫',trigger_war:'🔗',player_betritt:'👋',ev_timer:'⏱',ev_interval:'🔁'};
   // Logik-Operator: verbindet diese Bedingung mit der vorherigen
   const logik = c.logik ?? 'und';
   const logikBadge = ci === 0
@@ -4727,6 +4928,8 @@ function trigAddCond(tid, typ) {
     item_traegt:    {typ:'item_traegt', item:'', gruppe:''},
     trigger_war:    {typ:'trigger_war', trigId:''},
     player_betritt: {typ:'player_betritt'},
+    ev_timer:       {typ:'ev_timer', sek:10},
+    ev_interval:    {typ:'ev_interval', sek_min:30, sek_max:180},
   };
   t.bedingungen = t.bedingungen ?? [];
   t.bedingungen.push(defs[typ]??{typ});
