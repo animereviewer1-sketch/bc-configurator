@@ -3754,7 +3754,8 @@ let _selBotId  = null;
 let _ipickerCb = null;
 let _ipickerTab= 'item';
 // Item Manager integration: pending trigger context
-let _trigPending = null; // {tid, ai} – set when IM opened from trigger
+let _trigPending = null; // {tid, ai, cb} – set when IM opened from trigger
+let _ipickerForActContext = null; // {tid, ai} for restoring open state
 
 // ── Persistence ───────────────────────────────────────────────
 function _saveBots() {
@@ -4436,8 +4437,11 @@ function evFireImmediate(eid) {
 }
 
 function renderBotTab() {
-  _loadBots();
+  // Nur beim ersten Laden aus localStorage lesen – nie In-Memory-State überschreiben
+  if (!_bots.length) _loadBots();
   renderBotList();
+  // Falls _selBotId nicht gesetzt aber Bots vorhanden: ersten selektieren
+  if (!_selBotId && _bots.length) _selBotId = _bots[0].id;
   if (_selBotId) renderBotEditor();
 }
 
@@ -4492,6 +4496,10 @@ function botDelete(id) {
 // ── Bot Editor ────────────────────────────────────────────────
 function renderBotEditor() {
   const bot = _selBot(); if (!bot) return;
+  // Offene Trigger-Bodies vor Re-Render sichern
+  const openTids = new Set(
+    (bot.triggers||[]).map(t=>t.id).filter(id=>document.getElementById('tb-'+id)?.classList.contains('open'))
+  );
   const s = bot.settings;
   const statusCls = bot.laufend ? 'running' : 'stopped';
   const statusTxt = bot.laufend ? '▶️ Bot läuft · <span style="font-size:.62rem;opacity:.7">Änderungen → 🔄 Sync klicken</span>' : '⏹ Nicht gestartet';
@@ -4524,6 +4532,8 @@ function renderBotEditor() {
       <button class="be-addtrig" onclick="botAddTrig()">+ Trigger hinzufügen</button>
     </div>`;
   document.getElementById('botEditor').innerHTML = html;
+  // Offene Trigger-Bodies wiederherstellen
+  openTids.forEach(tid => document.getElementById('tb-'+tid)?.classList.add('open'));
 }
 
 function botField(field, val) {
@@ -5078,6 +5088,7 @@ function tpSlotField(tid, ai, si, field, val) {
 
 // ── Unified Item/Curse/Profile Picker ─────────────────────────
 function ipickerOpenForAct(tid, ai) {
+  _ipickerForActContext = {tid, ai};
   ipickerOpen('item', v => {
     const b = _selBot(); if (!b) return;
     const t = b.triggers.find(x=>x.id===tid); if (!t||!t.aktionen[ai]) return;
@@ -5138,8 +5149,9 @@ function ipickerSetTab(tab) {
   if (tab === 'item') {
     // If there's a pending action context, go to Item Manager with button
     if (_ipickerCb) {
-      _trigPending = {cb: _ipickerCb};
+      _trigPending = {cb: _ipickerCb, tid: _ipickerForActContext?.tid, ai: _ipickerForActContext?.ai};
       _ipickerCb = null;
+      _ipickerForActContext = null;
     }
     ipickerClose();
     switchTab('items');
@@ -5276,10 +5288,19 @@ function _addCurrentItemToTrigger() {
 
   const itemConfig = { asset, group, colors, tr, typeStr, props, archetype: cfg.archetype };
   const val = { type:'item', name: asset, group: group, itemConfig };
+  const _pendingTid = _trigPending?.tid; // save before cancel
   _trigPending.cb(val);
   _cancelTrigPending();
   switchTab('bot');
   showStatus('✅ ' + asset + ' mit vollständiger Konfiguration zum Trigger hinzugefügt','success');
+  // Trigger-Body öffnen + scrollen
+  if (_pendingTid) {
+    setTimeout(() => {
+      const tb = document.getElementById('tb-' + _pendingTid);
+      if (tb && !tb.classList.contains('open')) tb.classList.add('open');
+      document.getElementById('tc-' + _pendingTid)?.scrollIntoView({behavior:'smooth', block:'nearest'});
+    }, 50);
+  }
 }
 
 let _origBuildConf = null;
@@ -5408,7 +5429,7 @@ function _buildBotCode(bot) {
   const safeName = bot.name.replace(/\\/g,'\\\\').replace(/`/g,'\\`');
 
   const cfgJson  = JSON.stringify({hearChat:s.hearChat,hearEmote:s.hearEmote,hearWhisper:s.hearWhisper,nurEigene:s.nurEigene,logAktiv:s.logAktiv??true,modus:s.modus,moneyQueryCmd:_money?.settings?.queryCmd??'',moneyQueryTyp:_money?.settings?.queryTyp??'whisper'});
-  const trigsJson = JSON.stringify(triggers);
+  const trigsJson = JSON.stringify(triggers).replace(/`/g,'\\`').replace(/\${/g,'\\${');
   const events = (bot.events||[]).filter(e=>e.aktiv).map(e => ({
     id: e.id, name: e.name,
     von: e.von??'alle', vonNummer: e.vonNummer??0,
@@ -5588,20 +5609,40 @@ function _applyItemAction(a, C){
       let col=ic.colors??['#ffffff'];
       if(typeof col==='string'&&col.includes(','))col=col.split(',');
       InventoryWear(C,ic.asset,ic.group,col,0,Player.MemberNumber,null);
+      // Sofort TypeRecord setzen (vor CharacterRefresh) damit BC es direkt übernimmt
+      const itemNow=InventoryGet(C,ic.group);
+      if(itemNow){
+        itemNow.Color=col;
+        itemNow.Property=itemNow.Property??{};
+        if(ic.tr&&Object.keys(ic.tr).length){
+          itemNow.Property.TypeRecord=ic.tr;
+          itemNow.Property.Type=ic.typeStr??'';
+        }
+        if(ic.props)Object.assign(itemNow.Property,ic.props);
+      }
       CharacterRefresh(C);
+      ChatRoomCharacterUpdate(C);
       _restoreDisplaced(C,snapshot,ic.group);
+      // Zweiter Sync nach _restoreDisplaced (stellt sicher dass TypeRecord erhalten bleibt)
       setTimeout(()=>{
         const item=InventoryGet(C,ic.group);
-        if(!item)return;
-        item.Color=ic.colors;
-        item.Property=item.Property??{};
-        if(ic.tr&&Object.keys(ic.tr).length){
-          item.Property.TypeRecord=ic.tr;
-          item.Property.Type=ic.typeStr??'';
+        if(!item){
+          // Item wurde durch _restoreDisplaced verdrängt → nochmal anlegen
+          InventoryWear(C,ic.asset,ic.group,col,0,Player.MemberNumber,null);
+          const reItem=InventoryGet(C,ic.group);
+          if(reItem){
+            reItem.Property=reItem.Property??{};
+            if(ic.tr&&Object.keys(ic.tr).length){reItem.Property.TypeRecord=ic.tr;reItem.Property.Type=ic.typeStr??'';}
+            if(ic.props)Object.assign(reItem.Property,ic.props);
+          }
+        } else {
+          // TypeRecord nochmal sicherstellen (könnte durch _restoreDisplaced verloren gegangen sein)
+          item.Property=item.Property??{};
+          if(ic.tr&&Object.keys(ic.tr).length){item.Property.TypeRecord=ic.tr;item.Property.Type=ic.typeStr??'';}
+          if(ic.props)Object.assign(item.Property,ic.props);
         }
-        if(ic.props)Object.assign(item.Property,ic.props);
         CharacterRefresh(C);ChatRoomCharacterUpdate(C);
-      },600);
+      },500);
     }else if(a.curseEntry){
       let col=a.curseEntry.Farbe;if(typeof col==='string'&&col.includes(','))col=col.split(',');
       InventoryWear(C,a.curseEntry.ItemName,a.curseEntry.Gruppe,col,0,Player.MemberNumber,a.curseEntry.Craft);
