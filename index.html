@@ -6669,6 +6669,22 @@ const _joinPoll=setInterval(()=>{
             const ref=_trigMap[c.trigId];
             return ref?.charSpec?!!_firedChar[c.trigId+'_'+C.MemberNumber]:!!_fired[c.trigId];
           }
+          if(c.typ==='rang'){
+            const op=c.rang_op??'=';
+            const currentId=_rangState[C.MemberNumber]??null;
+            if(op==='kein') return !currentId;
+            if(!c.rang_id) return false;
+            const defs=(_cfg.rankDefs??[]).sort((a,b)=>a.level-b.level);
+            const targetDef=defs.find(r=>r.id===c.rang_id);
+            const currentDef=defs.find(r=>r.id===currentId);
+            if(!targetDef) return false;
+            if(!currentDef) return false;
+            const tl=targetDef.level, cl=currentDef.level;
+            if(op==='=')   return cl===tl;
+            if(op==='min') return cl>=tl;
+            if(op==='max') return cl<=tl;
+            return false;
+          }
           return true;
         });
         if(!otherOk)return;
@@ -6698,6 +6714,28 @@ const _joinPoll=setInterval(()=>{
           return true; // 'alle' → jeder
         })();
         if(!vonOk)return;
+        // Weitere Bedingungen prüfen (z.B. Rang) – player_betritt wurde bereits oben geprüft
+        const evOtherOk=(ev.bedingungen??[]).every(c=>{
+          if(c.typ==='player_betritt')return true;
+          if(c.typ==='rang'){
+            const op=c.rang_op??'=';
+            const currentId=_rangState[C.MemberNumber]??null;
+            if(op==='kein') return !currentId;
+            if(!c.rang_id) return false;
+            const defs=(_cfg.rankDefs??[]).sort((a,b)=>a.level-b.level);
+            const targetDef=defs.find(r=>r.id===c.rang_id);
+            const currentDef=defs.find(r=>r.id===currentId);
+            if(!targetDef) return false;
+            if(!currentDef) return false;
+            const tl=targetDef.level, cl=currentDef.level;
+            if(op==='=')   return cl===tl;
+            if(op==='min') return cl>=tl;
+            if(op==='max') return cl<=tl;
+            return false;
+          }
+          return true;
+        });
+        if(!evOtherOk)return;
         const evVars={name:C.Name,wort:'',typ:label,x:C.X??0,y:C.Y??0,zone:'',C};
         const allChars=[Player,...(ChatRoomCharacter||[])];
         let targets=[];
