@@ -6266,6 +6266,22 @@ function _okEv(ev,C,rohText,typKey){
     if(c.typ==='item_traegt'){return(C.Appearance??[]).some(a=>a.Asset?.Name===c.item);}
     if(c.typ==='item_traegt_nicht'){return!(C.Appearance??[]).some(a=>a.Asset?.Name===c.item);}
     if(c.typ==='trigger_war'){const ref=_trigMap[c.trigId];return ref?.charSpec?!!_firedChar[c.trigId+'_'+C.MemberNumber]:!!_fired[c.trigId];}
+    if(c.typ==='rang'){
+      const op=c.rang_op??'=';
+      const currentId=_rangState[C.MemberNumber]??null;
+      if(op==='kein') return !currentId;
+      if(!c.rang_id) return false;
+      const defs=(_cfg.rankDefs??[]).sort((a,b)=>a.level-b.level);
+      const targetDef=defs.find(r=>r.id===c.rang_id);
+      const currentDef=defs.find(r=>r.id===currentId);
+      if(!targetDef) return false;
+      if(!currentDef) return false;
+      const tl=targetDef.level, cl=currentDef.level;
+      if(op==='=')   return cl===tl;
+      if(op==='min') return cl>=tl;
+      if(op==='max') return cl<=tl;
+      return false;
+    }
     return true;
   }
   const groups=[[]];
