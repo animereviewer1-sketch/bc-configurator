@@ -941,6 +941,28 @@ button { cursor: pointer; }
 /* ═══════════════════════════════════════════════
    RANG SYSTEM
 ═══════════════════════════════════════════════ */
+
+/* ── Shop Tab ─────────────────────────────────────────────── */
+.shop-wrap { display: flex; flex-direction: column; height: calc(100vh - 112px); }
+.shop-settings-bar { display: flex; gap: 14px; align-items: center; padding: 10px 16px; border-bottom: 1px solid rgba(255,255,255,0.07); flex-wrap: wrap; background: rgba(10,10,24,0.8); flex-shrink: 0; }
+.shop-settings-bar label { font-size: .7rem; color: var(--text3); display: flex; align-items: center; gap: 5px; }
+.shop-body { display: flex; flex: 1; overflow: hidden; }
+.shop-list-col { width: 280px; flex-shrink: 0; border-right: 1px solid rgba(255,255,255,0.07); overflow-y: auto; background: rgba(10,10,24,0.8); padding: 10px; }
+.shop-detail-col { flex: 1; overflow-y: auto; padding: 14px 18px; }
+.shop-item-card { background: rgba(255,255,255,0.025); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 9px 12px; margin-bottom: 7px; cursor: pointer; transition: border-color .18s, background .18s; }
+.shop-item-card:hover, .shop-item-card.selected { border-color: rgba(139,92,246,0.4); background: rgba(139,92,246,0.06); }
+.shop-item-card.selected { border-color: var(--purple); }
+.shop-item-card.inactive { opacity: 0.45; }
+.shop-item-name { font-size: .8rem; font-weight: 700; color: var(--text); }
+.shop-item-price { font-size: .67rem; font-family: var(--font-mono); color: #f5c842; margin-top: 2px; }
+.shop-item-target { font-size: .6rem; color: var(--text3); margin-top: 1px; }
+.shop-add-btn { width: 100%; padding: 8px; background: none; border: 1px dashed rgba(139,92,246,0.25); border-radius: 8px; color: rgba(139,92,246,0.6); font-size: .72rem; cursor: pointer; transition: all .18s; font-family: var(--font-ui); font-weight: 600; margin-top: 4px; }
+.shop-add-btn:hover { border-color: var(--purple); color: #c4b5fd; background: rgba(139,92,246,0.05); }
+.shop-detail-empty { text-align: center; padding: 60px 20px; color: var(--text3); font-size: .85rem; }
+.shop-section-title { font-size: .68rem; font-weight: 800; color: var(--text3); text-transform: uppercase; letter-spacing: .08em; margin: 14px 0 7px; display: flex; align-items: center; gap: 7px; }
+.shop-section-title::after { content: ''; flex: 1; height: 1px; background: rgba(255,255,255,0.07); }
+.shop-acts { margin-top: 4px; }
+.shop-act-add-row { display: flex; gap: 6px; margin-top: 6px; }
 .rank-wrap { display: grid; grid-template-columns: 320px 1fr; height: calc(100vh - 112px); overflow: hidden; }
 .rank-cfg { border-right: 1px solid rgba(255,255,255,0.07); overflow-y: auto; background: rgba(10,10,24,0.8); padding: 14px; }
 .rank-cfg-title { font-size: .72rem; font-weight: 800; color: var(--text3); text-transform: uppercase; letter-spacing: .08em; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
@@ -1008,6 +1030,7 @@ button { cursor: pointer; }
   <button class="tab-btn"        id="tab-log-btn"    onclick="switchTab('log')">📋 Logs</button>
   <button class="tab-btn"        id="tab-money-btn"  onclick="switchTab('money')">💰 Money</button>
   <button class="tab-btn"        id="tab-rank-btn"   onclick="switchTab('rank')">🏆 Rang</button>
+  <button class="tab-btn"        id="tab-shop-btn"   onclick="switchTab('shop')">🛒 Shop</button>
 </div>
 
 <!-- TAB 1: ITEM MANAGER -->
@@ -2642,7 +2665,7 @@ function deleteProfileByIdx(idx) {
 let _activeTab = 'items';
 function switchTab(tab) {
   _activeTab = tab;
-  ['items','outfit','curse','bot','log','money','events','rank'].forEach(t => {
+  ['items','outfit','curse','bot','log','money','events','rank','shop'].forEach(t => {
     document.getElementById('tab-'+t)?.classList.toggle('active', t===tab);
     document.getElementById('tab-'+t+'-btn')?.classList.toggle('active', t===tab);
   });
@@ -2652,6 +2675,7 @@ function switchTab(tab) {
   if (tab === 'log')    { renderLogTab(); }
   if (tab === 'money')  { renderMoneyTab(); }
   if (tab === 'rank')   { renderRankTab(); }
+  if (tab === 'shop')   { renderShopTab(); }
 
 }
 
@@ -3308,6 +3332,30 @@ window.addEventListener('message', function(ev) {
       _moneyApply(ev.data.memberNum, ev.data.name, ev.data.delta, ev.data.setVal);
       break;
 
+
+    case 'BOT_SHOP_PAY': {
+      // Bot hat eine Shop-Kauf-Anfrage gesendet
+      const { memberNum, name, itemId, targetNum, pendingId, botId } = ev.data;
+      const sItem = _shop.items.find(i=>i.id===itemId);
+      const actBot = _bots.find(b=>b.laufend);
+      if (!sItem || !actBot) break;
+      const id = memberNum;
+      if (!_money.balances[id]) _money.balances[id] = { name: name||('#'+memberNum), balance: 0 };
+      const p = _money.balances[id];
+      const ok = p.balance >= sItem.price;
+      if (ok) {
+        p.balance -= sItem.price;
+        _saveMoney();
+        if (document.getElementById('tab-money')?.classList.contains('active')) renderMoneyTab();
+        const mBtn = document.getElementById('tab-money-btn');
+        if (mBtn) mBtn.textContent = '💰 Money (' + Object.keys(_money.balances).length + ')';
+      }
+      // Send result back to bot via EXEC calling its global callback
+      const cbCode = `(function(){const cb=window['__BCKShopCb_'+${JSON.stringify(botId)}];if(cb)cb(${JSON.stringify(pendingId)},${ok},${p.balance},${JSON.stringify(targetNum??null)});})();`;
+      bcSend({ type: 'EXEC', code: cbCode });
+      break;
+    }
+
     case 'BOT_RANG':
       _rankApply(ev.data.memberNum, ev.data.name, ev.data.rankId, 'bot');
       break;
@@ -3880,6 +3928,39 @@ function selectRoomMember(num) {
   </div>
 </div>
 
+<!-- TAB: SHOP SYSTEM -->
+<div id="tab-shop" class="tab-pane">
+  <div class="shop-wrap">
+    <div class="shop-settings-bar">
+      <span style="font-weight:700;font-size:.88rem">🛒 Shop System</span>
+      <label>Pay-Befehl:
+        <input id="shop-cmd-inp" class="cf" style="width:90px;margin-left:4px" placeholder="!pay"
+          value="" oninput="shopSetCmd(this.value)">
+      </label>
+      <label title="Abkürzungen werden erkannt: !p = !pay">
+        <span style="font-size:.62rem;color:var(--text3)">Syntax: !pay "Item" oder !pay "Item" "SpielerName/ID"</span>
+      </label>
+      <button onclick="shopExport()" style="margin-left:auto;font-size:.68rem;padding:4px 10px;background:none;border:1px solid rgba(255,255,255,0.1);border-radius:5px;color:var(--text3);cursor:pointer">⬇️ Export</button>
+      <button onclick="shopImport()" style="font-size:.68rem;padding:4px 10px;background:none;border:1px solid rgba(255,255,255,0.1);border-radius:5px;color:var(--text3);cursor:pointer">⬆️ Import</button>
+    </div>
+    <div class="shop-body">
+      <!-- LEFT: Item list -->
+      <div class="shop-list-col">
+        <div style="font-size:.65rem;color:var(--text3);margin-bottom:8px;line-height:1.5">
+          Items anklicken zum Bearbeiten.<br>Preis wird aus der Item-Config abgezogen.
+        </div>
+        <div id="shop-item-list"></div>
+        <button class="shop-add-btn" onclick="shopItemNew()">+ Neues Shop-Item</button>
+      </div>
+      <!-- RIGHT: Detail / Editor -->
+      <div class="shop-detail-col" id="shop-detail-col">
+        <div class="shop-detail-empty">🛒 Shop-Item auswählen oder neu erstellen</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+
 <script>
 // ══ BOT ENGINE ══════════════════════════════════════════════
 
@@ -3991,6 +4072,311 @@ function _moneyApply(memberNum, name, delta, setVal) {
   // Update tab badge
   const btn = document.getElementById('tab-money-btn');
   if (btn) btn.textContent = '💰 Money (' + Object.keys(_money.balances).length + ')';
+}
+
+
+
+// ══════════════════════════════════════════════════════
+//  SHOP SYSTEM
+// ══════════════════════════════════════════════════════
+const SHOP_KEY = 'BC_Shop_v1';
+let _shop = { settings: { cmd: '!pay' }, items: [] };
+(()=>{ try { const s=localStorage.getItem(SHOP_KEY); if(s) _shop=Object.assign({settings:{cmd:'!pay'},items:[]},JSON.parse(s)); } catch{} })();
+function _saveShop() { try { localStorage.setItem(SHOP_KEY, JSON.stringify(_shop)); } catch {} }
+
+let _shopSelId = null; // currently selected item id
+
+function shopSetCmd(v) { _shop.settings.cmd = v.trim(); _saveShop(); }
+
+function renderShopTab() {
+  const si = document.getElementById('shop-cmd-inp');
+  if (si) si.value = _shop.settings.cmd ?? '!pay';
+  renderShopItems();
+  if (_shopSelId && _shop.items.find(i=>i.id===_shopSelId)) {
+    renderShopDetail(_shopSelId);
+  } else {
+    const dc = document.getElementById('shop-detail-col');
+    if (dc) dc.innerHTML = '<div class="shop-detail-empty">🛒 Shop-Item auswählen oder neu erstellen</div>';
+  }
+}
+
+function renderShopItems() {
+  const el = document.getElementById('shop-item-list');
+  if (!el) return;
+  const cur = _money?.settings?.name || 'Coins';
+  if (!_shop.items.length) { el.innerHTML = '<div style="font-size:.7rem;color:var(--text3);text-align:center;padding:20px 0">Noch keine Items</div>'; return; }
+  el.innerHTML = _shop.items.map(item => `
+    <div class="shop-item-card${item.aktiv===false?' inactive':''}${_shopSelId===item.id?' selected':''}" onclick="shopSelect('${item.id}')">
+      <div style="display:flex;align-items:center;gap:6px">
+        <input type="checkbox" ${item.aktiv!==false?'checked':''} onclick="event.stopPropagation();shopItemField('${item.id}','aktiv',this.checked)" style="accent-color:var(--purple)">
+        <div style="flex:1">
+          <div class="shop-item-name">${escHtml(item.name||'(kein Name)')}</div>
+          <div class="shop-item-price">💰 ${item.price??0} ${escHtml(cur)}</div>
+          <div class="shop-item-target">${item.ziel_typ==='player'?'🎯 Ziel: anderer Spieler':'👤 Ziel: Käufer'}</div>
+        </div>
+        <button onclick="event.stopPropagation();shopItemDelete('${item.id}')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.75rem;padding:2px 5px">✕</button>
+      </div>
+    </div>`).join('');
+}
+
+function shopSelect(id) {
+  _shopSelId = id;
+  renderShopItems();
+  renderShopDetail(id);
+}
+
+function renderShopDetail(id) {
+  const item = _shop.items.find(i=>i.id===id);
+  const dc = document.getElementById('shop-detail-col');
+  if (!item || !dc) return;
+  const cur = _money?.settings?.name || 'Coins';
+  const akts = (item.aktionen??[]).map((a,ai) => renderShopAct(id, a, ai)).join('');
+  dc.innerHTML = `
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+      <span style="font-size:.9rem;font-weight:800;color:#c4b5fd">✏️ ${escHtml(item.name||'(kein Name)')}</span>
+      <button onclick="shopItemDelete('${id}')" style="margin-left:auto;font-size:.68rem;padding:3px 10px;background:#2a0a0a;border:1px solid var(--red);color:var(--red);border-radius:5px;cursor:pointer">🗑 Löschen</button>
+    </div>
+
+    <div class="shop-section-title">⚙️ Konfiguration</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+      <label style="font-size:.68rem;color:var(--text3);display:flex;flex-direction:column;gap:3px">
+        Name / Schlüsselwort (im !pay-Befehl)
+        <input class="cf" value="${escHtml(item.name||'')}" oninput="shopItemField('${id}','name',this.value)" placeholder="z.B. Gag, Fesselung, Stiefel…">
+      </label>
+      <label style="font-size:.68rem;color:var(--text3);display:flex;flex-direction:column;gap:3px">
+        Preis (${escHtml(cur)})
+        <input class="cf" type="number" min="0" value="${item.price??0}" oninput="shopItemField('${id}','price',+this.value)">
+      </label>
+    </div>
+    <label style="font-size:.68rem;color:var(--text3);display:flex;flex-direction:column;gap:3px;margin-bottom:8px">
+      Ziel der Aktionen
+      <select class="cf" style="width:260px;margin-top:2px" onchange="shopItemField('${id}','ziel_typ',this.value);shopSelect('${id}')">
+        <option value="self" ${item.ziel_typ!=='player'?'selected':''}>👤 Käufer selbst</option>
+        <option value="player" ${item.ziel_typ==='player'?'selected':''}>🎯 Anderer Spieler (via !pay "Name" "SpielerName/ID")</option>
+      </select>
+    </label>
+
+    <div class="shop-section-title">💬 Nachrichten</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+      <label style="font-size:.68rem;color:var(--text3);display:flex;flex-direction:column;gap:3px">
+        ✅ Erfolg-Whisper (an Käufer)
+        <input class="cf" value="${escHtml(item.successMsg||'')}" oninput="shopItemField('${id}','successMsg',this.value)" placeholder="{name} hat {item} gekauft!">
+        <span style="font-size:.58rem;color:var(--text3)">Variablen: {name} {item} {preis} {ziel}</span>
+      </label>
+      <label style="font-size:.68rem;color:var(--text3);display:flex;flex-direction:column;gap:3px">
+        ❌ Fehler-Whisper (an Käufer, z.B. zu wenig Coins)
+        <input class="cf" value="${escHtml(item.errorMsg||'')}" oninput="shopItemField('${id}','errorMsg',this.value)" placeholder="Nicht genug Coins! Preis: {preis}">
+        <span style="font-size:.58rem;color:var(--text3)">Variablen: {name} {item} {preis} {balance}</span>
+      </label>
+    </div>
+    ${item.ziel_typ==='player'?`<label style="font-size:.68rem;color:var(--text3);display:flex;flex-direction:column;gap:3px;margin-bottom:10px">
+      ❌ Fehler-Whisper wenn Spieler nicht gefunden
+      <input class="cf" value="${escHtml(item.notFoundMsg||'')}" oninput="shopItemField('${id}','notFoundMsg',this.value)" placeholder="Spieler nicht gefunden: {ziel}">
+    </label>`:''}
+
+    <div class="shop-section-title">⚡ Aktionen (werden auf Ziel angewendet)</div>
+    <div class="shop-acts" id="shop-acts-${id}">${akts}</div>
+    <div class="shop-act-add-row">
+      <button onclick="shopActAdd('${id}')" style="font-size:.72rem;padding:6px 14px;background:var(--pd);border:none;color:var(--pl);border-radius:6px;cursor:pointer">+ Aktion hinzufügen</button>
+    </div>`;
+}
+
+function renderShopAct(itemId, a, ai) {
+  const item = _shop.items.find(i=>i.id===itemId);
+  const tot = item?.aktionen?.length ?? 0;
+  const types = [
+    ['chat','💬 Chat'],['emote','✨ Emote'],['whisper','🤫 Whisper'],
+    ['item','📦 Item'],['item_entf','🗑️ Item entf.'],['teleport','🌀 TP'],['money','💰 Money'],['rang','🏆 Rang'],
+  ];
+  const typeOpts = types.map(([v,l])=>`<option value="${v}" ${a.typ===v?'selected':''}>${l}</option>`).join('');
+  let extra = '';
+  if (['chat','emote','whisper'].includes(a.typ)) {
+    extra = `<textarea class="cf" style="width:100%;resize:vertical;min-height:38px;margin-top:4px" rows="2"
+        oninput="shopActField('${itemId}',${ai},'text',this.value)">${escHtml(a.text||'')}</textarea>
+      <div style="font-size:.59rem;color:var(--text3);margin-top:2px">Variablen: {name} {ziel} {item} {preis}</div>`;
+  } else if (a.typ === 'item') {
+    const cfgInfo = a.itemConfig ? ` <span style="font-size:.58rem;background:var(--gd);color:var(--green);padding:1px 4px;border-radius:3px">✓ Konfig</span>` : '';
+    const label = a.itemConfig ? `📦 ${a.itemConfig.group}/${a.itemConfig.asset}` : a.profilName ? `👗 ${a.profilName}` : a.item ? `📦 ${a.gruppe||'?'}/${a.item}` : '– nichts gewählt –';
+    extra = `<div style="display:flex;gap:6px;align-items:center;margin-top:4px;flex-wrap:wrap">
+        <span style="font-size:.7rem;color:var(--text2);flex:1">${escHtml(label)}${cfgInfo}</span>
+        <button onclick="shopActPickItem('${itemId}',${ai})" style="font-size:.63rem;padding:3px 9px;background:var(--pd);border:none;color:var(--pl);border-radius:5px;cursor:pointer">📂 Wählen</button>
+      </div>`;
+  } else if (a.typ === 'item_entf') {
+    extra = `<input class="cf" style="width:100%;margin-top:4px" value="${escHtml(a.gruppe||'')}"
+        oninput="shopActField('${itemId}',${ai},'gruppe',this.value)" placeholder="Gruppe (z.B. ItemMouth)">`;
+  } else if (a.typ === 'teleport') {
+    const slots = a.tpSlots ?? [];
+    const slotsHtml = slots.map((s,si) => `<div class="tp-slot-row">
+      <span class="tp-slot-badge ${si===0?'primary':'fallback'}">${si===0?'Primär':'FB '+(si)}</span>
+      X<input class="cf" type="number" style="width:50px" value="${s.x??0}" oninput="shopActTpField('${itemId}',${ai},${si},'x',+this.value)">
+      Y<input class="cf" type="number" style="width:50px" value="${s.y??0}" oninput="shopActTpField('${itemId}',${ai},${si},'y',+this.value)">
+      <button onclick="shopActTpRemove('${itemId}',${ai},${si})" style="background:none;border:none;color:var(--red);cursor:pointer">✕</button>
+    </div>`).join('');
+    extra = `<div class="tp-slot-list">${slotsHtml}</div>
+      <button class="tp-slot-add-btn" onclick="shopActTpAdd('${itemId}',${ai})">+ Position/Fallback</button>`;
+  } else if (a.typ === 'money') {
+    const mop = a.money_op ?? 'add';
+    const moneyName = _money?.settings?.name || 'Gold';
+    extra = `<div style="display:flex;gap:8px;align-items:center;margin-top:5px;flex-wrap:wrap">
+      <select class="cf" style="width:130px" onchange="shopActField('${itemId}',${ai},'money_op',this.value);shopActRerender('${itemId}',${ai})">
+        <option value="add" ${mop==='add'?'selected':''}>➕ Hinzufügen</option>
+        <option value="sub" ${mop==='sub'?'selected':''}>➖ Abziehen</option>
+        <option value="set" ${mop==='set'?'selected':''}>= Setzen auf</option>
+        <option value="reset" ${mop==='reset'?'selected':''}>🔄 Zurücksetzen</option>
+      </select>
+      ${mop!=='reset'?`<input class="cf cf-w80" type="number" value="${a.money_val??1}" oninput="shopActField('${itemId}',${ai},'money_val',+this.value)">
+        <span style="font-size:.68rem;color:var(--text3)">${escHtml(moneyName)}</span>`:''}</div>`;
+  } else if (a.typ === 'rang') {
+    const rop = a.rang_op ?? 'setzen';
+    const ranks = _rankSorted();
+    extra = `<div style="display:flex;gap:8px;align-items:center;margin-top:5px;flex-wrap:wrap">
+      <select class="cf" style="width:155px" onchange="shopActField('${itemId}',${ai},'rang_op',this.value);shopActRerender('${itemId}',${ai})">
+        <option value="setzen" ${rop==='setzen'?'selected':''}>🏆 Rang setzen</option>
+        <option value="entfernen" ${rop==='entfernen'?'selected':''}>❌ Rang entfernen</option>
+        <option value="naechster" ${rop==='naechster'?'selected':''}>⬆️ Nächster Rang</option>
+        <option value="vorheriger" ${rop==='vorheriger'?'selected':''}>⬇️ Vorheriger Rang</option>
+      </select>
+      ${rop==='setzen'?`<select class="cf" style="flex:1;min-width:140px" onchange="shopActField('${itemId}',${ai},'rang_id',this.value)">
+        <option value="">– Rang wählen –</option>
+        ${ranks.map(r=>`<option value="${r.id}" ${a.rang_id===r.id?'selected':''}>${escHtml(r.icon+' '+r.name)} (Lv.${r.level})</option>`).join('')}
+      </select>`:''}</div>`;
+  }
+  return `<div class="act-card" id="shopact-${itemId}-${ai}">
+    <div style="flex:1">
+      <div style="display:flex;gap:4px;align-items:center">
+        <span style="display:flex;flex-direction:column;gap:1px;flex-shrink:0">
+          <button class="order-btn" onclick="shopActMoveUp('${itemId}',${ai})" ${ai===0?'disabled':''}>▲</button>
+          <button class="order-btn" onclick="shopActMoveDown('${itemId}',${ai})" ${ai===tot-1?'disabled':''}>▼</button>
+        </span>
+        <span class="trig-order-num" style="margin-right:2px">${ai+1}</span>
+        <select class="cf" style="flex:1" onchange="shopActChangeType('${itemId}',${ai},this.value)">${typeOpts}</select>
+        <input class="cf cf-w80" type="number" value="${a.delay??0}" oninput="shopActField('${itemId}',${ai},'delay',+this.value)" title="Delay (ms)"> ms
+      </div>
+      ${extra}
+    </div>
+    <button class="rm-btn" onclick="shopActRemove('${itemId}',${ai})">✕</button>
+  </div>`;
+}
+
+// ── Shop CRUD ──────────────────────────────────────────────────
+function shopItemNew() {
+  const item = { id:'si'+Date.now(), name:'Neues Item', price:10, aktiv:true, ziel_typ:'self',
+    successMsg:'', errorMsg:'', notFoundMsg:'', aktionen:[] };
+  _shop.items.push(item); _saveShop();
+  _shopSelId = item.id; renderShopTab();
+}
+
+function shopItemDelete(id) {
+  if (!confirm('Shop-Item löschen?')) return;
+  _shop.items = _shop.items.filter(i=>i.id!==id);
+  if (_shopSelId===id) _shopSelId=null;
+  _saveShop(); renderShopTab();
+}
+
+function shopItemField(id, field, val) {
+  const item = _shop.items.find(i=>i.id===id); if (!item) return;
+  item[field] = val; _saveShop();
+  renderShopItems();
+}
+
+function shopActAdd(id) {
+  const item = _shop.items.find(i=>i.id===id); if (!item) return;
+  if (!item.aktionen) item.aktionen = [];
+  item.aktionen.push({typ:'whisper', text:'', delay:0});
+  _saveShop(); renderShopDetail(id);
+}
+
+function shopActRemove(id, ai) {
+  const item = _shop.items.find(i=>i.id===id); if (!item) return;
+  item.aktionen.splice(ai,1); _saveShop(); renderShopDetail(id);
+}
+
+function shopActField(id, ai, field, val) {
+  const item = _shop.items.find(i=>i.id===id); if (!item) return;
+  item.aktionen[ai][field] = val; _saveShop();
+}
+
+function shopActChangeType(id, ai, typ) {
+  const item = _shop.items.find(i=>i.id===id); if (!item) return;
+  item.aktionen[ai] = {typ, delay: item.aktionen[ai].delay??0};
+  _saveShop(); renderShopDetail(id);
+}
+
+function shopActRerender(id, ai) {
+  const item = _shop.items.find(i=>i.id===id); if (!item) return;
+  const el = document.getElementById('shopact-'+id+'-'+ai); if (!el) return;
+  el.outerHTML = renderShopAct(id, item.aktionen[ai], ai);
+}
+
+function shopActMoveUp(id, ai) {
+  const item = _shop.items.find(i=>i.id===id); if (!item||ai===0) return;
+  [item.aktionen[ai-1],item.aktionen[ai]]=[item.aktionen[ai],item.aktionen[ai-1]];
+  _saveShop(); renderShopDetail(id);
+}
+
+function shopActMoveDown(id, ai) {
+  const item = _shop.items.find(i=>i.id===id); if (!item||ai>=item.aktionen.length-1) return;
+  [item.aktionen[ai],item.aktionen[ai+1]]=[item.aktionen[ai+1],item.aktionen[ai]];
+  _saveShop(); renderShopDetail(id);
+}
+
+function shopActTpField(id, ai, si, field, val) {
+  const item = _shop.items.find(i=>i.id===id); if (!item) return;
+  const a = item.aktionen[ai]; if (!a.tpSlots) a.tpSlots=[];
+  if (!a.tpSlots[si]) a.tpSlots[si]={x:0,y:0,gueltig:true};
+  a.tpSlots[si][field]=val; _saveShop();
+}
+
+function shopActTpAdd(id, ai) {
+  const item = _shop.items.find(i=>i.id===id); if (!item) return;
+  const a = item.aktionen[ai]; if (!a.tpSlots) a.tpSlots=[];
+  a.tpSlots.push({x:0,y:0,gueltig:true}); _saveShop(); renderShopDetail(id);
+}
+
+function shopActTpRemove(id, ai, si) {
+  const item = _shop.items.find(i=>i.id===id); if (!item) return;
+  item.aktionen[ai].tpSlots?.splice(si,1); _saveShop(); renderShopDetail(id);
+}
+
+// Item picker for shop actions
+let _shopActPickCtx = null;
+function shopActPickItem(id, ai) {
+  _shopActPickCtx = {id, ai};
+  ipickerOpen('curse', function(v) {
+    const item = _shop.items.find(i=>i.id===id); if (!item) return;
+    const a = item.aktionen[ai]; if (!a) return;
+    if (v.itemConfig) {
+      a.itemConfig = v.itemConfig; a.item = v.itemConfig.asset; a.gruppe = v.itemConfig.group;
+    } else if (v.profilName) { a.profilName=v.profilName; a.profilItems=v.profilItems; delete a.itemConfig; }
+    else if (v.curseKey) { a.curseKey=v.curseKey; a.curseName=v.name; delete a.itemConfig; }
+    else { a.item=v.name||v.asset; a.gruppe=v.group; delete a.itemConfig; }
+    _saveShop(); renderShopDetail(id);
+  });
+}
+
+function shopExport() {
+  const blob = new Blob([JSON.stringify(_shop,null,2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href=url;
+  a.download='BCShop_'+new Date().toISOString().slice(0,10)+'.json';
+  a.click(); URL.revokeObjectURL(url);
+}
+
+function shopImport() {
+  const inp = document.createElement('input'); inp.type='file'; inp.accept='.json';
+  inp.onchange = e => {
+    const r = new FileReader();
+    r.onload = ev => {
+      try {
+        const d = JSON.parse(ev.target.result);
+        _shop = Object.assign({settings:{cmd:'!pay'},items:[]}, d);
+        _saveShop(); _shopSelId=null; renderShopTab();
+        showStatus('✅ Shop importiert', 'success');
+      } catch { showStatus('❌ Import fehlgeschlagen', 'error'); }
+    };
+    r.readAsText(e.target.files[0]);
+  };
+  inp.click();
 }
 
 
@@ -5903,7 +6289,7 @@ function _buildBotCode(bot) {
   const safeId   = bot.id.replace(/\W/g,'_');
   const safeName = bot.name.replace(/\\/g,'\\\\').replace(/`/g,'\\`');
 
-  const cfgJson  = JSON.stringify({hearChat:s.hearChat,hearEmote:s.hearEmote,hearWhisper:s.hearWhisper,nurEigene:s.nurEigene,logAktiv:s.logAktiv??true,modus:s.modus,moneyQueryCmd:_money?.settings?.queryCmd??'',moneyQueryTyp:_money?.settings?.queryTyp??'whisper',rankQueryCmd:_rankData?.settings?.queryCmd??'',rankQueryTyp:_rankData?.settings?.queryCmdTyp??'whisper',rankQueryText:_rankData?.settings?.queryCmdText??'{name} hat Rang: {rang_icon} {rang}',rankDefs:_rankData?.defs??[],rankPlayers:Object.fromEntries(Object.entries(_rankData?.players??{}).map(([k,v])=>[k,v.rankId??null]))});
+  const cfgJson  = JSON.stringify({hearChat:s.hearChat,hearEmote:s.hearEmote,hearWhisper:s.hearWhisper,nurEigene:s.nurEigene,logAktiv:s.logAktiv??true,modus:s.modus,moneyQueryCmd:_money?.settings?.queryCmd??'',moneyQueryTyp:_money?.settings?.queryTyp??'whisper',rankQueryCmd:_rankData?.settings?.queryCmd??'',rankQueryTyp:_rankData?.settings?.queryCmdTyp??'whisper',rankQueryText:_rankData?.settings?.queryCmdText??'{name} hat Rang: {rang_icon} {rang}',rankDefs:_rankData?.defs??[],rankPlayers:Object.fromEntries(Object.entries(_rankData?.players??{}).map(([k,v])=>[k,v.rankId??null])),shopCmd:_shop?.settings?.cmd??'!pay',shopCurrencyName:_money?.settings?.name??'Gold',shopItems:(_shop?.items??[]).filter(i=>i.aktiv!==false).map(i=>({id:i.id,name:i.name,price:i.price??0,ziel_typ:i.ziel_typ??'self',successMsg:i.successMsg??'',errorMsg:i.errorMsg??'',notFoundMsg:i.notFoundMsg??'',aktionen:(i.aktionen??[]).map(a=>{if(a.typ==='item'&&a.curseKey&&!a.curseEntry)return{...a,curseEntry:CURSE_DB[a.curseKey]??null};if(a.typ==='item'&&a.profilName&&(!a.profilItems||!a.profilItems.length))return{...a,profilItems:PROFILES[a.profilName]?.items??[]};return a;})}))});
   const trigsJson = JSON.stringify(triggers).replace(/`/g,'\\`').replace(/\${/g,'\\${');
   const events = (bot.events||[]).filter(e=>e.aktiv).map(e => ({
     id: e.id, name: e.name,
@@ -5939,6 +6325,66 @@ const _BID='${safeId}';
 if(window['_BCBot_'+_BID]){console.warn('[Bot] Bereits aktiv – erst stoppen!');return;}
 const _cfg=${cfgJson};
 const _moneyCfg={queryCmd:_cfg.moneyQueryCmd??''};
+
+// ── Shop State ────────────────────────────────────────────────
+const _shopPending = {}; // pendingId -> { C, targetC, vars, item }
+let _shopPendingIdx = 0;
+
+// Global callback: called by popup EXEC after balance check
+window['__BCKShopCb_'+_BID] = function(pendingId, ok, newBalance, targetNum) {
+  const ctx = _shopPending[pendingId];
+  if (!ctx) return;
+  delete _shopPending[pendingId];
+  const cur = _cfg.shopCurrencyName || 'Coins';
+  const shopTpl = s => (s||'').replace(/{name}/gi, ctx.C.Name)
+    .replace(/{item}/gi, ctx.item.name||'')
+    .replace(/{preis}/gi, String(ctx.item.price??0))
+    .replace(/{balance}/gi, String(newBalance??0))
+    .replace(/{ziel}/gi, ctx.targetC?.Name || ctx.targetName || '?');
+  if (ok) {
+    const msg = ctx.item.successMsg || `✅ ${ctx.item.name||'Item'} gekauft für ${ctx.item.price} ${cur}!`;
+    ServerSend('ChatRoomChat', {Content: shopTpl(msg), Type:'Whisper', Target: ctx.C.MemberNumber});
+    // Execute actions on targetC
+    const fakeVars = {name: ctx.targetC?.Name||ctx.C.Name, wort:'', typ:'shop', x:0, y:0, zone:'', C: ctx.targetC||ctx.C};
+    _runSeq(ctx.item.aktionen??[], ctx.targetC||ctx.C, fakeVars, {name:ctx.item.name||'Shop',id:ctx.item.id}, ()=>{}, ()=>{});
+  } else {
+    const msg = ctx.item.errorMsg || `❌ Nicht genug ${cur}! Preis: ${ctx.item.price??0}, Guthaben: ${newBalance??0}`;
+    ServerSend('ChatRoomChat', {Content: shopTpl(msg), Type:'Whisper', Target: ctx.C.MemberNumber});
+  }
+};
+
+// Helper: parse quoted args from a string: !pay "Gag" "PlayerName"
+function _shopParseArgs(text) {
+  const args = [];
+  const re = /"([^"]*)"|(\S+)/g;
+  let m;
+  while ((m = re.exec(text)) !== null) args.push(m[1] ?? m[2]);
+  return args;
+}
+
+// Helper: find player by name or member number
+function _shopFindPlayer(arg) {
+  const all = [Player, ...(ChatRoomCharacter||[])];
+  const lower = (arg||'').toLowerCase().trim();
+  // 1. exact name match (case insensitive)
+  const exact = all.filter(c => c.Name.toLowerCase() === lower);
+  if (exact.length === 1) return { char: exact[0], ambiguous: false };
+  // 2. member number match
+  const num = parseInt(arg);
+  if (!isNaN(num) && num > 0) {
+    const byId = all.find(c => c.MemberNumber === num);
+    if (byId) return { char: byId, ambiguous: false };
+  }
+  // 3. partial name match
+  const partial = all.filter(c => c.Name.toLowerCase().includes(lower));
+  if (partial.length === 1) return { char: partial[0], ambiguous: false };
+  if (partial.length > 1) return { char: null, ambiguous: true, matches: partial };
+  // 4. multiple exact → use ID hint
+  if (exact.length > 1) return { char: null, ambiguous: true, matches: exact };
+  return { char: null, ambiguous: false };
+}
+
+
 const _trigs=${trigsJson};
 // State-Persistenz: beim Sync (Stop+Start) bleiben Fired-States erhalten
 const _stateKey='__BCKBotState_${safeId}';
@@ -6480,6 +6926,65 @@ function _proc(rohText,typKey,C){
     else ServerSend('ChatRoomChat',{Content:txt,Type:'Chat'});
     return;
   }
+  // ── Shop: Pay-Befehl ──────────────────────────────────────────
+  const shopCmd = (_cfg.shopCmd||'!pay').trim().toLowerCase();
+  const shopTrimmed = rohText.trim();
+  // Check if starts with shop command (case insensitive)
+  if (shopCmd && shopTrimmed.toLowerCase().startsWith(shopCmd.toLowerCase())) {
+    const afterCmd = shopTrimmed.slice(shopCmd.length).trim();
+    const args = _shopParseArgs(afterCmd);
+    // args[0] = item name, args[1] = optional: player name/ID or price confirmation
+    if (args.length >= 1) {
+      const itemNameRaw = args[0];
+      const arg2 = args[1] ?? null;
+      // Find shop item by name (case insensitive, partial match allowed)
+      const allItems = _cfg.shopItems ?? [];
+      const exactItem = allItems.find(i => i.name.toLowerCase() === itemNameRaw.toLowerCase());
+      const partialItems = exactItem ? [exactItem] : allItems.filter(i => i.name.toLowerCase().includes(itemNameRaw.toLowerCase()));
+      const shopItem = partialItems.length === 1 ? partialItems[0] : exactItem ?? null;
+      const cur = _cfg.shopCurrencyName || 'Coins';
+      if (!shopItem) {
+        // Unknown item → whisper list of available items
+        const names = allItems.map(i=>i.name).join(', ') || '(keine)';
+        ServerSend('ChatRoomChat',{Content:`❓ Unbekanntes Item: "${itemNameRaw}". Verfügbar: ${names}`,Type:'Whisper',Target:C.MemberNumber});
+        return;
+      }
+      let targetC = C; // default: buyer
+      let targetName = C.Name;
+      // Determine target based on ziel_typ and arg2
+      if (shopItem.ziel_typ === 'player' && arg2 !== null) {
+        const isNum = /^\d+$/.test((arg2||'').trim());
+        const res = _shopFindPlayer(arg2);
+        if (res.ambiguous) {
+          const names = res.matches.map(c=>c.Name+'#'+c.MemberNumber).join(', ');
+          ServerSend('ChatRoomChat',{Content:`⚠️ Mehrdeutiger Name "${arg2}". Bitte ID verwenden: ${names}`,Type:'Whisper',Target:C.MemberNumber});
+          return;
+        }
+        if (!res.char) {
+          const notFound = shopItem.notFoundMsg || `❌ Spieler nicht gefunden: "${arg2}"`;
+          ServerSend('ChatRoomChat',{Content:notFound,Type:'Whisper',Target:C.MemberNumber});
+          return;
+        }
+        targetC = res.char;
+        targetName = res.char.Name;
+      } else if (shopItem.ziel_typ === 'player' && arg2 === null) {
+        // Player-target item but no target given
+        ServerSend('ChatRoomChat',{Content:`⚠️ "${shopItem.name}" benötigt einen Zielspieler: ${shopCmd} "${shopItem.name}" "SpielerName"`,Type:'Whisper',Target:C.MemberNumber});
+        return;
+      }
+      // Register pending purchase
+      const pendingId = 'sp_' + (_shopPendingIdx++);
+      _shopPending[pendingId] = { C, targetC, targetName, item: shopItem, vars:{name:C.Name,wort:shopTrimmed,typ:typKey,x:C.X??0,y:C.Y??0,zone:'',C} };
+      // Send to popup for balance check + deduction
+      window.__BCK_popupRef?.postMessage({
+        app:'BCKonfigurator', type:'BOT_SHOP_PAY',
+        memberNum: C.MemberNumber, name: C.Name,
+        itemId: shopItem.id, targetNum: targetC?.MemberNumber ?? null,
+        pendingId, botId: _BID
+      }, '*');
+      return;
+    }
+  }
   const pos={X:C.X??0,Y:C.Y??0}; // direkt vom Character
   const typLabel={chat:'\u{1F4AC} Chat',emote:'\u{2728} Emote',whisper:'\u{1F917} Whisper'}[typKey]??typKey;
   _trigs.forEach(trig=>{
@@ -6908,6 +7413,7 @@ window['_BCBot_'+_BID]={
       delete window.__BCBot_origSend_${safeId};
     }
     if(_msgH) ServerSocket.off('ChatRoomMessage',_msgH);
+    delete window['__BCKShopCb_'+_BID]; // Shop-Callback aufräumen
     // Events timer stoppen
     Object.values(_evTimers).forEach(h=>clearTimeout(h)); // clears both _t and _i timers
     delete window['_BCBot_'+_BID];
