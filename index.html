@@ -998,29 +998,13 @@ button { cursor: pointer; }
 .rank-modal input, .rank-modal select { width: 100%; }
 .rank-modal-btns { display: flex; gap: 8px; margin-top: 18px; justify-content: flex-end; }
 
-/* ── AntiStrip Tab ─────────────────────────────────────── */
-.as-wrap { display:flex; gap:0; height:calc(100vh - 110px); }
-.as-cfg  { width:380px; min-width:280px; border-right:1px solid var(--border); padding:16px; overflow-y:auto; display:flex; flex-direction:column; gap:12px; }
-.as-right { flex:1; padding:16px; overflow-y:auto; }
-.as-title { font-size:.78rem; font-weight:700; color:var(--text1); letter-spacing:.04em; text-transform:uppercase; margin-bottom:4px; display:flex; align-items:center; gap:8px; }
-.as-rule  { background:var(--bg3); border:1px solid var(--border); border-radius:var(--r-md); padding:12px; display:flex; flex-direction:column; gap:8px; }
-.as-rule.inactive { opacity:.5; }
-.as-rule-head { display:flex; align-items:center; gap:8px; }
-.as-rule-name { flex:1; font-size:.75rem; font-weight:600; color:var(--text1); }
-.as-rule-grid { display:grid; grid-template-columns:1fr 1fr; gap:6px; }
-.as-rule-field { display:flex; flex-direction:column; gap:2px; }
-.as-rule-field label { font-size:.6rem; color:var(--text3); }
-.as-rule-field input { font-size:.68rem; padding:4px 7px; background:var(--bg4); border:1px solid var(--border); border-radius:5px; color:var(--text1); font-family:var(--font-mono); }
-.as-add-btn { padding:8px; background:var(--bg3); border:1px dashed var(--border2); border-radius:var(--r-md); color:var(--text3); font-size:.72rem; cursor:pointer; text-align:center; transition:var(--t-fast); }
-.as-add-btn:hover { background:var(--bg-hover); color:var(--purple-bright); border-color:var(--border-accent); }
-.as-status-badge { font-size:.65rem; padding:2px 8px; border-radius:var(--r-full); font-weight:600; }
-.as-status-badge.running { background:var(--gd); color:var(--green); }
-.as-status-badge.stopped { background:var(--bg3); color:var(--text3); }
-.as-log-entry { font-size:.68rem; font-family:var(--font-mono); padding:5px 10px; border-radius:5px; background:var(--bg3); border-left:3px solid var(--border2); margin-bottom:4px; color:var(--text2); }
-.as-log-entry.shield { border-left-color:var(--green); color:var(--green-bright); }
-.as-log-entry.warn   { border-left-color:var(--yellow); color:var(--yellow); }
-.as-color-row { display:flex; align-items:center; gap:6px; }
-.as-color-row input[type=color] { width:28px; height:22px; border:none; border-radius:3px; cursor:pointer; padding:0; background:none; }
+/* UND NICHT Logik */
+.logik-btn.active-nicht { background:rgba(251,113,133,0.2); color:#fb7185; border-color:rgba(251,113,133,0.4); }
+.cond-group-nicht::before { content:"UND NICHT"; display:block; font-size:.59rem; color:#fb7185; font-weight:800; letter-spacing:.09em; text-align:center; margin:4px 0 2px 7px; }
+/* AntiStrip in action */
+.as-act-box { margin-top:7px; padding:8px 10px; background:rgba(52,211,153,0.04); border:1px solid rgba(52,211,153,0.18); border-radius:8px; }
+.as-act-row { display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-top:5px; }
+.as-act-label { font-size:.6rem; color:var(--text3); white-space:nowrap; }
 
 </style>
 </head>
@@ -1059,7 +1043,6 @@ button { cursor: pointer; }
   <button class="tab-btn"        id="tab-money-btn"  onclick="switchTab('money')">💰 Money</button>
   <button class="tab-btn"        id="tab-rank-btn"   onclick="switchTab('rank')">🏆 Rang</button>
   <button class="tab-btn"        id="tab-shop-btn"   onclick="switchTab('shop')">🛒 Shop</button>
-  <button class="tab-btn"        id="tab-antistrip-btn" onclick="switchTab('antistrip')">🛡️ AntiStrip</button>
 </div>
 
 <!-- TAB 1: ITEM MANAGER -->
@@ -2694,7 +2677,7 @@ function deleteProfileByIdx(idx) {
 let _activeTab = 'items';
 function switchTab(tab) {
   _activeTab = tab;
-  ['items','outfit','curse','bot','log','money','events','rank','shop','antistrip'].forEach(t => {
+  ['items','outfit','curse','bot','log','money','events','rank','shop'].forEach(t => {
     document.getElementById('tab-'+t)?.classList.toggle('active', t===tab);
     document.getElementById('tab-'+t+'-btn')?.classList.toggle('active', t===tab);
   });
@@ -2704,8 +2687,7 @@ function switchTab(tab) {
   if (tab === 'log')    { renderLogTab(); }
   if (tab === 'money')  { renderMoneyTab(); }
   if (tab === 'rank')   { renderRankTab(); }
-  if (tab === 'shop')    { renderShopTab(); }
-  if (tab === 'antistrip') { renderAntiStripTab(); }
+  if (tab === 'shop')   { renderShopTab(); }
 
 }
 
@@ -4917,8 +4899,9 @@ function renderEvCond(bot, eid, c, ci) {
     : `<div style="display:flex;align-items:center;gap:0;margin:2px 0;padding-left:6px">
         <button onclick="evCondLogik('${eid}',${ci},'und')" class="logik-btn ${logik==='und'?'active':''}">UND</button>
         <button onclick="evCondLogik('${eid}',${ci},'oder')" class="logik-btn ${logik==='oder'?'active':''}">ODER</button>
+        <button onclick="evCondLogik('${eid}',${ci},'und_nicht')" class="logik-btn ${logik==='und_nicht'?'active active-nicht':''}" style="border-radius:0 3px 3px 0;border-left:none" title="UND NICHT">UND NICHT</button>
       </div>`;
-  return `<div class="cond-group ${logik==='oder'?'cond-group-oder':''}" id="evcond-${eid}-${ci}">
+  return `<div class="cond-group ${logik==='oder'?'cond-group-oder':logik==='und_nicht'?'cond-group-nicht':''}" id="evcond-${eid}-${ci}">
     ${logikBadge}
     <div class="cond-card cond-op">
       <div class="card-fields">
@@ -5495,9 +5478,10 @@ function renderCond(bot, tid, c, ci) {
     : `<div style="display:flex;align-items:center;gap:0;margin:2px 0;padding-left:6px">
         <button onclick="condLogik('${tid}',${ci},'und')" class="logik-btn ${logik==='und'?'active':''}" title="UND – alle müssen zutreffen">UND</button>
         <button onclick="condLogik('${tid}',${ci},'oder')" class="logik-btn ${logik==='oder'?'active':''}" title="ODER – mind. eine muss zutreffen">ODER</button>
-        <button onclick="condLogik('${tid}',${ci},'und_oder')" class="logik-btn ${logik==='und_oder'?'active':''}" style="border-radius:0 3px 3px 0" title="Egal – mindestens eine genügt">UND/ODER</button>
+        <button onclick="condLogik('${tid}',${ci},'und_oder')" class="logik-btn ${logik==='und_oder'?'active':''}" title="Egal – mindestens eine genügt">UND/ODER</button>
+        <button onclick="condLogik('${tid}',${ci},'und_nicht')" class="logik-btn ${logik==='und_nicht'?'active active-nicht':''}" style="border-radius:0 3px 3px 0;border-left:none" title="UND NICHT – diese Bedingung darf NICHT erfüllt sein">UND NICHT</button>
       </div>`;
-  return `<div class="cond-group ${logik==='oder'?'cond-group-oder':''}">
+  return `<div class="cond-group ${logik==='oder'?'cond-group-oder':logik==='und_nicht'?'cond-group-nicht':''}">
     ${logikBadge}
     <div class="cond-card cond-op" id="cond-${tid}-${ci}">
       <div class="card-fields">
@@ -5542,10 +5526,35 @@ function renderAct(tid, a, ai) {
   } else if (a.typ === 'item') {
     const cfgInfo = a.itemConfig ? ` <span style="font-size:.58rem;background:var(--gd);color:var(--green);padding:1px 4px;border-radius:3px">✓ Konfig</span>` : '';
     const label = a.itemConfig ? `📦 ${a.itemConfig.group}/${a.itemConfig.asset}` : a.profilName ? `👗 ${a.profilName}` : a.curseName ? `🔮 ${a.curseName}` : a.item ? `📦 ${a.gruppe||'?'}/${a.item}` : '– nichts gewählt –';
+    const asLabel = a.antiStrip_itemConfig ? `📦 ${a.antiStrip_itemConfig.group}/${a.antiStrip_itemConfig.asset}`
+                  : a.antiStrip_curseName  ? `🔮 ${a.antiStrip_curseName}`
+                  : a.antiStrip_ersatz     ? `📦 ${a.antiStrip_gruppe||'?'}/${a.antiStrip_ersatz}`
+                  : '– nichts gewählt –';
+    const antiStripBlock = a.antiStrip ? `
+      <div class="as-act-row">
+        <span class="as-act-label">Ersatz-Item:</span>
+        <span style="font-size:.68rem;color:var(--text2);flex:1">${escHtml(asLabel)}</span>
+        <button onclick="ipickerOpenForActAntiStrip('${tid}',${ai})" style="font-size:.63rem;padding:3px 9px;background:var(--pd);border:none;color:var(--pl);border-radius:5px;cursor:pointer">📂 Wählen</button>
+        ${a.antiStrip_ersatz && !a.antiStrip_itemConfig ? `<input class="cf" type="color" value="${a.antiStrip_farbe||'#ff0000'}" oninput="actField('${tid}',${ai},'antiStrip_farbe',this.value)" style="width:28px;padding:1px;cursor:pointer" title="Farbe">` : ''}
+      </div>
+      <div class="as-act-row">
+        <span class="as-act-label">Delay:</span>
+        <input class="cf" type="number" value="${a.antiStrip_delay??500}" min="0" step="100"
+          oninput="actField('${tid}',${ai},'antiStrip_delay',+this.value)"
+          style="width:72px;font-size:.68rem"> ms
+        <span style="font-size:.6rem;color:var(--text3)">(Wartezeit nach Entfernen)</span>
+      </div>` : '';
     extra = `<div style="display:flex;gap:6px;align-items:center;margin-top:4px;flex-wrap:wrap">
         <span style="font-size:.7rem;color:var(--text2);flex:1">${escHtml(label)}${cfgInfo}</span>
         <button onclick="ipickerOpenForAct('${tid}',${ai})" style="font-size:.63rem;padding:3px 9px;background:var(--pd);border:none;color:var(--pl);border-radius:5px;cursor:pointer">📂 Auswählen…</button>
         ${a.item && !a.itemConfig ? `<input class="cf" type="color" value="${a.farbe||'#ffffff'}" oninput="actField('${tid}',${ai},'farbe',this.value)" style="width:28px;padding:1px;cursor:pointer" title="Farbe">` : ''}
+      </div>
+      <div class="as-act-box">
+        <label style="cursor:pointer;display:flex;align-items:center;gap:6px;font-size:.65rem;color:var(--text2)">
+          <input type="checkbox" ${a.antiStrip?'checked':''} onchange="actField('${tid}',${ai},'antiStrip',this.checked);actRerender('${tid}',${ai})">
+          🛡️ AntiStrip – Item wird wieder angelegt wenn der Spieler es entfernt
+        </label>
+        ${antiStripBlock}
       </div>`;
   } else if (a.typ === 'item_entf') {
     extra = `<input class="cf" style="width:100%;margin-top:4px" value="${escHtml(a.gruppe||'')}"
@@ -5941,6 +5950,34 @@ function ipickerOpenForAct(tid, ai) {
     // Re-render action card
     const el = document.getElementById('act-'+tid+'-'+ai);
     if (el) { const tmp=document.createElement('div'); tmp.innerHTML=renderAct(tid,a,ai); el.replaceWith(tmp.firstElementChild); }
+  });
+}
+
+function ipickerOpenForActAntiStrip(tid, ai) {
+  ipickerOpen('item', v => {
+    const b = _selBot(); if (!b) return;
+    const t = b.triggers.find(x=>x.id===tid); if (!t||!t.aktionen[ai]) return;
+    const a = t.aktionen[ai];
+    delete a.antiStrip_ersatz; delete a.antiStrip_gruppe; delete a.antiStrip_farbe;
+    delete a.antiStrip_itemConfig; delete a.antiStrip_curseName; delete a.antiStrip_curseEntry;
+    if (v.type === 'item') {
+      if (v.itemConfig) {
+        a.antiStrip_itemConfig = v.itemConfig;
+        a.antiStrip_ersatz = v.itemConfig.asset;
+        a.antiStrip_gruppe = v.itemConfig.group;
+        a.antiStrip_farbe  = v.itemConfig.colors?.[0] ?? '#ff0000';
+      } else {
+        a.antiStrip_ersatz = v.name;
+        a.antiStrip_gruppe = v.group;
+        a.antiStrip_farbe  = '#ff0000';
+      }
+    } else if (v.type === 'curse') {
+      a.antiStrip_curseName  = v.name;
+      a.antiStrip_curseEntry = v.entry;
+      a.antiStrip_gruppe     = v.entry?.Gruppe ?? '';
+    }
+    _saveBots();
+    actRerender(tid, ai);
   });
 }
 
@@ -6424,7 +6461,8 @@ function _ok(trig,rohText,typKey,C){
     groups[groups.length-1].push(c);
   }
   // At least one group (OR) must be fully satisfied (AND within group)
-  return groups.some(g=>g.every(c=>checkOne(c)));
+  // und_nicht = negate the result of checkOne for that condition
+  return groups.some(g=>g.every(c=>c.logik==='und_nicht'?!checkOne(c):checkOne(c)));
 }
 function _istBesetzt(x,y,ausschliessen){
   // Ignore target positions at 0,0 — BC hasn't synced position yet
@@ -6584,8 +6622,8 @@ function _execAct(a,C,vars){
     if(a.typ==='chat'){ServerSend('ChatRoomChat',{Content:_tpl(a.text,vars),Type:'Chat'});ok=true;}
     else if(a.typ==='emote'){ServerSend('ChatRoomChat',{Content:_tpl(a.text,vars),Type:'Emote'});ok=true;}
     else if(a.typ==='whisper'){ServerSend('ChatRoomChat',{Content:_tpl(a.text,vars),Type:'Whisper',Target:C.MemberNumber});ok=true;}
-    else if(a.typ==='item_entf'){InventoryRemove(C,a.gruppe);CharacterRefresh(C);ChatRoomCharacterUpdate(C);ok=true;}
-    else if(a.typ==='item'){_applyItemAction(a,C);ok=true;}
+    else if(a.typ==='item_entf'){InventoryRemove(C,a.gruppe);CharacterRefresh(C);ChatRoomCharacterUpdate(C);_asUnregister(C,a.gruppe);ok=true;}
+    else if(a.typ==='item'){_applyItemAction(a,C);if(a.antiStrip)_asRegister(C,a);ok=true;}
     else if(a.typ==='teleport'){ok=_teleport(a,C);}
     else if(a.typ==='money'){
       const op=a.money_op??'add';
@@ -6722,7 +6760,7 @@ function _okEv(ev,C,rohText,typKey){
     if(c.logik==='oder'||c.logik==='und_oder')groups.push([]);
     groups[groups.length-1].push(c);
   }
-  return groups.some(g=>g.every(c=>checkOne(c)));
+  return groups.some(g=>g.every(c=>c.logik==='und_nicht'?!checkOne(c):checkOne(c)));
 }
 
 function _fireEv(ev){
@@ -7622,6 +7660,83 @@ try {
 
 // ── ServerSocket: alle Spieler im Raum (IMMER aktiv, unabhaengig von nurEigene) ──
 // Eigene Nachrichten kommen NICHT via Socket zurueck – die kommen via hookFunction
+// ── AntiStrip Runtime ─────────────────────────────────────────
+// _asWatchers: key=memberNum+'_'+gruppe → Regel-Objekt
+const _asWatchers={};
+function _asRegister(C,a){
+  // Gruppe aus Item- oder Curse-Konfig ermitteln
+  const gruppe=a.antiStrip_itemConfig?.group||a.antiStrip_curseEntry?.Gruppe||a.antiStrip_gruppe
+              ||a.itemConfig?.group||a.curseEntry?.Gruppe||a.gruppe;
+  if(!gruppe){_log('\u26A0 AntiStrip: keine Gruppe');return;}
+  const key=C.MemberNumber+'_'+gruppe;
+  _asWatchers[key]={
+    memberNum:C.MemberNumber, gruppe,
+    delay:a.antiStrip_delay??500,
+    ersatz:a.antiStrip_ersatz||null,
+    farbe:a.antiStrip_farbe||'#ffffff',
+    itemConfig:a.antiStrip_itemConfig||null,
+    curseEntry:a.antiStrip_curseEntry||null,
+  };
+  _log('\u{1F6E1}\uFE0F AntiStrip aktiv: '+C.Name+' / '+gruppe+(a.antiStrip_ersatz?' \u2192 '+a.antiStrip_ersatz:''));
+}
+function _asUnregister(C,gruppe){
+  if(!gruppe)return;
+  const key=C.MemberNumber+'_'+gruppe;
+  if(_asWatchers[key]){
+    delete _asWatchers[key];
+    _log('\u{1F6E1}\uFE0F AntiStrip beendet (Bot hat Item geändert/entfernt): '+C.Name+' / '+gruppe);
+  }
+}
+const _asH=function(data){
+  if(!data||data.Type!=='Action')return;
+  const txt=JSON.stringify(data);
+  if(txt.indexOf('ItemRemove')===-1&&txt.indexOf('ActionRemove')===-1)return;
+  // Sender ermitteln
+  var sender=null;
+  if(Array.isArray(data.Dictionary)){
+    for(var di=0;di<data.Dictionary.length;di++){
+      var d=data.Dictionary[di];
+      if(d.SourceCharacter!=null){sender=d.SourceCharacter;break;}
+    }
+  }
+  if(sender===null)sender=data.Sender;
+  // Wenn der Bot selbst das Item entfernt → kein AntiStrip auslösen
+  if(sender===Player.MemberNumber)return;
+  Object.values(_asWatchers).forEach(function(w){
+    const allChars=[Player,...(ChatRoomCharacter||[])];
+    const C=allChars.find(c=>c.MemberNumber===w.memberNum);
+    if(!C)return;
+    const item=typeof InventoryGet==='function'?InventoryGet(C,w.gruppe):null;
+    if(item)return; // Slot noch besetzt
+    _log('\u{1F6E1}\uFE0F AntiStrip: '+w.gruppe+' leer bei '+C.Name+' \u2192 '+  (w.ersatz||'Ersatz')+'...');
+    setTimeout(function(){
+      try{
+        if(w.itemConfig){
+          const ic=w.itemConfig;
+          let col=ic.colors??['#ffffff'];
+          if(typeof col==='string'&&col.includes(','))col=col.split(',');
+          InventoryWear(C,ic.asset,ic.group,col,0,Player.MemberNumber,ic.craft??null);
+          const itemNow=InventoryGet(C,ic.group);
+          if(itemNow){
+            itemNow.Color=col;itemNow.Property=itemNow.Property??{};
+            if(ic.tr&&Object.keys(ic.tr).length){itemNow.Property.TypeRecord=ic.tr;itemNow.Property.Type=ic.typeStr??'';}
+            if(ic.props)Object.assign(itemNow.Property,ic.props);
+          }
+        } else if(w.curseEntry){
+          let col=w.curseEntry.Farbe;
+          if(typeof col==='string'&&col.includes(','))col=col.split(',');
+          InventoryWear(C,w.curseEntry.ItemName,w.curseEntry.Gruppe,col,0,Player.MemberNumber,w.curseEntry.Craft);
+        } else if(w.ersatz){
+          InventoryWear(C,w.ersatz,w.gruppe,w.farbe||'#ffffff',0,Player.MemberNumber);
+        } else {return;}
+        CharacterRefresh(C);ChatRoomCharacterUpdate(C);
+        _log('\u2705 AntiStrip: '+( w.ersatz||'Item')+' wieder angelegt auf '+C.Name);
+      }catch(ex){_log('\u26A0 AntiStrip Fehler: '+ex.message);}
+    },w.delay??500);
+  });
+};
+ServerSocket.on('ChatRoomMessage',_asH);
+
 const _msgH=function(data){
   if(!['Chat','Emote','Whisper'].includes(data.Type))return;
   if(data.Sender===Player.MemberNumber)return; // eigene via hookFunction abgefangen
@@ -7647,6 +7762,7 @@ window['_BCBot_'+_BID]={
       window.ServerSend = window.__BCBot_origSend_${safeId};
       delete window.__BCBot_origSend_${safeId};
     }
+    if(_asH)  ServerSocket.off('ChatRoomMessage',_asH);
     if(_msgH) ServerSocket.off('ChatRoomMessage',_msgH);
     // Events timer stoppen
     Object.values(_evTimers).forEach(h=>clearTimeout(h)); // clears both _t and _i timers
@@ -7745,378 +7861,4 @@ function botSync() {
 }
 
 </script>
-
-<!-- TAB: ANTISTRIP -->
-<div id="tab-antistrip" class="tab-pane">
-  <div class="as-wrap">
-
-    <!-- LEFT: Regel-Konfiguration -->
-    <div class="as-cfg">
-
-      <div class="as-title">
-        🛡️ AntiStrip
-        <span id="as-status-badge" class="as-status-badge stopped">● Gestoppt</span>
-        <div style="margin-left:auto;display:flex;gap:6px">
-          <button onclick="asStart()" id="as-start-btn"
-            style="font-size:.65rem;padding:3px 10px;background:var(--gd);border:1px solid var(--green);color:var(--green);border-radius:5px;cursor:pointer">▶ Starten</button>
-          <button onclick="asStop()" id="as-stop-btn"
-            style="font-size:.65rem;padding:3px 10px;background:#2a0a0a;border:1px solid var(--red);color:var(--red);border-radius:5px;cursor:pointer">⏹ Stopp</button>
-        </div>
-      </div>
-
-      <div style="font-size:.62rem;color:var(--text3);line-height:1.55;margin-top:-4px">
-        Überwacht Items auf Spielern. Wenn ein Item entfernt wird, wird es (oder ein Ersatz) automatisch wieder angelegt.
-        Jede Regel ist einzeln aktivierbar.
-      </div>
-
-      <div id="as-rule-list" style="display:flex;flex-direction:column;gap:8px"></div>
-
-      <button class="as-add-btn" onclick="asAddRule()">+ Neue Regel hinzufügen</button>
-
-      <div style="margin-top:4px;border-top:1px solid var(--border);padding-top:12px">
-        <div class="as-title" style="margin-bottom:8px">⚙️ Einstellungen</div>
-        <label style="font-size:.63rem;color:var(--text3);display:flex;align-items:center;gap:8px;cursor:pointer">
-          <input type="checkbox" id="as-self-strip" onchange="asSave()" style="cursor:pointer">
-          Eigene Items (Bot selbst) auch schützen
-        </label>
-        <label style="font-size:.63rem;color:var(--text3);display:flex;align-items:center;gap:8px;margin-top:8px;cursor:pointer">
-          <input type="number" id="as-delay" min="0" max="10000" step="100" value="500"
-            onchange="asSave()" style="width:70px;font-size:.68rem;padding:3px 6px;background:var(--bg4);border:1px solid var(--border);border-radius:4px;color:var(--text1)">
-          ms Verzögerung beim Wiederanlegen
-        </label>
-      </div>
-
-      <div style="border-top:1px solid var(--border);padding-top:10px;display:flex;gap:6px;flex-wrap:wrap">
-        <button onclick="asExport()" style="flex:1;font-size:.65rem;padding:5px;background:none;border:1px solid var(--border2);color:var(--text3);border-radius:5px;cursor:pointer">⬇️ Export</button>
-        <button onclick="asImport()" style="flex:1;font-size:.65rem;padding:5px;background:none;border:1px solid var(--border2);color:var(--text3);border-radius:5px;cursor:pointer">⬆️ Import</button>
-        <button onclick="asResetAll()" style="flex:1;font-size:.65rem;padding:5px;background:#2a0a0a;border:1px solid var(--red);color:var(--red);border-radius:5px;cursor:pointer">🗑 Zurücksetzen</button>
-      </div>
-    </div>
-
-    <!-- RIGHT: Log -->
-    <div class="as-right">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid var(--border)">
-        <span style="font-size:.82rem;font-weight:700;color:var(--text1)">📋 AntiStrip Log</span>
-        <div style="display:flex;gap:8px">
-          <span id="as-log-count" style="font-size:.65rem;color:var(--text3)"></span>
-          <button onclick="asClearLog()" style="font-size:.65rem;padding:3px 10px;background:var(--bg3);border:1px solid var(--border);color:var(--text3);border-radius:5px;cursor:pointer">Leeren</button>
-        </div>
-      </div>
-      <div id="as-log-list">
-        <div style="font-size:.72rem;color:var(--text3);text-align:center;margin-top:40px">
-          🛡️ Noch keine Ereignisse.<br>
-          <span style="font-size:.65rem">Erscheint wenn AntiStrip aktiv ist und ein Item entfernt wird.</span>
-        </div>
-      </div>
-    </div>
-
-  </div>
-</div>
-
-<script>
-// ══ ANTISTRIP ══════════════════════════════════════════════════
-const AS_KEY = 'BC_AntiStrip_v1';
-let _asRules    = [];
-let _asSettings = { selfStrip: false, delay: 500 };
-let _asRunning  = false;
-let _asLog      = [];
-
-(function _asLoad() {
-  try {
-    const s = localStorage.getItem(AS_KEY);
-    if (s) {
-      const d = JSON.parse(s);
-      _asRules    = d.rules    ?? [];
-      _asSettings = Object.assign(_asSettings, d.settings ?? {});
-    }
-  } catch {}
-})();
-
-function asSave() {
-  _asSettings.selfStrip = document.getElementById('as-self-strip')?.checked ?? false;
-  _asSettings.delay     = parseInt(document.getElementById('as-delay')?.value ?? '500') || 500;
-  try { localStorage.setItem(AS_KEY, JSON.stringify({ rules: _asRules, settings: _asSettings })); } catch {}
-}
-
-function asRenderRules() {
-  const el = document.getElementById('as-rule-list');
-  if (!el) return;
-  if (_asRules.length === 0) {
-    el.innerHTML = '<div style="font-size:.68rem;color:var(--text3);text-align:center;padding:16px 0">Keine Regeln. Klicke "+ Neue Regel hinzufügen".</div>';
-    return;
-  }
-  el.innerHTML = _asRules.map((r, i) => `
-    <div class="as-rule ${r.aktiv ? '' : 'inactive'}" id="as-rule-${i}">
-      <div class="as-rule-head">
-        <label style="cursor:pointer;display:flex;align-items:center;gap:5px;font-size:.65rem;color:var(--text3)">
-          <input type="checkbox" ${r.aktiv ? 'checked' : ''} onchange="asToggle(${i},this.checked)">
-          Aktiv
-        </label>
-        <span class="as-rule-name">${asEsc(r.name || 'Regel ' + (i+1))}</span>
-        <button onclick="asDeleteRule(${i})" title="Löschen"
-          style="background:none;border:none;color:var(--red);font-size:.75rem;cursor:pointer;padding:0 4px">✕</button>
-      </div>
-      <div class="as-rule-grid">
-        <div class="as-rule-field">
-          <label>Name</label>
-          <input value="${asEsc(r.name)}" oninput="asFieldEdit(${i},'name',this.value)" placeholder="Regelname">
-        </div>
-        <div class="as-rule-field">
-          <label>MemberNumber</label>
-          <input value="${r.memberNumber ?? ''}" type="number" oninput="asFieldEdit(${i},'memberNumber',+this.value)" placeholder="998">
-        </div>
-        <div class="as-rule-field">
-          <label>Gruppe (Slot)</label>
-          <input value="${asEsc(r.gruppe)}" oninput="asFieldEdit(${i},'gruppe',this.value)" placeholder="ItemMouth">
-        </div>
-        <div class="as-rule-field">
-          <label>Überwachtes Item</label>
-          <input value="${asEsc(r.watchItem)}" oninput="asFieldEdit(${i},'watchItem',this.value)" placeholder="BallGag">
-        </div>
-        <div class="as-rule-field">
-          <label>Ersatz-Item</label>
-          <input value="${asEsc(r.ersatzItem)}" oninput="asFieldEdit(${i},'ersatzItem',this.value)" placeholder="RoseBallGag">
-        </div>
-        <div class="as-rule-field">
-          <label>Farbe</label>
-          <div class="as-color-row">
-            <input type="color" value="${r.farbe ?? '#ff0000'}"
-              oninput="asFieldEdit(${i},'farbe',this.value)" title="Farbe wählen">
-            <input value="${asEsc(r.farbe ?? '#FF0000')}" oninput="asFieldEdit(${i},'farbe',this.value)"
-              placeholder="#FF0000" style="flex:1;font-size:.62rem">
-          </div>
-        </div>
-      </div>
-    </div>
-  `).join('');
-}
-
-function asEsc(s) {
-  return String(s ?? '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-}
-
-function asFieldEdit(i, key, val) {
-  if (!_asRules[i]) return;
-  _asRules[i][key] = val;
-  // Sync Farbfeld Duplikat
-  if (key === 'farbe') {
-    const el = document.getElementById('as-rule-' + i);
-    if (el) {
-      const inputs = el.querySelectorAll('.as-color-row input');
-      inputs.forEach(inp => { if (inp.value !== val) inp.value = val; });
-    }
-  }
-  asSave();
-}
-
-function asToggle(i, val) {
-  if (!_asRules[i]) return;
-  _asRules[i].aktiv = val;
-  const el = document.getElementById('as-rule-' + i);
-  if (el) el.className = 'as-rule' + (val ? '' : ' inactive');
-  asSave();
-}
-
-function asAddRule() {
-  _asRules.push({
-    name:         'Neue Regel',
-    memberNumber: null,
-    gruppe:       'ItemMouth',
-    watchItem:    '',
-    ersatzItem:   '',
-    farbe:        '#FF0000',
-    aktiv:        true,
-  });
-  asSave();
-  asRenderRules();
-  // Scroll to bottom
-  const el = document.getElementById('as-rule-list');
-  if (el) el.lastElementChild?.scrollIntoView({ behavior: 'smooth' });
-}
-
-function asDeleteRule(i) {
-  if (!confirm('Regel "' + (_asRules[i]?.name ?? i) + '" löschen?')) return;
-  _asRules.splice(i, 1);
-  asSave();
-  asRenderRules();
-}
-
-function asResetAll() {
-  if (!confirm('Alle AntiStrip-Regeln zurücksetzen?')) return;
-  _asRules = [];
-  asSave();
-  asRenderRules();
-}
-
-function asExport() {
-  const json = JSON.stringify({ rules: _asRules, settings: _asSettings }, null, 2);
-  const a = document.createElement('a');
-  a.href = 'data:application/json;charset=utf-8,' + encodeURIComponent(json);
-  a.download = 'antistrip_export.json';
-  a.click();
-}
-
-function asImport() {
-  const inp = document.createElement('input');
-  inp.type = 'file'; inp.accept = '.json';
-  inp.onchange = e => {
-    const file = e.target.files[0]; if (!file) return;
-    const r = new FileReader();
-    r.onload = ev => {
-      try {
-        const d = JSON.parse(ev.target.result);
-        if (d.rules) _asRules = d.rules;
-        if (d.settings) _asSettings = Object.assign(_asSettings, d.settings);
-        asSave(); asRenderRules(); asRenderSettings();
-        showStatus('✅ AntiStrip importiert', 'success');
-      } catch { showStatus('❌ Import fehlgeschlagen', 'error'); }
-    };
-    r.readAsText(file);
-  };
-  inp.click();
-}
-
-function asRenderSettings() {
-  const selfEl  = document.getElementById('as-self-strip');
-  const delayEl = document.getElementById('as-delay');
-  if (selfEl)  selfEl.checked = _asSettings.selfStrip ?? false;
-  if (delayEl) delayEl.value  = _asSettings.delay ?? 500;
-}
-
-function asAddLog(msg, type = '') {
-  const ts = new Date().toLocaleTimeString('de-DE');
-  _asLog.unshift({ ts, msg, type });
-  if (_asLog.length > 200) _asLog.length = 200;
-  asRenderLog();
-}
-
-function asRenderLog() {
-  const el = document.getElementById('as-log-list');
-  const cnt = document.getElementById('as-log-count');
-  if (!el) return;
-  if (_asLog.length === 0) {
-    el.innerHTML = '<div style="font-size:.72rem;color:var(--text3);text-align:center;margin-top:40px">🛡️ Noch keine Ereignisse.</div>';
-    if (cnt) cnt.textContent = '';
-    return;
-  }
-  if (cnt) cnt.textContent = _asLog.length + ' Einträge';
-  el.innerHTML = _asLog.map(e =>
-    `<div class="as-log-entry ${e.type}">[${e.ts}] ${asEsc(e.msg)}</div>`
-  ).join('');
-}
-
-function asClearLog() { _asLog = []; asRenderLog(); }
-
-function asSetRunning(val) {
-  _asRunning = val;
-  const badge = document.getElementById('as-status-badge');
-  if (badge) {
-    badge.className = 'as-status-badge ' + (val ? 'running' : 'stopped');
-    badge.textContent = val ? '● Läuft' : '● Gestoppt';
-  }
-}
-
-function _buildAsCode() {
-  const activeRules = _asRules.filter(r => r.aktiv && r.memberNumber && r.gruppe && r.ersatzItem);
-  const rulesJson   = JSON.stringify(activeRules);
-  const delay       = _asSettings.delay ?? 500;
-  const selfStrip   = _asSettings.selfStrip ? 'true' : 'false';
-
-  return `(function(){
-  // AntiStrip – generiert von BC Konfigurator
-  if(window.__BCAntiStrip){ window.__BCAntiStrip.stop(); }
-  var REGELN=${rulesJson};
-  var DELAY=${delay};
-  var SELF_STRIP=${selfStrip};
-  var _active=true;
-  var _mod;
-  try{
-    _mod=bcModSdk.registerMod({name:'BC_AntiStrip',fullName:'BC AntiStrip',version:'1.0.0'});
-  }catch(e){
-    // Bereits registriert – patches trotzdem hinzufügen
-    _mod={hookFunction:function(){}};
-    console.warn('[AntiStrip] Mod bereits registriert – verwende Fallback');
-  }
-  function _handle(data){
-    if(!_active)return;
-    if(data&&data.Type!=='Action')return;
-    var text=JSON.stringify(data||'');
-    if(text.indexOf('ItemRemove')===-1&&text.indexOf('ActionRemove')===-1)return;
-    var sender=null;
-    if(data&&data.Dictionary){
-      for(var di=0;di<data.Dictionary.length;di++){
-        var d=data.Dictionary[di];
-        if(d.SourceCharacter!=null){sender=d.SourceCharacter;break;}
-      }
-    }
-    if(sender===null&&data)sender=data.Sender;
-    REGELN.forEach(function(regel){
-      if(!regel.aktiv)return;
-      if(regel.memberNumber&&sender!==regel.memberNumber)return;
-      if(!SELF_STRIP&&sender===Player.MemberNumber)return;
-      var C=null;
-      var chars=window.ChatRoomCharacter||[];
-      for(var ci=0;ci<chars.length;ci++){if(chars[ci].MemberNumber===regel.memberNumber){C=chars[ci];break;}}
-      if(!C&&Player.MemberNumber===regel.memberNumber)C=Player;
-      if(!C)return;
-      var item=typeof InventoryGet==='function'?InventoryGet(C,regel.gruppe):null;
-      // Slot noch besetzt → kein Eingriff
-      if(item)return;
-      console.log('[AntiStrip] '+regel.gruppe+' leer bei #'+regel.memberNumber+' → '+regel.ersatzItem+' anlegen');
-      setTimeout(function(){
-        if(!_active)return;
-        try{
-          InventoryWear(C,regel.ersatzItem,regel.gruppe,regel.farbe||'#ffffff',0,Player.MemberNumber);
-          CharacterRefresh(C);
-          ChatRoomCharacterUpdate(C);
-          console.log('[AntiStrip] ✅ '+regel.ersatzItem+' angelegt auf '+C.Name);
-        }catch(ex){
-          console.warn('[AntiStrip] Fehler beim Anlegen:',ex.message);
-        }
-      },DELAY);
-    });
-  }
-  ServerSocket.on('ChatRoomMessage',_handle);
-  window.__BCAntiStrip={
-    stop:function(){
-      _active=false;
-      ServerSocket.off('ChatRoomMessage',_handle);
-      delete window.__BCAntiStrip;
-      console.log('[AntiStrip] ⏹️ gestoppt');
-    },
-    status:function(){
-      console.log('[AntiStrip] Aktiv='+_active+' | Regeln:',REGELN.length);
-    }
-  };
-  console.log('[AntiStrip] ▶️ gestartet | '+REGELN.filter(function(r){return r.aktiv;}).length+' aktive Regeln | Delay: '+DELAY+'ms');
-})();`;
-}
-
-function asStart() {
-  if (!_connected) { showStatus('❌ Nicht mit BC verbunden', 'error'); return; }
-  const active = _asRules.filter(r => r.aktiv && r.memberNumber && r.gruppe && r.ersatzItem);
-  if (active.length === 0) { showStatus('⚠️ Keine aktiven Regeln', 'error'); return; }
-  bcSend({ type: 'EXEC', code: _buildAsCode() });
-  asSetRunning(true);
-  asAddLog('▶️ AntiStrip gestartet | ' + active.length + ' aktive Regeln', 'shield');
-  showStatus('▶️ AntiStrip gestartet', 'success');
-}
-
-function asStop() {
-  if (!_connected) { showStatus('❌ Nicht mit BC verbunden', 'error'); return; }
-  bcSend({ type: 'EXEC', code: "if(window.__BCAntiStrip)window.__BCAntiStrip.stop();" });
-  asSetRunning(false);
-  asAddLog('⏹ AntiStrip gestoppt', 'warn');
-  showStatus('⏹ AntiStrip gestoppt', 'success');
-}
-
-// ── Tab-Einstieg ──────────────────────────────────────────────
-function renderAntiStripTab() {
-  asRenderSettings();
-  asRenderRules();
-  asRenderLog();
-  asSetRunning(_asRunning);
-}
-</script>
-
 </body>
