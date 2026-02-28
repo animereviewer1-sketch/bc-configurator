@@ -843,44 +843,48 @@ window.CurseScanner = (() => {
     console.log('[BC-Konfigurator] Listener aktiv ✅');
   }
 
-  // ── BCX !pay Command-Unterdrückung ────────────────────
-  // Verhindert, dass BCX auf !pay-Whisper mit "Unknown command" antwortet,
-  // indem die Nachricht abgefangen wird, BEVOR BCX sie verarbeiten kann.
-  if (!window.__BCK_PAY_HOOK__) {
-    window.__BCK_PAY_HOOK__ = true;
+  // ── BCX Fehler-Whisper unterdrücken ──────────────────────────────────
+  // BCX verarbeitet unbekannte Befehle intern mit hoher Priorität und sendet
+  // die Fehlerantwort via ServerSend. Priorität 9999 stellt sicher dass unser
+  // Hook NACH BCX läuft und den ausgehenden Whisper still verwerfen kann.
+  if (!window.__BCK_BCX_FILTER__) {
+    window.__BCK_BCX_FILTER__ = true;
 
-    function installPayHook() {
+    function installBCXFilter() {
       if (typeof bcModSdk === 'undefined' || typeof bcModSdk.registerMod !== 'function') {
-        BCK.warn('bcModSdk noch nicht bereit – versuche erneut in 1s...');
-        setTimeout(installPayHook, 1000);
+        BCK.warn('[BCXFilter] bcModSdk noch nicht bereit – retry in 500ms');
+        setTimeout(installBCXFilter, 500);
         return;
       }
 
-      const payMod = bcModSdk.registerMod({
-        name:     'BCK_PayFix',
-        fullName: 'BCK PayCommand Fix',
+      // Falls Mod bereits existiert (z.B. durch Reload): erst entfernen
+      try { bcModSdk.unregisterMod('BCK_BCXFilter'); } catch(_) {}
+
+      var mod = bcModSdk.registerMod({
+        name:     'BCK_BCXFilter',
+        fullName: 'BCK BCX-Filter',
         version:  '1.0.0',
       });
 
-      // Priorität 1 → läuft VOR BCX (Priorität 0), sodass BCX !pay nie zu sehen bekommt
-      payMod.hookFunction('ChatRoomMessage', 1, (args, next) => {
-        const data = args[0];
+      mod.hookFunction('ServerSend', 9999, function(args, next) {
+        var typ  = args[0];
+        var data = args[1];
         if (
-          data?.Type === 'Whisper' &&
-          typeof data?.Content === 'string' &&
-          data.Content.trim().toLowerCase().startsWith('!pay')
+          typ === 'ChatRoomChat' &&
+          data && data.Type === 'Whisper' &&
+          typeof data.Content === 'string' &&
+          data.Content.startsWith('[BCX]')
         ) {
-          BCK.info('!pay abgefangen – BCX-Warnung unterdrückt:', data.Content);
-          // next(args) NICHT aufrufen → BCX bekommt die Nachricht nie
-          return;
+          BCK.info('[BCXFilter] Ausgehender BCX-Whisper blockiert (Ziel: #' + data.Target + ', Inhalt: ' + data.Content.substring(0,40) + '...')  → alle Ziele gefiltert');
+          return; // nicht senden
         }
         return next(args);
       });
 
-      BCK.ok('BCK_PayFix aktiv ✅ – BCX antwortet nicht mehr auf !pay');
+      BCK.ok('[BCXFilter] aktiv ✅ – ausgehende BCX-Fehlerwhisper werden blockiert (Prio 9999)');
     }
 
-    installPayHook();
+    installBCXFilter();
   }
 
   // ── Popup öffnen / fokussieren ─────────────────────────
