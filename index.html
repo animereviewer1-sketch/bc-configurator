@@ -997,6 +997,31 @@ button { cursor: pointer; }
 .rank-modal label { display: block; font-size: .67rem; color: var(--text3); font-weight: 700; text-transform: uppercase; letter-spacing: .06em; margin-bottom: 4px; margin-top: 11px; }
 .rank-modal input, .rank-modal select { width: 100%; }
 .rank-modal-btns { display: flex; gap: 8px; margin-top: 18px; justify-content: flex-end; }
+
+/* ── AntiStrip Tab ─────────────────────────────────────── */
+.as-wrap { display:flex; gap:0; height:calc(100vh - 110px); }
+.as-cfg  { width:380px; min-width:280px; border-right:1px solid var(--border); padding:16px; overflow-y:auto; display:flex; flex-direction:column; gap:12px; }
+.as-right { flex:1; padding:16px; overflow-y:auto; }
+.as-title { font-size:.78rem; font-weight:700; color:var(--text1); letter-spacing:.04em; text-transform:uppercase; margin-bottom:4px; display:flex; align-items:center; gap:8px; }
+.as-rule  { background:var(--bg3); border:1px solid var(--border); border-radius:var(--r-md); padding:12px; display:flex; flex-direction:column; gap:8px; }
+.as-rule.inactive { opacity:.5; }
+.as-rule-head { display:flex; align-items:center; gap:8px; }
+.as-rule-name { flex:1; font-size:.75rem; font-weight:600; color:var(--text1); }
+.as-rule-grid { display:grid; grid-template-columns:1fr 1fr; gap:6px; }
+.as-rule-field { display:flex; flex-direction:column; gap:2px; }
+.as-rule-field label { font-size:.6rem; color:var(--text3); }
+.as-rule-field input { font-size:.68rem; padding:4px 7px; background:var(--bg4); border:1px solid var(--border); border-radius:5px; color:var(--text1); font-family:var(--font-mono); }
+.as-add-btn { padding:8px; background:var(--bg3); border:1px dashed var(--border2); border-radius:var(--r-md); color:var(--text3); font-size:.72rem; cursor:pointer; text-align:center; transition:var(--t-fast); }
+.as-add-btn:hover { background:var(--bg-hover); color:var(--purple-bright); border-color:var(--border-accent); }
+.as-status-badge { font-size:.65rem; padding:2px 8px; border-radius:var(--r-full); font-weight:600; }
+.as-status-badge.running { background:var(--gd); color:var(--green); }
+.as-status-badge.stopped { background:var(--bg3); color:var(--text3); }
+.as-log-entry { font-size:.68rem; font-family:var(--font-mono); padding:5px 10px; border-radius:5px; background:var(--bg3); border-left:3px solid var(--border2); margin-bottom:4px; color:var(--text2); }
+.as-log-entry.shield { border-left-color:var(--green); color:var(--green-bright); }
+.as-log-entry.warn   { border-left-color:var(--yellow); color:var(--yellow); }
+.as-color-row { display:flex; align-items:center; gap:6px; }
+.as-color-row input[type=color] { width:28px; height:22px; border:none; border-radius:3px; cursor:pointer; padding:0; background:none; }
+
 </style>
 </head>
 <body>
@@ -1034,6 +1059,7 @@ button { cursor: pointer; }
   <button class="tab-btn"        id="tab-money-btn"  onclick="switchTab('money')">💰 Money</button>
   <button class="tab-btn"        id="tab-rank-btn"   onclick="switchTab('rank')">🏆 Rang</button>
   <button class="tab-btn"        id="tab-shop-btn"   onclick="switchTab('shop')">🛒 Shop</button>
+  <button class="tab-btn"        id="tab-antistrip-btn" onclick="switchTab('antistrip')">🛡️ AntiStrip</button>
 </div>
 
 <!-- TAB 1: ITEM MANAGER -->
@@ -2668,7 +2694,7 @@ function deleteProfileByIdx(idx) {
 let _activeTab = 'items';
 function switchTab(tab) {
   _activeTab = tab;
-  ['items','outfit','curse','bot','log','money','events','rank','shop'].forEach(t => {
+  ['items','outfit','curse','bot','log','money','events','rank','shop','antistrip'].forEach(t => {
     document.getElementById('tab-'+t)?.classList.toggle('active', t===tab);
     document.getElementById('tab-'+t+'-btn')?.classList.toggle('active', t===tab);
   });
@@ -2678,7 +2704,8 @@ function switchTab(tab) {
   if (tab === 'log')    { renderLogTab(); }
   if (tab === 'money')  { renderMoneyTab(); }
   if (tab === 'rank')   { renderRankTab(); }
-  if (tab === 'shop')   { renderShopTab(); }
+  if (tab === 'shop')    { renderShopTab(); }
+  if (tab === 'antistrip') { renderAntiStripTab(); }
 
 }
 
@@ -7718,4 +7745,378 @@ function botSync() {
 }
 
 </script>
+
+<!-- TAB: ANTISTRIP -->
+<div id="tab-antistrip" class="tab-pane">
+  <div class="as-wrap">
+
+    <!-- LEFT: Regel-Konfiguration -->
+    <div class="as-cfg">
+
+      <div class="as-title">
+        🛡️ AntiStrip
+        <span id="as-status-badge" class="as-status-badge stopped">● Gestoppt</span>
+        <div style="margin-left:auto;display:flex;gap:6px">
+          <button onclick="asStart()" id="as-start-btn"
+            style="font-size:.65rem;padding:3px 10px;background:var(--gd);border:1px solid var(--green);color:var(--green);border-radius:5px;cursor:pointer">▶ Starten</button>
+          <button onclick="asStop()" id="as-stop-btn"
+            style="font-size:.65rem;padding:3px 10px;background:#2a0a0a;border:1px solid var(--red);color:var(--red);border-radius:5px;cursor:pointer">⏹ Stopp</button>
+        </div>
+      </div>
+
+      <div style="font-size:.62rem;color:var(--text3);line-height:1.55;margin-top:-4px">
+        Überwacht Items auf Spielern. Wenn ein Item entfernt wird, wird es (oder ein Ersatz) automatisch wieder angelegt.
+        Jede Regel ist einzeln aktivierbar.
+      </div>
+
+      <div id="as-rule-list" style="display:flex;flex-direction:column;gap:8px"></div>
+
+      <button class="as-add-btn" onclick="asAddRule()">+ Neue Regel hinzufügen</button>
+
+      <div style="margin-top:4px;border-top:1px solid var(--border);padding-top:12px">
+        <div class="as-title" style="margin-bottom:8px">⚙️ Einstellungen</div>
+        <label style="font-size:.63rem;color:var(--text3);display:flex;align-items:center;gap:8px;cursor:pointer">
+          <input type="checkbox" id="as-self-strip" onchange="asSave()" style="cursor:pointer">
+          Eigene Items (Bot selbst) auch schützen
+        </label>
+        <label style="font-size:.63rem;color:var(--text3);display:flex;align-items:center;gap:8px;margin-top:8px;cursor:pointer">
+          <input type="number" id="as-delay" min="0" max="10000" step="100" value="500"
+            onchange="asSave()" style="width:70px;font-size:.68rem;padding:3px 6px;background:var(--bg4);border:1px solid var(--border);border-radius:4px;color:var(--text1)">
+          ms Verzögerung beim Wiederanlegen
+        </label>
+      </div>
+
+      <div style="border-top:1px solid var(--border);padding-top:10px;display:flex;gap:6px;flex-wrap:wrap">
+        <button onclick="asExport()" style="flex:1;font-size:.65rem;padding:5px;background:none;border:1px solid var(--border2);color:var(--text3);border-radius:5px;cursor:pointer">⬇️ Export</button>
+        <button onclick="asImport()" style="flex:1;font-size:.65rem;padding:5px;background:none;border:1px solid var(--border2);color:var(--text3);border-radius:5px;cursor:pointer">⬆️ Import</button>
+        <button onclick="asResetAll()" style="flex:1;font-size:.65rem;padding:5px;background:#2a0a0a;border:1px solid var(--red);color:var(--red);border-radius:5px;cursor:pointer">🗑 Zurücksetzen</button>
+      </div>
+    </div>
+
+    <!-- RIGHT: Log -->
+    <div class="as-right">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid var(--border)">
+        <span style="font-size:.82rem;font-weight:700;color:var(--text1)">📋 AntiStrip Log</span>
+        <div style="display:flex;gap:8px">
+          <span id="as-log-count" style="font-size:.65rem;color:var(--text3)"></span>
+          <button onclick="asClearLog()" style="font-size:.65rem;padding:3px 10px;background:var(--bg3);border:1px solid var(--border);color:var(--text3);border-radius:5px;cursor:pointer">Leeren</button>
+        </div>
+      </div>
+      <div id="as-log-list">
+        <div style="font-size:.72rem;color:var(--text3);text-align:center;margin-top:40px">
+          🛡️ Noch keine Ereignisse.<br>
+          <span style="font-size:.65rem">Erscheint wenn AntiStrip aktiv ist und ein Item entfernt wird.</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// ══ ANTISTRIP ══════════════════════════════════════════════════
+const AS_KEY = 'BC_AntiStrip_v1';
+let _asRules    = [];
+let _asSettings = { selfStrip: false, delay: 500 };
+let _asRunning  = false;
+let _asLog      = [];
+
+(function _asLoad() {
+  try {
+    const s = localStorage.getItem(AS_KEY);
+    if (s) {
+      const d = JSON.parse(s);
+      _asRules    = d.rules    ?? [];
+      _asSettings = Object.assign(_asSettings, d.settings ?? {});
+    }
+  } catch {}
+})();
+
+function asSave() {
+  _asSettings.selfStrip = document.getElementById('as-self-strip')?.checked ?? false;
+  _asSettings.delay     = parseInt(document.getElementById('as-delay')?.value ?? '500') || 500;
+  try { localStorage.setItem(AS_KEY, JSON.stringify({ rules: _asRules, settings: _asSettings })); } catch {}
+}
+
+function asRenderRules() {
+  const el = document.getElementById('as-rule-list');
+  if (!el) return;
+  if (_asRules.length === 0) {
+    el.innerHTML = '<div style="font-size:.68rem;color:var(--text3);text-align:center;padding:16px 0">Keine Regeln. Klicke "+ Neue Regel hinzufügen".</div>';
+    return;
+  }
+  el.innerHTML = _asRules.map((r, i) => `
+    <div class="as-rule ${r.aktiv ? '' : 'inactive'}" id="as-rule-${i}">
+      <div class="as-rule-head">
+        <label style="cursor:pointer;display:flex;align-items:center;gap:5px;font-size:.65rem;color:var(--text3)">
+          <input type="checkbox" ${r.aktiv ? 'checked' : ''} onchange="asToggle(${i},this.checked)">
+          Aktiv
+        </label>
+        <span class="as-rule-name">${asEsc(r.name || 'Regel ' + (i+1))}</span>
+        <button onclick="asDeleteRule(${i})" title="Löschen"
+          style="background:none;border:none;color:var(--red);font-size:.75rem;cursor:pointer;padding:0 4px">✕</button>
+      </div>
+      <div class="as-rule-grid">
+        <div class="as-rule-field">
+          <label>Name</label>
+          <input value="${asEsc(r.name)}" oninput="asFieldEdit(${i},'name',this.value)" placeholder="Regelname">
+        </div>
+        <div class="as-rule-field">
+          <label>MemberNumber</label>
+          <input value="${r.memberNumber ?? ''}" type="number" oninput="asFieldEdit(${i},'memberNumber',+this.value)" placeholder="998">
+        </div>
+        <div class="as-rule-field">
+          <label>Gruppe (Slot)</label>
+          <input value="${asEsc(r.gruppe)}" oninput="asFieldEdit(${i},'gruppe',this.value)" placeholder="ItemMouth">
+        </div>
+        <div class="as-rule-field">
+          <label>Überwachtes Item</label>
+          <input value="${asEsc(r.watchItem)}" oninput="asFieldEdit(${i},'watchItem',this.value)" placeholder="BallGag">
+        </div>
+        <div class="as-rule-field">
+          <label>Ersatz-Item</label>
+          <input value="${asEsc(r.ersatzItem)}" oninput="asFieldEdit(${i},'ersatzItem',this.value)" placeholder="RoseBallGag">
+        </div>
+        <div class="as-rule-field">
+          <label>Farbe</label>
+          <div class="as-color-row">
+            <input type="color" value="${r.farbe ?? '#ff0000'}"
+              oninput="asFieldEdit(${i},'farbe',this.value)" title="Farbe wählen">
+            <input value="${asEsc(r.farbe ?? '#FF0000')}" oninput="asFieldEdit(${i},'farbe',this.value)"
+              placeholder="#FF0000" style="flex:1;font-size:.62rem">
+          </div>
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function asEsc(s) {
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function asFieldEdit(i, key, val) {
+  if (!_asRules[i]) return;
+  _asRules[i][key] = val;
+  // Sync Farbfeld Duplikat
+  if (key === 'farbe') {
+    const el = document.getElementById('as-rule-' + i);
+    if (el) {
+      const inputs = el.querySelectorAll('.as-color-row input');
+      inputs.forEach(inp => { if (inp.value !== val) inp.value = val; });
+    }
+  }
+  asSave();
+}
+
+function asToggle(i, val) {
+  if (!_asRules[i]) return;
+  _asRules[i].aktiv = val;
+  const el = document.getElementById('as-rule-' + i);
+  if (el) el.className = 'as-rule' + (val ? '' : ' inactive');
+  asSave();
+}
+
+function asAddRule() {
+  _asRules.push({
+    name:         'Neue Regel',
+    memberNumber: null,
+    gruppe:       'ItemMouth',
+    watchItem:    '',
+    ersatzItem:   '',
+    farbe:        '#FF0000',
+    aktiv:        true,
+  });
+  asSave();
+  asRenderRules();
+  // Scroll to bottom
+  const el = document.getElementById('as-rule-list');
+  if (el) el.lastElementChild?.scrollIntoView({ behavior: 'smooth' });
+}
+
+function asDeleteRule(i) {
+  if (!confirm('Regel "' + (_asRules[i]?.name ?? i) + '" löschen?')) return;
+  _asRules.splice(i, 1);
+  asSave();
+  asRenderRules();
+}
+
+function asResetAll() {
+  if (!confirm('Alle AntiStrip-Regeln zurücksetzen?')) return;
+  _asRules = [];
+  asSave();
+  asRenderRules();
+}
+
+function asExport() {
+  const json = JSON.stringify({ rules: _asRules, settings: _asSettings }, null, 2);
+  const a = document.createElement('a');
+  a.href = 'data:application/json;charset=utf-8,' + encodeURIComponent(json);
+  a.download = 'antistrip_export.json';
+  a.click();
+}
+
+function asImport() {
+  const inp = document.createElement('input');
+  inp.type = 'file'; inp.accept = '.json';
+  inp.onchange = e => {
+    const file = e.target.files[0]; if (!file) return;
+    const r = new FileReader();
+    r.onload = ev => {
+      try {
+        const d = JSON.parse(ev.target.result);
+        if (d.rules) _asRules = d.rules;
+        if (d.settings) _asSettings = Object.assign(_asSettings, d.settings);
+        asSave(); asRenderRules(); asRenderSettings();
+        showStatus('✅ AntiStrip importiert', 'success');
+      } catch { showStatus('❌ Import fehlgeschlagen', 'error'); }
+    };
+    r.readAsText(file);
+  };
+  inp.click();
+}
+
+function asRenderSettings() {
+  const selfEl  = document.getElementById('as-self-strip');
+  const delayEl = document.getElementById('as-delay');
+  if (selfEl)  selfEl.checked = _asSettings.selfStrip ?? false;
+  if (delayEl) delayEl.value  = _asSettings.delay ?? 500;
+}
+
+function asAddLog(msg, type = '') {
+  const ts = new Date().toLocaleTimeString('de-DE');
+  _asLog.unshift({ ts, msg, type });
+  if (_asLog.length > 200) _asLog.length = 200;
+  asRenderLog();
+}
+
+function asRenderLog() {
+  const el = document.getElementById('as-log-list');
+  const cnt = document.getElementById('as-log-count');
+  if (!el) return;
+  if (_asLog.length === 0) {
+    el.innerHTML = '<div style="font-size:.72rem;color:var(--text3);text-align:center;margin-top:40px">🛡️ Noch keine Ereignisse.</div>';
+    if (cnt) cnt.textContent = '';
+    return;
+  }
+  if (cnt) cnt.textContent = _asLog.length + ' Einträge';
+  el.innerHTML = _asLog.map(e =>
+    `<div class="as-log-entry ${e.type}">[${e.ts}] ${asEsc(e.msg)}</div>`
+  ).join('');
+}
+
+function asClearLog() { _asLog = []; asRenderLog(); }
+
+function asSetRunning(val) {
+  _asRunning = val;
+  const badge = document.getElementById('as-status-badge');
+  if (badge) {
+    badge.className = 'as-status-badge ' + (val ? 'running' : 'stopped');
+    badge.textContent = val ? '● Läuft' : '● Gestoppt';
+  }
+}
+
+function _buildAsCode() {
+  const activeRules = _asRules.filter(r => r.aktiv && r.memberNumber && r.gruppe && r.ersatzItem);
+  const rulesJson   = JSON.stringify(activeRules);
+  const delay       = _asSettings.delay ?? 500;
+  const selfStrip   = _asSettings.selfStrip ? 'true' : 'false';
+
+  return `(function(){
+  // AntiStrip – generiert von BC Konfigurator
+  if(window.__BCAntiStrip){ window.__BCAntiStrip.stop(); }
+  var REGELN=${rulesJson};
+  var DELAY=${delay};
+  var SELF_STRIP=${selfStrip};
+  var _active=true;
+  var _mod;
+  try{
+    _mod=bcModSdk.registerMod({name:'BC_AntiStrip',fullName:'BC AntiStrip',version:'1.0.0'});
+  }catch(e){
+    // Bereits registriert – patches trotzdem hinzufügen
+    _mod={hookFunction:function(){}};
+    console.warn('[AntiStrip] Mod bereits registriert – verwende Fallback');
+  }
+  function _handle(data){
+    if(!_active)return;
+    if(data&&data.Type!=='Action')return;
+    var text=JSON.stringify(data||'');
+    if(text.indexOf('ItemRemove')===-1&&text.indexOf('ActionRemove')===-1)return;
+    var sender=null;
+    if(data&&data.Dictionary){
+      for(var di=0;di<data.Dictionary.length;di++){
+        var d=data.Dictionary[di];
+        if(d.SourceCharacter!=null){sender=d.SourceCharacter;break;}
+      }
+    }
+    if(sender===null&&data)sender=data.Sender;
+    REGELN.forEach(function(regel){
+      if(!regel.aktiv)return;
+      if(regel.memberNumber&&sender!==regel.memberNumber)return;
+      if(!SELF_STRIP&&sender===Player.MemberNumber)return;
+      var C=null;
+      var chars=window.ChatRoomCharacter||[];
+      for(var ci=0;ci<chars.length;ci++){if(chars[ci].MemberNumber===regel.memberNumber){C=chars[ci];break;}}
+      if(!C&&Player.MemberNumber===regel.memberNumber)C=Player;
+      if(!C)return;
+      var item=typeof InventoryGet==='function'?InventoryGet(C,regel.gruppe):null;
+      // Slot noch besetzt → kein Eingriff
+      if(item)return;
+      console.log('[AntiStrip] '+regel.gruppe+' leer bei #'+regel.memberNumber+' → '+regel.ersatzItem+' anlegen');
+      setTimeout(function(){
+        if(!_active)return;
+        try{
+          InventoryWear(C,regel.ersatzItem,regel.gruppe,regel.farbe||'#ffffff',0,Player.MemberNumber);
+          CharacterRefresh(C);
+          ChatRoomCharacterUpdate(C);
+          console.log('[AntiStrip] ✅ '+regel.ersatzItem+' angelegt auf '+C.Name);
+        }catch(ex){
+          console.warn('[AntiStrip] Fehler beim Anlegen:',ex.message);
+        }
+      },DELAY);
+    });
+  }
+  ServerSocket.on('ChatRoomMessage',_handle);
+  window.__BCAntiStrip={
+    stop:function(){
+      _active=false;
+      ServerSocket.off('ChatRoomMessage',_handle);
+      delete window.__BCAntiStrip;
+      console.log('[AntiStrip] ⏹️ gestoppt');
+    },
+    status:function(){
+      console.log('[AntiStrip] Aktiv='+_active+' | Regeln:',REGELN.length);
+    }
+  };
+  console.log('[AntiStrip] ▶️ gestartet | '+REGELN.filter(function(r){return r.aktiv;}).length+' aktive Regeln | Delay: '+DELAY+'ms');
+})();`;
+}
+
+function asStart() {
+  if (!_connected) { showStatus('❌ Nicht mit BC verbunden', 'error'); return; }
+  const active = _asRules.filter(r => r.aktiv && r.memberNumber && r.gruppe && r.ersatzItem);
+  if (active.length === 0) { showStatus('⚠️ Keine aktiven Regeln', 'error'); return; }
+  bcSend({ type: 'EXEC', code: _buildAsCode() });
+  asSetRunning(true);
+  asAddLog('▶️ AntiStrip gestartet | ' + active.length + ' aktive Regeln', 'shield');
+  showStatus('▶️ AntiStrip gestartet', 'success');
+}
+
+function asStop() {
+  if (!_connected) { showStatus('❌ Nicht mit BC verbunden', 'error'); return; }
+  bcSend({ type: 'EXEC', code: "if(window.__BCAntiStrip)window.__BCAntiStrip.stop();" });
+  asSetRunning(false);
+  asAddLog('⏹ AntiStrip gestoppt', 'warn');
+  showStatus('⏹ AntiStrip gestoppt', 'success');
+}
+
+// ── Tab-Einstieg ──────────────────────────────────────────────
+function renderAntiStripTab() {
+  asRenderSettings();
+  asRenderRules();
+  asRenderLog();
+  asSetRunning(_asRunning);
+}
+</script>
+
 </body>
