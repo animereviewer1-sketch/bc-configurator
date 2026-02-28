@@ -843,45 +843,47 @@ window.CurseScanner = (() => {
     console.log('[BC-Konfigurator] Listener aktiv ✅');
   }
 
-  // ── BCX Fehler-Whisper unterdrücken ──────────────────────────────────
-  // BCX verarbeitet unbekannte Befehle intern mit hoher Priorität und sendet
-  // die Fehlerantwort via ServerSend. Priorität 9999 stellt sicher dass unser
-  // Hook NACH BCX läuft und den ausgehenden Whisper still verwerfen kann.
+  // ── BCX Ausgehende Whisper blockieren ────────────────────────────────
+  // Priorität 9999 → läuft nach BCX, verwirft alle ausgehenden BCX-Whisper.
+  // Guard __BCK_BCX_FILTER__ verhindert doppelte Registrierung beim erneuten
+  // Ausführen des Bookmarklets. Kein unregisterMod() – existiert nicht in ModSDK 1.2.0.
   if (!window.__BCK_BCX_FILTER__) {
     window.__BCK_BCX_FILTER__ = true;
 
     function installBCXFilter() {
       if (typeof bcModSdk === 'undefined' || typeof bcModSdk.registerMod !== 'function') {
-        BCK.warn('[BCXFilter] bcModSdk noch nicht bereit – retry in 500ms');
+        BCK.warn('[BCXFilter] bcModSdk nicht bereit – retry in 500ms');
         setTimeout(installBCXFilter, 500);
         return;
       }
 
-      // Falls Mod bereits existiert (z.B. durch Reload): erst entfernen
-      try { bcModSdk.unregisterMod('BCK_BCXFilter'); } catch(_) {}
+      try {
+        var mod = bcModSdk.registerMod({
+          name:     'BCK_BCXFilter',
+          fullName: 'BCK BCX-Filter',
+          version:  '1.0.0',
+        });
 
-      var mod = bcModSdk.registerMod({
-        name:     'BCK_BCXFilter',
-        fullName: 'BCK BCX-Filter',
-        version:  '1.0.0',
-      });
+        mod.hookFunction('ServerSend', 9999, function(args, next) {
+          var typ  = args[0];
+          var data = args[1];
+          if (
+            typ === 'ChatRoomChat' &&
+            data &&
+            data.Type === 'Whisper' &&
+            typeof data.Content === 'string' &&
+            data.Content.startsWith('[BCX]')
+          ) {
+            BCK.info('[BCXFilter] BCX-Whisper blockiert → Ziel #' + data.Target);
+            return; // nicht senden
+          }
+          return next(args);
+        });
 
-      mod.hookFunction('ServerSend', 9999, function(args, next) {
-        var typ  = args[0];
-        var data = args[1];
-        if (
-          typ === 'ChatRoomChat' &&
-          data && data.Type === 'Whisper' &&
-          typeof data.Content === 'string' &&
-          data.Content.startsWith('[BCX]')
-        ) {
-          BCK.info('[BCXFilter] Ausgehender BCX-Whisper blockiert (Ziel: #' + data.Target + ', Inhalt: ' + data.Content.substring(0,40) + '...')  → alle Ziele gefiltert');
-          return; // nicht senden
-        }
-        return next(args);
-      });
-
-      BCK.ok('[BCXFilter] aktiv ✅ – ausgehende BCX-Fehlerwhisper werden blockiert (Prio 9999)');
+        BCK.ok('[BCXFilter] aktiv ✅ – alle ausgehenden BCX-Whisper werden blockiert');
+      } catch (e) {
+        BCK.err('[BCXFilter] Fehler:', e.message);
+      }
     }
 
     installBCXFilter();
