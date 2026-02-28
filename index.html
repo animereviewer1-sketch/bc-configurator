@@ -931,21 +931,6 @@ button { cursor: pointer; }
 
 
 .curse-row.fav { background: rgba(251,191,36,0.04); }
-
-/* ── Rang-System Styles ─────────────────────────────── */
-#ranksList .money-card, #ranksPlayerList .money-card {
-  border: 1px solid var(--border2);
-  border-radius: 6px;
-  margin-bottom: 4px;
-}
-/* ── Archiv-Tabelle ────────────────────────────────── */
-#archiveTable table tbody tr:nth-child(odd) { background: rgba(255,255,255,0.02); }
-#archiveTable table tbody tr:hover { background: rgba(168,85,247,0.06); }
-#archiveTable td { padding: 4px 8px; border-bottom: 1px solid rgba(255,255,255,0.04); vertical-align: top; }
-
-/* ── Whitelist Section in Trigger ─────────────────── */
-.wl-chip { display:inline-flex;align-items:center;gap:4px;background:var(--pd);border-radius:12px;padding:2px 8px;font-size:.62rem;color:var(--pl);margin:2px; }
-.wl-chip button { background:none;border:none;color:var(--pl);cursor:pointer;font-size:.65rem;padding:0;line-height:1; }
 .curse-row.fav:hover { background: rgba(251,191,36,0.08); }
 .fav-cell { width: 28px; text-align: center; cursor: pointer; user-select: none; padding: 6px 4px !important; font-size: 1rem; transition: transform .15s; }
 .fav-cell:hover { transform: scale(1.3); }
@@ -987,8 +972,6 @@ button { cursor: pointer; }
   <button class="tab-btn"        id="tab-bot-btn"    onclick="switchTab('bot')">🤖 Bot</button>
   <button class="tab-btn"        id="tab-log-btn"    onclick="switchTab('log')">📋 Logs</button>
   <button class="tab-btn"        id="tab-money-btn"  onclick="switchTab('money')">💰 Money</button>
-  <button class="tab-btn"        id="tab-ranks-btn"  onclick="switchTab('ranks')">🏅 Ränge</button>
-  <button class="tab-btn"        id="tab-archive-btn" onclick="switchTab('archive')">📜 Archiv</button>
 </div>
 
 <!-- TAB 1: ITEM MANAGER -->
@@ -2623,7 +2606,7 @@ function deleteProfileByIdx(idx) {
 let _activeTab = 'items';
 function switchTab(tab) {
   _activeTab = tab;
-  ['items','outfit','curse','bot','log','money','events','ranks','archive'].forEach(t => {
+  ['items','outfit','curse','bot','log','money','events'].forEach(t => {
     document.getElementById('tab-'+t)?.classList.toggle('active', t===tab);
     document.getElementById('tab-'+t+'-btn')?.classList.toggle('active', t===tab);
   });
@@ -2632,8 +2615,6 @@ function switchTab(tab) {
   if (tab === 'bot')    { renderBotTab(); }
   if (tab === 'log')    { renderLogTab(); }
   if (tab === 'money')  { renderMoneyTab(); }
-  if (tab === 'ranks')  { renderRanksTab(); }
-  if (tab === 'archive') { renderArchive(); }
 
 }
 
@@ -3279,60 +3260,6 @@ window.addEventListener('message', function(ev) {
       }
       break;
 
-    case 'BOT_RANG':
-      _ranksApply(ev.data.memberNum, ev.data.name, ev.data.rankId);
-      break;
-
-    case 'CHAT_ARCHIVE':
-      if (ev.data.entry) {
-        _archivePush(ev.data.entry);
-        // Live-Update if archive tab open
-        if (document.getElementById('tab-archive')?.classList.contains('active')) {
-          clearTimeout(_archiveLiveTimer);
-          _archiveLiveTimer = setTimeout(renderArchive, 800);
-        }
-      }
-      break;
-
-    case 'SHOP_CHECK': {
-      // Bot requests balance check + deduct if sufficient
-      const sc = ev.data;
-      const p = _money.balances[sc.memberNum];
-      const bal = p?.balance ?? 0;
-      const preis = sc.preis ?? 0;
-      const cur = _money.settings.name || 'Gold';
-      const actBot = _bots.find(b=>b.laufend);
-      if (!actBot) break;
-      const safeId = actBot.id.replace(/\W/g,'_');
-      if (bal >= preis) {
-        // Deduct coins
-        if (p) p.balance = bal - preis;
-        else _money.balances[sc.memberNum] = {name: sc.name, balance: -preis};
-        _saveMoney();
-        if (document.getElementById('tab-money')?.classList.contains('active')) renderMoneyTab();
-        // Fire trigger directly (popup has access to BC window via bcSend)
-        const _botObj = window['_BCBot_'+safeId];
-        if (_botObj) {
-          const _trig = (_botObj._trigs||[]).find(t=>t.id===sc.trigId);
-          const _C = [window.Player,...(window.ChatRoomCharacter||[])].find(x=>x.MemberNumber===sc.memberNum);
-          if (_trig && _C) _botObj._run(_trig, {...(sc.vars||{}), C:_C, name:_C.Name});
-          else {
-            // Fallback via EXEC
-            const memberNum = sc.memberNum, trigId = sc.trigId;
-            bcSend({ type:'EXEC', code: `(function(){var bot=window['_BCBot_${safeId}'];var trig=(bot._trigs||[]).find(t=>t.id===${JSON.stringify(trigId)});var C=[Player,...(ChatRoomCharacter||[])].find(x=>x.MemberNumber===${memberNum});if(trig&&C)bot._run(trig,{C,name:C.Name,wort:'',typ:'',x:0,y:0,zone:''});})();` });
-          }
-        }
-        showStatus('🛒 Kauf: '+sc.name+' kauft für '+preis+' '+cur, 'success');
-      } else {
-        // Not enough balance
-        const shortage = preis - bal;
-        const _whisperMsg = 'Nicht genug '+cur+'. Benötigt: '+preis+', vorhanden: '+bal+'. Fehlen: '+shortage+'.';
-        bcSend({ type:'EXEC', code: 'ServerSend(\'ChatRoomChat\',{Content:'+JSON.stringify(_whisperMsg)+',Type:\'Whisper\',Target:'+sc.memberNum+'});' });
-        showStatus('🛒 Kauf abgelehnt: '+sc.name+' hat nur '+bal+'/'+preis+' '+cur, 'info');
-      }
-      break;
-    }
-
     case 'BOT_EV_STATUS':
       _evIntervalStatusUpdate(ev.data.evId, ev.data.nextMs, ev.data.lo, ev.data.hi, ev.data.cnt);
       break;
@@ -3811,95 +3738,16 @@ function selectRoomMember(num) {
   <div id="money-entries" style="overflow-y:auto;height:calc(100vh - 162px);padding:10px 14px"></div>
 </div>
 
-<!-- TAB: RÄNGE -->
-<div id="tab-ranks" class="tab-pane">
-  <div style="padding:18px;max-width:900px;margin:0 auto">
-    <div style="display:flex;gap:16px;flex-wrap:wrap">
-      <!-- Rang-Liste (links) -->
-      <div style="flex:1;min-width:280px">
-        <div style="font-size:.8rem;font-weight:600;color:var(--text2);margin-bottom:10px">🏅 Ränge konfigurieren</div>
-        <div id="ranksList"></div>
-        <button onclick="ranksAddRank()" class="btn btn-purple" style="margin-top:8px;font-size:.72rem">+ Rang hinzufügen</button>
-        <div style="font-size:.63rem;color:var(--text3);margin-top:8px">Ränge werden von oben nach unten (niedrig → hoch) geordnet. Per Bot-Aktion „Rang setzen" kann ein Spieler hochgestuft werden.</div>
-      </div>
-      <!-- Spieler-Ränge (rechts) -->
-      <div style="flex:2;min-width:320px">
-        <div style="font-size:.8rem;font-weight:600;color:var(--text2);margin-bottom:10px">👥 Spieler-Ränge</div>
-        <div style="display:flex;gap:6px;margin-bottom:8px">
-          <input id="rankPlayerSearch" class="cf" placeholder="🔍 Spieler suchen..." oninput="renderRanksPlayers()" style="flex:1">
-          <button onclick="ranksAddPlayer()" class="btn btn-purple" style="font-size:.72rem">+ Manuell hinzufügen</button>
-        </div>
-        <div id="ranksPlayerList"></div>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- TAB: ARCHIV -->
-<div id="tab-archive" class="tab-pane">
-  <div style="padding:12px 16px">
-    <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
-      <span style="font-size:.8rem;font-weight:600;color:var(--text2)">📜 Chat-Archiv</span>
-      <input id="archiveSearch" class="cf" placeholder="🔍 Suchen..." oninput="renderArchive()" style="width:200px">
-      <select id="archiveTypFilter" class="cf" style="width:110px" onchange="renderArchive()">
-        <option value="">Alle Typen</option>
-        <option value="chat">Chat</option>
-        <option value="emote">Emote</option>
-        <option value="whisper">Whisper</option>
-      </select>
-      <select id="archiveSenderFilter" class="cf" style="width:150px" onchange="renderArchive()">
-        <option value="">Alle Sender</option>
-      </select>
-      <span id="archiveCount" style="font-size:.65rem;color:var(--text3);margin-left:4px"></span>
-      <div style="flex:1"></div>
-      <button onclick="archiveClear()" style="font-size:.65rem;padding:3px 10px;background:var(--rd);border:none;color:var(--red);border-radius:5px;cursor:pointer">🗑️ Löschen</button>
-      <button onclick="archiveExport()" class="btn btn-purple" style="font-size:.68rem">💾 Export CSV</button>
-    </div>
-    <div id="archiveTable" style="overflow-x:auto"></div>
-  </div>
-</div>
-
-
 <script>
 // ══ BOT ENGINE ══════════════════════════════════════════════
 
 const BOT_KEY = 'BC_Bots_v2';
 const MONEY_KEY = 'BC_Money_v1';
-const RANKS_KEY = 'BC_Ranks_v1';
-const ARCHIVE_KEY = 'BC_ChatArchive_v1';
 
 // Money storage: { settings: {name, queryCmd}, balances: { memberNum: {name, balance} } }
 let _money = { settings: { name: 'Gold', queryCmd: '!gold', queryTyp: 'whisper' }, balances: {} };
 (()=>{ try { const s=localStorage.getItem(MONEY_KEY); if(s){ const d=JSON.parse(s); _money=Object.assign(_money,d); } } catch{} })();
 function _saveMoney() { try { localStorage.setItem(MONEY_KEY, JSON.stringify(_money)); } catch {} }
-
-// ── Rang-System ──────────────────────────────────────────────
-let _ranks = {
-  ranks: [
-    {id:'r1', name:'Novize',    emoji:'⚪', color:'#9ca3af'},
-    {id:'r2', name:'Lehrling',  emoji:'🟢', color:'#10b981'},
-    {id:'r3', name:'Meister',   emoji:'🔵', color:'#3b82f6'},
-    {id:'r4', name:'Veteran',   emoji:'🟣', color:'#a855f7'},
-    {id:'r5', name:'Legende',   emoji:'🟡', color:'#f59e0b'},
-  ],
-  players: {}  // memberNum → {name, rankId}
-};
-(()=>{ try { const s=localStorage.getItem(RANKS_KEY); if(s){ const d=JSON.parse(s); Object.assign(_ranks,d); } } catch{} })();
-function _saveRanks() { try { localStorage.setItem(RANKS_KEY, JSON.stringify(_ranks)); } catch {} }
-
-// ── Chat-Archiv ───────────────────────────────────────────────
-let _chatArchive = [];
-(()=>{ try { const s=localStorage.getItem(ARCHIVE_KEY); if(s) _chatArchive=JSON.parse(s); } catch{} })();
-function _saveArchive() { try { localStorage.setItem(ARCHIVE_KEY, JSON.stringify(_chatArchive.slice(-5000))); } catch {} }
-function _archivePush(entry) {
-  _chatArchive.push(entry);
-  if (_chatArchive.length > 5000) _chatArchive.shift();
-  // Debounce save
-  clearTimeout(_archiveSaveTimer);
-  _archiveSaveTimer = setTimeout(_saveArchive, 3000);
-}
-let _archiveSaveTimer = null;
-let _archiveLiveTimer = null;
 
 let _bots      = [];
 let _selBotId  = null;
@@ -4216,53 +4064,6 @@ function renderEventCard(bot, e, i) {
           </select>
         </label>
         ${wdh==='n_mal'?`<input class="cf cf-w80" type="number" min="1" value="${e.maxMal??2}" oninput="evField('${e.id}','maxMal',+this.value)">×`:''}
-      </div>
-
-      <div class="te-section">
-        <div class="te-section-title" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
-          👥 Whitelist / Ziel
-          <span style="font-size:.6rem;color:var(--text3);font-weight:normal;text-transform:none;letter-spacing:0">(wer darf auslösen · auf wen wirkt die Aktion)</span>
-        </div>
-        <div style="display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap">
-          <div style="flex:1;min-width:220px">
-            <div style="font-size:.62rem;color:var(--text3);margin-bottom:4px">🔓 Auslöser</div>
-            <select class="cf" style="width:100%" onchange="trigField('${t.id}','ausloeserModus',this.value);trigRerender('${t.id}')">
-              <option value="alle"       ${(!t.ausloeserModus||t.ausloeserModus==='alle')?'selected':''}>🌐 Alle Spieler</option>
-              <option value="whitelist"  ${t.ausloeserModus==='whitelist'?'selected':''}>📋 Nur Whitelist</option>
-              <option value="bot"        ${t.ausloeserModus==='bot'?'selected':''}>🤖 Nur Bot (selbst)</option>
-            </select>
-            ${t.ausloeserModus==='whitelist'?`<div style="margin-top:4px">
-              <div id="wl-list-${t.id}">${(t.ausloeserWhitelist||[]).map(num=>`<div style="display:flex;align-items:center;gap:4px;margin:2px 0">
-                <span style="font-size:.68rem;color:var(--text2);flex:1">#${num}</span>
-                <button onclick="trigWLRemove('${t.id}',${num})" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.65rem">✕</button>
-              </div>`).join('')}</div>
-              <div style="display:flex;gap:4px;margin-top:4px">
-                <input class="cf" id="wl-inp-${t.id}" type="number" placeholder="Member #" style="width:90px">
-                <button onclick="trigWLAdd('${t.id}')" style="font-size:.63rem;padding:2px 8px;background:var(--pd);border:none;color:var(--pl);border-radius:4px;cursor:pointer">+ Hinzufügen</button>
-              </div>
-              <div style="font-size:.58rem;color:var(--text3);margin-top:3px">Nur diese Mitglieder können diesen Trigger auslösen</div>
-            </div>`:''}
-          </div>
-          <div style="flex:1;min-width:220px">
-            <div style="font-size:.62rem;color:var(--text3);margin-bottom:4px">🎯 Aktionsziel</div>
-            <select class="cf" style="width:100%" onchange="trigField('${t.id}','aktionsziel',this.value);trigRerender('${t.id}')">
-              <option value="ausloeser"  ${(!t.aktionsziel||t.aktionsziel==='ausloeser')?'selected':''}>👤 Auslöser (Standard)</option>
-              <option value="alle"       ${t.aktionsziel==='alle'?'selected':''}>🌐 Alle im Raum</option>
-              <option value="whitelist"  ${t.aktionsziel==='whitelist'?'selected':''}>📋 Whitelist</option>
-              <option value="bot"        ${t.aktionsziel==='bot'?'selected':''}>🤖 Bot (sich selbst)</option>
-            </select>
-            ${t.aktionsziel==='whitelist'?`<div style="margin-top:4px">
-              <div id="az-list-${t.id}">${(t.aktionszielListe||[]).map(num=>`<div style="display:flex;align-items:center;gap:4px;margin:2px 0">
-                <span style="font-size:.68rem;color:var(--text2);flex:1">#${num}</span>
-                <button onclick="trigAZRemove('${t.id}',${num})" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.65rem">✕</button>
-              </div>`).join('')}</div>
-              <div style="display:flex;gap:4px;margin-top:4px">
-                <input class="cf" id="az-inp-${t.id}" type="number" placeholder="Member #" style="width:90px">
-                <button onclick="trigAZAdd('${t.id}')" style="font-size:.63rem;padding:2px 8px;background:var(--pd);border:none;color:var(--pl);border-radius:4px;cursor:pointer">+ Hinzufügen</button>
-              </div>
-            </div>`:''}
-          </div>
-        </div>
       </div>
 
       <div class="te-section">
@@ -4801,8 +4602,6 @@ function renderTrigCard(bot, t, i) {
           <button onclick="trigAddCond('${t.id}','player_betritt')">+ Spieler betritt</button>
           <button onclick="trigAddCond('${t.id}','ev_timer')" title="Einmalig nach X Sekunden automatisch feuern">⏱ Timer</button>
           <button onclick="trigAddCond('${t.id}','ev_interval')" title="Wiederholt alle X–Y Sekunden feuern">🔁 Intervall</button>
-          <button onclick="trigAddCond('${t.id}','shop_kauf')" title="Spieler kauft per Befehl mit Coins">🛒 Shop-Kauf</button>
-          <button onclick="trigAddCond('${t.id}','rang_ist')" title="Spieler hat bestimmten Rang">🏅 Rang prüfen</button>
         </div>
         <div id="conds-${t.id}">${(t.bedingungen||[]).map((c,ci)=>renderCond(bot,t.id,c,ci)).join('')}</div>
       </div>
@@ -4898,48 +4697,8 @@ function renderCond(bot, tid, c, ci) {
       <input class="cf cf-w70" type="number" min="1" value="${c.sek_max??180}"
         oninput="condField('${tid}',${ci},'sek_max',+this.value)">
       <span style="font-size:.65rem;color:var(--text3)">Sekunden wiederholt feuern</span>`;
-  } else if (c.typ === 'shop_kauf') {
-    const _rankOptsSK = [
-      '<option value="">— Kein Rang —</option>',
-      ..._ranks.ranks.map(r=>`<option value="${r.id}" ${c.rangBelohnung===r.id?'selected':''}>${escHtml(r.emoji+' '+r.name)}</option>`)
-    ].join('');
-    inner = `<div style="display:flex;flex-direction:column;gap:4px;width:100%">
-      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
-        <span style="font-size:.65rem;color:var(--text3)">Befehl:</span>
-        <input class="cf cf-w80" value="${escHtml(c.cmd||'!pay')}" oninput="condField('${tid}',${ci},'cmd',this.value)" placeholder="!pay" title="Trigger-Befehl">
-        <span style="font-size:.65rem;color:var(--text3)">Preis:</span>
-        <input class="cf cf-w80" type="number" min="0" value="${c.preis??0}" oninput="condField('${tid}',${ci},'preis',+this.value)">
-        <span style="font-size:.65rem;color:var(--text2)">${escHtml(_money?.settings?.name||'Gold')}</span>
-      </div>
-      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
-        <span style="font-size:.65rem;color:var(--text3)">Beschreibung:</span>
-        <input class="cf cf-flex" value="${escHtml(c.beschreibung||'')}" oninput="condField('${tid}',${ci},'beschreibung',this.value)" placeholder="Was kauft der Spieler? (optional)">
-      </div>
-      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
-        <span style="font-size:.65rem;color:var(--text3)">Rang bei Kauf:</span>
-        <select class="cf" style="width:150px" onchange="condField('${tid}',${ci},'rangBelohnung',this.value)">${_rankOptsSK}</select>
-        <label style="font-size:.62rem;color:var(--text3);display:flex;align-items:center;gap:3px;cursor:pointer">
-          <input type="checkbox" ${c.keineRueckerstattung?'checked':''} onchange="condField('${tid}',${ci},'keineRueckerstattung',this.checked)" style="accent-color:var(--purple)">
-          Keine Rückerstattung bei Fehler
-        </label>
-      </div>
-      <div style="font-size:.59rem;color:var(--text3);margin-top:2px">
-        Syntax: <code style="background:var(--bg3);padding:1px 4px;border-radius:3px">${escHtml(c.cmd||'!pay')} "${escHtml(c.beschreibung||'Beschreibung')}" ${c.preis??0}</code>
-        oder kurz: <code style="background:var(--bg3);padding:1px 4px;border-radius:3px">${escHtml(c.cmd||'!pay')}</code>
-      </div>
-    </div>`;
-  } else if (c.typ === 'rang_ist') {
-    const _rankOptsRI = _ranks.ranks.map(r=>`<option value="${r.id}" ${c.rangId===r.id?'selected':''}>${escHtml(r.emoji+' '+r.name)}</option>`).join('');
-    const modeOpts = ['ist','ist_nicht','mindestens','hoechstens'].map(m=>`<option value="${m}" ${(c.rangModus||'ist')===m?'selected':''}>` +
-      ({ist:'= Ist genau',ist_nicht:'≠ Ist nicht',mindestens:'≥ Mindestens',hoechstens:'≤ Höchstens'}[m]) + `</option>`).join('');
-    inner = `<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
-      <select class="cf" style="width:140px" onchange="condField('${tid}',${ci},'rangModus',this.value)">${modeOpts}</select>
-      <select class="cf" style="width:150px" onchange="condField('${tid}',${ci},'rangId',this.value)">
-        <option value="">— Kein Rang —</option>${_rankOptsRI}
-      </select>
-    </div>`;
   }
-  const icons = {wort:'💬',zone:'🗺️',zone_rect:'📐',item_traegt:'👗',item_traegt_nicht:'🚫',trigger_war:'🔗',player_betritt:'👋',ev_timer:'⏱',ev_interval:'🔁',shop_kauf:'🛒',rang_ist:'🏅'};
+  const icons = {wort:'💬',zone:'🗺️',zone_rect:'📐',item_traegt:'👗',item_traegt_nicht:'🚫',trigger_war:'🔗',player_betritt:'👋',ev_timer:'⏱',ev_interval:'🔁'};
   // Logik-Operator: verbindet diese Bedingung mit der vorherigen
   const logik = c.logik ?? 'und';
   const logikBadge = ci === 0
@@ -4981,8 +4740,6 @@ function renderAct(tid, a, ai) {
     ['item','📦 Item / Curse / Profil anlegen'],['item_entf','🗑️ Item entfernen'],
     ['teleport','🌀 Teleport'],
     ['money','💰 Money ändern'],
-    ['set_rang','🏅 Rang setzen'],
-    ['anti_strip','🔒 Anti-Strip (Item schützen)'],
   ];
   const typeOpts = types.map(([v,l])=>`<option value="${v}" ${a.typ===v?'selected':''}>${l}</option>`).join('');
 
@@ -5027,46 +4784,6 @@ function renderAct(tid, a, ai) {
       </div>
       <div class="tp-slot-list" id="tpslots-${tid}-${ai}">${slotsHtml}</div>
       <button class="tp-slot-add-btn" onclick="tpSlotAdd('${tid}',${ai})">+ Position / Fallback hinzufügen</button>`;
-  } else if (a.typ === 'set_rang') {
-    const _rankOptsAct = [
-      '<option value="">— Kein Rang (entfernen) —</option>',
-      ..._ranks.ranks.map(r=>`<option value="${r.id}" ${a.rangId===r.id?'selected':''}>${escHtml(r.emoji+' '+r.name)}</option>`)
-    ].join('');
-    const _notifyOpts = ['whisper','chat','nichts'].map(v=>`<option value="${v}" ${(a.notify||'whisper')===v?'selected':''}>` +
-      {whisper:'🤫 Whisper',chat:'💬 Chat',nichts:'Keine Meldung'}[v] + '</option>').join('');
-    extra = `<div style="display:flex;gap:8px;align-items:center;margin-top:5px;flex-wrap:wrap">
-      <span style="font-size:.65rem;color:var(--text3)">Rang:</span>
-      <select class="cf" style="width:160px" onchange="actField('${tid}',${ai},'rangId',this.value)">${_rankOptsAct}</select>
-      <span style="font-size:.65rem;color:var(--text3)">Meldung:</span>
-      <select class="cf" style="width:130px" onchange="actField('${tid}',${ai},'notify',this.value);actRerender('${tid}',${ai})">${_notifyOpts}</select>
-      ${a.notify!=='nichts'?`<input class="cf cf-flex" value="${escHtml(a.notifyMsg||'')}" oninput="actField('${tid}',${ai},'notifyMsg',this.value)" placeholder="Meldung ({rang}, {name})">`:''} 
-    </div>`;
-  } else if (a.typ === 'anti_strip') {
-    const _asLabel = a.itemConfig ? `🔒 ${a.itemConfig.group}/${a.itemConfig.asset}` : '– kein Item gewählt –';
-    const _replLabel = a.ersatzConfig ? `🔄 ${a.ersatzConfig.group}/${a.ersatzConfig.asset}` : '– selbes Item –';
-    extra = `<div style="display:flex;flex-direction:column;gap:5px;margin-top:5px">
-      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
-        <span style="font-size:.65rem;color:var(--text3)">📦 Zu schützendes Item:</span>
-        <span style="font-size:.68rem;color:var(--text2);flex:1">${escHtml(_asLabel)}</span>
-        <button onclick="antiStripPickItem('${tid}',${ai},'itemConfig')" style="font-size:.63rem;padding:2px 8px;background:var(--pd);border:none;color:var(--pl);border-radius:4px;cursor:pointer">📂 Wählen…</button>
-      </div>
-      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
-        <span style="font-size:.65rem;color:var(--text3)">🔄 Ersatz wenn abgelegt:</span>
-        <span style="font-size:.68rem;color:var(--text2);flex:1">${escHtml(_replLabel)}</span>
-        <button onclick="antiStripPickItem('${tid}',${ai},'ersatzConfig')" style="font-size:.63rem;padding:2px 8px;background:var(--bg3);border:1px solid var(--border2);color:var(--text2);border-radius:4px;cursor:pointer">📂 Wählen…</button>
-        ${a.ersatzConfig?`<button onclick="actField('${tid}',${ai},'ersatzConfig',null);actRerender('${tid}',${ai})" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.7rem" title="Ersatz entfernen">✕</button>`:''}
-      </div>
-      <div style="display:flex;gap:6px;align-items:center">
-        <span style="font-size:.65rem;color:var(--text3)">Ziel:</span>
-        <select class="cf" style="width:160px" onchange="actField('${tid}',${ai},'antiStripZiel',this.value)">
-          <option value="ausloeser" ${(!a.antiStripZiel||a.antiStripZiel==='ausloeser')?'selected':''}>👤 Auslöser</option>
-          <option value="alle"      ${a.antiStripZiel==='alle'?'selected':''}>🌐 Alle im Raum</option>
-        </select>
-        <span style="font-size:.62rem;color:var(--text3)">Prüfintervall:</span>
-        <input class="cf cf-w80" type="number" min="2" max="30" value="${a.antiStripInterval||5}" oninput="actField('${tid}',${ai},'antiStripInterval',+this.value)"> sek
-      </div>
-      <div style="font-size:.59rem;color:var(--text3)">⚠️ Legt das Item alle X Sekunden wieder an, falls es entfernt wurde. Zum Stoppen: Trigger deaktivieren oder Bot neu starten.</div>
-    </div>`;
   } else if (a.typ === 'money') {
     const moneyName = _money?.settings?.name || 'Gold';
     const mop = a.money_op ?? 'add';
@@ -5142,39 +4859,6 @@ function renderAct(tid, a, ai) {
     </div>
     <button class="rm-btn" onclick="actRemove('${tid}',${ai})">✕</button>
   </div>`;
-}
-
-
-// ── Trigger Whitelist Helpers ─────────────────────────────────────
-function trigWLAdd(tid) {
-  const b = _selBot(); if (!b) return;
-  const t = b.triggers.find(x=>x.id===tid); if (!t) return;
-  const inp = document.getElementById('wl-inp-'+tid);
-  const num = parseInt(inp?.value); if (!num) return;
-  t.ausloeserWhitelist = t.ausloeserWhitelist ?? [];
-  if (!t.ausloeserWhitelist.includes(num)) t.ausloeserWhitelist.push(num);
-  _saveBots(); trigRerender(tid); inp.value='';
-}
-function trigWLRemove(tid, num) {
-  const b = _selBot(); if (!b) return;
-  const t = b.triggers.find(x=>x.id===tid); if (!t) return;
-  t.ausloeserWhitelist = (t.ausloeserWhitelist||[]).filter(x=>x!==num);
-  _saveBots(); trigRerender(tid);
-}
-function trigAZAdd(tid) {
-  const b = _selBot(); if (!b) return;
-  const t = b.triggers.find(x=>x.id===tid); if (!t) return;
-  const inp = document.getElementById('az-inp-'+tid);
-  const num = parseInt(inp?.value); if (!num) return;
-  t.aktionszielListe = t.aktionszielListe ?? [];
-  if (!t.aktionszielListe.includes(num)) t.aktionszielListe.push(num);
-  _saveBots(); trigRerender(tid); inp.value='';
-}
-function trigAZRemove(tid, num) {
-  const b = _selBot(); if (!b) return;
-  const t = b.triggers.find(x=>x.id===tid); if (!t) return;
-  t.aktionszielListe = (t.aktionszielListe||[]).filter(x=>x!==num);
-  _saveBots(); trigRerender(tid);
 }
 
 // ── Trigger CRUD helpers ───────────────────────────────────────
@@ -5256,8 +4940,6 @@ function trigAddCond(tid, typ) {
     player_betritt: {typ:'player_betritt'},
     ev_timer:       {typ:'ev_timer', sek:10},
     ev_interval:    {typ:'ev_interval', sek_min:30, sek_max:180},
-    shop_kauf:      {typ:'shop_kauf', cmd:'!pay', preis:0, beschreibung:'', rangBelohnung:'', keineRueckerstattung:false},
-    rang_ist:       {typ:'rang_ist', rangId:'', rangModus:'ist'},
   };
   t.bedingungen = t.bedingungen ?? [];
   t.bedingungen.push(defs[typ]??{typ});
@@ -5405,23 +5087,6 @@ function tpSlotField(tid, ai, si, field, val) {
 }
 
 // ── Unified Item/Curse/Profile Picker ─────────────────────────
-function antiStripPickItem(tid, ai, field) {
-  _ipickerForActContext = {tid, ai};
-  ipickerOpen('item', v => {
-    const b = _selBot(); if (!b) return;
-    const t = b.triggers.find(x=>x.id===tid); if (!t||!t.aktionen[ai]) return;
-    const a = t.aktionen[ai];
-    if (v.type === 'item' && v.itemConfig) {
-      a[field] = v.itemConfig;
-    } else if (v.type === 'item') {
-      a[field] = {asset: v.name, group: v.group, colors:['#ffffff'], tr:{}, typeStr:'', props:{}};
-    }
-    _saveBots();
-    const el = document.getElementById('act-'+tid+'-'+ai);
-    if (el) { const tmp=document.createElement('div'); tmp.innerHTML=renderAct(tid,a,ai); el.replaceWith(tmp.firstElementChild); }
-  });
-}
-
 function ipickerOpenForAct(tid, ai) {
   _ipickerForActContext = {tid, ai};
   ipickerOpen('item', v => {
@@ -5655,7 +5320,7 @@ function botExportConfig() {
   const b = _selBot(); if (!b) { showStatus('❌ Kein Bot ausgewählt','error'); return; }
   // Include logs for this bot + system events
   const botLogs = (window._BCBotLog||[]).filter(e => e.botName === b.name || e.trigId === '__system__');
-  const pkg = { ...b, _exportedLogs: botLogs, _exportedAt: new Date().toISOString(), _ranksSnapshot: _ranks };
+  const pkg = { ...b, _exportedLogs: botLogs, _exportedAt: new Date().toISOString() };
   const blob = new Blob([JSON.stringify(pkg,null,2)],{type:'application/json'});
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -5746,194 +5411,6 @@ function _loadLogsFromStorage() {
 }
 
 // ── Deploy ────────────────────────────────────────────────────
-
-// ══════════════════════════════════════════════════════════════════
-//  RANG-SYSTEM
-// ══════════════════════════════════════════════════════════════════
-function renderRanksTab() {
-  renderRanksList();
-  renderRanksPlayers();
-}
-
-function renderRanksList() {
-  const el = document.getElementById('ranksList'); if (!el) return;
-  if (!_ranks.ranks.length) {
-    el.innerHTML = '<div style="color:var(--text3);font-size:.72rem">Noch keine Ränge konfiguriert.</div>';
-    return;
-  }
-  el.innerHTML = _ranks.ranks.map((r, i) => `
-    <div class="money-card" style="display:flex;align-items:center;gap:8px;padding:8px 12px">
-      <span style="font-size:.7rem;color:var(--text3);min-width:18px">${i+1}.</span>
-      <input class="cf" style="width:32px;font-size:1rem;padding:2px;text-align:center" value="${escHtml(r.emoji||'⭐')}" oninput="rankField('${r.id}','emoji',this.value)" title="Emoji">
-      <input class="cf cf-w120" value="${escHtml(r.name)}" oninput="rankField('${r.id}','name',this.value)" placeholder="Name">
-      <input class="cf" type="color" value="${r.color||'#9ca3af'}" oninput="rankField('${r.id}','color',this.value)" style="width:28px;padding:1px;cursor:pointer" title="Farbe">
-      <button onclick="rankMoveUp('${r.id}')" ${i===0?'disabled':''} style="background:none;border:none;cursor:pointer;color:var(--text3);font-size:.7rem">▲</button>
-      <button onclick="rankMoveDown('${r.id}')" ${i===_ranks.ranks.length-1?'disabled':''} style="background:none;border:none;cursor:pointer;color:var(--text3);font-size:.7rem">▼</button>
-      <button onclick="rankDelete('${r.id}')" class="rm-btn" title="Rang löschen">✕</button>
-    </div>`).join('');
-}
-
-function renderRanksPlayers() {
-  const el = document.getElementById('ranksPlayerList'); if (!el) return;
-  const q = (document.getElementById('rankPlayerSearch')?.value||'').toLowerCase();
-  const entries = Object.entries(_ranks.players).filter(([id, p]) => !q || (p.name||'').toLowerCase().includes(q) || id.includes(q));
-  
-  // Update sender filter
-  const sf = document.getElementById('archiveSenderFilter');
-  
-  if (!entries.length) {
-    el.innerHTML = '<div style="color:var(--text3);font-size:.72rem;padding:12px">Noch keine Spieler mit Rang.</div>';
-    return;
-  }
-  
-  const rankOpts = [
-    '<option value="">— Kein Rang —</option>',
-    ..._ranks.ranks.map(r => `<option value="${r.id}">${r.emoji} ${escHtml(r.name)}</option>`)
-  ].join('');
-  
-  el.innerHTML = entries.sort((a,b)=>{
-    const ri = r => _ranks.ranks.findIndex(x=>x.id===r);
-    return ri(b[1].rankId||'') - ri(a[1].rankId||'');
-  }).map(([id, p]) => {
-    const rank = _ranks.ranks.find(r=>r.id===p.rankId);
-    return `<div class="money-card" style="display:flex;align-items:center;gap:8px;padding:8px 12px">
-      <span style="font-size:.75rem;min-width:80px;color:${rank?.color||'var(--text3)'}">${rank ? rank.emoji+' '+escHtml(rank.name) : '—'}</span>
-      <span style="flex:1;font-size:.75rem">${escHtml(p.name||id)} <span style="color:var(--text3);font-size:.62rem">#${id}</span></span>
-      <select class="cf" style="width:140px;font-size:.68rem" onchange="rankSetPlayer('${id}',this.value)">
-        ${rankOpts.replace(`value="${p.rankId||''}"`, `value="${p.rankId||''}" selected`)}
-      </select>
-      <button onclick="rankRemovePlayer('${id}')" class="rm-btn">✕</button>
-    </div>`;
-  }).join('');
-}
-
-function rankField(id, field, val) {
-  const r = _ranks.ranks.find(x=>x.id===id); if (!r) return;
-  r[field] = val; _saveRanks(); renderRanksList();
-}
-function rankMoveUp(id) {
-  const i = _ranks.ranks.findIndex(x=>x.id===id); if (i<=0) return;
-  [_ranks.ranks[i-1], _ranks.ranks[i]] = [_ranks.ranks[i], _ranks.ranks[i-1]];
-  _saveRanks(); renderRanksList();
-}
-function rankMoveDown(id) {
-  const i = _ranks.ranks.findIndex(x=>x.id===id); if (i>=_ranks.ranks.length-1) return;
-  [_ranks.ranks[i+1], _ranks.ranks[i]] = [_ranks.ranks[i], _ranks.ranks[i+1]];
-  _saveRanks(); renderRanksList();
-}
-function rankDelete(id) {
-  if (!confirm('Rang löschen?')) return;
-  _ranks.ranks = _ranks.ranks.filter(x=>x.id!==id);
-  // Remove from players
-  Object.values(_ranks.players).forEach(p => { if (p.rankId===id) p.rankId=''; });
-  _saveRanks(); renderRanksList(); renderRanksPlayers();
-}
-function ranksAddRank() {
-  const id = 'r'+Date.now();
-  _ranks.ranks.push({id, name:'Neuer Rang', emoji:'⚪', color:'#9ca3af'});
-  _saveRanks(); renderRanksList();
-}
-function rankSetPlayer(memberNum, rankId) {
-  if (!_ranks.players[memberNum]) _ranks.players[memberNum] = {name:'#'+memberNum, rankId};
-  else _ranks.players[memberNum].rankId = rankId;
-  _saveRanks(); renderRanksPlayers();
-}
-function rankRemovePlayer(memberNum) {
-  delete _ranks.players[memberNum]; _saveRanks(); renderRanksPlayers();
-}
-function ranksAddPlayer() {
-  const num = prompt('Spieler-Nummer (#):');
-  if (!num || isNaN(+num)) return;
-  const name = prompt('Anzeigename:') || ('#'+num);
-  if (!_ranks.players[num]) {
-    _ranks.players[num] = {name, rankId:''};
-    _saveRanks(); renderRanksPlayers();
-  }
-}
-// Called from bot postMessage
-function _ranksApply(memberNum, name, rankId) {
-  if (!_ranks.players[memberNum]) _ranks.players[memberNum] = {name: name||('#'+memberNum), rankId};
-  else {
-    _ranks.players[memberNum].rankId = rankId;
-    if (name) _ranks.players[memberNum].name = name;
-  }
-  _saveRanks();
-  if (document.getElementById('tab-ranks')?.classList.contains('active')) renderRanksPlayers();
-}
-
-// ══════════════════════════════════════════════════════════════════
-//  CHAT-ARCHIV FUNCTIONS
-// ══════════════════════════════════════════════════════════════════
-function renderArchive() {
-  const el = document.getElementById('archiveTable'); if (!el) return;
-  const q = (document.getElementById('archiveSearch')?.value||'').toLowerCase();
-  const typF = document.getElementById('archiveTypFilter')?.value||'';
-  const senderF = document.getElementById('archiveSenderFilter')?.value||'';
-  
-  let entries = [..._chatArchive].reverse();
-  if (q) entries = entries.filter(e => (e.content||'').toLowerCase().includes(q) || (e.sender||'').toLowerCase().includes(q));
-  if (typF) entries = entries.filter(e => e.typ===typF);
-  if (senderF) entries = entries.filter(e => String(e.memberNum)===senderF);
-  
-  // Update sender dropdown
-  const sf = document.getElementById('archiveSenderFilter');
-  if (sf) {
-    const senders = [...new Map(_chatArchive.map(e=>[String(e.memberNum),e.sender])).entries()];
-    const cur = sf.value;
-    sf.innerHTML = '<option value="">Alle Sender</option>' +
-      senders.map(([num,name])=>`<option value="${num}" ${cur===num?'selected':''}>${escHtml(name||'#'+num)}</option>`).join('');
-  }
-  
-  document.getElementById('archiveCount').textContent = `${entries.length} / ${_chatArchive.length} Einträge`;
-  
-  if (!entries.length) {
-    el.innerHTML = '<div style="color:var(--text3);font-size:.75rem;padding:20px;text-align:center">Keine Nachrichten im Archiv.</div>';
-    return;
-  }
-  
-  const typIcon = {chat:'💬', emote:'✨', whisper:'🤫'};
-  const rows = entries.slice(0, 500).map(e => {
-    const ts = e.ts ? new Date(e.ts).toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit',second:'2-digit'}) : '–';
-    const date = e.ts ? new Date(e.ts).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit'}) : '';
-    return `<tr>
-      <td style="color:var(--text3);font-size:.62rem;white-space:nowrap">${date} ${ts}</td>
-      <td>${typIcon[e.typ]||e.typ}</td>
-      <td style="font-size:.72rem;white-space:nowrap;max-width:120px;overflow:hidden;text-overflow:ellipsis">${escHtml(e.sender||'')}</td>
-      <td style="font-size:.72rem;max-width:400px;word-break:break-word">${escHtml(e.content||'')}</td>
-    </tr>`;
-  }).join('');
-  
-  el.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:.73rem">
-    <thead><tr style="background:var(--bg3)">
-      <th style="padding:5px 8px;text-align:left;color:var(--text3);font-weight:500">Zeit</th>
-      <th style="padding:5px 4px;width:24px"></th>
-      <th style="padding:5px 8px;text-align:left;color:var(--text3);font-weight:500">Sender</th>
-      <th style="padding:5px 8px;text-align:left;color:var(--text3);font-weight:500">Inhalt</th>
-    </tr></thead>
-    <tbody>${rows}</tbody>
-  </table>`;
-}
-
-function archiveClear() {
-  if (!confirm('Archiv löschen?')) return;
-  _chatArchive = []; _saveArchive(); renderArchive();
-  showStatus('Archiv geleert','info');
-}
-function archiveExport() {
-  const rows = [['Zeit','Typ','Sender','MemberNum','Inhalt']];
-  _chatArchive.forEach(e => rows.push([
-    e.ts ? new Date(e.ts).toISOString() : '',
-    e.typ||'', e.sender||'', e.memberNum||'',
-    '"'+(e.content||'').replace(/"/g,'""')+'"'
-  ]));
-  const csv = rows.map(r=>r.join(';')).join('\n');
-  const blob = new Blob([csv],{type:'text/csv;charset=utf-8;'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a'); a.href=url; a.download='chat_archiv_'+new Date().toISOString().slice(0,10)+'.csv'; a.click();
-  URL.revokeObjectURL(url);
-}
-
-
 function _buildBotCode(bot) {
   const s = bot.settings;
   const triggers = (bot.triggers||[]).filter(t=>t.aktiv).map(t => ({
@@ -5942,10 +5419,6 @@ function _buildBotCode(bot) {
       fallbackTyp: t.fallbackTyp??'nichts', fallbackText: t.fallbackText??'',
       charSpec: !!t.charSpec, resetOnLeave: !!t.resetOnLeave,
     bedingungen: (t.bedingungen||[]),
-    ausloeserModus: t.ausloeserModus??'alle',
-    ausloeserWhitelist: t.ausloeserWhitelist??[],
-    aktionsziel: t.aktionsziel??'ausloeser',
-    aktionszielListe: t.aktionszielListe??[],
     aktionen: (t.aktionen||[]).map(a => {
       if (a.typ==='item' && a.curseKey && !a.curseEntry) return {...a, curseEntry: CURSE_DB[a.curseKey]??null};
       if (a.typ==='item' && a.profilName && (!a.profilItems||!a.profilItems.length)) return {...a, profilItems: PROFILES[a.profilName]?.items??[]};
@@ -5956,8 +5429,7 @@ function _buildBotCode(bot) {
   const safeName = bot.name.replace(/\\/g,'\\\\').replace(/`/g,'\\`');
 
   const cfgJson  = JSON.stringify({hearChat:s.hearChat,hearEmote:s.hearEmote,hearWhisper:s.hearWhisper,nurEigene:s.nurEigene,logAktiv:s.logAktiv??true,modus:s.modus,moneyQueryCmd:_money?.settings?.queryCmd??'',moneyQueryTyp:_money?.settings?.queryTyp??'whisper'});
-  const ranksJson = JSON.stringify({ranks:_ranks.ranks,players:_ranks.players}).replace(/`/g,'\\`').replace(/\$\{/g,'\\${');
-  const trigsJson = JSON.stringify(triggers).replace(/`/g,'\\`').replace(/\$\{/g,'\\${');
+  const trigsJson = JSON.stringify(triggers).replace(/`/g,'\\`').replace(/\${/g,'\\${');
   const events = (bot.events||[]).filter(e=>e.aktiv).map(e => ({
     id: e.id, name: e.name,
     von: e.von??'alle', vonNummer: e.vonNummer??0,
@@ -5971,7 +5443,7 @@ function _buildBotCode(bot) {
       return a;
     }),
   }));
-  const eventsJson = JSON.stringify(events).replace(/`/g,'\\`').replace(/\$\{/g,'\\${');
+  const eventsJson = JSON.stringify(events).replace(/`/g,'\\`').replace(/\${/g,'\\${');
   // Build roomEver from logs – members who joined and haven't left yet
   // This is the authoritative source: Log löschen = Erstes Mal joinen
   const persistedRoomEver = (() => {
@@ -5992,7 +5464,6 @@ const _BID='${safeId}';
 if(window['_BCBot_'+_BID]){console.warn('[Bot] Bereits aktiv – erst stoppen!');return;}
 const _cfg=${cfgJson};
 const _moneyCfg={queryCmd:_cfg.moneyQueryCmd??''};
-const _ranksData=${ranksJson};
 const _trigs=${trigsJson};
 // State-Persistenz: beim Sync (Stop+Start) bleiben Fired-States erhalten
 const _stateKey='__BCKBotState_${safeId}';
@@ -6058,17 +5529,6 @@ function _ok(trig,rohText,typKey,C){
       return ref?.charSpec?!!_firedChar[c.trigId+'_'+C.MemberNumber]:!!_fired[c.trigId];
     }
     if(c.typ==='player_betritt')return true; // handled by poll
-    if(c.typ==='rang_ist'||c.typ==='shop_kauf')return true; // handled separately
-    if(c.typ==='rang_ist'){
-      const playerRankId=(_ranksData.players[C.MemberNumber]||{}).rankId||'';
-      const rankIdx=r=>_ranksData.ranks.findIndex(x=>x.id===r);
-      const pi=rankIdx(playerRankId), ci2=rankIdx(c.rangId||'');
-      if(c.rangModus==='ist')return playerRankId===c.rangId;
-      if(c.rangModus==='ist_nicht')return playerRankId!==c.rangId;
-      if(c.rangModus==='mindestens')return pi>=ci2&&pi>=0;
-      if(c.rangModus==='hoechstens')return pi<=ci2||pi<0;
-      return true;
-    }
     return true;
   }
   // Split into OR-groups (oder + und_oder both split groups)
@@ -6080,62 +5540,6 @@ function _ok(trig,rohText,typKey,C){
   // At least one group (OR) must be fully satisfied (AND within group)
   return groups.some(g=>g.every(c=>checkOne(c)));
 }
-
-function _checkWhitelist(trig,C){
-  const mode=trig.ausloeserModus??'alle';
-  if(mode==='alle')return true;
-  if(mode==='bot')return C.MemberNumber===Player.MemberNumber;
-  if(mode==='whitelist'){
-    const wl=trig.ausloeserWhitelist??[];
-    return wl.includes(C.MemberNumber);
-  }
-  return true;
-}
-
-function _checkShopKauf(shopCond,rohText,typKey,C,trig){
-  const cmd=(shopCond.cmd||'!pay').trim().toLowerCase();
-  const txt=rohText.trim();
-  const txtLow=txt.toLowerCase();
-  // Match: cmd exactly OR cmd "desc" price OR cmd price
-  const matchSimple=txtLow===cmd;
-  // Parse: !pay "Beschreibung" 100  OR  !pay 100
-  const matchCmd=txtLow.startsWith(cmd+' ')||txtLow===cmd;
-  if(!matchSimple&&!matchCmd)return false;
-  const preis=shopCond.preis??0;
-  const pos={X:C.X??0,Y:C.Y??0};
-  const typLabel={chat:'\u{1F4AC} Chat',emote:'\u{2728} Emote',whisper:'\u{1F917} Whisper'}[typKey]??typKey;
-  // Preis-Check
-  window.__BCK_popupRef?.postMessage({app:'BCKonfigurator',type:'SHOP_CHECK',
-    memberNum:C.MemberNumber,name:C.Name,preis,trigId:trig.id,
-    vars:{name:C.Name,wort:rohText,typ:typLabel,x:pos.X,y:pos.Y,zone:'',C}
-  },'*');
-  return false; // handled async via postMessage response
-}
-
-// Anti-Strip Watchdogs: {watchId → intervalId}
-const _antiStripWatchers={};
-function _startAntiStrip(a,targetC){
-  const key=(a.itemConfig?.group||'?')+':'+(a.itemConfig?.asset||'?')+':'+(targetC?.MemberNumber||'all');
-  if(_antiStripWatchers[key])return; // already watching
-  const interval=(a.antiStripInterval||5)*1000;
-  const ic=a.itemConfig;
-  const ec=a.ersatzConfig??ic; // use replacement or same item
-  if(!ic)return;
-  const watchFn=()=>{
-    const chars=a.antiStripZiel==='alle'?[Player,...(ChatRoomCharacter||[])]:[targetC];
-    chars.forEach(CC=>{
-      if(!CC)return;
-      const has=(CC.Appearance??[]).some(ap=>ap.Asset?.Name===ic.asset&&ap.Asset?.Group?.Name===ic.group);
-      if(!has){
-        _log('🔒 Anti-Strip: '+CC.Name+' hat '+ic.asset+' abgelegt – wird wieder angelegt');
-        _applyItemAction({...a,itemConfig:ec},CC);
-      }
-    });
-  };
-  _antiStripWatchers[key]=setInterval(watchFn,interval);
-  _log('🔒 Anti-Strip aktiv für '+ic.asset+' (alle '+(a.antiStripInterval||5)+'s)');
-}
-
 function _istBesetzt(x,y,ausschliessen){
   // Ignore target positions at 0,0 — BC hasn't synced position yet
   if(x===0&&y===0)return false;
@@ -6268,22 +5672,6 @@ function _execAct(a,C,vars){
     else if(a.typ==='item_entf'){InventoryRemove(C,a.gruppe);CharacterRefresh(C);ChatRoomCharacterUpdate(C);ok=true;}
     else if(a.typ==='item'){_applyItemAction(a,C);ok=true;}
     else if(a.typ==='teleport'){ok=_teleport(a,C);}
-    else if(a.typ==='set_rang'){
-      const rankData=_ranksData.ranks.find(r=>r.id===a.rangId);
-      window.__BCK_popupRef?.postMessage({app:'BCKonfigurator',type:'BOT_RANG',
-        memberNum:C.MemberNumber,name:C.Name,rankId:a.rangId??''},'*');
-      if(a.notify!=='nichts'&&a.notifyMsg){
-        const rang=rankData?(rankData.emoji+' '+rankData.name):'Kein Rang';
-        const txt=_tpl(a.notifyMsg,{...vars??{},{rang}});
-        const typ=a.notify==='whisper'?{Content:txt,Type:'Whisper',Target:C.MemberNumber}:{Content:txt,Type:'Chat'};
-        setTimeout(()=>ServerSend('ChatRoomChat',typ),300);
-      }
-      ok=true;
-    }
-    else if(a.typ==='anti_strip'){
-      _startAntiStrip(a,C);
-      ok=true;
-    }
     else if(a.typ==='money'){
       const op=a.money_op??'add';
       const val=a.money_val??0;
@@ -6492,35 +5880,10 @@ function _run(trig,vars){
 
   _log('\u{1F3AF} "'+trig.name+'" von '+vars.name+' | X='+vars.x+' Y='+vars.y+' | #'+(cnt+1)+(wdh==='n_mal'?' von '+trig.maxMal:''));
 
-  // ── Aktionsziel bestimmen ────────────────────────────────
-  const _aktionsziel=trig.aktionsziel??'ausloeser';
-  let _targets=[C];
-  if(_aktionsziel==='alle'){
-    _targets=[Player,...(ChatRoomCharacter||[])];
-  } else if(_aktionsziel==='whitelist'){
-    const azl=trig.aktionszielListe??[];
-    _targets=[Player,...(ChatRoomCharacter||[])].filter(x=>azl.includes(x.MemberNumber));
-    if(!_targets.length)_targets=[C];
-  } else if(_aktionsziel==='bot'){
-    _targets=[Player];
-  }
-
   // ── Aktionen sequenziell mit Basis-Delay starten ─────────
   setTimeout(()=>{
-    // Für alle Targets nacheinander ausführen
-    const _runForTargets=(targets)=>{
-      if(!targets.length){/*done*/return;}
-      const [tc,...rest]=targets;
-      _runSeq(
-        trig.aktionen??[],tc,{...vars,C:tc,name:tc.Name},trig,
-        ()=>{ _runForTargets(rest); },
-        ()=>{ /* ungültig → stop */ }
-      );
-    };
-    // Run for remaining targets (async, don't affect count)
-    if(_targets.length>1){_runForTargets(_targets.slice(1));}
     _runSeq(
-      trig.aktionen??[],_targets[0],{...vars,C:_targets[0],name:_targets[0].Name},trig,
+      trig.aktionen??[],C,vars,trig,
       // onDone – Trigger erfolgreich gezählt
       ()=>{
         const now=Date.now();
@@ -6544,23 +5907,10 @@ function _run(trig,vars){
   },trig.delay??0);
 }
 
-function _getRang(memberNum){
-  const p=_ranksData?.players?.[memberNum];
-  if(!p||!p.rankId)return'Kein Rang';
-  const r=(_ranksData?.ranks||[]).find(x=>x.id===p.rankId);
-  return r?(r.emoji+' '+r.name):'Kein Rang';
-}
-function _tpl(s,v){
-  const rang=v.C?_getRang(v.C.MemberNumber):v.rang??'';
-  return(s??'').replace(/{name}/gi,v.name??'').replace(/{wort}/gi,v.wort??'').replace(/{typ}/gi,v.typ??'').replace(/{x}/gi,v.x??'').replace(/{y}/gi,v.y??'').replace(/{y}/gi,v.y??'').replace(/{zone}/gi,v.zone??'').replace(/{rang}/gi,rang);
-}
+function _tpl(s,v){return(s??'').replace(/{name}/gi,v.name??'').replace(/{wort}/gi,v.wort??'').replace(/{typ}/gi,v.typ??'').replace(/{x}/gi,v.x??'').replace(/{y}/gi,v.y??'').replace(/{zone}/gi,v.zone??'');}
 
 function _proc(rohText,typKey,C){
   if(!rohText)return;
-  // ── Chat-Archiv ──
-  window.__BCK_popupRef?.postMessage({app:'BCKonfigurator',type:'CHAT_ARCHIVE',
-    entry:{ts:Date.now(),typ:typKey,sender:C.Name,memberNum:C.MemberNumber,content:rohText}
-  },'*');
   // Money query command
   const qCmd=(_moneyCfg?.queryCmd||'').trim().toLowerCase();
   if(qCmd&&rohText.trim().toLowerCase()===qCmd.toLowerCase()){
@@ -6576,14 +5926,6 @@ function _proc(rohText,typKey,C){
     const hasItem=(trig.bedingungen??[]).some(c=>c.typ==='item_traegt');
     const hasWort=(trig.bedingungen??[]).some(c=>c.typ==='wort');
     if(hasItem&&!hasWort)return;
-    // ── Whitelist-Check ──
-    if(!_checkWhitelist(trig,C))return;
-    // ── Shop-Kauf Bedingung prüfen ──
-    const shopCond=(trig.bedingungen??[]).find(c=>c.typ==='shop_kauf');
-    if(shopCond){
-      if(!_checkShopKauf(shopCond,rohText,typKey,C,trig))return;
-      return; // shop_kauf handled internally
-    }
     // Alle anderen: _ok prueft Bedingungen (wort, zone, vortrigger)
     if(_ok(trig,rohText,typKey,C))_run(trig,{name:C.Name,wort:rohText,typ:typLabel,x:pos.X,y:pos.Y,zone:'',C});
   });
@@ -6929,13 +6271,10 @@ const _msgH=function(data){
 ServerSocket.on('ChatRoomMessage',_msgH);
 
 window['_BCBot_'+_BID]={
-  _trigs,
-  _run,
   stop(){
     clearInterval(_itPoll);
     clearInterval(_joinPoll);
     clearInterval(_zonePoll);
-    Object.values(_antiStripWatchers).forEach(id=>clearInterval(id));
     try{ if(_mod) _mod.removePatches(); } catch(e){}
     // Restore ServerSend if we patched it as fallback
     if(window.__BCBot_origSend_${safeId}) {
