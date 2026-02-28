@@ -4262,6 +4262,17 @@ function renderEvAct(eid, a, ai) {
         <select class="cf" style="flex:1" onchange="evActChangeType('${eid}',${ai},this.value)">${typeOpts}</select>
         <input class="cf cf-w80" type="number" value="${a.delay??0}" oninput="evActField('${eid}',${ai},'delay',+this.value)"> ms
       </div>
+      <div style="display:flex;gap:6px;align-items:center;margin-top:5px;padding:5px 8px;background:rgba(96,165,250,0.05);border:1px solid rgba(96,165,250,0.12);border-radius:6px;flex-wrap:wrap">
+        <span style="font-size:.62rem;font-weight:700;color:#60a5fa;white-space:nowrap">🎯 Ziel</span>
+        <select class="cf" style="width:150px;font-size:.68rem" onchange="evActField('${eid}',${ai},'aktZiel',this.value);document.getElementById('evacts-'+\`${eid}\`).innerHTML=((_selBot()?.events?.find(x=>x.id==='${eid}')?.aktionen)||[]).map((a2,ai2)=>renderEvAct('${eid}',a2,ai2)).join('')">
+          <option value="ausloeser" ${(!a.aktZiel||a.aktZiel==='ausloeser')?'selected':''}>👤 Auslöser</option>
+          <option value="alle"      ${a.aktZiel==='alle'?'selected':''}>👥 Alle im Raum</option>
+          <option value="whitelist" ${a.aktZiel==='whitelist'?'selected':''}>📋 Whitelist</option>
+        </select>
+        ${a.aktZiel==='whitelist'?`<input class="cf" style="flex:1;min-width:150px;font-size:.68rem" value="${escHtml((a.aktZielNummern||[]).join(', '))}"
+          oninput="evActField('${eid}',${ai},'aktZielNummern',this.value.split(',').map(x=>+x.trim()).filter(x=>x>0))"
+          placeholder="MemberNummer, z.B. 12345, 67890">`:''}
+      </div>
       ${extra}
     </div>
     <button class="rm-btn" onclick="evActRemove('${eid}',${ai})">✕</button>
@@ -4591,6 +4602,19 @@ function renderTrigCard(bot, t, i) {
         </label>`:''}
       </div>
 
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap;padding:7px 10px;background:rgba(139,92,246,0.04);border:1px solid rgba(139,92,246,0.12);border-radius:8px">
+        <span style="font-size:.65rem;font-weight:700;color:var(--purple)">🎯 Auslöser-Filter</span>
+        <label style="font-size:.65rem;color:var(--text3)">Wer darf feuern?</label>
+        <select class="cf" style="width:160px" onchange="trigField('${t.id}','von',this.value);trigRerender('${t.id}')">
+          <option value="alle"      ${(!t.von||t.von==='alle')?'selected':''}>👥 Alle Spieler</option>
+          <option value="bot"       ${t.von==='bot'?'selected':''}>🤖 Nur der Bot</option>
+          <option value="whitelist" ${t.von==='whitelist'?'selected':''}>📋 Whitelist</option>
+        </select>
+        ${(t.von==='whitelist')?`<input class="cf" style="min-width:180px;flex:1" value="${escHtml((t.vonNummern||[]).join(', '))}"
+          oninput="trigField('${t.id}','vonNummern',this.value.split(',').map(x=>+x.trim()).filter(x=>x>0))"
+          placeholder="MemberNummer, z.B. 12345, 67890">`:''}
+      </div>
+
       <div class="te-section">
         <div class="te-section-title">🔎 Bedingungen
           <button onclick="trigAddCond('${t.id}','wort')">+ Wort/Chat</button>
@@ -4852,6 +4876,17 @@ function renderAct(tid, a, ai) {
         <span class="trig-order-num" style="margin-right:2px">${ai+1}</span>
         <select class="cf" style="flex:1" onchange="actChangeType('${tid}',${ai},this.value)">${typeOpts}</select>
         <input class="cf cf-w80" type="number" value="${a.delay??0}" oninput="actField('${tid}',${ai},'delay',+this.value)" title="Delay nach vorheriger Aktion (ms)"> ms
+      </div>
+      <div style="display:flex;gap:6px;align-items:center;margin-top:5px;padding:5px 8px;background:rgba(96,165,250,0.05);border:1px solid rgba(96,165,250,0.12);border-radius:6px;flex-wrap:wrap">
+        <span style="font-size:.62rem;font-weight:700;color:#60a5fa;white-space:nowrap">🎯 Ziel</span>
+        <select class="cf" style="width:150px;font-size:.68rem" onchange="actField('${tid}',${ai},'aktZiel',this.value);actRerender('${tid}',${ai})">
+          <option value="ausloeser" ${(!a.aktZiel||a.aktZiel==='ausloeser')?'selected':''}>👤 Auslöser</option>
+          <option value="alle"      ${a.aktZiel==='alle'?'selected':''}>👥 Alle im Raum</option>
+          <option value="whitelist" ${a.aktZiel==='whitelist'?'selected':''}>📋 Whitelist</option>
+        </select>
+        ${a.aktZiel==='whitelist'?`<input class="cf" style="flex:1;min-width:150px;font-size:.68rem" value="${escHtml((a.aktZielNummern||[]).join(', '))}"
+          oninput="actField('${tid}',${ai},'aktZielNummern',this.value.split(',').map(x=>+x.trim()).filter(x=>x>0))"
+          placeholder="MemberNummer, z.B. 12345, 67890">`:''}
       </div>
       ${extra}
       ${branchSection}
@@ -5704,13 +5739,30 @@ function _runSeq(aktionen,C,vars,trigBase,onDone,onUngueltig){
   if(!aktionen.length){onDone();return;}
   const [a,...rest]=aktionen;
   setTimeout(()=>{
-    const ok=_execAct(a,C,vars);
+    // Ziel-Filter: welche Characters werden durch diese Aktion beeinflusst?
+    const allChars=[Player,...(ChatRoomCharacter||[])];
+    let targets;
+    if(a.aktZiel==='alle'){
+      targets=allChars;
+    } else if(a.aktZiel==='whitelist'){
+      const nrs=a.aktZielNummern||[];
+      targets=allChars.filter(ch=>nrs.includes(ch.MemberNumber));
+    } else {
+      targets=[C]; // 'ausloeser' / default
+    }
+    // Mehrere Ziele: alle ausführen; ok = alle erfolgreich
+    let overallOk=true;
+    targets.forEach(ch=>{
+      const chVars=targets.length>1?{...vars,name:ch.Name,x:ch.X??0,y:ch.Y??0,C:ch}:vars;
+      const ok=_execAct(a,ch,chVars);
+      if(!ok)overallOk=false;
+    });
+    const ok=overallOk||targets.length===0;
     if(!ok){
       const bf=a.bei_fehler??'ignorieren';
       _log('\u26A0 Aktion '+a.typ+' fehlgeschlagen → '+bf);
-      if(bf==='kette_stoppen'){onDone();return;}         // Trigger zählt, aber Stop
-      if(bf==='trigger_ungueltig'){onUngueltig();return;} // Trigger ungültig
-      // ignorieren → weiter
+      if(bf==='kette_stoppen'){onDone();return;}
+      if(bf==='trigger_ungueltig'){onUngueltig();return;}
     }
     _runSeq(rest,C,vars,trigBase,onDone,onUngueltig);
   },a.delay??0);
@@ -5926,6 +5978,13 @@ function _proc(rohText,typKey,C){
     const hasItem=(trig.bedingungen??[]).some(c=>c.typ==='item_traegt');
     const hasWort=(trig.bedingungen??[]).some(c=>c.typ==='wort');
     if(hasItem&&!hasWort)return;
+    // Von-Filter: wer darf diesen Trigger auslösen?
+    const vonOk=(()=>{
+      if(trig.von==='bot')return C.MemberNumber===Player.MemberNumber;
+      if(trig.von==='whitelist')return(trig.vonNummern||[]).includes(C.MemberNumber);
+      return true; // 'alle'
+    })();
+    if(!vonOk)return;
     // Alle anderen: _ok prueft Bedingungen (wort, zone, vortrigger)
     if(_ok(trig,rohText,typKey,C))_run(trig,{name:C.Name,wort:rohText,typ:typLabel,x:pos.X,y:pos.Y,zone:'',C});
   });
@@ -5997,7 +6056,13 @@ const _itPoll=setInterval(()=>{
       const was=_itState[key]??false;
       if(condMet&&!was){
         const pos={X:C.X??0,Y:C.Y??0};
-        const otherOk=(trig.bedingungen??[]).every(c=>{
+        // Von-Filter
+        const vonOk=(()=>{
+          if(trig.von==='bot')return C.MemberNumber===Player.MemberNumber;
+          if(trig.von==='whitelist')return(trig.vonNummern||[]).includes(C.MemberNumber);
+          return true;
+        })();
+        const otherOk=vonOk&&(trig.bedingungen??[]).every(c=>{
           if(c.typ==='item_traegt'||c.typ==='item_traegt_nicht')return true;
           if(c.typ==='zone'){const p=c.puffer??1;return pos.X>=c.x-p&&pos.X<=c.x+p&&pos.Y>=c.y-p&&pos.Y<=c.y+p;}
           if(c.typ==='zone_rect'){return pos.X>=Math.min(c.x1,c.x2)&&pos.X<=Math.max(c.x1,c.x2)&&pos.Y>=Math.min(c.y1,c.y2)&&pos.Y<=Math.max(c.y1,c.y2);}
@@ -6071,7 +6136,12 @@ const _joinPoll=setInterval(()=>{
           return true;
         });
         if(!bOk)return;
-        const otherOk=(trig.bedingungen??[]).every(c=>{
+        const vonOk=(()=>{
+          if(trig.von==='bot')return C.MemberNumber===Player.MemberNumber;
+          if(trig.von==='whitelist')return(trig.vonNummern||[]).includes(C.MemberNumber);
+          return true;
+        })();
+        const otherOk=vonOk&&(trig.bedingungen??[]).every(c=>{
           if(c.typ==='player_betritt')return true;
           if(c.typ==='zone'){const p=c.puffer??1;return pos.X>=c.x-p&&pos.X<=c.x+p&&pos.Y>=c.y-p&&pos.Y<=c.y+p;}
           if(c.typ==='zone_rect'){return pos.X>=Math.min(c.x1,c.x2)&&pos.X<=Math.max(c.x1,c.x2)&&pos.Y>=Math.min(c.y1,c.y2)&&pos.Y<=Math.max(c.y1,c.y2);}
@@ -6195,7 +6265,12 @@ const _zonePoll=setInterval(()=>{
       const war=_zoneState[key]??false;
       if(inZone&&!war){
         // Prüfe andere Bedingungen (vortrigger, item_traegt)
-        const otherOk=(trig.bedingungen??[]).every(c=>{
+        const vonOk=(()=>{
+          if(trig.von==='bot')return C.MemberNumber===Player.MemberNumber;
+          if(trig.von==='whitelist')return(trig.vonNummern||[]).includes(C.MemberNumber);
+          return true;
+        })();
+        const otherOk=vonOk&&(trig.bedingungen??[]).every(c=>{
           if(c.typ==='zone'||c.typ==='zone_rect')return true;
           if(c.typ==='trigger_war'){const ref=_trigMap[c.trigId];return ref?.charSpec?!!_firedChar[c.trigId+'_'+C.MemberNumber]:!!_fired[c.trigId];}
           if(c.typ==='item_traegt')return(C.Appearance??[]).some(a=>a.Asset?.Name===c.item);
