@@ -6578,6 +6578,22 @@ const _itPoll=setInterval(()=>{
           if(c.typ==='zone'){const p=c.puffer??1;return pos.X>=c.x-p&&pos.X<=c.x+p&&pos.Y>=c.y-p&&pos.Y<=c.y+p;}
           if(c.typ==='zone_rect'){return pos.X>=Math.min(c.x1,c.x2)&&pos.X<=Math.max(c.x1,c.x2)&&pos.Y>=Math.min(c.y1,c.y2)&&pos.Y<=Math.max(c.y1,c.y2);}
           if(c.typ==='trigger_war'){const ref=_trigMap[c.trigId];return ref?.charSpec?!!_firedChar[c.trigId+'_'+C.MemberNumber]:!!_fired[c.trigId];}
+          if(c.typ==='rang'){
+            const op=c.rang_op??'=';
+            const currentId=_rangState[C.MemberNumber]??null;
+            if(op==='kein') return !currentId;
+            if(!c.rang_id) return false;
+            const defs=(_cfg.rankDefs??[]).sort((a,b)=>a.level-b.level);
+            const targetDef=defs.find(r=>r.id===c.rang_id);
+            const currentDef=defs.find(r=>r.id===currentId);
+            if(!targetDef) return false;
+            if(!currentDef) return false;
+            const tl=targetDef.level, cl=currentDef.level;
+            if(op==='=')   return cl===tl;
+            if(op==='min') return cl>=tl;
+            if(op==='max') return cl<=tl;
+            return false;
+          }
           return true;
         });
         if(otherOk)_run(trig,{name:C.Name,wort:'',typ:'Item',x:pos.X,y:pos.Y,zone:'',C});
@@ -6826,6 +6842,22 @@ const _zonePoll=setInterval(()=>{
           if(c.typ==='trigger_war'){const ref=_trigMap[c.trigId];return ref?.charSpec?!!_firedChar[c.trigId+'_'+C.MemberNumber]:!!_fired[c.trigId];}
           if(c.typ==='item_traegt')return(C.Appearance??[]).some(a=>a.Asset?.Name===c.item);
           if(c.typ==='item_traegt_nicht')return!(C.Appearance??[]).some(a=>a.Asset?.Name===c.item);
+          if(c.typ==='rang'){
+            const op=c.rang_op??'=';
+            const currentId=_rangState[C.MemberNumber]??null;
+            if(op==='kein') return !currentId;
+            if(!c.rang_id) return false;
+            const defs=(_cfg.rankDefs??[]).sort((a,b)=>a.level-b.level);
+            const targetDef=defs.find(r=>r.id===c.rang_id);
+            const currentDef=defs.find(r=>r.id===currentId);
+            if(!targetDef) return false;
+            if(!currentDef) return false;
+            const tl=targetDef.level, cl=currentDef.level;
+            if(op==='=')   return cl===tl;
+            if(op==='min') return cl>=tl;
+            if(op==='max') return cl<=tl;
+            return false;
+          }
           return true;
         });
         if(otherOk){
