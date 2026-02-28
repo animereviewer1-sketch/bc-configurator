@@ -5903,7 +5903,7 @@ function _buildBotCode(bot) {
   const safeId   = bot.id.replace(/\W/g,'_');
   const safeName = bot.name.replace(/\\/g,'\\\\').replace(/`/g,'\\`');
 
-  const cfgJson  = JSON.stringify({hearChat:s.hearChat,hearEmote:s.hearEmote,hearWhisper:s.hearWhisper,nurEigene:s.nurEigene,logAktiv:s.logAktiv??true,modus:s.modus,moneyQueryCmd:_money?.settings?.queryCmd??'',moneyQueryTyp:_money?.settings?.queryTyp??'whisper',rankQueryCmd:_rankData?.settings?.queryCmd??'',rankQueryTyp:_rankData?.settings?.queryCmdTyp??'whisper',rankQueryText:_rankData?.settings?.queryCmdText??'{name} hat Rang: {rang_icon} {rang}',rankDefs:_rankData?.defs??[]});
+  const cfgJson  = JSON.stringify({hearChat:s.hearChat,hearEmote:s.hearEmote,hearWhisper:s.hearWhisper,nurEigene:s.nurEigene,logAktiv:s.logAktiv??true,modus:s.modus,moneyQueryCmd:_money?.settings?.queryCmd??'',moneyQueryTyp:_money?.settings?.queryTyp??'whisper',rankQueryCmd:_rankData?.settings?.queryCmd??'',rankQueryTyp:_rankData?.settings?.queryCmdTyp??'whisper',rankQueryText:_rankData?.settings?.queryCmdText??'{name} hat Rang: {rang_icon} {rang}',rankDefs:_rankData?.defs??[],rankPlayers:Object.fromEntries(Object.entries(_rankData?.players??{}).map(([k,v])=>[k,v.rankId??null]))});
   const trigsJson = JSON.stringify(triggers).replace(/`/g,'\\`').replace(/\${/g,'\\${');
   const events = (bot.events||[]).filter(e=>e.aktiv).map(e => ({
     id: e.id, name: e.name,
@@ -5962,7 +5962,8 @@ const _REJOIN_GRACE=1000; // ms window stays open regardless of other triggers
 const _evts=${eventsJson};
 
 // Rang-State: memberNum -> aktueller rankId (laut Popup-State)
-const _rangState={};
+// Beim Start mit gespeicherten Spieler-Rang-Zuweisungen initialisieren
+const _rangState=Object.assign({},_cfg.rankPlayers??{});
 
 function _log(...a){if(_cfg.logAktiv)console.log('[Bot:${safeName}]',...a);}
 
