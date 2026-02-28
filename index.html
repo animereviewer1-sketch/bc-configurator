@@ -963,6 +963,31 @@ button { cursor: pointer; }
 .rank-badge-none { font-size: .72rem; color: var(--text3); font-style: italic; }
 .rank-history-btn { background: none; border: 1px solid rgba(255,255,255,0.1); border-radius: 5px; color: var(--text3); font-size: .62rem; padding: 2px 8px; cursor: pointer; transition: all .15s; font-family: var(--font-ui); }
 .rank-history-btn:hover { border-color: rgba(139,92,246,0.4); color: #c4b5fd; }
+
+/* ══════════════════ SHOP ══════════════════ */
+.shop-wrap { display: grid; grid-template-columns: 340px 1fr; height: calc(100vh - 112px); overflow: hidden; }
+.shop-cfg  { border-right: 1px solid rgba(255,255,255,0.07); overflow-y: auto; background: rgba(10,10,24,0.8); padding: 14px; }
+.shop-cfg-title { font-size: .72rem; font-weight: 800; color: var(--text3); text-transform: uppercase; letter-spacing: .08em; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
+.shop-item-card { background: rgba(255,255,255,0.025); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 9px 12px; margin-bottom: 7px; display: flex; align-items: center; gap: 9px; transition: border-color .18s; cursor: default; }
+.shop-item-card:hover { border-color: rgba(255,255,255,0.14); }
+.shop-item-icon { font-size: 1.1rem; flex-shrink: 0; }
+.shop-item-name { flex: 1; font-size: .80rem; font-weight: 700; color: var(--text); }
+.shop-item-price { font-size: .68rem; font-family: var(--font-mono); color: var(--green); font-weight: 700; flex-shrink: 0; }
+.shop-item-inactive { opacity: .45; }
+.shop-add-btn { width: 100%; padding: 9px; background: none; border: 1px dashed rgba(52,211,153,0.25); border-radius: 9px; color: rgba(52,211,153,0.6); font-size: .72rem; cursor: pointer; transition: all .18s; font-family: var(--font-ui); font-weight: 600; margin-top: 4px; }
+.shop-add-btn:hover { border-color: var(--green); color: var(--green); background: rgba(52,211,153,0.05); }
+.shop-right { overflow-y: auto; background: var(--bg); padding: 20px 24px; }
+.shop-empty { text-align: center; padding: 60px 20px; color: var(--text3); font-size: .85rem; }
+.shop-modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.8); z-index: 800; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(8px); }
+.shop-modal { background: var(--bg3); border: 1px solid rgba(52,211,153,0.3); border-radius: 16px; padding: 24px; min-width: 380px; max-width: 480px; box-shadow: 0 12px 48px rgba(0,0,0,.8); }
+.shop-modal h3 { font-size: .95rem; font-weight: 800; color: #6ee7b7; margin-bottom: 16px; }
+.shop-modal label { display: block; font-size: .67rem; color: var(--text3); font-weight: 700; text-transform: uppercase; letter-spacing: .06em; margin-bottom: 4px; margin-top: 11px; }
+.shop-modal input, .shop-modal select, .shop-modal textarea { width: 100%; }
+.shop-modal-btns { display: flex; gap: 8px; margin-top: 18px; justify-content: flex-end; }
+.shop-log-card { background: rgba(52,211,153,0.04); border: 1px solid rgba(52,211,153,0.12); border-radius: 8px; padding: 9px 13px; margin-bottom: 6px; font-size: .73rem; }
+.shop-log-card .shop-log-who { font-weight: 700; color: var(--green); }
+.shop-log-card .shop-log-item { color: var(--text1); }
+.shop-log-card .shop-log-meta { color: var(--text3); font-size: .62rem; font-family: var(--font-mono); margin-top: 2px; }
 .rank-history-popup { position: fixed; z-index: 700; background: var(--bg3); border: 1px solid rgba(139,92,246,0.3); border-radius: 12px; padding: 14px 18px; min-width: 260px; box-shadow: 0 8px 32px rgba(0,0,0,0.7); }
 .rank-edit-inline { display: flex; gap: 5px; align-items: center; }
 .rank-empty { text-align: center; padding: 60px 20px; color: var(--text3); font-size: .85rem; }
@@ -1008,6 +1033,7 @@ button { cursor: pointer; }
   <button class="tab-btn"        id="tab-log-btn"    onclick="switchTab('log')">📋 Logs</button>
   <button class="tab-btn"        id="tab-money-btn"  onclick="switchTab('money')">💰 Money</button>
   <button class="tab-btn"        id="tab-rank-btn"   onclick="switchTab('rank')">🏆 Rang</button>
+  <button class="tab-btn"        id="tab-shop-btn"   onclick="switchTab('shop')">🛒 Shop</button>
 </div>
 
 <!-- TAB 1: ITEM MANAGER -->
@@ -2642,7 +2668,7 @@ function deleteProfileByIdx(idx) {
 let _activeTab = 'items';
 function switchTab(tab) {
   _activeTab = tab;
-  ['items','outfit','curse','bot','log','money','events','rank'].forEach(t => {
+  ['items','outfit','curse','bot','log','money','events','rank','shop'].forEach(t => {
     document.getElementById('tab-'+t)?.classList.toggle('active', t===tab);
     document.getElementById('tab-'+t+'-btn')?.classList.toggle('active', t===tab);
   });
@@ -2652,6 +2678,7 @@ function switchTab(tab) {
   if (tab === 'log')    { renderLogTab(); }
   if (tab === 'money')  { renderMoneyTab(); }
   if (tab === 'rank')   { renderRankTab(); }
+  if (tab === 'shop')   { renderShopTab(); }
 
 }
 
@@ -3308,6 +3335,11 @@ window.addEventListener('message', function(ev) {
       _moneyApply(ev.data.memberNum, ev.data.name, ev.data.delta, ev.data.setVal);
       break;
 
+    case 'BOT_SHOP': {
+      _shopLogPurchase(ev.data);
+      break;
+    }
+
     case 'BOT_RANG':
       _rankApply(ev.data.memberNum, ev.data.name, ev.data.rankId, 'bot');
       break;
@@ -3880,6 +3912,91 @@ function selectRoomMember(num) {
   </div>
 </div>
 
+<!-- TAB: SHOP SYSTEM -->
+<div id="tab-shop" class="tab-pane">
+  <div class="shop-wrap">
+    <!-- LEFT: Shop-Artikel Definitionen -->
+    <div class="shop-cfg">
+      <div class="shop-cfg-title">🛒 Shop-Artikel
+        <button onclick="shopExport()" title="Exportieren" style="margin-left:auto;background:none;border:1px solid rgba(255,255,255,0.1);border-radius:5px;color:var(--text3);font-size:.62rem;padding:2px 8px;cursor:pointer">⬇️</button>
+        <button onclick="shopImport()" title="Importieren" style="background:none;border:1px solid rgba(255,255,255,0.1);border-radius:5px;color:var(--text3);font-size:.62rem;padding:2px 8px;cursor:pointer">⬆️</button>
+      </div>
+      <div style="font-size:.65rem;color:var(--text3);margin-bottom:10px;line-height:1.5">
+        Definiere kaufbare Artikel. Jeder Artikel löst Trigger mit der Bedingung <b>🛒 Shop-Kauf</b> aus.<br>
+        Befehl: <code style="color:var(--green)">&lt;!pay&gt; "Artikelname"</code> oder für einen anderen Spieler: <code style="color:var(--green)">&lt;!pay&gt; "Artikel" "Spielername"</code>
+      </div>
+      <div id="shop-item-list"></div>
+      <button class="shop-add-btn" onclick="shopItemNew()">+ Neuen Artikel hinzufügen</button>
+
+      <div style="margin-top:18px">
+        <div class="shop-cfg-title">⚙️ Shop-Einstellungen</div>
+        <label style="font-size:.65rem;color:var(--text3)">Pay-Befehl (Chat):
+          <input id="shop-cmd-inp" class="cf" style="width:100%;margin-top:3px" placeholder="!pay"
+            value="" oninput="shopSetCmd(this.value)">
+        </label>
+        <label style="font-size:.65rem;color:var(--text3);margin-top:8px;display:block">Standard-Bestätigung (Whisper an Käufer):
+          <input id="shop-confirm-inp" class="cf" style="width:100%;margin-top:3px"
+            placeholder="{name} kauft: {item} für {preis} {waehrung}. Kontostand: {kontostand}"
+            value="" oninput="shopSetConfirm(this.value)">
+        </label>
+        <label style="font-size:.65rem;color:var(--text3);margin-top:8px;display:block">Standard-Fehlermeldung (zu wenig Coins):
+          <input id="shop-error-inp" class="cf" style="width:100%;margin-top:3px"
+            placeholder="Nicht genug {waehrung}! Du hast {kontostand}, benötigt: {preis}."
+            value="" oninput="shopSetError(this.value)">
+        </label>
+        <div style="font-size:.59rem;color:var(--text3);margin-top:6px">Variablen: {name} {ziel} {item} {preis} {waehrung} {kontostand}</div>
+      </div>
+
+      <div style="margin-top:18px">
+        <div class="shop-cfg-title">🗑 Daten</div>
+        <button onclick="shopResetLog()" style="width:100%;font-size:.68rem;padding:6px;background:#0a1a0a;border:1px solid var(--green);color:var(--green);border-radius:6px;cursor:pointer;margin-bottom:6px">Kauf-Log leeren</button>
+        <button onclick="shopResetAll()" style="width:100%;font-size:.68rem;padding:6px;background:#2a0a0a;border:1px solid var(--red);color:var(--red);border-radius:6px;cursor:pointer">Alle Shop-Daten zurücksetzen</button>
+      </div>
+    </div>
+
+    <!-- RIGHT: Kauf-Log -->
+    <div class="shop-right">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid rgba(255,255,255,0.07)">
+        <span style="font-size:.85rem;font-weight:700;color:var(--text1)">📋 Kauf-Verlauf</span>
+        <span id="shop-log-count" style="font-size:.65rem;color:var(--text3)"></span>
+      </div>
+      <div id="shop-log-list">
+        <div class="shop-empty">🛒 Noch keine Käufe.<br><span style="font-size:.72rem;color:var(--text3)">Käufe erscheinen hier wenn der Bot aktiv ist und ein Spieler einen Artikel kauft.</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Shop Item Edit Modal -->
+<div id="shop-modal-overlay" class="shop-modal-overlay" style="display:none" onclick="if(event.target===this)shopModalClose()">
+  <div class="shop-modal">
+    <h3 id="shop-modal-title">🛒 Artikel bearbeiten</h3>
+    <input type="hidden" id="shop-modal-id">
+    <label>Artikelname (wird im Befehl verwendet)</label>
+    <input class="cf" id="shop-modal-name" placeholder="z.B. Gag, Handschellen, VIP…">
+    <label>Beschreibung (optional, für Log)</label>
+    <input class="cf" id="shop-modal-desc" placeholder="z.B. Ein einfacher Knebel">
+    <label>Icon / Emoji</label>
+    <input class="cf" id="shop-modal-icon" placeholder="🛒" style="width:80px">
+    <label>Preis (Coins)</label>
+    <input class="cf" id="shop-modal-preis" type="number" min="0" value="10">
+    <label>Aktiv</label>
+    <select class="cf" id="shop-modal-aktiv">
+      <option value="true">✅ Aktiv</option>
+      <option value="false">❌ Deaktiviert</option>
+    </select>
+    <label>Bestätigungsnachricht (leer = Standard)</label>
+    <input class="cf" id="shop-modal-confirm" placeholder="Leer = Standard-Nachricht">
+    <label>Fehlermeldung bei zu wenig Coins (leer = Standard)</label>
+    <input class="cf" id="shop-modal-error" placeholder="Leer = Standard-Nachricht">
+    <div style="font-size:.59rem;color:var(--text3);margin-top:4px">Variablen: {name} {ziel} {item} {preis} {waehrung} {kontostand}</div>
+    <div class="shop-modal-btns">
+      <button onclick="shopModalClose()" style="padding:7px 16px;border:1px solid rgba(255,255,255,0.1);background:none;color:var(--text3);border-radius:8px;cursor:pointer;font-family:var(--font-ui);font-size:.78rem">Abbrechen</button>
+      <button onclick="shopModalSave()" style="padding:7px 18px;background:var(--green);border:none;color:#000;border-radius:8px;cursor:pointer;font-family:var(--font-ui);font-size:.78rem;font-weight:700">✓ Speichern</button>
+    </div>
+  </div>
+</div>
+
 <script>
 // ══ BOT ENGINE ══════════════════════════════════════════════
 
@@ -4009,6 +4126,174 @@ let _rankData = {
 function _saveRank() { try { localStorage.setItem(RANK_KEY, JSON.stringify(_rankData)); } catch {} }
 function _rankById(id) { return _rankData.defs.find(r=>r.id===id)??null; }
 function _rankSorted() { return [..._rankData.defs].sort((a,b)=>a.level-b.level); }
+
+// ══════════════════════════════════════════════════════
+//  SHOP SYSTEM
+// ══════════════════════════════════════════════════════
+const SHOP_KEY = 'BC_Shop_v1';
+let _shop = {
+  settings: { cmd: '!pay', confirmMsg: '', errorMsg: '' },
+  items: [],
+  log: []
+};
+(()=>{
+  try { const s=localStorage.getItem(SHOP_KEY); if(s) _shop = Object.assign({settings:{cmd:'!pay',confirmMsg:'',errorMsg:''},items:[],log:[]},JSON.parse(s)); } catch{}
+})();
+function _saveShop() { try { localStorage.setItem(SHOP_KEY, JSON.stringify(_shop)); } catch {} }
+function _shopById(id) { return _shop.items.find(i=>i.id===id)??null; }
+
+function renderShopTab() {
+  // Sync settings inputs
+  const cmdEl = document.getElementById('shop-cmd-inp');
+  if (cmdEl) cmdEl.value = _shop.settings.cmd ?? '!pay';
+  const confEl = document.getElementById('shop-confirm-inp');
+  if (confEl) confEl.value = _shop.settings.confirmMsg ?? '';
+  const errEl = document.getElementById('shop-error-inp');
+  if (errEl) errEl.value = _shop.settings.errorMsg ?? '';
+  renderShopItems();
+  renderShopLog();
+  // Update tab badge
+  const btn = document.getElementById('tab-shop-btn');
+  if (btn) btn.textContent = '🛒 Shop (' + _shop.items.filter(i=>i.aktiv).length + ')';
+}
+
+function renderShopItems() {
+  const el = document.getElementById('shop-item-list'); if (!el) return;
+  const items = _shop.items;
+  if (!items.length) { el.innerHTML = '<div style="font-size:.7rem;color:var(--text3);text-align:center;padding:12px 0">Noch keine Artikel.</div>'; return; }
+  el.innerHTML = items.map(item => `
+    <div class="shop-item-card ${item.aktiv?'':'shop-item-inactive'}">
+      <span class="shop-item-icon">${escHtml(item.icon||'🛒')}</span>
+      <div style="flex:1;min-width:0">
+        <div class="shop-item-name">${escHtml(item.name||'–')}</div>
+        ${item.beschreibung?`<div style="font-size:.62rem;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(item.beschreibung)}</div>`:''}
+      </div>
+      <span class="shop-item-price">${item.preis??0} 💰</span>
+      <button onclick="shopItemEdit('${item.id}')" style="background:none;border:1px solid rgba(255,255,255,0.1);border-radius:5px;color:var(--text3);font-size:.62rem;padding:2px 7px;cursor:pointer">✏️</button>
+      <button onclick="shopItemDelete('${item.id}')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.75rem;padding:2px 5px">✕</button>
+    </div>
+  `).join('');
+}
+
+function renderShopLog() {
+  const el = document.getElementById('shop-log-list'); if (!el) return;
+  const log = [...(_shop.log||[])].reverse();
+  const cntEl = document.getElementById('shop-log-count');
+  if (cntEl) cntEl.textContent = log.length + ' Käufe';
+  if (!log.length) {
+    el.innerHTML = '<div class="shop-empty">🛒 Noch keine Käufe.<br><span style="font-size:.72rem;color:var(--text3)">Käufe erscheinen hier wenn der Bot aktiv ist und ein Spieler einen Artikel kauft.</span></div>';
+    return;
+  }
+  el.innerHTML = log.map(e => {
+    const d = new Date(e.ts);
+    const timeStr = d.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    const targetStr = e.targetName && e.targetName !== e.buyerName ? ` → <span style="color:#60a5fa">${escHtml(e.targetName)}</span>` : '';
+    return `<div class="shop-log-card">
+      <span class="shop-log-who">${escHtml(e.buyerName||('#'+e.buyerNum))}</span>${targetStr}
+      kauft <span class="shop-log-item">${escHtml(e.itemName||'?')}</span>
+      für <span style="color:var(--green)">${e.preis} 💰</span>
+      <div class="shop-log-meta">${timeStr} · #${e.buyerNum}${e.targetNum&&e.targetNum!==e.buyerNum?' → #'+e.targetNum:''}</div>
+    </div>`;
+  }).join('');
+}
+
+function shopSetCmd(v)     { _shop.settings.cmd = v.trim(); _saveShop(); }
+function shopSetConfirm(v) { _shop.settings.confirmMsg = v; _saveShop(); }
+function shopSetError(v)   { _shop.settings.errorMsg = v; _saveShop(); }
+
+function shopItemNew() {
+  document.getElementById('shop-modal-id').value = '';
+  document.getElementById('shop-modal-title').textContent = '🛒 Neuer Artikel';
+  document.getElementById('shop-modal-name').value = '';
+  document.getElementById('shop-modal-desc').value = '';
+  document.getElementById('shop-modal-icon').value = '🛒';
+  document.getElementById('shop-modal-preis').value = '10';
+  document.getElementById('shop-modal-aktiv').value = 'true';
+  document.getElementById('shop-modal-confirm').value = '';
+  document.getElementById('shop-modal-error').value = '';
+  document.getElementById('shop-modal-overlay').style.display = 'flex';
+}
+
+function shopItemEdit(id) {
+  const item = _shopById(id); if (!item) return;
+  document.getElementById('shop-modal-id').value = id;
+  document.getElementById('shop-modal-title').textContent = '✏️ Artikel bearbeiten';
+  document.getElementById('shop-modal-name').value = item.name||'';
+  document.getElementById('shop-modal-desc').value = item.beschreibung||'';
+  document.getElementById('shop-modal-icon').value = item.icon||'🛒';
+  document.getElementById('shop-modal-preis').value = item.preis??10;
+  document.getElementById('shop-modal-aktiv').value = item.aktiv !== false ? 'true' : 'false';
+  document.getElementById('shop-modal-confirm').value = item.confirmMsg||'';
+  document.getElementById('shop-modal-error').value = item.errorMsg||'';
+  document.getElementById('shop-modal-overlay').style.display = 'flex';
+}
+
+function shopModalClose() { document.getElementById('shop-modal-overlay').style.display = 'none'; }
+
+function shopModalSave() {
+  const id = document.getElementById('shop-modal-id').value;
+  const name = document.getElementById('shop-modal-name').value.trim();
+  if (!name) { alert('Artikelname ist erforderlich.'); return; }
+  const data = {
+    name,
+    beschreibung: document.getElementById('shop-modal-desc').value.trim(),
+    icon: document.getElementById('shop-modal-icon').value.trim()||'🛒',
+    preis: parseInt(document.getElementById('shop-modal-preis').value)||0,
+    aktiv: document.getElementById('shop-modal-aktiv').value !== 'false',
+    confirmMsg: document.getElementById('shop-modal-confirm').value.trim(),
+    errorMsg: document.getElementById('shop-modal-error').value.trim(),
+  };
+  if (id) {
+    const item = _shopById(id); if (item) Object.assign(item, data);
+  } else {
+    _shop.items.push({ id:'shop'+Date.now(), ...data });
+  }
+  _saveShop(); shopModalClose(); renderShopItems();
+  const btn = document.getElementById('tab-shop-btn');
+  if (btn) btn.textContent = '🛒 Shop (' + _shop.items.filter(i=>i.aktiv).length + ')';
+}
+
+function shopItemDelete(id) {
+  if (!confirm('Artikel wirklich löschen?')) return;
+  _shop.items = _shop.items.filter(i=>i.id!==id);
+  _saveShop(); renderShopItems();
+}
+
+function shopResetLog() {
+  if (!confirm('Kauf-Log wirklich leeren?')) return;
+  _shop.log = []; _saveShop(); renderShopLog();
+}
+
+function shopResetAll() {
+  if (!confirm('Alle Shop-Daten wirklich zurücksetzen?')) return;
+  _shop.items = []; _shop.log = []; _saveShop(); renderShopTab();
+}
+
+function shopExport() {
+  const blob = new Blob([JSON.stringify({items:_shop.items,settings:_shop.settings},null,2)],{type:'application/json'});
+  const a = document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='shop_export.json'; a.click();
+}
+
+function shopImport() {
+  const inp = document.createElement('input'); inp.type='file'; inp.accept='.json';
+  inp.onchange = e => {
+    const f=e.target.files[0]; if(!f) return;
+    const r=new FileReader();
+    r.onload=ev=>{try{const d=JSON.parse(ev.target.result);if(d.items){_shop.items=d.items;_saveShop();renderShopItems();}}catch{alert('Ungültige Shop-Datei.');}};
+    r.readAsText(f);
+  };
+  inp.click();
+}
+
+// Called from bot via postMessage when a purchase occurs
+function _shopLogPurchase(data) {
+  _shop.log = _shop.log || [];
+  _shop.log.push({ ts: Date.now(), buyerNum: data.buyerNum, buyerName: data.buyerName, targetNum: data.targetNum, targetName: data.targetName, itemName: data.itemName, preis: data.preis });
+  // Keep last 200 entries
+  if (_shop.log.length > 200) _shop.log = _shop.log.slice(-200);
+  _saveShop();
+  if (document.getElementById('tab-shop')?.classList.contains('active')) renderShopLog();
+}
 
 function renderRankTab() {
   const si = document.getElementById('rank-cmd-inp');      if(si) si.value = _rankData.settings.queryCmd??'!rang';
@@ -4660,6 +4945,7 @@ function renderEvAct(eid, a, ai) {
         <span style="font-size:.62rem;font-weight:700;color:#60a5fa;white-space:nowrap">🎯 Ziel</span>
         <select class="cf" style="width:150px;font-size:.68rem" onchange="evActField('${eid}',${ai},'aktZiel',this.value);document.getElementById('evacts-'+\`${eid}\`).innerHTML=((_selBot()?.events?.find(x=>x.id==='${eid}')?.aktionen)||[]).map((a2,ai2)=>renderEvAct('${eid}',a2,ai2)).join('')">
           <option value="ausloeser" ${(!a.aktZiel||a.aktZiel==='ausloeser')?'selected':''}>👤 Auslöser</option>
+          <option value="shop_kaeufer" ${a.aktZiel==='shop_kaeufer'?'selected':''}>💳 Käufer (bei Shop)</option>
           <option value="alle"      ${a.aktZiel==='alle'?'selected':''}>👥 Alle im Raum</option>
           <option value="whitelist" ${a.aktZiel==='whitelist'?'selected':''}>📋 Whitelist</option>
         </select>
@@ -5019,6 +5305,7 @@ function renderTrigCard(bot, t, i) {
           <button onclick="trigAddCond('${t.id}','trigger_war')">+ Vortrigger</button>
           <button onclick="trigAddCond('${t.id}','player_betritt')">+ Spieler betritt</button>
           <button onclick="trigAddCond('${t.id}','rang')">🏆 Rang</button>
+          <button onclick="trigAddCond('${t.id}','shop_kauf')" title="Wird ausgelöst wenn ein Spieler einen Shop-Artikel kauft">🛒 Shop-Kauf</button>
           <button onclick="trigAddCond('${t.id}','ev_timer')" title="Einmalig nach X Sekunden automatisch feuern">⏱ Timer</button>
           <button onclick="trigAddCond('${t.id}','ev_interval')" title="Wiederholt alle X–Y Sekunden feuern">🔁 Intervall</button>
         </div>
@@ -5116,6 +5403,14 @@ function renderCond(bot, tid, c, ci) {
         <option value="">– Rang wählen –</option>
         ${ranks.map(r=>`<option value="${r.id}" ${c.rang_id===r.id?'selected':''}>${escHtml(r.icon+' '+r.name)} (Lv.${r.level})</option>`).join('')}
       </select>`:''}`;
+  } else if (c.typ === 'shop_kauf') {
+    const shopItems = _shop.items;
+    inner = `
+      <select class="cf" style="flex:1;min-width:180px" onchange="condField('${tid}',${ci},'shop_id',this.value)">
+        <option value="">🛒 Jeder Shop-Kauf</option>
+        ${shopItems.map(i=>`<option value="${i.id}" ${c.shop_id===i.id?'selected':''}>${escHtml(i.icon+' '+i.name)} (${i.preis} 💰)</option>`).join('')}
+      </select>
+      <span style="font-size:.62rem;color:var(--text3)">Auslöser = Käufer · C = Kaufziel</span>`;
   }
   if (c.typ === 'ev_timer') {
     inner = `<span style="font-size:.65rem;color:var(--text3)">Einmalig nach</span>
@@ -5131,7 +5426,7 @@ function renderCond(bot, tid, c, ci) {
         oninput="condField('${tid}',${ci},'sek_max',+this.value)">
       <span style="font-size:.65rem;color:var(--text3)">Sekunden wiederholt feuern</span>`;
   }
-  const icons = {wort:'💬',zone:'🗺️',zone_rect:'📐',item_traegt:'👗',item_traegt_nicht:'🚫',trigger_war:'🔗',player_betritt:'👋',ev_timer:'⏱',ev_interval:'🔁',rang:'🏆'};
+  const icons = {wort:'💬',zone:'🗺️',zone_rect:'📐',item_traegt:'👗',item_traegt_nicht:'🚫',trigger_war:'🔗',player_betritt:'👋',ev_timer:'⏱',ev_interval:'🔁',rang:'🏆',shop_kauf:'🛒'};
   // Logik-Operator: verbindet diese Bedingung mit der vorherigen
   const logik = c.logik ?? 'und';
   const logikBadge = ci === 0
@@ -5306,7 +5601,8 @@ function renderAct(tid, a, ai) {
       <div style="display:flex;gap:6px;align-items:center;margin-top:5px;padding:5px 8px;background:rgba(96,165,250,0.05);border:1px solid rgba(96,165,250,0.12);border-radius:6px;flex-wrap:wrap">
         <span style="font-size:.62rem;font-weight:700;color:#60a5fa;white-space:nowrap">🎯 Ziel</span>
         <select class="cf" style="width:150px;font-size:.68rem" onchange="actField('${tid}',${ai},'aktZiel',this.value);actRerender('${tid}',${ai})">
-          <option value="ausloeser" ${(!a.aktZiel||a.aktZiel==='ausloeser')?'selected':''}>👤 Auslöser</option>
+          <option value="ausloeser" ${(!a.aktZiel||a.aktZiel==='ausloeser')?'selected':''}>👤 Auslöser / Kaufziel</option>
+          <option value="shop_kaeufer" ${a.aktZiel==='shop_kaeufer'?'selected':''}>💳 Käufer (bei Shop)</option>
           <option value="alle"      ${a.aktZiel==='alle'?'selected':''}>👥 Alle im Raum</option>
           <option value="whitelist" ${a.aktZiel==='whitelist'?'selected':''}>📋 Whitelist</option>
         </select>
@@ -5400,6 +5696,7 @@ function trigAddCond(tid, typ) {
     trigger_war:    {typ:'trigger_war', trigId:''},
     player_betritt: {typ:'player_betritt'},
     rang:           {typ:'rang', rang_op:'=', rang_id:''},
+    shop_kauf:      {typ:'shop_kauf', shop_id:''},
     ev_timer:       {typ:'ev_timer', sek:10},
     ev_interval:    {typ:'ev_interval', sek_min:30, sek_max:180},
   };
@@ -5903,7 +6200,7 @@ function _buildBotCode(bot) {
   const safeId   = bot.id.replace(/\W/g,'_');
   const safeName = bot.name.replace(/\\/g,'\\\\').replace(/`/g,'\\`');
 
-  const cfgJson  = JSON.stringify({hearChat:s.hearChat,hearEmote:s.hearEmote,hearWhisper:s.hearWhisper,nurEigene:s.nurEigene,logAktiv:s.logAktiv??true,modus:s.modus,moneyQueryCmd:_money?.settings?.queryCmd??'',moneyQueryTyp:_money?.settings?.queryTyp??'whisper',rankQueryCmd:_rankData?.settings?.queryCmd??'',rankQueryTyp:_rankData?.settings?.queryCmdTyp??'whisper',rankQueryText:_rankData?.settings?.queryCmdText??'{name} hat Rang: {rang_icon} {rang}',rankDefs:_rankData?.defs??[],rankPlayers:Object.fromEntries(Object.entries(_rankData?.players??{}).map(([k,v])=>[k,v.rankId??null]))});
+  const cfgJson  = JSON.stringify({hearChat:s.hearChat,hearEmote:s.hearEmote,hearWhisper:s.hearWhisper,nurEigene:s.nurEigene,logAktiv:s.logAktiv??true,modus:s.modus,moneyQueryCmd:_money?.settings?.queryCmd??'',moneyQueryTyp:_money?.settings?.queryTyp??'whisper',moneyName:_money?.settings?.name??'Gold',rankQueryCmd:_rankData?.settings?.queryCmd??'',rankQueryTyp:_rankData?.settings?.queryCmdTyp??'whisper',rankQueryText:_rankData?.settings?.queryCmdText??'{name} hat Rang: {rang_icon} {rang}',rankDefs:_rankData?.defs??[],rankPlayers:Object.fromEntries(Object.entries(_rankData?.players??{}).map(([k,v])=>[k,v.rankId??null])),shopCmd:_shop?.settings?.cmd??'!pay',shopConfirmMsg:_shop?.settings?.confirmMsg??'',shopErrorMsg:_shop?.settings?.errorMsg??'',shopItems:(_shop?.items??[]).filter(i=>i.aktiv!==false),moneyBalances:Object.fromEntries(Object.entries(_money?.balances??{}).map(([k,v])=>[k,{balance:v.balance??0,name:v.name??''}]))});
   const trigsJson = JSON.stringify(triggers).replace(/`/g,'\\`').replace(/\${/g,'\\${');
   const events = (bot.events||[]).filter(e=>e.aktiv).map(e => ({
     id: e.id, name: e.name,
@@ -5965,6 +6262,17 @@ const _evts=${eventsJson};
 // Beim Start mit gespeicherten Spieler-Rang-Zuweisungen initialisieren
 const _rangState=Object.assign({},_cfg.rankPlayers??{});
 
+// Shop-Konfiguration (Snapshot beim Bot-Start)
+const _shopCfg={
+  cmd:(_cfg.shopCmd||'!pay').trim(),
+  items:_cfg.shopItems??[],
+  confirmMsg:_cfg.shopConfirmMsg??'',
+  errorMsg:_cfg.shopErrorMsg??'',
+  moneyName:_cfg.moneyName??'Gold',
+};
+// Money-Balances: lokale Kopie für Echtzeit-Prüfungen (wird bei Abbuchung synchron aktualisiert)
+const _moneyBalances=Object.assign({},_cfg.moneyBalances??{});
+
 function _log(...a){if(_cfg.logAktiv)console.log('[Bot:${safeName}]',...a);}
 
 // bei_fehler: 'ignorieren' | 'kette_stoppen' | 'trigger_ungueltig'
@@ -6023,6 +6331,7 @@ function _ok(trig,rohText,typKey,C){
       if(op==='max') return cl<=tl;
       return false;
     }
+    if(c.typ==='shop_kauf') return false; // Nur via _handleShopCmd auslösbar
     if(c.typ==='player_betritt')return true; // handled by poll
     return true;
   }
@@ -6223,6 +6532,11 @@ function _runSeq(aktionen,C,vars,trigBase,onDone,onUngueltig){
     } else if(a.aktZiel==='whitelist'){
       const nrs=(a.aktZielNummern||[]).map(Number);
       targets=allChars.filter(ch=>nrs.includes(Number(ch.MemberNumber)));
+    } else if(a.aktZiel==='shop_kaeufer'){
+      // Zielt auf den Käufer (vars.shopBuyer), nicht das Kaufziel
+      const buyerNum=vars.shopBuyer?.MemberNumber;
+      const buyerChar=buyerNum?allChars.find(ch=>ch.MemberNumber===buyerNum):null;
+      targets=buyerChar?[buyerChar]:[C];
     } else {
       targets=[C]; // 'ausloeser' / default
     }
@@ -6457,7 +6771,174 @@ function _run(trig,vars){
   },trig.delay??0);
 }
 
-function _tpl(s,v){return(s??'').replace(/{name}/gi,v.name??'').replace(/{wort}/gi,v.wort??'').replace(/{typ}/gi,v.typ??'').replace(/{x}/gi,v.x??'').replace(/{y}/gi,v.y??'').replace(/{zone}/gi,v.zone??'');}
+function _tpl(s,v){
+  const cur=_shopCfg.moneyName||'Gold';
+  return(s??'')
+    .replace(/{name}/gi,v.name??'')
+    .replace(/{wort}/gi,v.wort??'')
+    .replace(/{typ}/gi,v.typ??'')
+    .replace(/{x}/gi,v.x??'')
+    .replace(/{y}/gi,v.y??'')
+    .replace(/{zone}/gi,v.zone??'')
+    .replace(/{käufer}/gi,v.shopBuyer?.Name??v.name??'')
+    .replace(/{kaeufer}/gi,v.shopBuyer?.Name??v.name??'')
+    .replace(/{ziel}/gi,v.C?.Name??v.name??'')
+    .replace(/{item}/gi,v.shopItem?.name??'')
+    .replace(/{preis}/gi,String(v.shopItem?.preis??''))
+    .replace(/{waehrung}/gi,cur)
+    .replace(/{kontostand}/gi,String((_moneyBalances[v.shopBuyer?.MemberNumber??v.C?.MemberNumber]?.balance)??0));
+}
+
+// ── Shop-Befehl Parsing ───────────────────────────────
+function _parseShopArgs(rest){
+  // Parst gequotete und ungequotete Argumente
+  const args=[];
+  let pos=0;
+  rest=rest.trim();
+  while(pos<rest.length){
+    while(pos<rest.length&&rest[pos]===' ')pos++;
+    if(pos>=rest.length)break;
+    if(rest[pos]==='"'||rest[pos]==="'"){
+      const q=rest[pos]; pos++;
+      const end=rest.indexOf(q,pos);
+      if(end===-1){args.push(rest.slice(pos));break;}
+      args.push(rest.slice(pos,end)); pos=end+1;
+    } else {
+      const sp=rest.indexOf(' ',pos);
+      if(sp===-1){args.push(rest.slice(pos));break;}
+      args.push(rest.slice(pos,sp)); pos=sp+1;
+    }
+  }
+  return args.filter(a=>a.length>0);
+}
+
+// ── Shop-Kauf Handler ────────────────────────────────────
+function _handleShopCmd(rohText,buyerC){
+  const cmd=_shopCfg.cmd.trim();
+  const rest=rohText.trim().slice(cmd.length);
+  const args=_parseShopArgs(rest);
+  if(!args.length)return;
+
+  const itemName=args[0].toLowerCase();
+  const shopItem=_shopCfg.items.find(i=>i.name.toLowerCase()===itemName);
+  if(!shopItem){
+    _log('🛒 Kein Shop-Artikel "'+args[0]+'" gefunden');
+    return;
+  }
+
+  const allChars=[Player,...(ChatRoomCharacter||[])];
+  let targetC=buyerC;
+  let targetAmbiguous=false;
+
+  if(args[1]){
+    const arg2=args[1].trim();
+    if(/^\d+$/.test(arg2)){
+      // Direkte MemberNummer
+      const num=parseInt(arg2);
+      targetC=allChars.find(c=>c.MemberNumber===num)||buyerC;
+    } else {
+      // Name-Suche (case-insensitive)
+      const nameMatches=allChars.filter(c=>c.Name.toLowerCase()===arg2.toLowerCase());
+      if(nameMatches.length===1){
+        targetC=nameMatches[0];
+      } else if(nameMatches.length>1){
+        // Mehrfach-Treffer → Fehlermeldung
+        targetAmbiguous=true;
+        const ids=nameMatches.map(c=>'#'+c.MemberNumber).join(', ');
+        const msg='⚠️ Mehrere Spieler mit dem Namen "'+arg2+'". Bitte MemberNummer verwenden: '+ids;
+        ServerSend('ChatRoomChat',{Content:msg,Type:'Whisper',Target:buyerC.MemberNumber});
+        return;
+      }
+      // Kein Treffer → buyerC bleibt
+    }
+  }
+
+  const preis=shopItem.preis??0;
+  const cur=_shopCfg.moneyName||'Gold';
+  const buyerBalance=(_moneyBalances[buyerC.MemberNumber]?.balance)??0;
+
+  if(buyerBalance<preis){
+    // Zu wenig Guthaben
+    const rawMsg=shopItem.errorMsg||_shopCfg.errorMsg||('Nicht genug '+cur+'! Du hast {kontostand} '+cur+', benötigt: {preis} '+cur+'.');
+    const msg=rawMsg
+      .replace(/{name}/gi,buyerC.Name)
+      .replace(/{ziel}/gi,targetC.Name)
+      .replace(/{item}/gi,shopItem.name)
+      .replace(/{preis}/gi,String(preis))
+      .replace(/{waehrung}/gi,cur)
+      .replace(/{kontostand}/gi,String(buyerBalance));
+    ServerSend('ChatRoomChat',{Content:msg,Type:'Whisper',Target:buyerC.MemberNumber});
+    _log('🛒 Kauf abgelehnt: '+buyerC.Name+' hat '+buyerBalance+' '+cur+', braucht '+preis);
+    return;
+  }
+
+  // Coins abziehen (lokal + Popup)
+  if(!_moneyBalances[buyerC.MemberNumber])
+    _moneyBalances[buyerC.MemberNumber]={balance:0,name:buyerC.Name};
+  _moneyBalances[buyerC.MemberNumber].balance-=preis;
+  window.__BCK_popupRef?.postMessage({app:'BCKonfigurator',type:'BOT_MONEY',
+    memberNum:buyerC.MemberNumber,name:buyerC.Name,delta:-preis},'*');
+
+  const newBal=_moneyBalances[buyerC.MemberNumber].balance;
+  _log('🛒 Kauf: '+buyerC.Name+' kauft "'+shopItem.name+'" für '+preis+' '+cur+' → Ziel: '+targetC.Name+' | Kontostand: '+newBal);
+
+  // Kauf an Popup melden (für Log)
+  window.__BCK_popupRef?.postMessage({app:'BCKonfigurator',type:'BOT_SHOP',
+    buyerNum:buyerC.MemberNumber,buyerName:buyerC.Name,
+    targetNum:targetC.MemberNumber,targetName:targetC.Name,
+    itemName:shopItem.name,preis},'*');
+
+  // Bestätigungsnachricht
+  const rawConf=shopItem.confirmMsg||_shopCfg.confirmMsg||('✅ '+buyerC.Name+' kauft: '+shopItem.name+' für '+preis+' '+cur+'. Kontostand: '+newBal+' '+cur+'.');
+  if(rawConf){
+    const msg=rawConf
+      .replace(/{name}/gi,buyerC.Name)
+      .replace(/{ziel}/gi,targetC.Name)
+      .replace(/{item}/gi,shopItem.name)
+      .replace(/{preis}/gi,String(preis))
+      .replace(/{waehrung}/gi,cur)
+      .replace(/{kontostand}/gi,String(newBal));
+    ServerSend('ChatRoomChat',{Content:msg,Type:'Whisper',Target:buyerC.MemberNumber});
+  }
+
+  // Shop-Trigger finden und auslösen
+  const shopVars={name:buyerC.Name,wort:rohText,typ:'🛒 Shop',x:buyerC.X??0,y:buyerC.Y??0,C:targetC,shopBuyer:buyerC,shopItem};
+  _trigs.forEach(trig=>{
+    const shopConds=(trig.bedingungen??[]).filter(c=>c.typ==='shop_kauf');
+    if(!shopConds.length)return;
+    // shop_id leer = jeder Artikel; sonst muss der Artikel passen
+    const itemMatch=shopConds.every(c=>!c.shop_id||c.shop_id===shopItem.id);
+    if(!itemMatch)return;
+    // Von-Filter (wer darf kaufen)
+    const vonOk=(()=>{
+      if(trig.von==='bot')return buyerC.MemberNumber===Player.MemberNumber;
+      if(trig.von==='whitelist')return(trig.vonNummern||[]).map(Number).includes(Number(buyerC.MemberNumber));
+      return true;
+    })();
+    if(!vonOk)return;
+    // Andere Bedingungen prüfen (Rang etc.) – shop_kauf Bedingungen überspringen
+    const otherConds=(trig.bedingungen??[]).filter(c=>c.typ!=='shop_kauf');
+    const otherOk=otherConds.every(c=>{
+      if(c.typ==='rang'){
+        const op=c.rang_op??'=';
+        const currentId=_rangState[buyerC.MemberNumber]??null;
+        if(op==='kein') return !currentId;
+        if(!c.rang_id) return false;
+        const defs=(_cfg.rankDefs??[]).sort((a,b)=>a.level-b.level);
+        const td=defs.find(r=>r.id===c.rang_id);
+        const cd=defs.find(r=>r.id===currentId);
+        if(!td||!cd) return false;
+        if(op==='=') return cd.level===td.level;
+        if(op==='min') return cd.level>=td.level;
+        if(op==='max') return cd.level<=td.level;
+        return false;
+      }
+      return true;
+    });
+    if(!otherOk)return;
+    _run(trig,shopVars);
+  });
+}
 
 function _proc(rohText,typKey,C){
   if(!rohText)return;
@@ -6478,6 +6959,12 @@ function _proc(rohText,typKey,C){
     const typ=_cfg.rankQueryTyp||'whisper';
     if(typ==='whisper')ServerSend('ChatRoomChat',{Content:txt,Type:'Whisper',Target:C.MemberNumber});
     else ServerSend('ChatRoomChat',{Content:txt,Type:'Chat'});
+    return;
+  }
+  // Shop Pay-Befehl
+  const shopCmd=(_shopCfg.cmd||'').trim().toLowerCase();
+  if(shopCmd&&rohText.trim().toLowerCase().startsWith(shopCmd+' ')||rohText.trim().toLowerCase()===shopCmd){
+    _handleShopCmd(rohText,C);
     return;
   }
   const pos={X:C.X??0,Y:C.Y??0}; // direkt vom Character
