@@ -5453,11 +5453,17 @@ function _buildBotCode(bot) {
       wiederholung: t.wiederholung??'immer', maxMal: t.maxMal??2,
       fallbackTyp: t.fallbackTyp??'nichts', fallbackText: t.fallbackText??'',
       charSpec: !!t.charSpec, resetOnLeave: !!t.resetOnLeave,
+      von: t.von??'alle',
+      vonNummern: (t.vonNummern||[]).map(Number),
     bedingungen: (t.bedingungen||[]),
     aktionen: (t.aktionen||[]).map(a => {
-      if (a.typ==='item' && a.curseKey && !a.curseEntry) return {...a, curseEntry: CURSE_DB[a.curseKey]??null};
-      if (a.typ==='item' && a.profilName && (!a.profilItems||!a.profilItems.length)) return {...a, profilItems: PROFILES[a.profilName]?.items??[]};
-      return a;
+      const base = a.typ==='item' && a.curseKey && !a.curseEntry ? {...a, curseEntry: CURSE_DB[a.curseKey]??null}
+                 : a.typ==='item' && a.profilName && (!a.profilItems||!a.profilItems.length) ? {...a, profilItems: PROFILES[a.profilName]?.items??[]}
+                 : {...a};
+      // Ensure aktZiel fields are preserved and numbers are typed correctly
+      base.aktZiel = a.aktZiel ?? 'ausloeser';
+      base.aktZielNummern = (a.aktZielNummern||[]).map(Number);
+      return base;
     }),
   }));
   const safeId   = bot.id.replace(/\W/g,'_');
@@ -5745,20 +5751,26 @@ function _runSeq(aktionen,C,vars,trigBase,onDone,onUngueltig){
     if(a.aktZiel==='alle'){
       targets=allChars;
     } else if(a.aktZiel==='whitelist'){
-      const nrs=a.aktZielNummern||[];
-      targets=allChars.filter(ch=>nrs.includes(ch.MemberNumber));
+      const nrs=(a.aktZielNummern||[]).map(Number);
+      targets=allChars.filter(ch=>nrs.includes(Number(ch.MemberNumber)));
     } else {
       targets=[C]; // 'ausloeser' / default
     }
-    // Mehrere Ziele: alle ausführen; ok = alle erfolgreich
+    // Chat/Emote sind Broadcast-Nachrichten → nur 1x senden egal wieviele Ziele
+    // Whisper, Item, Teleport, Money → pro Ziel ausführen
     let overallOk=true;
-    targets.forEach(ch=>{
-      const chVars=targets.length>1?{...vars,name:ch.Name,x:ch.X??0,y:ch.Y??0,C:ch}:vars;
-      const ok=_execAct(a,ch,chVars);
+    if(['chat','emote'].includes(a.typ)&&targets.length>0){
+      // Sende einmal mit Variablen des Auslösers
+      const ok=_execAct(a,C,vars);
       if(!ok)overallOk=false;
-    });
-    const ok=overallOk||targets.length===0;
-    if(!ok){
+    } else {
+      targets.forEach(ch=>{
+        const chVars=ch===C?vars:{...vars,name:ch.Name,x:ch.X??0,y:ch.Y??0,C:ch};
+        const ok=_execAct(a,ch,chVars);
+        if(!ok)overallOk=false;
+      });
+    }
+    if(!overallOk){
       const bf=a.bei_fehler??'ignorieren';
       _log('\u26A0 Aktion '+a.typ+' fehlgeschlagen → '+bf);
       if(bf==='kette_stoppen'){onDone();return;}
@@ -5981,7 +5993,7 @@ function _proc(rohText,typKey,C){
     // Von-Filter: wer darf diesen Trigger auslösen?
     const vonOk=(()=>{
       if(trig.von==='bot')return C.MemberNumber===Player.MemberNumber;
-      if(trig.von==='whitelist')return(trig.vonNummern||[]).includes(C.MemberNumber);
+      if(trig.von==='whitelist')return(trig.vonNummern||[]).map(Number).includes(Number(C.MemberNumber));
       return true; // 'alle'
     })();
     if(!vonOk)return;
@@ -6059,7 +6071,7 @@ const _itPoll=setInterval(()=>{
         // Von-Filter
         const vonOk=(()=>{
           if(trig.von==='bot')return C.MemberNumber===Player.MemberNumber;
-          if(trig.von==='whitelist')return(trig.vonNummern||[]).includes(C.MemberNumber);
+          if(trig.von==='whitelist')return(trig.vonNummern||[]).map(Number).includes(Number(C.MemberNumber));
           return true;
         })();
         const otherOk=vonOk&&(trig.bedingungen??[]).every(c=>{
@@ -6138,7 +6150,7 @@ const _joinPoll=setInterval(()=>{
         if(!bOk)return;
         const vonOk=(()=>{
           if(trig.von==='bot')return C.MemberNumber===Player.MemberNumber;
-          if(trig.von==='whitelist')return(trig.vonNummern||[]).includes(C.MemberNumber);
+          if(trig.von==='whitelist')return(trig.vonNummern||[]).map(Number).includes(Number(C.MemberNumber));
           return true;
         })();
         const otherOk=vonOk&&(trig.bedingungen??[]).every(c=>{
@@ -6267,7 +6279,7 @@ const _zonePoll=setInterval(()=>{
         // Prüfe andere Bedingungen (vortrigger, item_traegt)
         const vonOk=(()=>{
           if(trig.von==='bot')return C.MemberNumber===Player.MemberNumber;
-          if(trig.von==='whitelist')return(trig.vonNummern||[]).includes(C.MemberNumber);
+          if(trig.von==='whitelist')return(trig.vonNummern||[]).map(Number).includes(Number(C.MemberNumber));
           return true;
         })();
         const otherOk=vonOk&&(trig.bedingungen??[]).every(c=>{
