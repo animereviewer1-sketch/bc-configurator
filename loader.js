@@ -843,6 +843,46 @@ window.CurseScanner = (() => {
     console.log('[BC-Konfigurator] Listener aktiv ✅');
   }
 
+  // ── BCX !pay Command-Unterdrückung ────────────────────
+  // Verhindert, dass BCX auf !pay-Whisper mit "Unknown command" antwortet,
+  // indem die Nachricht abgefangen wird, BEVOR BCX sie verarbeiten kann.
+  if (!window.__BCK_PAY_HOOK__) {
+    window.__BCK_PAY_HOOK__ = true;
+
+    function installPayHook() {
+      if (typeof bcModSdk === 'undefined' || typeof bcModSdk.registerMod !== 'function') {
+        BCK.warn('bcModSdk noch nicht bereit – versuche erneut in 1s...');
+        setTimeout(installPayHook, 1000);
+        return;
+      }
+
+      const payMod = bcModSdk.registerMod({
+        name:     'BCK_PayFix',
+        fullName: 'BCK PayCommand Fix',
+        version:  '1.0.0',
+      });
+
+      // Priorität 1 → läuft VOR BCX (Priorität 0), sodass BCX !pay nie zu sehen bekommt
+      payMod.hookFunction('ChatRoomMessage', 1, (args, next) => {
+        const data = args[0];
+        if (
+          data?.Type === 'Whisper' &&
+          typeof data?.Content === 'string' &&
+          data.Content.trim().toLowerCase().startsWith('!pay')
+        ) {
+          BCK.info('!pay abgefangen – BCX-Warnung unterdrückt:', data.Content);
+          // next(args) NICHT aufrufen → BCX bekommt die Nachricht nie
+          return;
+        }
+        return next(args);
+      });
+
+      BCK.ok('BCK_PayFix aktiv ✅ – BCX antwortet nicht mehr auf !pay');
+    }
+
+    installPayHook();
+  }
+
   // ── Popup öffnen / fokussieren ─────────────────────────
   if (window.__BCK_WIN__ && !window.__BCK_WIN__.closed) {
     window.__BCK_WIN__.focus();
