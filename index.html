@@ -5956,7 +5956,7 @@ function _buildBotCode(bot) {
   const safeName = bot.name.replace(/\\/g,'\\\\').replace(/`/g,'\\`');
 
   const cfgJson  = JSON.stringify({hearChat:s.hearChat,hearEmote:s.hearEmote,hearWhisper:s.hearWhisper,nurEigene:s.nurEigene,logAktiv:s.logAktiv??true,modus:s.modus,moneyQueryCmd:_money?.settings?.queryCmd??'',moneyQueryTyp:_money?.settings?.queryTyp??'whisper'});
-  const ranksJson = JSON.stringify({ranks:_ranks.ranks,players:_ranks.players}).replace(/`/g,'\\`').replace(/\${/g,'\\${');
+  const ranksJson = JSON.stringify({ranks:_ranks.ranks,players:_ranks.players}).replace(/`/g,'\\`').replace(/\$\{/g,'\\${');
   const trigsJson = JSON.stringify(triggers).replace(/`/g,'\\`').replace(/\$\{/g,'\\${');
   const events = (bot.events||[]).filter(e=>e.aktiv).map(e => ({
     id: e.id, name: e.name,
