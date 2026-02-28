@@ -5957,7 +5957,7 @@ function _buildBotCode(bot) {
 
   const cfgJson  = JSON.stringify({hearChat:s.hearChat,hearEmote:s.hearEmote,hearWhisper:s.hearWhisper,nurEigene:s.nurEigene,logAktiv:s.logAktiv??true,modus:s.modus,moneyQueryCmd:_money?.settings?.queryCmd??'',moneyQueryTyp:_money?.settings?.queryTyp??'whisper'});
   const ranksJson = JSON.stringify({ranks:_ranks.ranks,players:_ranks.players}).replace(/`/g,'\\`').replace(/\${/g,'\\${');
-  const trigsJson = JSON.stringify(triggers).replace(/`/g,'\\`').replace(/\${/g,'\\${');
+  const trigsJson = JSON.stringify(triggers).replace(/`/g,'\\`').replace(/\$\{/g,'\\${');
   const events = (bot.events||[]).filter(e=>e.aktiv).map(e => ({
     id: e.id, name: e.name,
     von: e.von??'alle', vonNummer: e.vonNummer??0,
@@ -5971,7 +5971,7 @@ function _buildBotCode(bot) {
       return a;
     }),
   }));
-  const eventsJson = JSON.stringify(events).replace(/`/g,'\\`').replace(/\${/g,'\\${');
+  const eventsJson = JSON.stringify(events).replace(/`/g,'\\`').replace(/\$\{/g,'\\${');
   // Build roomEver from logs – members who joined and haven't left yet
   // This is the authoritative source: Log löschen = Erstes Mal joinen
   const persistedRoomEver = (() => {

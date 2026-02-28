@@ -735,12 +735,15 @@ window.CurseScanner = (() => {
         case 'EXEC':
           BCK.info('EXEC | code-L\u00e4nge:', ev.data.code?.length);
           try {
+            // Wrap in an IIFE so code starting with `{` (object literal / block)
+            // is never misread as a block statement by the Function constructor.
             // eslint-disable-next-line no-new-func
-            new Function(ev.data.code)();
+            new Function('(function(){\n' + ev.data.code + '\n})();')();
             BCK.ok('EXEC \u2705');
             src.postMessage({ app: APP, type: 'EXEC_OK' }, ALLOWED_ORIGIN);
           } catch (ex) {
-            BCK.err('EXEC \u274c:', ex.message);
+            // Log the first 300 chars of the failing code to make debugging easier
+            BCK.err('EXEC \u274c:', ex.message, '\nCode (Anfang):', String(ev.data.code).slice(0, 300));
             src.postMessage({ app: APP, type: 'EXEC_ERR', msg: ex.message }, ALLOWED_ORIGIN);
           }
           break;
