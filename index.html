@@ -5748,7 +5748,14 @@ function _addCurrentItemToTrigger() {
   for (const [p,v] of Object.entries(globalPropVals||{})) if (v!=null) props[p] = v;
   const typeStr = Object.entries(tr).map(([k,v])=>k+v).join('');
 
-  const itemConfig = { asset, group, colors, tr, typeStr, props, archetype: cfg.archetype };
+  // Craft (Name/Beschreibung) aus dem Item Manager auslesen
+  const craftName = document.getElementById('craftName')?.value.trim() ?? '';
+  const craftDesc = document.getElementById('craftDesc')?.value.trim() ?? '';
+  const craftProp = document.getElementById('craftProp')?.value ?? 'Leash_Full';
+  const firstColor = colors.find(c => c !== 'Default') ?? '#808080';
+  const craft = craftName ? { Name: craftName, Description: craftDesc, Property: craftProp, Color: firstColor, Lock: '', Item: asset, Private: false } : null;
+
+  const itemConfig = { asset, group, colors, tr, typeStr, props, archetype: cfg.archetype, craft };
   const val = { type:'item', name: asset, group: group, itemConfig };
   const _pendingTid = _trigPending?.tid; // save before cancel
   _trigPending.cb(val);
@@ -6095,7 +6102,7 @@ function _applyItemAction(a, C){
       const ic=a.itemConfig;
       let col=ic.colors??['#ffffff'];
       if(typeof col==='string'&&col.includes(','))col=col.split(',');
-      InventoryWear(C,ic.asset,ic.group,col,0,Player.MemberNumber,null);
+      InventoryWear(C,ic.asset,ic.group,col,0,Player.MemberNumber,ic.craft??null);
       // Sofort TypeRecord setzen (vor CharacterRefresh) damit BC es direkt übernimmt
       const itemNow=InventoryGet(C,ic.group);
       if(itemNow){
@@ -6115,7 +6122,7 @@ function _applyItemAction(a, C){
         const item=InventoryGet(C,ic.group);
         if(!item){
           // Item wurde durch _restoreDisplaced verdrängt → nochmal anlegen
-          InventoryWear(C,ic.asset,ic.group,col,0,Player.MemberNumber,null);
+          InventoryWear(C,ic.asset,ic.group,col,0,Player.MemberNumber,ic.craft??null);
           const reItem=InventoryGet(C,ic.group);
           if(reItem){
             reItem.Property=reItem.Property??{};
