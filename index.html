@@ -1124,6 +1124,76 @@ button { cursor: pointer; }
 .as-act-row { display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-top:5px; }
 .as-act-label { font-size:.6rem; color:var(--text3); white-space:nowrap; }
 
+
+
+/* ── Bot Profile ──────────────────────────────────────────── */
+.bp-section { border-top:1px solid rgba(255,255,255,.07); }
+.bp-head { padding:9px 14px; display:flex; align-items:center; gap:6px; cursor:pointer; user-select:none; font-size:.72rem; font-weight:700; color:var(--text2); background:rgba(255,255,255,.01); transition:background .13s; }
+.bp-head:hover { background:rgba(255,255,255,.035); }
+.bp-chevron { margin-left:auto; font-size:.6rem; color:var(--text3); transition:transform .2s; }
+.bp-head.open .bp-chevron { transform:rotate(90deg); }
+.bp-body { display:none; }
+.bp-body.open { display:block; }
+.bp-item { padding:9px 14px; display:flex; align-items:center; gap:8px; border-bottom:1px solid rgba(255,255,255,.04); cursor:pointer; transition:background .13s; }
+.bp-item:hover { background:rgba(255,255,255,.03); }
+.bp-item.active { background:rgba(139,92,246,.1); border-left:3px solid var(--purple); }
+.bp-icon { font-size:1.1rem; flex-shrink:0; }
+.bp-info { flex:1; min-width:0; }
+.bp-name { font-size:.72rem; font-weight:700; color:var(--text1); }
+.bp-meta { font-size:.59rem; color:var(--text3); }
+.bp-btns { display:flex; gap:4px; flex-shrink:0; }
+.bp-btn { border:none; border-radius:5px; cursor:pointer; padding:2px 8px; font-size:.6rem; font-weight:700; }
+.bp-btn.edit { background:rgba(255,255,255,.06); color:var(--text3); }
+/* Profil Modal */
+.pm-overlay { position:fixed; inset:0; background:rgba(0,0,0,.72); display:flex; align-items:center; justify-content:center; z-index:9999; backdrop-filter:blur(4px); }
+.pm-box { background:var(--bg3); border:1px solid var(--border2); border-radius:var(--r-lg); padding:22px 24px; width:430px; max-width:95vw; max-height:85vh; overflow-y:auto; box-shadow:var(--shadow-lg); }
+.pm-box h3 { font-size:.85rem; font-weight:800; color:var(--text1); margin:0 0 16px; }
+.pm-box label { display:block; font-size:.63rem; color:var(--text3); margin-bottom:4px; margin-top:12px; }
+.pm-bot-list { display:flex; flex-direction:column; gap:4px; max-height:220px; overflow-y:auto; border:1px solid var(--border); border-radius:var(--r-sm); padding:8px; background:var(--bg4); }
+.pm-bot-row { display:flex; align-items:center; gap:8px; font-size:.7rem; color:var(--text2); cursor:pointer; padding:4px 6px; border-radius:5px; transition:background .12s; }
+.pm-bot-row:hover { background:rgba(255,255,255,.04); }
+.pm-bot-row input { accent-color:var(--purple); cursor:pointer; }
+.pm-icons { display:flex; gap:5px; flex-wrap:wrap; margin-top:4px; }
+.pm-icon-btn { font-size:1.1rem; padding:4px 7px; border-radius:6px; cursor:pointer; border:2px solid transparent; background:rgba(255,255,255,.04); transition:all .14s; }
+.pm-icon-btn.sel { border-color:var(--purple); background:rgba(139,92,246,.15); }
+.pm-footer { display:flex; gap:8px; justify-content:flex-end; margin-top:18px; }
+
+/* ── Bot Gruppen & Profile ──────────────────────────────────── */
+.bs-section { border-top:1px solid rgba(255,255,255,.07); }
+.bs-section-head { padding:9px 14px; display:flex; align-items:center; gap:6px; cursor:pointer; user-select:none; font-size:.72rem; font-weight:700; color:var(--text2); background:rgba(255,255,255,.01); transition:background .13s; }
+.bs-section-head:hover { background:rgba(255,255,255,.035); }
+.bs-sec-chevron { margin-left:auto; font-size:.6rem; color:var(--text3); transition:transform .2s; }
+.bs-section-head.open .bs-sec-chevron { transform:rotate(90deg); }
+.bs-section-body { display:none; }
+.bs-section-body.open { display:block; }
+.grp-item { padding:8px 14px; display:flex; align-items:center; gap:6px; border-bottom:1px solid rgba(255,255,255,.04); font-size:.71rem; }
+.grp-item-name { flex:1; font-weight:600; color:var(--text1); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.grp-item-meta { font-size:.59rem; color:var(--text3); white-space:nowrap; }
+.grp-btn { border:none; border-radius:5px; cursor:pointer; padding:2px 8px; font-size:.6rem; font-weight:700; transition:opacity .15s; }
+.grp-btn:hover { opacity:.8; }
+.grp-btn.start { background:rgba(52,211,153,.2); color:var(--green); }
+.grp-btn.stop  { background:rgba(251,113,133,.2); color:var(--red); }
+.grp-btn.edit  { background:rgba(255,255,255,.06); color:var(--text3); }
+.prof-item { padding:9px 14px; display:flex; align-items:center; gap:8px; border-bottom:1px solid rgba(255,255,255,.04); cursor:pointer; transition:background .13s; }
+.prof-item:hover { background:rgba(255,255,255,.03); }
+.prof-item.active { background:rgba(139,92,246,.1); border-left:3px solid var(--purple); }
+.prof-item-icon { font-size:1.1rem; flex-shrink:0; }
+.prof-item-info { flex:1; min-width:0; }
+.prof-item-name { font-size:.72rem; font-weight:700; color:var(--text1); }
+.prof-item-meta { font-size:.59rem; color:var(--text3); }
+.prof-item-btns { display:flex; gap:4px; flex-shrink:0; }
+.gp-modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,.7); display:flex; align-items:center; justify-content:center; z-index:9999; backdrop-filter:blur(4px); }
+.gp-modal { background:var(--bg3); border:1px solid var(--border2); border-radius:var(--r-lg); padding:22px 24px; width:420px; max-width:95vw; max-height:85vh; overflow-y:auto; box-shadow:var(--shadow-lg); }
+.gp-modal h3 { font-size:.85rem; font-weight:800; color:var(--text1); margin:0 0 16px; }
+.gp-modal label { display:block; font-size:.63rem; color:var(--text3); margin-bottom:4px; margin-top:12px; }
+.gp-bot-pick { display:flex; flex-direction:column; gap:4px; max-height:220px; overflow-y:auto; border:1px solid var(--border); border-radius:var(--r-sm); padding:8px; background:var(--bg4); }
+.gp-bot-pick-row { display:flex; align-items:center; gap:8px; font-size:.7rem; color:var(--text2); cursor:pointer; padding:4px 6px; border-radius:5px; transition:background .12s; }
+.gp-bot-pick-row:hover { background:rgba(255,255,255,.04); }
+.gp-bot-pick-row input { accent-color:var(--purple); cursor:pointer; }
+.gp-modal-btns { display:flex; gap:8px; justify-content:flex-end; margin-top:18px; }
+.gp-icon-btn { font-size:1.15rem; padding:4px 7px; border-radius:6px; cursor:pointer; border:2px solid transparent; background:rgba(255,255,255,.04); transition:all .14s; }
+.gp-icon-btn.sel { border-color:var(--purple); background:rgba(139,92,246,.15); }
+
 </style>
 </head>
 <body>
@@ -3891,6 +3961,19 @@ function selectRoomMember(num) {
       <div id="botGroupList"></div>
       <!-- Ungrouped bots -->
       <div class="bot-list" id="botList"></div>
+
+      <!-- ── Profile ── -->
+      <div class="bp-section">
+        <div class="bp-head" id="bp-head" onclick="bpToggle()">
+          <span>🎭</span>&nbsp;Profile
+          <button onclick="event.stopPropagation();bpNew()" style="margin-left:8px;font-size:.58rem;padding:2px 7px;background:rgba(139,92,246,.2);border:1px solid rgba(139,92,246,.4);color:var(--purple-bright);border-radius:4px;cursor:pointer">+ Neu</button>
+          <span class="bp-chevron">▶</span>
+        </div>
+        <div class="bp-body" id="bp-body">
+          <div style="font-size:.59rem;color:var(--text3);padding:5px 14px 2px">Klicken = alle anderen stoppen, Profil-Bots starten</div>
+          <div id="bpList"></div>
+        </div>
+      </div>
     </div>
 
     <!-- Main: Editor -->
@@ -5472,7 +5555,9 @@ function renderBotTab() {
   // Nur beim ersten Laden aus localStorage lesen – nie In-Memory-State überschreiben
   if (!_bots.length) _loadBots();
   if (!_botGroups.length) _loadBotGroups();
+  _bpLoad();
   renderBotList();
+  bpRender();
   // Falls _selBotId nicht gesetzt aber Bots vorhanden: ersten selektieren
   if (!_selBotId && _bots.length) _selBotId = _bots[0].id;
   if (_selBotId) renderBotEditor();
@@ -6847,14 +6932,19 @@ function _asRegister(C, a) {
     || a.gruppe || '';
   if (!gruppe) { _log('\u26A0 AntiStrip: Gruppe nicht erkannt'); return; }
   var key = C.MemberNumber + '_' + gruppe;
+  // Falls kein explizites Ersatz-Item → gleiches Item (Action-eigene Felder als Fallback)
+  var resolvedItemConfig = a.antiStrip_itemConfig || a.itemConfig || null;
+  var resolvedCurseEntry = a.antiStrip_curseEntry || a.curseEntry || null;
+  var resolvedErsatz     = a.antiStrip_ersatz     || a.item       || null;
+  var resolvedFarbe      = a.antiStrip_farbe      || a.farbe      || '#ffffff';
   _asWatchers[key] = {
     memberNum:  C.MemberNumber,
     gruppe:     gruppe,
     delay:      a.antiStrip_delay != null ? a.antiStrip_delay : 500,
-    ersatz:     a.antiStrip_ersatz     || null,
-    farbe:      a.antiStrip_farbe      || '#ffffff',
-    itemConfig: a.antiStrip_itemConfig || null,
-    curseEntry: a.antiStrip_curseEntry || null,
+    ersatz:     resolvedErsatz,
+    farbe:      resolvedFarbe,
+    itemConfig: resolvedItemConfig,
+    curseEntry: resolvedCurseEntry,
   };
   _log('\u{1F6E1}\uFE0F AntiStrip aktiv: ' + C.Name + ' / ' + gruppe
     + (a.antiStrip_ersatz ? ' \u2192 ' + a.antiStrip_ersatz : ' (gleiches Item)'));
@@ -8501,5 +8591,149 @@ function botSync() {
   }, 700);
 }
 
+
+// ══════════════════════════════════════════════════════════════
+//  BOT PROFILE  (schnelles Umschalten zwischen Bot-Sets)
+// ══════════════════════════════════════════════════════════════
+const _BP_KEY   = 'BC_BotProfiles_v1';
+const _BP_ICONS = ['🎭','🌙','☀️','🌈','⚡','🔥','🎮','🎲','🎪','🎨','🏰','🌸','🤖','🐉','💎','🚀','🌿','🎵','👑','🔮'];
+let _bpList     = [];
+let _bpActiveId = null;
+
+function _bpLoad() {
+  try {
+    const d = JSON.parse(localStorage.getItem(_BP_KEY) || '{}');
+    _bpList     = d.list     ?? [];
+    _bpActiveId = d.activeId ?? null;
+  } catch {}
+}
+function _bpSave() {
+  try { localStorage.setItem(_BP_KEY, JSON.stringify({ list: _bpList, activeId: _bpActiveId })); } catch {}
+}
+
+function bpToggle() {
+  document.getElementById('bp-head')?.classList.toggle('open');
+  document.getElementById('bp-body')?.classList.toggle('open');
+}
+
+function bpRender() {
+  const el = document.getElementById('bpList'); if (!el) return;
+  if (!_bpList.length) {
+    el.innerHTML = '<div style="padding:10px 14px;font-size:.62rem;color:var(--text3)">Noch keine Profile. Klicke + Neu.</div>';
+    return;
+  }
+  el.innerHTML = _bpList.map(p => {
+    const bots  = p.botIds.map(id => _bots.find(b => b.id === id)).filter(Boolean);
+    const isAct = p.id === _bpActiveId;
+    return `<div class="bp-item${isAct ? ' active' : ''}" onclick="bpActivate('${p.id}')" title="Klicken zum Aktivieren">
+      <div class="bp-icon">${escHtml(p.icon || '🎭')}</div>
+      <div class="bp-info">
+        <div class="bp-name">${escHtml(p.name)}${isAct ? '&nbsp;<span style="font-size:.55rem;background:rgba(139,92,246,.3);color:#c4b5fd;padding:1px 5px;border-radius:3px">AKTIV</span>' : ''}</div>
+        <div class="bp-meta">${bots.length} Bot${bots.length !== 1 ? 's' : ''}</div>
+      </div>
+      <div class="bp-btns" onclick="event.stopPropagation()">
+        <button class="bp-btn edit" onclick="bpEdit('${p.id}')" title="Bearbeiten">✎</button>
+        <button onclick="bpDelete('${p.id}')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.7rem;padding:1px 5px">\u2715</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function bpActivate(id) {
+  if (!_connected) { showStatus('\u274C Nicht mit BC verbunden', 'error'); return; }
+  const p = _bpList.find(x => x.id === id); if (!p) return;
+  _bots.forEach(b => { if (b.laufend && !p.botIds.includes(b.id)) botStopById(b.id); });
+  setTimeout(() => {
+    p.botIds.forEach(bid => {
+      const b = _bots.find(x => x.id === bid);
+      if (b && !b.laufend) botDeployById(b.id);
+    });
+    _bpActiveId = id;
+    _bpSave();
+    showStatus('\u{1F3AD} Profil "' + p.name + '" aktiviert', 'success');
+    bpRender(); renderBotList();
+  }, 400);
+}
+
+function bpNew()    { bpModalOpen(null); }
+function bpEdit(id) { bpModalOpen(id);   }
+
+function bpDelete(id) {
+  const p = _bpList.find(x => x.id === id);
+  if (!p || !confirm('Profil "' + p.name + '" l\u00f6schen?')) return;
+  _bpList = _bpList.filter(x => x.id !== id);
+  if (_bpActiveId === id) _bpActiveId = null;
+  _bpSave(); bpRender();
+}
+
+function bpModalOpen(id) {
+  const ov = document.getElementById('bpModalOverlay'); if (!ov) return;
+  const p  = id ? _bpList.find(x => x.id === id) : null;
+  document.getElementById('bpModalId').value   = id ?? '';
+  document.getElementById('bpModalTitle').textContent = id ? 'Profil bearbeiten' : 'Neues Profil';
+  document.getElementById('bpModalName').value = p?.name ?? '';
+  const curIcon = p?.icon ?? '\u{1F3AD}';
+  document.getElementById('bpIconPicker').innerHTML = _BP_ICONS.map(ic =>
+    `<button class="pm-icon-btn${ic === curIcon ? ' sel' : ''}" onclick="bpIconSel('${ic}')" data-icon="${ic}">${ic}</button>`
+  ).join('');
+  const selIds = p?.botIds ?? [];
+  document.getElementById('bpBotList').innerHTML = _bots.length
+    ? _bots.map(b =>
+        `<label class="pm-bot-row">
+          <input type="checkbox" value="${b.id}" ${selIds.includes(b.id) ? 'checked' : ''}>
+          <span>${escHtml(b.name)}</span>
+          <span style="font-size:.58rem;color:var(--text3);margin-left:auto">${b.laufend ? '\u25B6\uFE0F' : '\u23F8'}</span>
+        </label>`
+      ).join('')
+    : '<div style="font-size:.65rem;color:var(--text3);padding:8px">Noch keine Bots.</div>';
+  ov.style.display = 'flex';
+  setTimeout(() => document.getElementById('bpModalName').focus(), 40);
+}
+
+function bpIconSel(icon) {
+  document.querySelectorAll('#bpIconPicker .pm-icon-btn')
+    .forEach(b => b.classList.toggle('sel', b.dataset.icon === icon));
+}
+function bpModalClose() { document.getElementById('bpModalOverlay').style.display = 'none'; }
+
+function bpModalSave() {
+  const id   = document.getElementById('bpModalId').value || null;
+  const name = document.getElementById('bpModalName').value.trim();
+  if (!name) {
+    document.getElementById('bpModalName').style.outline = '2px solid var(--red)';
+    document.getElementById('bpModalName').focus(); return;
+  }
+  document.getElementById('bpModalName').style.outline = '';
+  const icon   = document.querySelector('#bpIconPicker .pm-icon-btn.sel')?.dataset.icon ?? '\u{1F3AD}';
+  const botIds = [...document.querySelectorAll('#bpBotList input[type=checkbox]:checked')].map(cb => cb.value);
+  if (id) {
+    const p = _bpList.find(x => x.id === id);
+    if (p) { p.name = name; p.icon = icon; p.botIds = botIds; }
+  } else {
+    _bpList.push({ id: 'p' + Date.now(), name, icon, botIds });
+  }
+  _bpSave(); bpModalClose(); bpRender();
+  showStatus('\u2705 Profil gespeichert', 'success');
+}
+
 </script>
+
+<!-- Profil Editor Modal -->
+<div id="bpModalOverlay" class="pm-overlay" style="display:none" onclick="if(event.target===this)bpModalClose()">
+  <div class="pm-box">
+    <h3 id="bpModalTitle">Neues Profil</h3>
+    <input type="hidden" id="bpModalId">
+    <label>Name</label>
+    <input class="cf" id="bpModalName" placeholder="Profilname" style="width:100%">
+    <label>Icon</label>
+    <div class="pm-icons" id="bpIconPicker"></div>
+    <label style="margin-top:12px">Bots in diesem Profil</label>
+    <div class="pm-bot-list" id="bpBotList"></div>
+    <div class="pm-footer">
+      <button onclick="bpModalClose()" style="padding:7px 16px;border:1px solid rgba(255,255,255,.1);background:none;color:var(--text3);border-radius:8px;cursor:pointer;font-family:var(--font-ui);font-size:.78rem">Abbrechen</button>
+      <button onclick="bpModalSave()" style="padding:7px 18px;background:var(--purple);border:none;color:#fff;border-radius:8px;cursor:pointer;font-family:var(--font-ui);font-size:.78rem;font-weight:700">&#x2713; Speichern</button>
+    </div>
+  </div>
+</div>
+
 </body>
