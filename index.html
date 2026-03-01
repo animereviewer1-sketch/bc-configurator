@@ -860,6 +860,23 @@ textarea.outfit-code { width: 100%; min-height: 210px; background: rgba(0,0,0,0.
 .ifelse-add-btn.sonst { border-color: rgba(251,113,133,0.2); color: rgba(251,113,133,0.6); }
 .ifelse-add-btn:hover { border-color: var(--purple); color: #c4b5fd; background: rgba(139,92,246,0.05); }
 .ifelse-add-btn.sonst:hover { border-color: #fb7185; color: #fb7185; background: rgba(251,113,133,0.05); }
+.ifelse-if-hdr {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 14px; font-size: 0.7rem; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase;
+  background: rgba(139,92,246,0.1); border-bottom: 1px solid rgba(139,92,246,0.2); color: #a78bfa;
+}
+.ifelse-if-body {
+  padding: 10px 14px; background: rgba(139,92,246,0.03);
+  border-bottom: 2px solid rgba(139,92,246,0.15);
+}
+.ifelse-if-add-btn {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 3px 9px; background: none;
+  border: 1px dashed rgba(139,92,246,0.3); border-radius: 5px; color: rgba(139,92,246,0.7);
+  font-size: 0.66rem; cursor: pointer; margin: 3px 3px 0 0; transition: all 0.15s;
+  font-family: var(--font-ui); font-weight: 600;
+}
+.ifelse-if-add-btn:hover { border-color: var(--purple); color: #c4b5fd; background: rgba(139,92,246,0.07); }
 
 .be-topbar { padding: 12px 20px; border-bottom: 1px solid rgba(255,255,255,0.07); display: flex; align-items: center; gap: 9px; background: rgba(255,255,255,0.01); }
 .be-topbar input { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: var(--text); padding: 6px 12px; font-size: 0.82rem; font-weight: 800; font-family: var(--font-mono); transition: border-color 0.18s; }
@@ -4036,7 +4053,8 @@ function selectRoomMember(num) {
       </div>
       <div style="font-size:.65rem;color:var(--text3);margin-bottom:10px;line-height:1.5">
         Definiere kaufbare Artikel. Jeder Artikel löst Trigger mit der Bedingung <b>🛒 Shop-Kauf</b> aus.<br>
-        Befehl: <code style="color:var(--green)">&lt;!pay&gt; "Artikelname"</code> · Für anderen: <code style="color:var(--green)">&lt;!pay&gt; "Artikel" "Spielername"</code> · Für alle: <code style="color:var(--yellow)">&lt;!pay&gt; "Artikel" All</code>
+        Befehl: <code style="color:var(--green)">&lt;!pay&gt; "Artikelname"</code> · Für anderen: <code style="color:var(--green)">&lt;!pay&gt; "Artikel" "Spielername"</code> · Für alle: <code style="color:var(--yellow)">&lt;!pay&gt; "Artikel" All</code><br>
+        Flags: <code style="color:#a78bfa">/u</code> = anonym &nbsp;·&nbsp; <code style="color:#f87171">/nostrip</code> = Item kann nicht abgelegt werden &nbsp;·&nbsp; <code style="color:var(--text3)">/w</code> = Flüstern
       </div>
       <div id="shop-item-list"></div>
       <button class="shop-add-btn" onclick="shopItemNew()">+ Neuen Artikel hinzufügen</button>
@@ -4068,6 +4086,26 @@ function selectRoomMember(num) {
             value="" oninput="shopSetError(this.value)">
         </label>
         <div style="font-size:.59rem;color:var(--text3);margin-top:6px">Variablen: {name} {ziel} {item} {preis} {waehrung} {kontostand} · All-Kauf: {anzahl} {gesamt}</div>
+      </div>
+
+      <div style="margin-top:18px">
+        <div class="shop-cfg-title">🚩 Flag-Aufpreise</div>
+        <div style="font-size:.62rem;color:var(--text3);margin-bottom:8px;line-height:1.5">
+          Optionale Zusatzkosten wenn Spieler Flags verwenden.<br>
+          <code style="color:var(--green)">/u</code> = Käufername anonym &nbsp;·&nbsp;
+          <code style="color:#f87171">/nostrip</code> = Item kann nicht abgelegt werden (AntiStrip)<br>
+          <span style="color:var(--text3)">0 = kostenlos. Kann pro Artikel überschrieben werden.</span>
+        </div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap">
+          <label style="font-size:.65rem;color:var(--text3);flex:1;min-width:120px">/u Aufpreis (Coins):
+            <input id="shop-preis-u-inp" class="cf" type="number" min="0" value="0" style="width:100%;margin-top:3px"
+              oninput="shopSetPreisU(this.value)" placeholder="0 = kostenlos">
+          </label>
+          <label style="font-size:.65rem;color:var(--text3);flex:1;min-width:120px">/nostrip Aufpreis (Coins):
+            <input id="shop-preis-nostrip-inp" class="cf" type="number" min="0" value="0" style="width:100%;margin-top:3px"
+              oninput="shopSetPreisNostrip(this.value)" placeholder="0 = kostenlos">
+          </label>
+        </div>
       </div>
 
       <div style="margin-top:18px">
@@ -4117,6 +4155,17 @@ function selectRoomMember(num) {
     <label>Fehlermeldung bei zu wenig Coins (leer = Standard)</label>
     <input class="cf" id="shop-modal-error" placeholder="Leer = Standard-Nachricht">
     <div style="font-size:.59rem;color:var(--text3);margin-top:4px">Variablen: {name} {ziel} {item} {preis} {waehrung} {kontostand} · All-Kauf: {anzahl} {gesamt}</div>
+    <div style="margin-top:12px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.07)">
+      <div style="font-size:.66rem;font-weight:700;color:var(--purple);margin-bottom:6px">🚩 Flag-Aufpreis (Artikel-Override, leer = globale Einstellung)</div>
+      <div style="display:flex;gap:10px">
+        <label style="font-size:.63rem;color:var(--text3);flex:1">/u Aufpreis:
+          <input class="cf" id="shop-modal-preis-u" type="number" min="0" placeholder="leer = global" style="width:100%;margin-top:2px">
+        </label>
+        <label style="font-size:.63rem;color:var(--text3);flex:1">/nostrip Aufpreis:
+          <input class="cf" id="shop-modal-preis-nostrip" type="number" min="0" placeholder="leer = global" style="width:100%;margin-top:2px">
+        </label>
+      </div>
+    </div>
     <div class="shop-modal-btns">
       <button onclick="shopModalClose()" style="padding:7px 16px;border:1px solid rgba(255,255,255,0.1);background:none;color:var(--text3);border-radius:8px;cursor:pointer;font-family:var(--font-ui);font-size:.78rem">Abbrechen</button>
       <button onclick="shopModalSave()" style="padding:7px 18px;background:var(--green);border:none;color:#000;border-radius:8px;cursor:pointer;font-family:var(--font-ui);font-size:.78rem;font-weight:700">✓ Speichern</button>
@@ -4383,12 +4432,12 @@ function _rankSorted() { return [..._rankData.defs].sort((a,b)=>a.level-b.level)
 // ══════════════════════════════════════════════════════
 const SHOP_KEY = 'BC_Shop_v1';
 let _shop = {
-  settings: { cmd: '!pay', confirmMsg: '', errorMsg: '' },
+  settings: { cmd: '!pay', confirmMsg: '', errorMsg: '', preisU: 0, preisNostrip: 0 },
   items: [],
   log: []
 };
 (()=>{
-  try { const s=localStorage.getItem(SHOP_KEY); if(s) _shop = Object.assign({settings:{cmd:'!pay',confirmMsg:'',errorMsg:''},items:[],log:[]},JSON.parse(s)); } catch{}
+  try { const s=localStorage.getItem(SHOP_KEY); if(s) _shop = Object.assign({settings:{cmd:'!pay',confirmMsg:'',errorMsg:'',preisU:0,preisNostrip:0},items:[],log:[]},JSON.parse(s)); } catch{}
 })();
 function _saveShop() { try { localStorage.setItem(SHOP_KEY, JSON.stringify(_shop)); } catch {} }
 function _shopById(id) { return _shop.items.find(i=>i.id===id)??null; }
@@ -4405,6 +4454,10 @@ function renderShopTab() {
   if (annAllEl) annAllEl.value = _shop.settings.announceAllMsg ?? '';
   const errEl = document.getElementById('shop-error-inp');
   if (errEl) errEl.value = _shop.settings.errorMsg ?? '';
+  const uEl = document.getElementById('shop-preis-u-inp');
+  if (uEl) uEl.value = _shop.settings.preisU ?? 0;
+  const nsEl = document.getElementById('shop-preis-nostrip-inp');
+  if (nsEl) nsEl.value = _shop.settings.preisNostrip ?? 0;
   renderShopItems();
   renderShopLog();
   // Update tab badge
@@ -4416,18 +4469,26 @@ function renderShopItems() {
   const el = document.getElementById('shop-item-list'); if (!el) return;
   const items = _shop.items;
   if (!items.length) { el.innerHTML = '<div style="font-size:.7rem;color:var(--text3);text-align:center;padding:12px 0">Noch keine Artikel.</div>'; return; }
-  el.innerHTML = items.map(item => `
+  el.innerHTML = items.map(item => {
+    const nostripPreis = item.preisNostrip != null ? item.preisNostrip : (_shop.settings.preisNostrip??0);
+    const uPreis       = item.preisU       != null ? item.preisU       : (_shop.settings.preisU??0);
+    const flagBadges   = [
+      uPreis>0       ? `<span style="font-size:.55rem;background:rgba(139,92,246,0.15);border:1px solid rgba(139,92,246,0.3);color:#a78bfa;padding:1px 5px;border-radius:3px">/u +${uPreis}💰</span>` : '',
+      nostripPreis>0 ? `<span style="font-size:.55rem;background:rgba(248,113,113,0.12);border:1px solid rgba(248,113,113,0.3);color:#f87171;padding:1px 5px;border-radius:3px">/nostrip +${nostripPreis}💰</span>` : (nostripPreis===0?`<span style="font-size:.55rem;background:rgba(248,113,113,0.07);border:1px solid rgba(248,113,113,0.2);color:#f87171;padding:1px 5px;border-radius:3px">/nostrip ✓</span>`:''),
+    ].filter(Boolean).join(' ');
+    return `
     <div class="shop-item-card ${item.aktiv?'':'shop-item-inactive'}">
       <span class="shop-item-icon">${escHtml(item.icon||'🛒')}</span>
       <div style="flex:1;min-width:0">
         <div class="shop-item-name">${escHtml(item.name||'–')}</div>
         ${item.beschreibung?`<div style="font-size:.62rem;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(item.beschreibung)}</div>`:''}
+        ${flagBadges?`<div style="margin-top:3px;display:flex;gap:3px;flex-wrap:wrap">${flagBadges}</div>`:''}
       </div>
       <span class="shop-item-price">${item.preis??0} 💰</span>
       <button onclick="shopItemEdit('${item.id}')" style="background:none;border:1px solid rgba(255,255,255,0.1);border-radius:5px;color:var(--text3);font-size:.62rem;padding:2px 7px;cursor:pointer">✏️</button>
       <button onclick="shopItemDelete('${item.id}')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.75rem;padding:2px 5px">✕</button>
     </div>
-  `).join('');
+  `}).join('');
 }
 
 function renderShopLog() {
@@ -4465,6 +4526,8 @@ function shopSetConfirm(v)    { _shop.settings.confirmMsg = v; _saveShop(); }
 function shopSetAnnounce(v)   { _shop.settings.announceMsg = v; _saveShop(); }
 function shopSetAnnounceAll(v){ _shop.settings.announceAllMsg = v; _saveShop(); }
 function shopSetError(v)      { _shop.settings.errorMsg = v; _saveShop(); }
+function shopSetPreisU(v)     { _shop.settings.preisU = parseInt(v)||0; _saveShop(); }
+function shopSetPreisNostrip(v){ _shop.settings.preisNostrip = parseInt(v)||0; _saveShop(); }
 
 function shopItemNew() {
   document.getElementById('shop-modal-id').value = '';
@@ -4478,6 +4541,8 @@ function shopItemNew() {
   document.getElementById('shop-modal-announce').value = '';
   document.getElementById('shop-modal-announce-all').value = '';
   document.getElementById('shop-modal-error').value = '';
+  document.getElementById('shop-modal-preis-u').value = '';
+  document.getElementById('shop-modal-preis-nostrip').value = '';
   document.getElementById('shop-modal-overlay').style.display = 'flex';
 }
 
@@ -4494,6 +4559,8 @@ function shopItemEdit(id) {
   document.getElementById('shop-modal-announce').value = item.announceMsg||'';
   document.getElementById('shop-modal-announce-all').value = item.announceAllMsg||'';
   document.getElementById('shop-modal-error').value = item.errorMsg||'';
+  document.getElementById('shop-modal-preis-u').value = item.preisU != null ? item.preisU : '';
+  document.getElementById('shop-modal-preis-nostrip').value = item.preisNostrip != null ? item.preisNostrip : '';
   document.getElementById('shop-modal-overlay').style.display = 'flex';
 }
 
@@ -4513,6 +4580,8 @@ function shopModalSave() {
     announceMsg: document.getElementById('shop-modal-announce').value.trim(),
     announceAllMsg: document.getElementById('shop-modal-announce-all').value.trim(),
     errorMsg: document.getElementById('shop-modal-error').value.trim(),
+    preisU: document.getElementById('shop-modal-preis-u').value.trim()!=='' ? parseInt(document.getElementById('shop-modal-preis-u').value)||0 : null,
+    preisNostrip: document.getElementById('shop-modal-preis-nostrip').value.trim()!=='' ? parseInt(document.getElementById('shop-modal-preis-nostrip').value)||0 : null,
   };
   if (id) {
     const item = _shopById(id); if (item) Object.assign(item, data);
@@ -5624,21 +5693,40 @@ function renderTrigCard(bot, t, i) {
           <input type="checkbox" ${t.ifElse?'checked':''} onchange="trigSetIfElse('${t.id}',this.checked)">
           🔀 If/Else-Logik aktivieren
         </label>
-        <span class="ifelse-hint">Wenn Bedingungen zutreffen → DANN-Aktionen, sonst → SONST-Aktionen</span>
+        <span class="ifelse-hint">Auslöser-Bedingungen feuern den Trigger – IF-Bedingungen entscheiden DANN vs. SONST</span>
       </div>
 
       ${t.ifElse ? `
       <!-- If/Else blocks -->
       <div class="ifelse-wrapper">
+        <div class="ifelse-if-hdr">
+          🔀 IF – diese Bedingungen entscheiden DANN vs. SONST
+        </div>
+        <div class="ifelse-if-body">
+          <div style="font-size:.61rem;color:var(--text3);margin-bottom:7px">
+            Nur wenn die <b style="color:var(--text2)">Auslöser-Bedingungen</b> oben bereits zugetroffen haben, wird hier geprüft:<br>
+            ✅ <b style="color:#34d399">DANN</b> wenn alle IF-Bedingungen zutreffen &nbsp;·&nbsp; ❌ <b style="color:#fb7185">SONST</b> wenn eine nicht zutrifft.
+            Ohne IF-Bedingungen läuft immer DANN.
+          </div>
+          <div id="ifconds-${t.id}">${(t.ifBedingungen||[]).map((c,ci)=>renderIfCond(bot,t.id,c,ci)).join('')}</div>
+          <div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:2px">
+            <button class="ifelse-if-add-btn" onclick="trigAddIfCond('${t.id}','wort')">+ Wort/Chat</button>
+            <button class="ifelse-if-add-btn" onclick="trigAddIfCond('${t.id}','zone_rect')">+ Zone</button>
+            <button class="ifelse-if-add-btn" onclick="trigAddIfCond('${t.id}','item_traegt')">+ Item trägt</button>
+            <button class="ifelse-if-add-btn" onclick="trigAddIfCond('${t.id}','item_traegt_nicht')">+ Item trägt NICHT</button>
+            <button class="ifelse-if-add-btn" onclick="trigAddIfCond('${t.id}','trigger_war')">+ Vortrigger</button>
+            <button class="ifelse-if-add-btn" onclick="trigAddIfCond('${t.id}','rang')">🏆 Rang</button>
+          </div>
+        </div>
         <div class="ifelse-dann-hdr">
-          ✅ DANN – Bedingungen treffen zu
+          ✅ DANN – IF-Bedingungen treffen zu
         </div>
         <div class="ifelse-dann-body">
           <div id="acts-${t.id}">${(t.aktionen||[]).map((a,ai)=>renderAct(t.id,a,ai,'dann')).join('')}</div>
           <button class="ifelse-add-btn" onclick="trigAddAct('${t.id}','dann')">+ DANN-Aktion hinzufügen</button>
         </div>
         <div class="ifelse-sonst-hdr">
-          ❌ SONST – Bedingungen treffen NICHT zu
+          ❌ SONST – IF-Bedingungen treffen NICHT zu
         </div>
         <div class="ifelse-sonst-body">
           <div id="acts-sonst-${t.id}">${(t.aktionen_sonst||[]).map((a,ai)=>renderAct(t.id,a,ai,'sonst')).join('')}</div>
@@ -6103,6 +6191,71 @@ function condRerender(tid) {
   document.getElementById('conds-'+tid).innerHTML = (t.bedingungen||[]).map((c,ci)=>renderCond(b,tid,c,ci)).join('');
 }
 
+// ── IF-Bedingungen (zweite Ebene für IF/Else Entscheid) ───────
+function renderIfCond(bot, tid, c, ci) {
+  // Render using regular renderCond then swap all callback names to ifCond* variants
+  return renderCond(bot, tid, c, ci)
+    .replace(/\bcondField\b/g,    'ifCondField')
+    .replace(/\bcondLogik\b/g,    'ifCondLogik')
+    .replace(/\bcondMoveUp\b/g,   'ifCondMoveUp')
+    .replace(/\bcondMoveDown\b/g, 'ifCondMoveDown')
+    .replace(/\bcondRemove\b/g,   'ifCondRemove')
+    .replace(/\bcondRerender\b/g, 'ifCondRerender')
+    .replace(/id="cond-/g,        'id="ifcond-');
+}
+function trigAddIfCond(tid, typ) {
+  const b = _selBot(); if (!b) return;
+  const t = b.triggers.find(x=>x.id===tid); if (!t) return;
+  const defs = {
+    wort:           {typ:'wort',           wort:'',    logik:'und'},
+    zone_rect:      {typ:'zone_rect',       x1:0,y1:0,x2:2,y2:2, logik:'und'},
+    item_traegt:    {typ:'item_traegt',     item:'', gruppe:'', logik:'und'},
+    item_traegt_nicht:{typ:'item_traegt_nicht',item:'',gruppe:'',logik:'und'},
+    trigger_war:    {typ:'trigger_war',     trigId:'', logik:'und'},
+    rang:           {typ:'rang',            rang_op:'=', rang_id:'', logik:'und'},
+  };
+  t.ifBedingungen = t.ifBedingungen ?? [];
+  t.ifBedingungen.push(defs[typ] ?? {typ, logik:'und'});
+  _saveBots();
+  document.getElementById('ifconds-'+tid).innerHTML = (t.ifBedingungen||[]).map((c,ci)=>renderIfCond(b,tid,c,ci)).join('');
+}
+function ifCondField(tid, ci, field, val) {
+  const b = _selBot(); if (!b) return;
+  const t = b.triggers.find(x=>x.id===tid); if (!t) return;
+  if (!t.ifBedingungen?.[ci]) return;
+  t.ifBedingungen[ci][field] = val; _saveBots();
+}
+function ifCondLogik(tid, ci, logik) {
+  const b = _selBot(); if (!b) return;
+  const t = b.triggers.find(x=>x.id===tid); if (!t) return;
+  if (!t.ifBedingungen?.[ci]) return;
+  t.ifBedingungen[ci].logik = logik; _saveBots();
+  ifCondRerender(tid);
+}
+function ifCondMoveUp(tid, ci) {
+  const b = _selBot(); if (!b) return;
+  const t = b.triggers.find(x=>x.id===tid); if (!t || ci<=0) return;
+  [t.ifBedingungen[ci-1], t.ifBedingungen[ci]] = [t.ifBedingungen[ci], t.ifBedingungen[ci-1]];
+  _saveBots(); ifCondRerender(tid);
+}
+function ifCondMoveDown(tid, ci) {
+  const b = _selBot(); if (!b) return;
+  const t = b.triggers.find(x=>x.id===tid); if (!t || ci>=(t.ifBedingungen?.length??0)-1) return;
+  [t.ifBedingungen[ci], t.ifBedingungen[ci+1]] = [t.ifBedingungen[ci+1], t.ifBedingungen[ci]];
+  _saveBots(); ifCondRerender(tid);
+}
+function ifCondRemove(tid, ci) {
+  const b = _selBot(); if (!b) return;
+  const t = b.triggers.find(x=>x.id===tid); if (!t) return;
+  t.ifBedingungen.splice(ci,1); _saveBots();
+  document.getElementById('ifconds-'+tid).innerHTML = (t.ifBedingungen||[]).map((c,ci2)=>renderIfCond(b,tid,c,ci2)).join('');
+}
+function ifCondRerender(tid) {
+  const b = _selBot(); if (!b) return;
+  const t = b.triggers.find(x=>x.id===tid); if (!t) return;
+  document.getElementById('ifconds-'+tid).innerHTML = (t.ifBedingungen||[]).map((c,ci)=>renderIfCond(b,tid,c,ci)).join('');
+}
+
 // Actions
 function trigAddAct(tid, branch) {
   const b = _selBot(); if (!b) return;
@@ -6121,7 +6274,8 @@ function trigSetIfElse(tid, val) {
   const b = _selBot(); if (!b) return;
   const t = b.triggers.find(x=>x.id===tid); if (!t) return;
   t.ifElse = val;
-  if (val && !t.aktionen_sonst) t.aktionen_sonst = [];
+  if (val && !t.aktionen_sonst)  t.aktionen_sonst  = [];
+  if (val && !t.ifBedingungen)   t.ifBedingungen   = [];
   _saveBots();
   trigRerender(tid);
 }
@@ -6624,6 +6778,7 @@ function _buildBotCode(bot) {
       vonNummern: (t.vonNummern||[]).map(Number),
       ifElse: !!t.ifElse,
     bedingungen: (t.bedingungen||[]),
+    ifBedingungen: (t.ifBedingungen||[]),
     aktionen: (t.aktionen||[]).map(a => {
       const base = a.typ==='item' && a.curseKey && !a.curseEntry ? {...a, curseEntry: CURSE_DB[a.curseKey]??null}
                  : a.typ==='item' && a.profilName && (!a.profilItems||!a.profilItems.length) ? {...a, profilItems: PROFILES[a.profilName]?.items??[]}
@@ -6644,7 +6799,7 @@ function _buildBotCode(bot) {
   const safeId   = bot.id.replace(/\W/g,'_');
   const safeName = bot.name.replace(/\\/g,'\\\\').replace(/`/g,'\\`');
 
-  const cfgJson  = JSON.stringify({hearChat:s.hearChat,hearEmote:s.hearEmote,hearWhisper:s.hearWhisper,nurEigene:s.nurEigene,logAktiv:s.logAktiv??true,modus:s.modus,moneyQueryCmd:_money?.settings?.queryCmd??'',moneyQueryTyp:_money?.settings?.queryTyp??'whisper',moneyName:_money?.settings?.name??'Gold',rankQueryCmd:_rankData?.settings?.queryCmd??'',rankQueryTyp:_rankData?.settings?.queryCmdTyp??'whisper',rankQueryText:_rankData?.settings?.queryCmdText??'{name} hat Rang: {rang_icon} {rang}',rankDefs:_rankData?.defs??[],rankPlayers:Object.fromEntries(Object.entries(_rankData?.players??{}).map(([k,v])=>[k,v.rankId??null])),shopCmd:_shop?.settings?.cmd??'!pay',shopConfirmMsg:_shop?.settings?.confirmMsg??'',shopAnnounceMsg:_shop?.settings?.announceMsg??'',shopAnnounceAllMsg:_shop?.settings?.announceAllMsg??'',shopErrorMsg:_shop?.settings?.errorMsg??'',shopItems:(_shop?.items??[]).filter(i=>i.aktiv!==false),moneyBalances:Object.fromEntries(Object.entries(_money?.balances??{}).map(([k,v])=>[k,{balance:v.balance??0,name:v.name??''}]))});
+  const cfgJson  = JSON.stringify({hearChat:s.hearChat,hearEmote:s.hearEmote,hearWhisper:s.hearWhisper,nurEigene:s.nurEigene,logAktiv:s.logAktiv??true,modus:s.modus,moneyQueryCmd:_money?.settings?.queryCmd??'',moneyQueryTyp:_money?.settings?.queryTyp??'whisper',moneyName:_money?.settings?.name??'Gold',rankQueryCmd:_rankData?.settings?.queryCmd??'',rankQueryTyp:_rankData?.settings?.queryCmdTyp??'whisper',rankQueryText:_rankData?.settings?.queryCmdText??'{name} hat Rang: {rang_icon} {rang}',rankDefs:_rankData?.defs??[],rankPlayers:Object.fromEntries(Object.entries(_rankData?.players??{}).map(([k,v])=>[k,v.rankId??null])),shopCmd:_shop?.settings?.cmd??'!pay',shopConfirmMsg:_shop?.settings?.confirmMsg??'',shopAnnounceMsg:_shop?.settings?.announceMsg??'',shopAnnounceAllMsg:_shop?.settings?.announceAllMsg??'',shopErrorMsg:_shop?.settings?.errorMsg??'',shopPreisU:_shop?.settings?.preisU??0,shopPreisNostrip:_shop?.settings?.preisNostrip??0,shopItems:(_shop?.items??[]).filter(i=>i.aktiv!==false),moneyBalances:Object.fromEntries(Object.entries(_money?.balances??{}).map(([k,v])=>[k,{balance:v.balance??0,name:v.name??''}]))});
   const trigsJson = JSON.stringify(triggers).replace(/`/g,'\\`').replace(/\${/g,'\\${');
   const events = (bot.events||[]).filter(e=>e.aktiv).map(e => ({
     id: e.id, name: e.name,
@@ -6751,6 +6906,8 @@ const _shopCfg={
   announceAllMsg:_cfg.shopAnnounceAllMsg??'',
   errorMsg:_cfg.shopErrorMsg??'',
   moneyName:_cfg.moneyName??'Gold',
+  preisU:_cfg.shopPreisU??0,
+  preisNostrip:_cfg.shopPreisNostrip??0,
 };
 // Money-Balances: lokale Kopie für Echtzeit-Prüfungen (wird bei Abbuchung synchron aktualisiert)
 const _moneyBalances=Object.assign({},_cfg.moneyBalances??{});
@@ -6827,7 +6984,62 @@ function _ok(trig,rohText,typKey,C){
   // und_nicht: Bedingung muss FALSCH sein
   return groups.some(g=>g.every(c=>c.logik==='und_nicht'?!checkOne(c):checkOne(c)));
 }
-function _istBesetzt(x,y,ausschliessen){
+
+// ── IF-Bedingungen Check (entscheidet DANN vs. SONST wenn ifElse aktiv) ──
+function _okIf(trig,rohText,typKey,C){
+  const cx=C.X??-999,cy=C.Y??-999;
+  const beds=trig.ifBedingungen??[];
+  if(!beds.length)return true; // keine IF-Beds → immer DANN
+  function checkOne(c){
+    if(c.typ==='wort'){
+      const m=c.typ_msg||'any';
+      if(m!=='any'&&m!==typKey)return false;
+      return!c.wort||(rohText||'').toLowerCase().includes((c.wort||'').toLowerCase());
+    }
+    if(c.typ==='zone'){
+      const p=c.puffer??1;
+      return cx>=c.x-p&&cx<=c.x+p&&cy>=c.y-p&&cy<=c.y+p;
+    }
+    if(c.typ==='zone_rect'){
+      return cx>=Math.min(c.x1,c.x2)&&cx<=Math.max(c.x1,c.x2)&&cy>=Math.min(c.y1,c.y2)&&cy<=Math.max(c.y1,c.y2);
+    }
+    if(c.typ==='item_traegt'){
+      const Cf=ChatRoomCharacter.find(x=>x.MemberNumber===C.MemberNumber)??C;
+      return(Cf.Appearance??[]).some(a=>a.Asset?.Name===c.item);
+    }
+    if(c.typ==='item_traegt_nicht'){
+      const Cf=ChatRoomCharacter.find(x=>x.MemberNumber===C.MemberNumber)??C;
+      return!(Cf.Appearance??[]).some(a=>a.Asset?.Name===c.item);
+    }
+    if(c.typ==='trigger_war'){
+      const ref=_trigMap[c.trigId];
+      return ref?.charSpec?!!_firedChar[c.trigId+'_'+C.MemberNumber]:!!_fired[c.trigId];
+    }
+    if(c.typ==='rang'){
+      const op=c.rang_op??'=';
+      const currentId=_rangState[C.MemberNumber]??null;
+      if(op==='kein') return !currentId;
+      if(!c.rang_id) return false;
+      const defs=(_cfg.rankDefs??[]).sort((a,b)=>a.level-b.level);
+      const targetDef=defs.find(r=>r.id===c.rang_id);
+      const currentDef=defs.find(r=>r.id===currentId);
+      if(!targetDef) return false;
+      if(!currentDef) return false;
+      const tl=targetDef.level, cl=currentDef.level;
+      if(op==='=')   return cl===tl;
+      if(op==='min') return cl>=tl;
+      if(op==='max') return cl<=tl;
+      return false;
+    }
+    return true;
+  }
+  const groups=[[]];
+  for(const c of beds){
+    if(c.logik==='oder'||c.logik==='und_oder')groups.push([]);
+    groups[groups.length-1].push(c);
+  }
+  return groups.some(g=>g.every(c=>c.logik==='und_nicht'?!checkOne(c):checkOne(c)));
+}(x,y,ausschliessen){
   // Ignore target positions at 0,0 — BC hasn't synced position yet
   if(x===0&&y===0)return false;
   return[Player,...(ChatRoomCharacter||[])].some(C=>{
@@ -6986,7 +7198,11 @@ function _execAct(a,C,vars){
     else if(a.typ==='emote'){ServerSend('ChatRoomChat',{Content:_tpl(a.text,vars),Type:'Emote'});ok=true;}
     else if(a.typ==='whisper'){ServerSend('ChatRoomChat',{Content:_tpl(a.text,vars),Type:'Whisper',Target:C.MemberNumber});ok=true;}
     else if(a.typ==='item_entf'){const _entfGruppe=a.gruppe;InventoryRemove(C,_entfGruppe);CharacterRefresh(C);ChatRoomCharacterUpdate(C);_asUnregister(C,_entfGruppe);ok=true;}
-    else if(a.typ==='item'){_applyItemAction(a,C);if(a.antiStrip)_asRegister(C,a);ok=true;}
+    else if(a.typ==='item'){
+      _applyItemAction(a,C);
+      if(a.antiStrip||vars?.shopNostrip)_asRegister(C,a);
+      ok=true;
+    }
     else if(a.typ==='teleport'){ok=_teleport(a,C);}
     else if(a.typ==='money'){
       const op=a.money_op??'add';
@@ -7330,8 +7546,14 @@ function _parseShopArgs(rest){
   while(pos<rest.length){
     while(pos<rest.length&&rest[pos]===' ')pos++;
     if(pos>=rest.length)break;
-    // Flag-Erkennung: /w oder /u (case-insensitive, als eigenes Token)
+    // Flag-Erkennung: /w, /u, /nostrip (case-insensitive, als eigenes Token)
     if(rest[pos]==='/'&&pos+1<rest.length){
+      const remaining=rest.slice(pos+1);
+      if(/^nostrip\b/i.test(remaining)){
+        flags.add('nostrip');
+        pos+=8; // '/' + 'nostrip'
+        continue;
+      }
       const fl=rest[pos+1].toLowerCase();
       if(fl==='w'||fl==='u'){
         flags.add(fl);
@@ -7378,6 +7600,12 @@ function _handleShopCmd(rohText,buyerC){
 
   const flagWhisper=flags.has('w');   // /w = Ankündigung als Whisper statt Chat
   const flagUnknown=flags.has('u');   // /u = Käufername wird als "Unbekannt" angezeigt
+  const flagNostrip=flags.has('nostrip'); // /nostrip = Item kann nicht abgelegt werden (AntiStrip)
+
+  // Flag-Aufpreise berechnen
+  const preisU      = flagUnknown ? (shopItem.preisU      ?? _shopCfg.preisU      ?? 0) : 0;
+  const preisNostrip= flagNostrip ? (shopItem.preisNostrip ?? _shopCfg.preisNostrip ?? 0) : 0;
+  const flagAufpreis= preisU + preisNostrip;
 
   const itemName=args[0].toLowerCase();
   const shopItem=_shopCfg.items.find(i=>i.name.toLowerCase()===itemName);
@@ -7400,14 +7628,21 @@ function _handleShopCmd(rohText,buyerC){
       ServerSend('ChatRoomChat',{Content:'Niemand im Raum.',Type:'Whisper',Target:buyerC.MemberNumber});
       return;
     }
-    const gesamt=preis*anzahl;
+    const gesamt=(preis+flagAufpreis)*anzahl;
     const buyerBalance=(_moneyBalances[buyerC.MemberNumber]?.balance)??0;
 
     if(buyerBalance<gesamt){
-      const rawMsg=shopItem.errorMsg||_shopCfg.errorMsg||('Nicht genug '+cur+'! Du hast {kontostand} '+cur+', benötigt: {gesamt} '+cur+' ('+anzahl+'×'+preis+').');
-      const msg=_shopTpl(rawMsg,buyerC,null,shopItem,preis,buyerBalance,anzahl,gesamt);
+      let aufpreisInfo='';
+      if(flagAufpreis>0){
+        const parts=[];
+        if(preisU>0)      parts.push('/u: '+preisU+' '+cur);
+        if(preisNostrip>0)parts.push('/nostrip: '+preisNostrip+' '+cur);
+        aufpreisInfo=' (inkl. Flag-Aufpreis: '+parts.join(', ')+')';
+      }
+      const rawMsg=shopItem.errorMsg||_shopCfg.errorMsg||('Nicht genug '+cur+'! Du hast {kontostand} '+cur+', benötigt: {gesamt} '+cur+' ('+anzahl+'×'+(preis+flagAufpreis)+')'+aufpreisInfo+'.');
+      const msg=_shopTpl(rawMsg,buyerC,null,shopItem,preis+flagAufpreis,buyerBalance,anzahl,gesamt);
       ServerSend('ChatRoomChat',{Content:msg,Type:'Whisper',Target:buyerC.MemberNumber});
-      _log('🛒 All-Kauf abgelehnt: '+buyerC.Name+' hat '+buyerBalance+', braucht '+gesamt+' ('+anzahl+'×'+preis+')');
+      _log('🛒 All-Kauf abgelehnt: '+buyerC.Name+' hat '+buyerBalance+', braucht '+gesamt+' ('+anzahl+'×'+(preis+flagAufpreis)+')');
       return;
     }
 
@@ -7419,7 +7654,7 @@ function _handleShopCmd(rohText,buyerC){
       memberNum:buyerC.MemberNumber,name:buyerC.Name,delta:-gesamt},'*');
 
     const newBal=_moneyBalances[buyerC.MemberNumber].balance;
-    _log('🛒 All-Kauf: '+buyerC.Name+' kauft "'+shopItem.name+'" für alle ('+anzahl+'×'+preis+'='+gesamt+' '+cur+'). Kontostand: '+newBal+(flagUnknown?' [/u]':'')+(flagWhisper?' [/w]':''));
+    _log('🛒 All-Kauf: '+buyerC.Name+' kauft "'+shopItem.name+'" für alle ('+anzahl+'×'+(preis+flagAufpreis)+'='+gesamt+' '+cur+'). Kontostand: '+newBal+(flagUnknown?' [/u]':'')+(flagWhisper?' [/w]':'')+(flagNostrip?' [/nostrip]':''));
 
     window.__BCK_popupRef?.postMessage({app:'BCKonfigurator',type:'BOT_SHOP',
       buyerNum:buyerC.MemberNumber,buyerName:buyerC.Name,
@@ -7446,7 +7681,7 @@ function _handleShopCmd(rohText,buyerC){
     // Trigger für jeden Ziel-Spieler
     targets.forEach(targetC=>{
       const shopVars={name:buyerC.Name,wort:rohText,typ:'🛒 Shop All',x:buyerC.X??0,y:buyerC.Y??0,
-        C:targetC,shopBuyer:buyerC,shopItem,shopAnzahl:anzahl,shopGesamt:gesamt};
+        C:targetC,shopBuyer:buyerC,shopItem,shopAnzahl:anzahl,shopGesamt:gesamt,shopNostrip:flagNostrip};
       _trigs.forEach(trig=>{
         const shopConds=(trig.bedingungen??[]).filter(c=>c.typ==='shop_kauf');
         if(!shopConds.length)return;
@@ -7501,25 +7736,33 @@ function _handleShopCmd(rohText,buyerC){
     }
   }
 
+  const preisEffektiv = preis + flagAufpreis;
   const buyerBalance=(_moneyBalances[buyerC.MemberNumber]?.balance)??0;
 
-  if(buyerBalance<preis){
-    const rawMsg=shopItem.errorMsg||_shopCfg.errorMsg||('Nicht genug '+cur+'! Du hast {kontostand} '+cur+', benötigt: {preis} '+cur+'.');
-    ServerSend('ChatRoomChat',{Content:_shopTpl(rawMsg,buyerC,targetC,shopItem,preis,buyerBalance),Type:'Whisper',Target:buyerC.MemberNumber});
-    _log('🛒 Kauf abgelehnt: '+buyerC.Name+' hat '+buyerBalance+' '+cur+', braucht '+preis);
+  if(buyerBalance<preisEffektiv){
+    let aufpreisInfo='';
+    if(flagAufpreis>0){
+      const parts=[];
+      if(preisU>0)      parts.push('/u: '+preisU+' '+cur);
+      if(preisNostrip>0)parts.push('/nostrip: '+preisNostrip+' '+cur);
+      aufpreisInfo=' (inkl. '+parts.join(' + ')+')';
+    }
+    const rawMsg=shopItem.errorMsg||_shopCfg.errorMsg||('Nicht genug '+cur+'! Du hast {kontostand} '+cur+', benötigt: {preis} '+cur+aufpreisInfo+'.');
+    ServerSend('ChatRoomChat',{Content:_shopTpl(rawMsg,buyerC,targetC,shopItem,preisEffektiv,buyerBalance),Type:'Whisper',Target:buyerC.MemberNumber});
+    _log('🛒 Kauf abgelehnt: '+buyerC.Name+' hat '+buyerBalance+' '+cur+', braucht '+preisEffektiv);
     return;
   }
 
   // Coins abziehen
   if(!_moneyBalances[buyerC.MemberNumber])
     _moneyBalances[buyerC.MemberNumber]={balance:0,name:buyerC.Name};
-  _moneyBalances[buyerC.MemberNumber].balance-=preis;
+  _moneyBalances[buyerC.MemberNumber].balance-=preisEffektiv;
   window.__BCK_popupRef?.postMessage({app:'BCKonfigurator',type:'BOT_MONEY',
-    memberNum:buyerC.MemberNumber,name:buyerC.Name,delta:-preis},'*');
+    memberNum:buyerC.MemberNumber,name:buyerC.Name,delta:-preisEffektiv},'*');
 
   const newBal=_moneyBalances[buyerC.MemberNumber].balance;
   const isFremdkauf=targetC.MemberNumber!==buyerC.MemberNumber;
-  _log('🛒 Kauf: '+buyerC.Name+' kauft "'+shopItem.name+'" für '+preis+' '+cur+(isFremdkauf?' → Ziel: '+targetC.Name:'')+' | Kontostand: '+newBal+(flagUnknown?' [/u]':'')+(flagWhisper?' [/w]':''));
+  _log('🛒 Kauf: '+buyerC.Name+' kauft "'+shopItem.name+'" für '+preisEffektiv+' '+cur+(isFremdkauf?' → Ziel: '+targetC.Name:'')+' | Kontostand: '+newBal+(flagUnknown?' [/u]':'')+(flagWhisper?' [/w]':'')+(flagNostrip?' [/nostrip]':''));
 
   window.__BCK_popupRef?.postMessage({app:'BCKonfigurator',type:'BOT_SHOP',
     buyerNum:buyerC.MemberNumber,buyerName:buyerC.Name,
@@ -7528,16 +7771,15 @@ function _handleShopCmd(rohText,buyerC){
 
   // Bestätigungs-Whisper an Käufer
   const rawConf=shopItem.confirmMsg||_shopCfg.confirmMsg||
-    ('✅ '+(isFremdkauf?'Du kaufst '+shopItem.name+' für '+targetC.Name:shopItem.name+' gekauft')+'. Bezahlt: '+preis+' '+cur+'. Kontostand: '+newBal+' '+cur+'.');
-  ServerSend('ChatRoomChat',{Content:_shopTpl(rawConf,buyerC,targetC,shopItem,preis,newBal),Type:'Whisper',Target:buyerC.MemberNumber});
+    ('✅ '+(isFremdkauf?'Du kaufst '+shopItem.name+' für '+targetC.Name:shopItem.name+' gekauft')+'. Bezahlt: '+preisEffektiv+' '+cur+(flagNostrip?' 🔒 NoStrip':'')+'. Kontostand: '+newBal+' '+cur+'.');
+  ServerSend('ChatRoomChat',{Content:_shopTpl(rawConf,buyerC,targetC,shopItem,preisEffektiv,newBal),Type:'Whisper',Target:buyerC.MemberNumber});
 
   // Fremdkauf-Ankündigung (nur wenn für anderen Spieler)
   if(isFremdkauf){
     const rawAnn=shopItem.announceMsg||_shopCfg.announceMsg||
-      (displayBuyer.Name+' hat für '+targetC.Name+' das Item '+shopItem.icon+' '+shopItem.name+' gekauft.');
-    const annTxt=_shopTpl(rawAnn,displayBuyer,targetC,shopItem,preis,newBal);
+      (displayBuyer.Name+' hat für '+targetC.Name+' das Item '+shopItem.icon+' '+shopItem.name+' gekauft'+(flagNostrip?' 🔒':'')+'.') ;
+    const annTxt=_shopTpl(rawAnn,displayBuyer,targetC,shopItem,preisEffektiv,newBal);
     if(flagWhisper){
-      // Whisper direkt an das Ziel
       ServerSend('ChatRoomChat',{Content:annTxt,Type:'Whisper',Target:targetC.MemberNumber});
     } else {
       ServerSend('ChatRoomChat',{Content:annTxt,Type:'Chat'});
@@ -7545,7 +7787,7 @@ function _handleShopCmd(rohText,buyerC){
   }
 
   // Shop-Trigger auslösen
-  const shopVars={name:buyerC.Name,wort:rohText,typ:'🛒 Shop',x:buyerC.X??0,y:buyerC.Y??0,C:targetC,shopBuyer:buyerC,shopItem};
+  const shopVars={name:buyerC.Name,wort:rohText,typ:'🛒 Shop',x:buyerC.X??0,y:buyerC.Y??0,C:targetC,shopBuyer:buyerC,shopItem,shopNostrip:flagNostrip};
   _trigs.forEach(trig=>{
     const shopConds=(trig.bedingungen??[]).filter(c=>c.typ==='shop_kauf');
     if(!shopConds.length)return;
@@ -7623,12 +7865,17 @@ function _proc(rohText,typKey,C){
       return true; // 'alle'
     })();
     if(!vonOk)return;
-    // Alle anderen: _ok prueft Bedingungen (wort, zone, vortrigger)
+    // Alle anderen: _ok prueft Auslöser-Bedingungen (wort, zone, vortrigger)
     const condOk=_ok(trig,rohText,typKey,C);
     if(condOk){
-      _run(trig,{name:C.Name,wort:rohText,typ:typLabel,x:pos.X,y:pos.Y,zone:'',C});
-    } else if(trig.ifElse&&(trig.aktionen_sonst??[]).length){
-      _runSonst(trig,{name:C.Name,wort:rohText,typ:typLabel,x:pos.X,y:pos.Y,zone:'',C});
+      // Auslöser passt → jetzt IF-Bedingungen prüfen (nur wenn ifElse aktiv und ifBedingungen vorhanden)
+      const ifBeds=trig.ifBedingungen??[];
+      const ifOk=!trig.ifElse||!ifBeds.length||_okIf(trig,rohText,typKey,C);
+      if(ifOk){
+        _run(trig,{name:C.Name,wort:rohText,typ:typLabel,x:pos.X,y:pos.Y,zone:'',C});
+      } else if((trig.aktionen_sonst??[]).length){
+        _runSonst(trig,{name:C.Name,wort:rohText,typ:typLabel,x:pos.X,y:pos.Y,zone:'',C});
+      }
     }
   });
 
@@ -7728,7 +7975,12 @@ const _itPoll=setInterval(()=>{
           }
           return true;
         });
-        if(otherOk)_run(trig,{name:C.Name,wort:'',typ:'Item',x:pos.X,y:pos.Y,zone:'',C});
+        if(otherOk){
+          const ifBeds=trig.ifBedingungen??[];
+          const ifOk=!trig.ifElse||!ifBeds.length||_okIf(trig,'','item',C);
+          if(ifOk) _run(trig,{name:C.Name,wort:'',typ:'Item',x:pos.X,y:pos.Y,zone:'',C});
+          else if((trig.aktionen_sonst??[]).length) _runSonst(trig,{name:C.Name,wort:'',typ:'Item',x:pos.X,y:pos.Y,zone:'',C});
+        }
       }
       _itState[key]=condMet;
     });
@@ -7839,7 +8091,10 @@ const _joinPoll=setInterval(()=>{
         if(isRejoinTrig){
           rejoinBatch.push(trig); // Rejoin: gesammelt feuern
         } else {
-          _run(trig,{name:C.Name,wort:'',typ:label,x:pos.X,y:pos.Y,zone:'',C});
+          const ifBeds=trig.ifBedingungen??[];
+          const ifOk=!trig.ifElse||!ifBeds.length||_okIf(trig,'',null,C);
+          if(ifOk) _run(trig,{name:C.Name,wort:'',typ:label,x:pos.X,y:pos.Y,zone:'',C});
+          else if((trig.aktionen_sonst??[]).length) _runSonst(trig,{name:C.Name,wort:'',typ:label,x:pos.X,y:pos.Y,zone:'',C});
         }
       });
       // ── Betritt-Events feuern (Events mit player_betritt Bedingung) ──
@@ -7928,10 +8183,16 @@ const _joinPoll=setInterval(()=>{
               _log('⏭ [Rejoin] "'+trig.name+'" – Item-Bedingung nach Sync nicht erfüllt (Appearance jetzt geladen)');
               return;
             }
-            _run(trig,{name:Cfresh.Name,wort:'',typ:label,x:Cfresh.X??pos.X,y:Cfresh.Y??pos.Y,zone:'',C:Cfresh});
+            const ifBedsR=trig.ifBedingungen??[];
+            const ifOkR=!trig.ifElse||!ifBedsR.length||_okIf(trig,'',null,Cfresh);
+            if(ifOkR) _run(trig,{name:Cfresh.Name,wort:'',typ:label,x:Cfresh.X??pos.X,y:Cfresh.Y??pos.Y,zone:'',C:Cfresh});
+            else if((trig.aktionen_sonst??[]).length) _runSonst(trig,{name:Cfresh.Name,wort:'',typ:label,x:Cfresh.X??pos.X,y:Cfresh.Y??pos.Y,zone:'',C:Cfresh});
           }, ITEM_SYNC_DELAY);
         } else {
-          _run(trig,{name:C.Name,wort:'',typ:label,x:pos.X,y:pos.Y,zone:'',C});
+          const ifBeds=trig.ifBedingungen??[];
+          const ifOk=!trig.ifElse||!ifBeds.length||_okIf(trig,'',null,C);
+          if(ifOk) _run(trig,{name:C.Name,wort:'',typ:label,x:pos.X,y:pos.Y,zone:'',C});
+          else if((trig.aktionen_sonst??[]).length) _runSonst(trig,{name:C.Name,wort:'',typ:label,x:pos.X,y:pos.Y,zone:'',C});
         }
       });
     }
