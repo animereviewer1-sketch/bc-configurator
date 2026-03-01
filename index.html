@@ -997,6 +997,15 @@ button { cursor: pointer; }
 .rank-modal label { display: block; font-size: .67rem; color: var(--text3); font-weight: 700; text-transform: uppercase; letter-spacing: .06em; margin-bottom: 4px; margin-top: 11px; }
 .rank-modal input, .rank-modal select { width: 100%; }
 .rank-modal-btns { display: flex; gap: 8px; margin-top: 18px; justify-content: flex-end; }
+
+/* UND NICHT Logik */
+.logik-btn.active-nicht { background:rgba(251,113,133,0.2); color:#fb7185; border-color:rgba(251,113,133,0.4); }
+.cond-group-nicht::before { content:"UND NICHT"; display:block; font-size:.59rem; color:#fb7185; font-weight:800; letter-spacing:.09em; text-align:center; margin:4px 0 2px 7px; }
+/* AntiStrip in Aktion */
+.as-act-box { margin-top:7px; padding:8px 10px; background:rgba(52,211,153,0.04); border:1px solid rgba(52,211,153,0.18); border-radius:8px; }
+.as-act-row { display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-top:5px; }
+.as-act-label { font-size:.6rem; color:var(--text3); white-space:nowrap; }
+
 </style>
 </head>
 <body>
@@ -4890,8 +4899,9 @@ function renderEvCond(bot, eid, c, ci) {
     : `<div style="display:flex;align-items:center;gap:0;margin:2px 0;padding-left:6px">
         <button onclick="evCondLogik('${eid}',${ci},'und')" class="logik-btn ${logik==='und'?'active':''}">UND</button>
         <button onclick="evCondLogik('${eid}',${ci},'oder')" class="logik-btn ${logik==='oder'?'active':''}">ODER</button>
+        <button onclick="evCondLogik('${eid}',${ci},'und_nicht')" class="logik-btn ${logik==='und_nicht'?'active active-nicht':''}" style="border-left:none;border-radius:0 3px 3px 0" title="UND NICHT">UND NICHT</button>
       </div>`;
-  return `<div class="cond-group ${logik==='oder'?'cond-group-oder':''}" id="evcond-${eid}-${ci}">
+  return `<div class="cond-group ${logik==='oder'?'cond-group-oder':logik==='und_nicht'?'cond-group-nicht':''}" id="evcond-${eid}-${ci}">
     ${logikBadge}
     <div class="cond-card cond-op">
       <div class="card-fields">
@@ -5468,9 +5478,10 @@ function renderCond(bot, tid, c, ci) {
     : `<div style="display:flex;align-items:center;gap:0;margin:2px 0;padding-left:6px">
         <button onclick="condLogik('${tid}',${ci},'und')" class="logik-btn ${logik==='und'?'active':''}" title="UND – alle müssen zutreffen">UND</button>
         <button onclick="condLogik('${tid}',${ci},'oder')" class="logik-btn ${logik==='oder'?'active':''}" title="ODER – mind. eine muss zutreffen">ODER</button>
-        <button onclick="condLogik('${tid}',${ci},'und_oder')" class="logik-btn ${logik==='und_oder'?'active':''}" style="border-radius:0 3px 3px 0" title="Egal – mindestens eine genügt">UND/ODER</button>
+        <button onclick="condLogik('${tid}',${ci},'und_oder')" class="logik-btn ${logik==='und_oder'?'active':''}" title="Egal – mindestens eine genügt">UND/ODER</button>
+        <button onclick="condLogik('${tid}',${ci},'und_nicht')" class="logik-btn ${logik==='und_nicht'?'active active-nicht':''}" style="border-left:none;border-radius:0 3px 3px 0" title="UND NICHT – Bedingung darf NICHT zutreffen">UND NICHT</button>
       </div>`;
-  return `<div class="cond-group ${logik==='oder'?'cond-group-oder':''}">
+  return `<div class="cond-group ${logik==='oder'?'cond-group-oder':logik==='und_nicht'?'cond-group-nicht':''}">
     ${logikBadge}
     <div class="cond-card cond-op" id="cond-${tid}-${ci}">
       <div class="card-fields">
@@ -5515,10 +5526,35 @@ function renderAct(tid, a, ai) {
   } else if (a.typ === 'item') {
     const cfgInfo = a.itemConfig ? ` <span style="font-size:.58rem;background:var(--gd);color:var(--green);padding:1px 4px;border-radius:3px">✓ Konfig</span>` : '';
     const label = a.itemConfig ? `📦 ${a.itemConfig.group}/${a.itemConfig.asset}` : a.profilName ? `👗 ${a.profilName}` : a.curseName ? `🔮 ${a.curseName}` : a.item ? `📦 ${a.gruppe||'?'}/${a.item}` : '– nichts gewählt –';
+    const asLabel = a.antiStrip_itemConfig ? `📦 ${a.antiStrip_itemConfig.group}/${a.antiStrip_itemConfig.asset}`
+                  : a.antiStrip_curseName  ? `🔮 ${a.antiStrip_curseName}`
+                  : a.antiStrip_ersatz     ? `📦 ${a.antiStrip_gruppe||'?'}/${a.antiStrip_ersatz}`
+                  : '– kein Ersatz – gleiches Item wird wieder angelegt –';
+    const antiStripRows = a.antiStrip ? `
+      <div class="as-act-row">
+        <span class="as-act-label">Ersatz-Item:</span>
+        <span style="font-size:.68rem;color:var(--text2);flex:1">${escHtml(asLabel)}</span>
+        <button onclick="ipickerOpenForActAntiStrip('${tid}',${ai})" style="font-size:.63rem;padding:3px 9px;background:var(--pd);border:none;color:var(--pl);border-radius:5px;cursor:pointer">📂 Wählen</button>
+        ${a.antiStrip_ersatz && !a.antiStrip_itemConfig ? `<input class="cf" type="color" value="${a.antiStrip_farbe||'#ff0000'}" oninput="actField('${tid}',${ai},'antiStrip_farbe',this.value)" style="width:28px;padding:1px;cursor:pointer" title="Farbe">` : ''}
+      </div>
+      <div class="as-act-row">
+        <span class="as-act-label">Delay:</span>
+        <input class="cf" type="number" value="${a.antiStrip_delay??500}" min="0" step="100"
+          oninput="actField('${tid}',${ai},'antiStrip_delay',+this.value)"
+          style="width:72px;font-size:.68rem"> ms
+        <span style="font-size:.6rem;color:var(--text3)">(Wartezeit nach Entfernen)</span>
+      </div>` : '';
     extra = `<div style="display:flex;gap:6px;align-items:center;margin-top:4px;flex-wrap:wrap">
         <span style="font-size:.7rem;color:var(--text2);flex:1">${escHtml(label)}${cfgInfo}</span>
         <button onclick="ipickerOpenForAct('${tid}',${ai})" style="font-size:.63rem;padding:3px 9px;background:var(--pd);border:none;color:var(--pl);border-radius:5px;cursor:pointer">📂 Auswählen…</button>
         ${a.item && !a.itemConfig ? `<input class="cf" type="color" value="${a.farbe||'#ffffff'}" oninput="actField('${tid}',${ai},'farbe',this.value)" style="width:28px;padding:1px;cursor:pointer" title="Farbe">` : ''}
+      </div>
+      <div class="as-act-box">
+        <label style="cursor:pointer;display:flex;align-items:center;gap:6px;font-size:.65rem;color:var(--text2)">
+          <input type="checkbox" ${a.antiStrip?'checked':''} onchange="actField('${tid}',${ai},'antiStrip',this.checked);actRerender('${tid}',${ai})">
+          🛡️ AntiStrip – Item wird wieder angelegt wenn der Spieler es entfernt
+        </label>
+        ${antiStripRows}
       </div>`;
   } else if (a.typ === 'item_entf') {
     extra = `<input class="cf" style="width:100%;margin-top:4px" value="${escHtml(a.gruppe||'')}"
@@ -5917,6 +5953,34 @@ function ipickerOpenForAct(tid, ai) {
   });
 }
 
+function ipickerOpenForActAntiStrip(tid, ai) {
+  ipickerOpen('item', v => {
+    const b = _selBot(); if (!b) return;
+    const t = b.triggers.find(x=>x.id===tid); if (!t||!t.aktionen[ai]) return;
+    const a = t.aktionen[ai];
+    delete a.antiStrip_ersatz; delete a.antiStrip_gruppe; delete a.antiStrip_farbe;
+    delete a.antiStrip_itemConfig; delete a.antiStrip_curseName; delete a.antiStrip_curseEntry;
+    if (v.type === 'item') {
+      if (v.itemConfig) {
+        a.antiStrip_itemConfig = v.itemConfig;
+        a.antiStrip_ersatz = v.itemConfig.asset;
+        a.antiStrip_gruppe = v.itemConfig.group;
+        a.antiStrip_farbe  = v.itemConfig.colors?.[0] ?? '#ff0000';
+      } else {
+        a.antiStrip_ersatz = v.name;
+        a.antiStrip_gruppe = v.group;
+        a.antiStrip_farbe  = '#ff0000';
+      }
+    } else if (v.type === 'curse') {
+      a.antiStrip_curseName  = v.name;
+      a.antiStrip_curseEntry = v.entry;
+      a.antiStrip_gruppe     = v.entry?.Gruppe ?? '';
+    }
+    _saveBots();
+    actRerender(tid, ai);
+  });
+}
+
 function ipickerOpen(defaultTab, cb) {
   _ipickerCb  = cb;
   _ipickerTab = defaultTab;
@@ -6287,6 +6351,42 @@ function _buildBotCode(bot) {
   return `(function(){
 const _BID='${safeId}';
 if(window['_BCBot_'+_BID]){console.warn('[Bot] Bereits aktiv – erst stoppen!');return;}
+// ── AntiStrip ────────────────────────────────────────────────
+// var statt const → Hoisting, damit _asRegister schon in
+// _execAct verfügbar ist bevor _asH unten befüllt wird.
+var _asWatchers = {}; // key: memberNum+'_'+gruppe
+var _asH        = null;
+function _asRegister(C, a) {
+  var gruppe = (a.antiStrip_itemConfig && a.antiStrip_itemConfig.group)
+    || (a.antiStrip_curseEntry && a.antiStrip_curseEntry.Gruppe)
+    || a.antiStrip_gruppe
+    || (a.itemConfig && a.itemConfig.group)
+    || (a.curseEntry && a.curseEntry.Gruppe)
+    || a.gruppe || '';
+  if (!gruppe) { _log('\u26A0 AntiStrip: Gruppe nicht erkannt'); return; }
+  var key = C.MemberNumber + '_' + gruppe;
+  _asWatchers[key] = {
+    memberNum:  C.MemberNumber,
+    gruppe:     gruppe,
+    delay:      a.antiStrip_delay != null ? a.antiStrip_delay : 500,
+    ersatz:     a.antiStrip_ersatz     || null,
+    farbe:      a.antiStrip_farbe      || '#ffffff',
+    itemConfig: a.antiStrip_itemConfig || null,
+    curseEntry: a.antiStrip_curseEntry || null,
+  };
+  _log('\u{1F6E1}\uFE0F AntiStrip aktiv: ' + C.Name + ' / ' + gruppe
+    + (a.antiStrip_ersatz ? ' \u2192 ' + a.antiStrip_ersatz : ' (gleiches Item)'));
+}
+function _asUnregister(C, gruppe) {
+  if (!gruppe) return;
+  var key = C.MemberNumber + '_' + gruppe;
+  if (_asWatchers[key]) {
+    delete _asWatchers[key];
+    _log('\u{1F6E1}\uFE0F AntiStrip beendet (Bot hat Item geändert/entfernt): '
+      + C.Name + ' / ' + gruppe);
+  }
+}
+// ─────────────────────────────────────────────────────────────
 const _cfg=${cfgJson};
 const _moneyCfg={queryCmd:_cfg.moneyQueryCmd??''};
 const _trigs=${trigsJson};
@@ -6397,7 +6497,8 @@ function _ok(trig,rohText,typKey,C){
     groups[groups.length-1].push(c);
   }
   // At least one group (OR) must be fully satisfied (AND within group)
-  return groups.some(g=>g.every(c=>checkOne(c)));
+  // und_nicht: Bedingung muss FALSCH sein
+  return groups.some(g=>g.every(c=>c.logik==='und_nicht'?!checkOne(c):checkOne(c)));
 }
 function _istBesetzt(x,y,ausschliessen){
   // Ignore target positions at 0,0 — BC hasn't synced position yet
@@ -6557,8 +6658,8 @@ function _execAct(a,C,vars){
     if(a.typ==='chat'){ServerSend('ChatRoomChat',{Content:_tpl(a.text,vars),Type:'Chat'});ok=true;}
     else if(a.typ==='emote'){ServerSend('ChatRoomChat',{Content:_tpl(a.text,vars),Type:'Emote'});ok=true;}
     else if(a.typ==='whisper'){ServerSend('ChatRoomChat',{Content:_tpl(a.text,vars),Type:'Whisper',Target:C.MemberNumber});ok=true;}
-    else if(a.typ==='item_entf'){InventoryRemove(C,a.gruppe);CharacterRefresh(C);ChatRoomCharacterUpdate(C);ok=true;}
-    else if(a.typ==='item'){_applyItemAction(a,C);ok=true;}
+    else if(a.typ==='item_entf'){const _entfGruppe=a.gruppe;InventoryRemove(C,_entfGruppe);CharacterRefresh(C);ChatRoomCharacterUpdate(C);_asUnregister(C,_entfGruppe);ok=true;}
+    else if(a.typ==='item'){_applyItemAction(a,C);if(a.antiStrip)_asRegister(C,a);ok=true;}
     else if(a.typ==='teleport'){ok=_teleport(a,C);}
     else if(a.typ==='money'){
       const op=a.money_op??'add';
@@ -6695,7 +6796,7 @@ function _okEv(ev,C,rohText,typKey){
     if(c.logik==='oder'||c.logik==='und_oder')groups.push([]);
     groups[groups.length-1].push(c);
   }
-  return groups.some(g=>g.every(c=>checkOne(c)));
+  return groups.some(g=>g.every(c=>c.logik==='und_nicht'?!checkOne(c):checkOne(c)));
 }
 
 function _fireEv(ev){
@@ -7596,6 +7697,76 @@ try {
 
 // ── ServerSocket: alle Spieler im Raum (IMMER aktiv, unabhaengig von nurEigene) ──
 // Eigene Nachrichten kommen NICHT via Socket zurueck – die kommen via hookFunction
+// ── AntiStrip Listener ──────────────────────────────────────
+_asH = function(data) {
+  if (!data || data.Type !== 'Action') return;
+  var txt = JSON.stringify(data);
+  if (txt.indexOf('ItemRemove') === -1 && txt.indexOf('ActionRemove') === -1) return;
+  // Sender ermitteln – Bot selbst? → kein AntiStrip
+  var sender = null;
+  if (Array.isArray(data.Dictionary)) {
+    for (var _di = 0; _di < data.Dictionary.length; _di++) {
+      if (data.Dictionary[_di].SourceCharacter != null) {
+        sender = data.Dictionary[_di].SourceCharacter; break;
+      }
+    }
+  }
+  if (sender === null) sender = data.Sender;
+  if (sender === Player.MemberNumber) return;
+  // Alle aktiven Watcher durchgehen
+  var _keys = Object.keys(_asWatchers);
+  for (var _wi = 0; _wi < _keys.length; _wi++) {
+    (function(w) {
+      var allChars = [Player].concat(ChatRoomCharacter || []);
+      var C = null;
+      for (var _ci = 0; _ci < allChars.length; _ci++) {
+        if (allChars[_ci].MemberNumber === w.memberNum) { C = allChars[_ci]; break; }
+      }
+      if (!C) return;
+      var item = (typeof InventoryGet === 'function') ? InventoryGet(C, w.gruppe) : null;
+      if (item) return; // Slot noch besetzt
+      _log('\u{1F6E1}\uFE0F AntiStrip: ' + w.gruppe + ' leer bei ' + C.Name + ' \u2192 lege wieder an...');
+      setTimeout(function() {
+        try {
+          if (w.itemConfig) {
+            var ic = w.itemConfig;
+            var col = ic.colors || ['#ffffff'];
+            if (typeof col === 'string' && col.indexOf(',') !== -1) col = col.split(',');
+            InventoryWear(C, ic.asset, ic.group, col, 0, Player.MemberNumber, ic.craft || null);
+            var itemNow = InventoryGet(C, ic.group);
+            if (itemNow) {
+              itemNow.Color = col;
+              itemNow.Property = itemNow.Property || {};
+              if (ic.tr && Object.keys(ic.tr).length) {
+                itemNow.Property.TypeRecord = ic.tr;
+                itemNow.Property.Type = ic.typeStr || '';
+              }
+              if (ic.props) Object.assign(itemNow.Property, ic.props);
+            }
+          } else if (w.curseEntry) {
+            var col2 = w.curseEntry.Farbe;
+            if (typeof col2 === 'string' && col2.indexOf(',') !== -1) col2 = col2.split(',');
+            InventoryWear(C, w.curseEntry.ItemName, w.curseEntry.Gruppe,
+              col2, 0, Player.MemberNumber, w.curseEntry.Craft || null);
+          } else if (w.ersatz) {
+            InventoryWear(C, w.ersatz, w.gruppe, w.farbe || '#ffffff', 0, Player.MemberNumber);
+          } else {
+            _log('\u26A0 AntiStrip: kein Ersatz konfiguriert f\u00fcr ' + w.gruppe);
+            return;
+          }
+          CharacterRefresh(C);
+          ChatRoomCharacterUpdate(C);
+          _log('\u2705 AntiStrip: ' + (w.ersatz || 'Item') + ' wieder angelegt auf ' + C.Name);
+        } catch(ex) {
+          _log('\u26A0 AntiStrip Fehler: ' + ex.message);
+        }
+      }, w.delay != null ? w.delay : 500);
+    })(_asWatchers[_keys[_wi]]);
+  }
+};
+ServerSocket.on('ChatRoomMessage', _asH);
+// ─────────────────────────────────────────────────────────────
+
 const _msgH=function(data){
   if(!['Chat','Emote','Whisper'].includes(data.Type))return;
   if(data.Sender===Player.MemberNumber)return; // eigene via hookFunction abgefangen
@@ -7621,6 +7792,7 @@ window['_BCBot_'+_BID]={
       window.ServerSend = window.__BCBot_origSend_${safeId};
       delete window.__BCBot_origSend_${safeId};
     }
+    if(_asH)  ServerSocket.off('ChatRoomMessage',_asH);
     if(_msgH) ServerSocket.off('ChatRoomMessage',_msgH);
     // Events timer stoppen
     Object.values(_evTimers).forEach(h=>clearTimeout(h)); // clears both _t and _i timers
