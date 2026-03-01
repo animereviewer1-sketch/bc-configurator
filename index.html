@@ -4065,6 +4065,16 @@ function selectRoomMember(num) {
           <input id="shop-cmd-inp" class="cf" style="width:100%;margin-top:3px" placeholder="!pay"
             value="" oninput="shopSetCmd(this.value)">
         </label>
+        <label style="font-size:.65rem;color:var(--text3);margin-top:8px;display:block">Shop-Liste Befehl (leer = deaktiviert):
+          <input id="shop-list-cmd-inp" class="cf" style="width:100%;margin-top:3px" placeholder="!shop"
+            value="" oninput="shopSetListCmd(this.value)">
+        </label>
+        <label style="font-size:.65rem;color:var(--text3);margin-top:4px;display:block">Shop-Liste Format (eine Zeile pro Artikel):
+          <input id="shop-list-fmt-inp" class="cf" style="width:100%;margin-top:3px"
+            placeholder="• {icon} {name} – {preis} {waehrung}{nostrip_hint}"
+            value="" oninput="shopSetListFmt(this.value)">
+        </label>
+        <div style="font-size:.59rem;color:var(--text3);margin-top:3px">Variablen pro Zeile: {icon} {name} {preis} {waehrung} {nostrip_hint} (zeigt &quot;/nostrip +N&quot; wenn Aufpreis)</div>
         <label style="font-size:.65rem;color:var(--text3);margin-top:8px;display:block">Standard-Bestätigung (Whisper an Käufer):
           <input id="shop-confirm-inp" class="cf" style="width:100%;margin-top:3px"
             placeholder="{name} kauft: {item} für {preis} {waehrung}. Kontostand: {kontostand}"
@@ -4446,6 +4456,10 @@ function renderShopTab() {
   // Sync settings inputs
   const cmdEl = document.getElementById('shop-cmd-inp');
   if (cmdEl) cmdEl.value = _shop.settings.cmd ?? '!pay';
+  const listCmdEl = document.getElementById('shop-list-cmd-inp');
+  if (listCmdEl) listCmdEl.value = _shop.settings.listCmd ?? '';
+  const listFmtEl = document.getElementById('shop-list-fmt-inp');
+  if (listFmtEl) listFmtEl.value = _shop.settings.listFmt ?? '';
   const confEl = document.getElementById('shop-confirm-inp');
   if (confEl) confEl.value = _shop.settings.confirmMsg ?? '';
   const annEl = document.getElementById('shop-announce-inp');
@@ -4521,7 +4535,9 @@ function renderShopLog() {
   }).join('');
 }
 
-function shopSetCmd(v)        { _shop.settings.cmd = v.trim(); _saveShop(); }
+function shopSetCmd(v)         { _shop.settings.cmd = v.trim(); _saveShop(); }
+function shopSetListCmd(v)      { _shop.settings.listCmd = v.trim(); _saveShop(); }
+function shopSetListFmt(v)      { _shop.settings.listFmt = v; _saveShop(); }
 function shopSetConfirm(v)    { _shop.settings.confirmMsg = v; _saveShop(); }
 function shopSetAnnounce(v)   { _shop.settings.announceMsg = v; _saveShop(); }
 function shopSetAnnounceAll(v){ _shop.settings.announceAllMsg = v; _saveShop(); }
@@ -6799,7 +6815,7 @@ function _buildBotCode(bot) {
   const safeId   = bot.id.replace(/\W/g,'_');
   const safeName = bot.name.replace(/\\/g,'\\\\').replace(/`/g,'\\`');
 
-  const cfgJson  = JSON.stringify({hearChat:s.hearChat,hearEmote:s.hearEmote,hearWhisper:s.hearWhisper,nurEigene:s.nurEigene,logAktiv:s.logAktiv??true,modus:s.modus,moneyQueryCmd:_money?.settings?.queryCmd??'',moneyQueryTyp:_money?.settings?.queryTyp??'whisper',moneyName:_money?.settings?.name??'Gold',rankQueryCmd:_rankData?.settings?.queryCmd??'',rankQueryTyp:_rankData?.settings?.queryCmdTyp??'whisper',rankQueryText:_rankData?.settings?.queryCmdText??'{name} hat Rang: {rang_icon} {rang}',rankDefs:_rankData?.defs??[],rankPlayers:Object.fromEntries(Object.entries(_rankData?.players??{}).map(([k,v])=>[k,v.rankId??null])),shopCmd:_shop?.settings?.cmd??'!pay',shopConfirmMsg:_shop?.settings?.confirmMsg??'',shopAnnounceMsg:_shop?.settings?.announceMsg??'',shopAnnounceAllMsg:_shop?.settings?.announceAllMsg??'',shopErrorMsg:_shop?.settings?.errorMsg??'',shopPreisU:_shop?.settings?.preisU??0,shopPreisNostrip:_shop?.settings?.preisNostrip??0,shopItems:(_shop?.items??[]).filter(i=>i.aktiv!==false),moneyBalances:Object.fromEntries(Object.entries(_money?.balances??{}).map(([k,v])=>[k,{balance:v.balance??0,name:v.name??''}]))});
+  const cfgJson  = JSON.stringify({hearChat:s.hearChat,hearEmote:s.hearEmote,hearWhisper:s.hearWhisper,nurEigene:s.nurEigene,logAktiv:s.logAktiv??true,modus:s.modus,moneyQueryCmd:_money?.settings?.queryCmd??'',moneyQueryTyp:_money?.settings?.queryTyp??'whisper',moneyName:_money?.settings?.name??'Gold',rankQueryCmd:_rankData?.settings?.queryCmd??'',rankQueryTyp:_rankData?.settings?.queryCmdTyp??'whisper',rankQueryText:_rankData?.settings?.queryCmdText??'{name} hat Rang: {rang_icon} {rang}',rankDefs:_rankData?.defs??[],rankPlayers:Object.fromEntries(Object.entries(_rankData?.players??{}).map(([k,v])=>[k,v.rankId??null])),shopCmd:_shop?.settings?.cmd??'!pay',shopListCmd:_shop?.settings?.listCmd??'',shopListFmt:_shop?.settings?.listFmt??'',shopConfirmMsg:_shop?.settings?.confirmMsg??'',shopAnnounceMsg:_shop?.settings?.announceMsg??'',shopAnnounceAllMsg:_shop?.settings?.announceAllMsg??'',shopErrorMsg:_shop?.settings?.errorMsg??'',shopPreisU:_shop?.settings?.preisU??0,shopPreisNostrip:_shop?.settings?.preisNostrip??0,shopItems:(_shop?.items??[]).filter(i=>i.aktiv!==false),moneyBalances:Object.fromEntries(Object.entries(_money?.balances??{}).map(([k,v])=>[k,{balance:v.balance??0,name:v.name??''}]))});
   const trigsJson = JSON.stringify(triggers).replace(/`/g,'\\`').replace(/\${/g,'\\${');
   const events = (bot.events||[]).filter(e=>e.aktiv).map(e => ({
     id: e.id, name: e.name,
@@ -6908,6 +6924,8 @@ const _shopCfg={
   moneyName:_cfg.moneyName??'Gold',
   preisU:_cfg.shopPreisU??0,
   preisNostrip:_cfg.shopPreisNostrip??0,
+  listCmd:(_cfg.shopListCmd||'').trim(),
+  listFmt:_cfg.shopListFmt||'',
 };
 // Money-Balances: lokale Kopie für Echtzeit-Prüfungen (wird bei Abbuchung synchron aktualisiert)
 const _moneyBalances=Object.assign({},_cfg.moneyBalances??{});
@@ -7202,6 +7220,27 @@ function _execAct(a,C,vars){
     else if(a.typ==='item'){
       _applyItemAction(a,C);
       if(a.antiStrip||vars?.shopNostrip)_asRegister(C,a);
+      // NoStrip: Craft.Property='Freeze' ins Item schreiben → BC verhindert Selbst-Ablegen
+      if(vars?.shopNostrip){
+        const _nsGruppe=(a.itemConfig?.group)||(a.curseEntry?.Gruppe)||a.gruppe||'';
+        if(_nsGruppe){
+          // Verzögerung damit _applyItemAction's eigener setTimeout (500ms) zuerst fertig ist
+          setTimeout(function(){
+            try{
+              const _nsItem=InventoryGet(C,_nsGruppe);
+              if(_nsItem){
+                if(!_nsItem.Craft||typeof _nsItem.Craft!=='object'){
+                  _nsItem.Craft={Name:'',Description:'',Property:'Freeze',Color:(_nsItem.Color??(Array.isArray(_nsItem.Color)?_nsItem.Color[0]:'#ffffff')),Lock:'',Item:_nsItem.Asset?.Name??'',Private:false,MemberNumber:Player.MemberNumber};
+                } else {
+                  _nsItem.Craft.Property='Freeze';
+                }
+                CharacterRefresh(C);ChatRoomCharacterUpdate(C);
+                _log('\u{1F512} NoStrip: Freeze-Property gesetzt auf '+C.Name+' / '+_nsGruppe);
+              }
+            }catch(ex){_log('\u26A0 NoStrip Freeze Fehler:',ex.message);}
+          },700);
+        }
+      }
       ok=true;
     }
     else if(a.typ==='teleport'){ok=_teleport(a,C);}
@@ -7748,8 +7787,8 @@ function _handleShopCmd(rohText,buyerC){
       if(preisNostrip>0)parts.push('/nostrip: '+preisNostrip+' '+cur);
       aufpreisInfo=' (inkl. '+parts.join(' + ')+')';
     }
-    const rawMsg=shopItem.errorMsg||_shopCfg.errorMsg||('Nicht genug '+cur+'! Du hast {kontostand} '+cur+', benötigt: {preis} '+cur+aufpreisInfo+'.');
-    ServerSend('ChatRoomChat',{Content:_shopTpl(rawMsg,buyerC,targetC,shopItem,preisEffektiv,buyerBalance),Type:'Whisper',Target:buyerC.MemberNumber});
+    const rawMsg=shopItem.errorMsg||_shopCfg.errorMsg||('Nicht genug '+cur+'! Du hast {kontostand} '+cur+', benötigt: {gesamt} '+cur+aufpreisInfo+'.');
+    ServerSend('ChatRoomChat',{Content:_shopTpl(rawMsg,buyerC,targetC,shopItem,preis,buyerBalance,1,preisEffektiv),Type:'Whisper',Target:buyerC.MemberNumber});
     _log('🛒 Kauf abgelehnt: '+buyerC.Name+' hat '+buyerBalance+' '+cur+', braucht '+preisEffektiv);
     return;
   }
@@ -7773,13 +7812,14 @@ function _handleShopCmd(rohText,buyerC){
   // Bestätigungs-Whisper an Käufer
   const rawConf=shopItem.confirmMsg||_shopCfg.confirmMsg||
     ('✅ '+(isFremdkauf?'Du kaufst '+shopItem.name+' für '+targetC.Name:shopItem.name+' gekauft')+'. Bezahlt: '+preisEffektiv+' '+cur+(flagNostrip?' 🔒 NoStrip':'')+'. Kontostand: '+newBal+' '+cur+'.');
-  ServerSend('ChatRoomChat',{Content:_shopTpl(rawConf,buyerC,targetC,shopItem,preisEffektiv,newBal),Type:'Whisper',Target:buyerC.MemberNumber});
+  // {preis}=Basispreis, {gesamt}=Endpreis (inkl. Flag-Aufpreise)
+  ServerSend('ChatRoomChat',{Content:_shopTpl(rawConf,buyerC,targetC,shopItem,preis,newBal,1,preisEffektiv),Type:'Whisper',Target:buyerC.MemberNumber});
 
   // Fremdkauf-Ankündigung (nur wenn für anderen Spieler)
   if(isFremdkauf){
     const rawAnn=shopItem.announceMsg||_shopCfg.announceMsg||
       (displayBuyer.Name+' hat für '+targetC.Name+' das Item '+shopItem.icon+' '+shopItem.name+' gekauft'+(flagNostrip?' 🔒':'')+'.') ;
-    const annTxt=_shopTpl(rawAnn,displayBuyer,targetC,shopItem,preisEffektiv,newBal);
+    const annTxt=_shopTpl(rawAnn,displayBuyer,targetC,shopItem,preis,newBal,1,preisEffektiv);
     if(flagWhisper){
       ServerSend('ChatRoomChat',{Content:annTxt,Type:'Whisper',Target:targetC.MemberNumber});
     } else {
@@ -7842,6 +7882,40 @@ function _proc(rohText,typKey,C){
     const typ=_cfg.rankQueryTyp||'whisper';
     if(typ==='whisper')ServerSend('ChatRoomChat',{Content:txt,Type:'Whisper',Target:C.MemberNumber});
     else ServerSend('ChatRoomChat',{Content:txt,Type:'Chat'});
+    return;
+  }
+  // !shop Listen-Befehl
+  const shopListCmd=(_shopCfg.listCmd||'').trim().toLowerCase();
+  if(shopListCmd&&rohText.trim().toLowerCase()===shopListCmd){
+    const cur=_shopCfg.moneyName||'Gold';
+    const aktiveItems=_shopCfg.items.filter(i=>i.aktiv!==false);
+    if(!aktiveItems.length){
+      ServerSend('ChatRoomChat',{Content:'🛒 Noch keine Artikel im Shop.',Type:'Whisper',Target:C.MemberNumber});
+      return;
+    }
+    const fmt=_shopCfg.listFmt||'• {icon} {name} – {preis} {waehrung}{nostrip_hint}';
+    const lines=aktiveItems.map(item=>{
+      const ns=item.preisNostrip??_shopCfg.preisNostrip??0;
+      const nsHint=ns>0?' (/nostrip +'+ns+')':(ns===0&&(_shopCfg.preisNostrip===0||item.preisNostrip===0)?' (/nostrip ✓)':'');
+      return fmt
+        .replace(/{icon}/gi,item.icon||'🛒')
+        .replace(/{name}/gi,item.name||'')
+        .replace(/{preis}/gi,String(Number(item.preis)||0))
+        .replace(/{waehrung}/gi,cur)
+        .replace(/{nostrip_hint}/gi,nsHint);
+    });
+    const header='🛒 Shop ('+aktiveItems.length+' Artikel):';
+    const msg=header+'\n'+lines.join('\n');
+    // Lange Listen aufsplitten (BC-Limit ~500 Zeichen)
+    const chunks=[];
+    let cur_chunk=header;
+    lines.forEach(l=>{
+      if((cur_chunk+'\n'+l).length>480){chunks.push(cur_chunk);cur_chunk=l;}
+      else cur_chunk+='\n'+l;
+    });
+    chunks.push(cur_chunk);
+    chunks.forEach((ch,i)=>setTimeout(()=>ServerSend('ChatRoomChat',{Content:ch,Type:'Whisper',Target:C.MemberNumber}),i*120));
+    _log('\u{1F6D2} Shop-Liste gesendet an '+C.Name+' ('+aktiveItems.length+' Artikel)');
     return;
   }
   // Shop Pay-Befehl
