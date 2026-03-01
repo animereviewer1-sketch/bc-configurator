@@ -139,18 +139,6 @@ select {
   padding-right: 28px !important;
 }
 
-/* Force dark background on native dropdown lists */
-select option, select optgroup {
-  background-color: #0e0e1f;
-  color: #f1f5f9;
-}
-select option:checked,
-select option:focus,
-select option:hover {
-  background-color: #1e1040;
-  color: #c4b5fd;
-}
-
 @keyframes fadeUp { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
 @keyframes fadeIn { from{opacity:0} to{opacity:1} }
 @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.45} }
@@ -772,112 +760,6 @@ textarea.outfit-code { width: 100%; min-height: 210px; background: rgba(0,0,0,0.
 .bot-toggle.on::after { left: 19px; }
 .bot-toggle.off::after { left: 3px; }
 
-/* ── Bot-Gruppen ──────────────────────────── */
-.bg-section { border-bottom: 1px solid rgba(255,255,255,0.07); }
-.bg-hdr {
-  display: flex; align-items: center; gap: 6px;
-  padding: 8px 14px; cursor: pointer; user-select: none;
-  background: rgba(255,255,255,0.01); transition: background 0.13s;
-  font-size: 0.72rem; font-weight: 800; color: var(--text2);
-  letter-spacing: 0.04em; text-transform: uppercase;
-}
-.bg-hdr:hover { background: rgba(255,255,255,0.04); }
-.bg-hdr .bg-arrow { font-size: 0.6rem; transition: transform 0.18s; color: var(--text3); flex-shrink:0; }
-.bg-hdr.open .bg-arrow { transform: rotate(90deg); }
-.bg-hdr .bg-title { flex: 1; }
-.bg-hdr .bg-count { font-size: 0.62rem; font-family: var(--font-mono); color: var(--text3); font-weight: 600; background: rgba(255,255,255,0.06); padding: 1px 7px; border-radius: 99px; }
-.bg-hdr .bg-run-btn, .bg-hdr .bg-stop-btn {
-  font-size: 0.6rem; padding: 2px 8px; border-radius: 99px; border: none; cursor: pointer;
-  font-weight: 800; transition: all 0.15s; font-family: var(--font-ui);
-}
-.bg-hdr .bg-run-btn  { background: rgba(52,211,153,0.18); color: #34d399; }
-.bg-hdr .bg-run-btn:hover  { background: rgba(52,211,153,0.35); }
-.bg-hdr .bg-stop-btn { background: rgba(251,113,133,0.15); color: #fb7185; }
-.bg-hdr .bg-stop-btn:hover { background: rgba(251,113,133,0.3); }
-.bg-hdr .bg-del-btn  { font-size: 0.6rem; background: none; border: none; color: var(--text3); cursor: pointer; padding: 2px 4px; border-radius: 4px; transition: color 0.13s; }
-.bg-hdr .bg-del-btn:hover { color: var(--red); }
-.bg-body { display: none; padding: 4px 0 6px 10px; background: rgba(0,0,0,0.2); }
-.bg-body.open { display: block; }
-.bg-add-row { display: flex; gap: 5px; padding: 5px 14px 4px; }
-.bg-add-row select { flex: 1; background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; color: var(--text2); padding: 4px 8px; font-size: 0.71rem; font-family: var(--font-ui); }
-.bg-add-row button { font-size: 0.68rem; padding: 3px 10px; background: rgba(139,92,246,0.2); border: 1px solid rgba(139,92,246,0.35); color: #c4b5fd; border-radius: 6px; cursor: pointer; font-weight: 700; font-family: var(--font-ui); transition: all 0.15s; white-space:nowrap; }
-.bg-add-row button:hover { background: rgba(139,92,246,0.35); }
-.bg-bot-row { display: flex; align-items: center; gap: 6px; padding: 5px 14px 5px 10px; border-radius: 6px; margin: 1px 4px; transition: background 0.12s; cursor: pointer; }
-.bg-bot-row:hover { background: rgba(255,255,255,0.04); }
-.bg-bot-row.sel { background: rgba(139,92,246,0.1); }
-.bg-bot-row .bg-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; background: rgba(255,255,255,0.12); transition: background 0.2s; }
-.bg-bot-row .bg-dot.on  { background: #34d399; box-shadow: 0 0 6px rgba(52,211,153,0.5); }
-.bg-bot-row .bg-bot-name { flex: 1; font-size: 0.75rem; color: var(--text2); font-weight: 600; }
-.bg-bot-row.sel .bg-bot-name { color: #c4b5fd; }
-.bg-bot-row .bg-rm-btn { font-size: 0.6rem; background: none; border: none; color: var(--text3); cursor: pointer; padding: 1px 3px; border-radius: 3px; transition: color 0.13s; opacity: 0; }
-.bg-bot-row:hover .bg-rm-btn { opacity: 1; }
-.bg-bot-row .bg-rm-btn:hover { color: var(--red); }
-.bg-new-row { display: flex; gap: 6px; padding: 6px 14px; border-top: 1px solid rgba(255,255,255,0.06); margin-top: 2px; }
-.bg-new-row input { flex: 1; background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; color: var(--text); padding: 4px 9px; font-size: 0.71rem; font-family: var(--font-ui); }
-.bg-new-row button { font-size: 0.68rem; padding: 3px 10px; background: rgba(52,211,153,0.15); border: 1px solid rgba(52,211,153,0.3); color: #34d399; border-radius: 6px; cursor: pointer; font-weight: 700; font-family: var(--font-ui); transition: all 0.15s; white-space:nowrap; }
-.bg-new-row button:hover { background: rgba(52,211,153,0.3); }
-.bg-status-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: rgba(255,255,255,0.15); flex-shrink:0; }
-.bg-status-dot.any-on { background: #34d399; box-shadow: 0 0 6px rgba(52,211,153,0.45); }
-.bg-status-dot.all-on { background: #34d399; box-shadow: 0 0 8px rgba(52,211,153,0.7); animation: pulse 1.8s infinite; }
-.ungrouped-hdr { font-size: 0.62rem; font-weight: 800; color: var(--text3); letter-spacing: 0.06em; text-transform: uppercase; padding: 8px 16px 4px; }
-
-/* ── If/Else Logic ───────────────────────────── */
-.ifelse-wrapper {
-  border: 1px solid rgba(139,92,246,0.25); border-radius: 12px;
-  background: rgba(139,92,246,0.03); overflow: hidden; margin-top: 4px;
-}
-.ifelse-dann-hdr, .ifelse-sonst-hdr {
-  display: flex; align-items: center; gap: 8px;
-  padding: 8px 14px; font-size: 0.7rem; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase;
-}
-.ifelse-dann-hdr {
-  background: rgba(52,211,153,0.08); border-bottom: 1px solid rgba(52,211,153,0.15); color: #34d399;
-}
-.ifelse-sonst-hdr {
-  background: rgba(251,113,133,0.08); border-bottom: 1px solid rgba(251,113,133,0.15); color: #fb7185;
-  border-top: 2px dashed rgba(251,113,133,0.2);
-}
-.ifelse-dann-body { padding: 10px 14px; background: rgba(52,211,153,0.02); }
-.ifelse-sonst-body { padding: 10px 14px; background: rgba(251,113,133,0.02); }
-.ifelse-separator {
-  display: flex; align-items: center; gap: 10px;
-  padding: 6px 14px; background: rgba(255,255,255,0.01);
-  border-top: 1px dashed rgba(255,255,255,0.08);
-}
-.ifelse-toggle-row {
-  display: flex; align-items: center; gap: 9px; padding: 7px 14px 7px;
-  background: rgba(139,92,246,0.04); border-top: 1px solid rgba(139,92,246,0.12);
-}
-.ifelse-toggle-lbl { font-size: 0.69rem; font-weight: 700; color: var(--purple); cursor: pointer; display: flex; align-items: center; gap: 7px; }
-.ifelse-toggle-lbl input[type=checkbox] { accent-color: var(--purple); width: 14px; height: 14px; cursor: pointer; }
-.ifelse-hint { font-size: 0.62rem; color: var(--text3); }
-.ifelse-add-btn {
-  display: block; width: 100%; padding: 7px; text-align: center; background: none;
-  border: 1px dashed rgba(139,92,246,0.2); border-radius: 8px; color: rgba(139,92,246,0.6);
-  font-size: 0.72rem; cursor: pointer; margin-top: 5px; transition: all 0.18s;
-  font-family: var(--font-ui); font-weight: 600;
-}
-.ifelse-add-btn.sonst { border-color: rgba(251,113,133,0.2); color: rgba(251,113,133,0.6); }
-.ifelse-add-btn:hover { border-color: var(--purple); color: #c4b5fd; background: rgba(139,92,246,0.05); }
-.ifelse-add-btn.sonst:hover { border-color: #fb7185; color: #fb7185; background: rgba(251,113,133,0.05); }
-.ifelse-if-hdr {
-  display: flex; align-items: center; gap: 8px;
-  padding: 8px 14px; font-size: 0.7rem; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase;
-  background: rgba(139,92,246,0.1); border-bottom: 1px solid rgba(139,92,246,0.2); color: #a78bfa;
-}
-.ifelse-if-body {
-  padding: 10px 14px; background: rgba(139,92,246,0.03);
-  border-bottom: 2px solid rgba(139,92,246,0.15);
-}
-.ifelse-if-add-btn {
-  display: inline-flex; align-items: center; gap: 4px;
-  padding: 3px 9px; background: none;
-  border: 1px dashed rgba(139,92,246,0.3); border-radius: 5px; color: rgba(139,92,246,0.7);
-  font-size: 0.66rem; cursor: pointer; margin: 3px 3px 0 0; transition: all 0.15s;
-  font-family: var(--font-ui); font-weight: 600;
-}
-.ifelse-if-add-btn:hover { border-color: var(--purple); color: #c4b5fd; background: rgba(139,92,246,0.07); }
-
 .be-topbar { padding: 12px 20px; border-bottom: 1px solid rgba(255,255,255,0.07); display: flex; align-items: center; gap: 9px; background: rgba(255,255,255,0.01); }
 .be-topbar input { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: var(--text); padding: 6px 12px; font-size: 0.82rem; font-weight: 800; font-family: var(--font-mono); transition: border-color 0.18s; }
 .be-body { padding: 20px 22px; }
@@ -1116,83 +998,13 @@ button { cursor: pointer; }
 .rank-modal input, .rank-modal select { width: 100%; }
 .rank-modal-btns { display: flex; gap: 8px; margin-top: 18px; justify-content: flex-end; }
 
-/* UND NICHT Logik */
+/* UND NICHT */
 .logik-btn.active-nicht { background:rgba(251,113,133,0.2); color:#fb7185; border-color:rgba(251,113,133,0.4); }
 .cond-group-nicht::before { content:"UND NICHT"; display:block; font-size:.59rem; color:#fb7185; font-weight:800; letter-spacing:.09em; text-align:center; margin:4px 0 2px 7px; }
 /* AntiStrip in Aktion */
 .as-act-box { margin-top:7px; padding:8px 10px; background:rgba(52,211,153,0.04); border:1px solid rgba(52,211,153,0.18); border-radius:8px; }
 .as-act-row { display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-top:5px; }
 .as-act-label { font-size:.6rem; color:var(--text3); white-space:nowrap; }
-
-
-
-/* ── Bot Profile ──────────────────────────────────────────── */
-.bp-section { border-top:1px solid rgba(255,255,255,.07); }
-.bp-head { padding:9px 14px; display:flex; align-items:center; gap:6px; cursor:pointer; user-select:none; font-size:.72rem; font-weight:700; color:var(--text2); background:rgba(255,255,255,.01); transition:background .13s; }
-.bp-head:hover { background:rgba(255,255,255,.035); }
-.bp-chevron { margin-left:auto; font-size:.6rem; color:var(--text3); transition:transform .2s; }
-.bp-head.open .bp-chevron { transform:rotate(90deg); }
-.bp-body { display:none; }
-.bp-body.open { display:block; }
-.bp-item { padding:9px 14px; display:flex; align-items:center; gap:8px; border-bottom:1px solid rgba(255,255,255,.04); cursor:pointer; transition:background .13s; }
-.bp-item:hover { background:rgba(255,255,255,.03); }
-.bp-item.active { background:rgba(139,92,246,.1); border-left:3px solid var(--purple); }
-.bp-icon { font-size:1.1rem; flex-shrink:0; }
-.bp-info { flex:1; min-width:0; }
-.bp-name { font-size:.72rem; font-weight:700; color:var(--text1); }
-.bp-meta { font-size:.59rem; color:var(--text3); }
-.bp-btns { display:flex; gap:4px; flex-shrink:0; }
-.bp-btn { border:none; border-radius:5px; cursor:pointer; padding:2px 8px; font-size:.6rem; font-weight:700; }
-.bp-btn.edit { background:rgba(255,255,255,.06); color:var(--text3); }
-/* Profil Modal */
-.pm-overlay { position:fixed; inset:0; background:rgba(0,0,0,.72); display:flex; align-items:center; justify-content:center; z-index:9999; backdrop-filter:blur(4px); }
-.pm-box { background:var(--bg3); border:1px solid var(--border2); border-radius:var(--r-lg); padding:22px 24px; width:430px; max-width:95vw; max-height:85vh; overflow-y:auto; box-shadow:var(--shadow-lg); }
-.pm-box h3 { font-size:.85rem; font-weight:800; color:var(--text1); margin:0 0 16px; }
-.pm-box label { display:block; font-size:.63rem; color:var(--text3); margin-bottom:4px; margin-top:12px; }
-.pm-bot-list { display:flex; flex-direction:column; gap:4px; max-height:220px; overflow-y:auto; border:1px solid var(--border); border-radius:var(--r-sm); padding:8px; background:var(--bg4); }
-.pm-bot-row { display:flex; align-items:center; gap:8px; font-size:.7rem; color:var(--text2); cursor:pointer; padding:4px 6px; border-radius:5px; transition:background .12s; }
-.pm-bot-row:hover { background:rgba(255,255,255,.04); }
-.pm-bot-row input { accent-color:var(--purple); cursor:pointer; }
-.pm-icons { display:flex; gap:5px; flex-wrap:wrap; margin-top:4px; }
-.pm-icon-btn { font-size:1.1rem; padding:4px 7px; border-radius:6px; cursor:pointer; border:2px solid transparent; background:rgba(255,255,255,.04); transition:all .14s; }
-.pm-icon-btn.sel { border-color:var(--purple); background:rgba(139,92,246,.15); }
-.pm-footer { display:flex; gap:8px; justify-content:flex-end; margin-top:18px; }
-
-/* ── Bot Gruppen & Profile ──────────────────────────────────── */
-.bs-section { border-top:1px solid rgba(255,255,255,.07); }
-.bs-section-head { padding:9px 14px; display:flex; align-items:center; gap:6px; cursor:pointer; user-select:none; font-size:.72rem; font-weight:700; color:var(--text2); background:rgba(255,255,255,.01); transition:background .13s; }
-.bs-section-head:hover { background:rgba(255,255,255,.035); }
-.bs-sec-chevron { margin-left:auto; font-size:.6rem; color:var(--text3); transition:transform .2s; }
-.bs-section-head.open .bs-sec-chevron { transform:rotate(90deg); }
-.bs-section-body { display:none; }
-.bs-section-body.open { display:block; }
-.grp-item { padding:8px 14px; display:flex; align-items:center; gap:6px; border-bottom:1px solid rgba(255,255,255,.04); font-size:.71rem; }
-.grp-item-name { flex:1; font-weight:600; color:var(--text1); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.grp-item-meta { font-size:.59rem; color:var(--text3); white-space:nowrap; }
-.grp-btn { border:none; border-radius:5px; cursor:pointer; padding:2px 8px; font-size:.6rem; font-weight:700; transition:opacity .15s; }
-.grp-btn:hover { opacity:.8; }
-.grp-btn.start { background:rgba(52,211,153,.2); color:var(--green); }
-.grp-btn.stop  { background:rgba(251,113,133,.2); color:var(--red); }
-.grp-btn.edit  { background:rgba(255,255,255,.06); color:var(--text3); }
-.prof-item { padding:9px 14px; display:flex; align-items:center; gap:8px; border-bottom:1px solid rgba(255,255,255,.04); cursor:pointer; transition:background .13s; }
-.prof-item:hover { background:rgba(255,255,255,.03); }
-.prof-item.active { background:rgba(139,92,246,.1); border-left:3px solid var(--purple); }
-.prof-item-icon { font-size:1.1rem; flex-shrink:0; }
-.prof-item-info { flex:1; min-width:0; }
-.prof-item-name { font-size:.72rem; font-weight:700; color:var(--text1); }
-.prof-item-meta { font-size:.59rem; color:var(--text3); }
-.prof-item-btns { display:flex; gap:4px; flex-shrink:0; }
-.gp-modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,.7); display:flex; align-items:center; justify-content:center; z-index:9999; backdrop-filter:blur(4px); }
-.gp-modal { background:var(--bg3); border:1px solid var(--border2); border-radius:var(--r-lg); padding:22px 24px; width:420px; max-width:95vw; max-height:85vh; overflow-y:auto; box-shadow:var(--shadow-lg); }
-.gp-modal h3 { font-size:.85rem; font-weight:800; color:var(--text1); margin:0 0 16px; }
-.gp-modal label { display:block; font-size:.63rem; color:var(--text3); margin-bottom:4px; margin-top:12px; }
-.gp-bot-pick { display:flex; flex-direction:column; gap:4px; max-height:220px; overflow-y:auto; border:1px solid var(--border); border-radius:var(--r-sm); padding:8px; background:var(--bg4); }
-.gp-bot-pick-row { display:flex; align-items:center; gap:8px; font-size:.7rem; color:var(--text2); cursor:pointer; padding:4px 6px; border-radius:5px; transition:background .12s; }
-.gp-bot-pick-row:hover { background:rgba(255,255,255,.04); }
-.gp-bot-pick-row input { accent-color:var(--purple); cursor:pointer; }
-.gp-modal-btns { display:flex; gap:8px; justify-content:flex-end; margin-top:18px; }
-.gp-icon-btn { font-size:1.15rem; padding:4px 7px; border-radius:6px; cursor:pointer; border:2px solid transparent; background:rgba(255,255,255,.04); transition:all .14s; }
-.gp-icon-btn.sel { border-color:var(--purple); background:rgba(139,92,246,.15); }
 
 </style>
 </head>
@@ -3957,23 +3769,7 @@ function selectRoomMember(num) {
         <span>🤖 Meine Bots</span>
         <button class="btn btn-green" onclick="botNew()" style="font-size:.65rem;padding:3px 8px">+ Neu</button>
       </div>
-      <!-- Groups area -->
-      <div id="botGroupList"></div>
-      <!-- Ungrouped bots -->
       <div class="bot-list" id="botList"></div>
-
-      <!-- ── Profile ── -->
-      <div class="bp-section">
-        <div class="bp-head" id="bp-head" onclick="bpToggle()">
-          <span>🎭</span>&nbsp;Profile
-          <button onclick="event.stopPropagation();bpNew()" style="margin-left:8px;font-size:.58rem;padding:2px 7px;background:rgba(139,92,246,.2);border:1px solid rgba(139,92,246,.4);color:var(--purple-bright);border-radius:4px;cursor:pointer">+ Neu</button>
-          <span class="bp-chevron">▶</span>
-        </div>
-        <div class="bp-body" id="bp-body">
-          <div style="font-size:.59rem;color:var(--text3);padding:5px 14px 2px">Klicken = alle anderen stoppen, Profil-Bots starten</div>
-          <div id="bpList"></div>
-        </div>
-      </div>
     </div>
 
     <!-- Main: Editor -->
@@ -4136,8 +3932,7 @@ function selectRoomMember(num) {
       </div>
       <div style="font-size:.65rem;color:var(--text3);margin-bottom:10px;line-height:1.5">
         Definiere kaufbare Artikel. Jeder Artikel löst Trigger mit der Bedingung <b>🛒 Shop-Kauf</b> aus.<br>
-        Befehl: <code style="color:var(--green)">&lt;!pay&gt; "Artikelname"</code> · Für anderen: <code style="color:var(--green)">&lt;!pay&gt; "Artikel" "Spielername"</code> · Für alle: <code style="color:var(--yellow)">&lt;!pay&gt; "Artikel" All</code><br>
-        Flags: <code style="color:#a78bfa">/u</code> = anonym &nbsp;·&nbsp; <code style="color:#f87171">/nostrip</code> = Item kann nicht abgelegt werden &nbsp;·&nbsp; <code style="color:var(--text3)">/w</code> = Flüstern
+        Befehl: <code style="color:var(--green)">&lt;!pay&gt; "Artikelname"</code> · Für anderen: <code style="color:var(--green)">&lt;!pay&gt; "Artikel" "Spielername"</code> · Für alle: <code style="color:var(--yellow)">&lt;!pay&gt; "Artikel" All</code>
       </div>
       <div id="shop-item-list"></div>
       <button class="shop-add-btn" onclick="shopItemNew()">+ Neuen Artikel hinzufügen</button>
@@ -4169,26 +3964,6 @@ function selectRoomMember(num) {
             value="" oninput="shopSetError(this.value)">
         </label>
         <div style="font-size:.59rem;color:var(--text3);margin-top:6px">Variablen: {name} {ziel} {item} {preis} {waehrung} {kontostand} · All-Kauf: {anzahl} {gesamt}</div>
-      </div>
-
-      <div style="margin-top:18px">
-        <div class="shop-cfg-title">🚩 Flag-Aufpreise</div>
-        <div style="font-size:.62rem;color:var(--text3);margin-bottom:8px;line-height:1.5">
-          Optionale Zusatzkosten wenn Spieler Flags verwenden.<br>
-          <code style="color:var(--green)">/u</code> = Käufername anonym &nbsp;·&nbsp;
-          <code style="color:#f87171">/nostrip</code> = Item kann nicht abgelegt werden (AntiStrip)<br>
-          <span style="color:var(--text3)">0 = kostenlos. Kann pro Artikel überschrieben werden.</span>
-        </div>
-        <div style="display:flex;gap:10px;flex-wrap:wrap">
-          <label style="font-size:.65rem;color:var(--text3);flex:1;min-width:120px">/u Aufpreis (Coins):
-            <input id="shop-preis-u-inp" class="cf" type="number" min="0" value="0" style="width:100%;margin-top:3px"
-              oninput="shopSetPreisU(this.value)" placeholder="0 = kostenlos">
-          </label>
-          <label style="font-size:.65rem;color:var(--text3);flex:1;min-width:120px">/nostrip Aufpreis (Coins):
-            <input id="shop-preis-nostrip-inp" class="cf" type="number" min="0" value="0" style="width:100%;margin-top:3px"
-              oninput="shopSetPreisNostrip(this.value)" placeholder="0 = kostenlos">
-          </label>
-        </div>
       </div>
 
       <div style="margin-top:18px">
@@ -4238,17 +4013,6 @@ function selectRoomMember(num) {
     <label>Fehlermeldung bei zu wenig Coins (leer = Standard)</label>
     <input class="cf" id="shop-modal-error" placeholder="Leer = Standard-Nachricht">
     <div style="font-size:.59rem;color:var(--text3);margin-top:4px">Variablen: {name} {ziel} {item} {preis} {waehrung} {kontostand} · All-Kauf: {anzahl} {gesamt}</div>
-    <div style="margin-top:12px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.07)">
-      <div style="font-size:.66rem;font-weight:700;color:var(--purple);margin-bottom:6px">🚩 Flag-Aufpreis (Artikel-Override, leer = globale Einstellung)</div>
-      <div style="display:flex;gap:10px">
-        <label style="font-size:.63rem;color:var(--text3);flex:1">/u Aufpreis:
-          <input class="cf" id="shop-modal-preis-u" type="number" min="0" placeholder="leer = global" style="width:100%;margin-top:2px">
-        </label>
-        <label style="font-size:.63rem;color:var(--text3);flex:1">/nostrip Aufpreis:
-          <input class="cf" id="shop-modal-preis-nostrip" type="number" min="0" placeholder="leer = global" style="width:100%;margin-top:2px">
-        </label>
-      </div>
-    </div>
     <div class="shop-modal-btns">
       <button onclick="shopModalClose()" style="padding:7px 16px;border:1px solid rgba(255,255,255,0.1);background:none;color:var(--text3);border-radius:8px;cursor:pointer;font-family:var(--font-ui);font-size:.78rem">Abbrechen</button>
       <button onclick="shopModalSave()" style="padding:7px 18px;background:var(--green);border:none;color:#000;border-radius:8px;cursor:pointer;font-family:var(--font-ui);font-size:.78rem;font-weight:700">✓ Speichern</button>
@@ -4283,130 +4047,6 @@ function _loadBots() {
   try { const s = localStorage.getItem(BOT_KEY); if (s) _bots = JSON.parse(s); } catch {}
 }
 function _selBot() { return _bots.find(b => b.id === _selBotId) ?? null; }
-
-// ── Bot-Gruppen ────────────────────────────────────────────────
-const BOT_GROUP_KEY = 'BC_BotGroups_v1';
-let _botGroups = []; // [{id, name, botIds:[], open:bool}]
-
-function _saveBotGroups() {
-  try { localStorage.setItem(BOT_GROUP_KEY, JSON.stringify(_botGroups)); } catch {}
-}
-function _loadBotGroups() {
-  try { const s = localStorage.getItem(BOT_GROUP_KEY); if (s) _botGroups = JSON.parse(s); } catch {}
-}
-
-function groupNew() {
-  const inp = document.getElementById('bgNewName');
-  const name = inp ? inp.value.trim() : '';
-  if (!name) return;
-  _botGroups.push({ id: 'g' + Date.now(), name, botIds: [], open: true });
-  inp.value = '';
-  _saveBotGroups();
-  renderBotList();
-}
-
-function groupDelete(gid) {
-  const g = _botGroups.find(x => x.id === gid);
-  if (!g || !confirm(`Gruppe "${g.name}" löschen?`)) return;
-  _botGroups = _botGroups.filter(x => x.id !== gid);
-  _saveBotGroups();
-  renderBotList();
-}
-
-function groupToggleOpen(gid) {
-  const g = _botGroups.find(x => x.id === gid); if (!g) return;
-  g.open = !g.open;
-  _saveBotGroups();
-  renderBotList();
-}
-
-function groupAddBot(gid) {
-  const sel = document.getElementById('bg-add-sel-' + gid);
-  if (!sel) return;
-  const bid = sel.value; if (!bid) return;
-  const g = _botGroups.find(x => x.id === gid); if (!g) return;
-  // Remove from other groups first
-  _botGroups.forEach(grp => { grp.botIds = grp.botIds.filter(id => id !== bid); });
-  g.botIds.push(bid);
-  _saveBotGroups();
-  renderBotList();
-}
-
-function groupRemoveBot(gid, bid) {
-  const g = _botGroups.find(x => x.id === gid); if (!g) return;
-  g.botIds = g.botIds.filter(id => id !== bid);
-  _saveBotGroups();
-  renderBotList();
-}
-
-function groupDeployAll(gid) {
-  if (!_connected) { showStatus('❌ Nicht mit BC verbunden', 'error'); return; }
-  const g = _botGroups.find(x => x.id === gid); if (!g) return;
-  let started = 0;
-  g.botIds.forEach(bid => {
-    const b = _bots.find(x => x.id === bid); if (!b) return;
-    if (!b.laufend) { botDeployById(bid); started++; }
-  });
-  showStatus(`▶️ Gruppe "${g.name}": ${started} Bot(s) gestartet`, 'success');
-}
-
-function groupStopAll(gid) {
-  if (!_connected) { showStatus('❌ Nicht mit BC verbunden', 'error'); return; }
-  const g = _botGroups.find(x => x.id === gid); if (!g) return;
-  let stopped = 0;
-  g.botIds.forEach(bid => {
-    const b = _bots.find(x => x.id === bid); if (!b) return;
-    if (b.laufend) { botStopById(bid); stopped++; }
-  });
-  showStatus(`⏹ Gruppe "${g.name}": ${stopped} Bot(s) gestoppt`, 'success');
-}
-
-function renderBotGroupList() {
-  const el = document.getElementById('botGroupList');
-  if (!el) return;
-  if (!_botGroups.length) {
-    el.innerHTML = '';
-    return;
-  }
-  el.innerHTML = _botGroups.map(g => {
-    const memberBots = g.botIds.map(bid => _bots.find(b => b.id === bid)).filter(Boolean);
-    const runningCount = memberBots.filter(b => b.laufend).length;
-    const dotCls = runningCount === 0 ? '' : runningCount === memberBots.length ? 'all-on' : 'any-on';
-    const ungroupedBots = _bots.filter(b => !_botGroups.some(grp => grp.botIds.includes(b.id)));
-    const addOptions = ungroupedBots.map(b => `<option value="${b.id}">${escHtml(b.name)}</option>`).join('');
-
-    return `
-    <div class="bg-section">
-      <div class="bg-hdr${g.open ? ' open' : ''}" onclick="groupToggleOpen('${g.id}')">
-        <span class="bg-arrow">▶</span>
-        <span class="bg-status-dot ${dotCls}"></span>
-        <span class="bg-title">${escHtml(g.name)}</span>
-        <span class="bg-count">${runningCount}/${memberBots.length}</span>
-        <button class="bg-run-btn" onclick="event.stopPropagation();groupDeployAll('${g.id}')" title="Alle starten">▶ Alle</button>
-        <button class="bg-stop-btn" onclick="event.stopPropagation();groupStopAll('${g.id}')" title="Alle stoppen">⏹ Alle</button>
-        <button class="bg-del-btn" onclick="event.stopPropagation();groupDelete('${g.id}')" title="Gruppe löschen">✕</button>
-      </div>
-      <div class="bg-body${g.open ? ' open' : ''}">
-        ${memberBots.length ? memberBots.map(b => `
-          <div class="bg-bot-row${b.id === _selBotId ? ' sel' : ''}" onclick="botSelect('${b.id}')">
-            <span class="bg-dot${b.laufend ? ' on' : ''}"></span>
-            <span class="bg-bot-name">${escHtml(b.name)}</span>
-            <button class="bot-toggle ${b.laufend ? 'on' : 'off'}" onclick="event.stopPropagation();botToggleLaufend('${b.id}')" title="${b.laufend ? 'Läuft' : 'Gestoppt'}"></button>
-            <button class="bg-rm-btn" onclick="event.stopPropagation();groupRemoveBot('${g.id}','${b.id}')" title="Aus Gruppe entfernen">✕</button>
-          </div>`).join('') : `<div style="padding:6px 14px;font-size:.69rem;color:var(--text3);font-style:italic">Keine Bots in dieser Gruppe</div>`}
-        ${addOptions ? `
-        <div class="bg-add-row">
-          <select id="bg-add-sel-${g.id}">
-            <option value="">Bot hinzufügen…</option>
-            ${addOptions}
-          </select>
-          <button onclick="groupAddBot('${g.id}')">+ Hinzufügen</button>
-        </div>` : ''}
-      </div>
-    </div>`;
-  }).join('');
-}
-
 
 // ── Tab entry ─────────────────────────────────────────────────
 // ══════════════════════════════════════════════════════
@@ -4515,12 +4155,12 @@ function _rankSorted() { return [..._rankData.defs].sort((a,b)=>a.level-b.level)
 // ══════════════════════════════════════════════════════
 const SHOP_KEY = 'BC_Shop_v1';
 let _shop = {
-  settings: { cmd: '!pay', confirmMsg: '', errorMsg: '', preisU: 0, preisNostrip: 0 },
+  settings: { cmd: '!pay', confirmMsg: '', errorMsg: '' },
   items: [],
   log: []
 };
 (()=>{
-  try { const s=localStorage.getItem(SHOP_KEY); if(s) _shop = Object.assign({settings:{cmd:'!pay',confirmMsg:'',errorMsg:'',preisU:0,preisNostrip:0},items:[],log:[]},JSON.parse(s)); } catch{}
+  try { const s=localStorage.getItem(SHOP_KEY); if(s) _shop = Object.assign({settings:{cmd:'!pay',confirmMsg:'',errorMsg:''},items:[],log:[]},JSON.parse(s)); } catch{}
 })();
 function _saveShop() { try { localStorage.setItem(SHOP_KEY, JSON.stringify(_shop)); } catch {} }
 function _shopById(id) { return _shop.items.find(i=>i.id===id)??null; }
@@ -4537,10 +4177,6 @@ function renderShopTab() {
   if (annAllEl) annAllEl.value = _shop.settings.announceAllMsg ?? '';
   const errEl = document.getElementById('shop-error-inp');
   if (errEl) errEl.value = _shop.settings.errorMsg ?? '';
-  const uEl = document.getElementById('shop-preis-u-inp');
-  if (uEl) uEl.value = _shop.settings.preisU ?? 0;
-  const nsEl = document.getElementById('shop-preis-nostrip-inp');
-  if (nsEl) nsEl.value = _shop.settings.preisNostrip ?? 0;
   renderShopItems();
   renderShopLog();
   // Update tab badge
@@ -4552,26 +4188,18 @@ function renderShopItems() {
   const el = document.getElementById('shop-item-list'); if (!el) return;
   const items = _shop.items;
   if (!items.length) { el.innerHTML = '<div style="font-size:.7rem;color:var(--text3);text-align:center;padding:12px 0">Noch keine Artikel.</div>'; return; }
-  el.innerHTML = items.map(item => {
-    const nostripPreis = item.preisNostrip != null ? item.preisNostrip : (_shop.settings.preisNostrip??0);
-    const uPreis       = item.preisU       != null ? item.preisU       : (_shop.settings.preisU??0);
-    const flagBadges   = [
-      uPreis>0       ? `<span style="font-size:.55rem;background:rgba(139,92,246,0.15);border:1px solid rgba(139,92,246,0.3);color:#a78bfa;padding:1px 5px;border-radius:3px">/u +${uPreis}💰</span>` : '',
-      nostripPreis>0 ? `<span style="font-size:.55rem;background:rgba(248,113,113,0.12);border:1px solid rgba(248,113,113,0.3);color:#f87171;padding:1px 5px;border-radius:3px">/nostrip +${nostripPreis}💰</span>` : (nostripPreis===0?`<span style="font-size:.55rem;background:rgba(248,113,113,0.07);border:1px solid rgba(248,113,113,0.2);color:#f87171;padding:1px 5px;border-radius:3px">/nostrip ✓</span>`:''),
-    ].filter(Boolean).join(' ');
-    return `
+  el.innerHTML = items.map(item => `
     <div class="shop-item-card ${item.aktiv?'':'shop-item-inactive'}">
       <span class="shop-item-icon">${escHtml(item.icon||'🛒')}</span>
       <div style="flex:1;min-width:0">
         <div class="shop-item-name">${escHtml(item.name||'–')}</div>
         ${item.beschreibung?`<div style="font-size:.62rem;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(item.beschreibung)}</div>`:''}
-        ${flagBadges?`<div style="margin-top:3px;display:flex;gap:3px;flex-wrap:wrap">${flagBadges}</div>`:''}
       </div>
       <span class="shop-item-price">${item.preis??0} 💰</span>
       <button onclick="shopItemEdit('${item.id}')" style="background:none;border:1px solid rgba(255,255,255,0.1);border-radius:5px;color:var(--text3);font-size:.62rem;padding:2px 7px;cursor:pointer">✏️</button>
       <button onclick="shopItemDelete('${item.id}')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.75rem;padding:2px 5px">✕</button>
     </div>
-  `}).join('');
+  `).join('');
 }
 
 function renderShopLog() {
@@ -4609,8 +4237,6 @@ function shopSetConfirm(v)    { _shop.settings.confirmMsg = v; _saveShop(); }
 function shopSetAnnounce(v)   { _shop.settings.announceMsg = v; _saveShop(); }
 function shopSetAnnounceAll(v){ _shop.settings.announceAllMsg = v; _saveShop(); }
 function shopSetError(v)      { _shop.settings.errorMsg = v; _saveShop(); }
-function shopSetPreisU(v)     { _shop.settings.preisU = parseInt(v)||0; _saveShop(); }
-function shopSetPreisNostrip(v){ _shop.settings.preisNostrip = parseInt(v)||0; _saveShop(); }
 
 function shopItemNew() {
   document.getElementById('shop-modal-id').value = '';
@@ -4624,8 +4250,6 @@ function shopItemNew() {
   document.getElementById('shop-modal-announce').value = '';
   document.getElementById('shop-modal-announce-all').value = '';
   document.getElementById('shop-modal-error').value = '';
-  document.getElementById('shop-modal-preis-u').value = '';
-  document.getElementById('shop-modal-preis-nostrip').value = '';
   document.getElementById('shop-modal-overlay').style.display = 'flex';
 }
 
@@ -4642,8 +4266,6 @@ function shopItemEdit(id) {
   document.getElementById('shop-modal-announce').value = item.announceMsg||'';
   document.getElementById('shop-modal-announce-all').value = item.announceAllMsg||'';
   document.getElementById('shop-modal-error').value = item.errorMsg||'';
-  document.getElementById('shop-modal-preis-u').value = item.preisU != null ? item.preisU : '';
-  document.getElementById('shop-modal-preis-nostrip').value = item.preisNostrip != null ? item.preisNostrip : '';
   document.getElementById('shop-modal-overlay').style.display = 'flex';
 }
 
@@ -4663,8 +4285,6 @@ function shopModalSave() {
     announceMsg: document.getElementById('shop-modal-announce').value.trim(),
     announceAllMsg: document.getElementById('shop-modal-announce-all').value.trim(),
     errorMsg: document.getElementById('shop-modal-error').value.trim(),
-    preisU: document.getElementById('shop-modal-preis-u').value.trim()!=='' ? parseInt(document.getElementById('shop-modal-preis-u').value)||0 : null,
-    preisNostrip: document.getElementById('shop-modal-preis-nostrip').value.trim()!=='' ? parseInt(document.getElementById('shop-modal-preis-nostrip').value)||0 : null,
   };
   if (id) {
     const item = _shopById(id); if (item) Object.assign(item, data);
@@ -5554,10 +5174,7 @@ function evFireImmediate(eid) {
 function renderBotTab() {
   // Nur beim ersten Laden aus localStorage lesen – nie In-Memory-State überschreiben
   if (!_bots.length) _loadBots();
-  if (!_botGroups.length) _loadBotGroups();
-  _bpLoad();
   renderBotList();
-  bpRender();
   // Falls _selBotId nicht gesetzt aber Bots vorhanden: ersten selektieren
   if (!_selBotId && _bots.length) _selBotId = _bots[0].id;
   if (_selBotId) renderBotEditor();
@@ -5565,34 +5182,13 @@ function renderBotTab() {
 
 // ── Bot Sidebar ───────────────────────────────────────────────
 function renderBotList() {
-  renderBotGroupList();
-
   const el = document.getElementById('botList');
   if (!el) return;
-
-  // Only show bots not in any group
-  const groupedIds = new Set(_botGroups.flatMap(g => g.botIds));
-  const ungrouped = _bots.filter(b => !groupedIds.has(b.id));
-
   if (!_bots.length) {
     el.innerHTML = '<div style="padding:20px;color:var(--text3);font-size:.71rem;text-align:center">Noch keine Bots.<br>Klicke + Neu.</div>';
     return;
   }
-
-  // Show "Neue Gruppe" input row + ungrouped bots
-  const newGroupRow = `
-    <div class="bg-new-row">
-      <input id="bgNewName" placeholder="Gruppenname…" onkeydown="if(event.key==='Enter')groupNew()">
-      <button onclick="groupNew()">📁 Gruppe</button>
-    </div>`;
-
-  if (!ungrouped.length) {
-    el.innerHTML = newGroupRow + (_botGroups.length ? '' : '<div style="padding:6px 16px 12px;color:var(--text3);font-size:.69rem;font-style:italic">Alle Bots in Gruppen</div>');
-    return;
-  }
-
-  const ungroupedHdr = _botGroups.length ? '<div class="ungrouped-hdr">Ohne Gruppe</div>' : '';
-  el.innerHTML = newGroupRow + ungroupedHdr + ungrouped.map(b => `
+  el.innerHTML = _bots.map(b => `
     <div class="bot-item${b.id===_selBotId?' sel':''}" onclick="botSelect('${b.id}')">
       <div style="flex:1">
         <div class="bi-name">${escHtml(b.name)}</div>
@@ -5761,6 +5357,13 @@ function renderTrigCard(bot, t, i) {
       </div>
 
       <div class="te-section">
+        <div class="te-section-title">⚡ Aktionen
+          <button onclick="trigAddAct('${t.id}')">+ Aktion</button>
+        </div>
+        <div id="acts-${t.id}">${(t.aktionen||[]).map((a,ai)=>renderAct(t.id,a,ai)).join('')}</div>
+      </div>
+
+      <div class="te-section">
         <div class="te-section-title">🔙 Fallback <small style="font-weight:normal;text-transform:none;letter-spacing:0">(läuft wenn eine Aktion ❌ Trigger ungültig auslöst – Trigger zählt dann nicht)</small></div>
         <div style="display:flex;gap:6px;align-items:center">
           <select class="cf" style="width:140px" onchange="trigField('${t.id}','fallbackTyp',this.value);trigRerender('${t.id}')">
@@ -5771,61 +5374,6 @@ function renderTrigCard(bot, t, i) {
           ${t.fallbackTyp&&t.fallbackTyp!=='nichts'?`<input class="cf cf-flex" value="${escHtml(t.fallbackText||'')}" oninput="trigField('${t.id}','fallbackText',this.value)" placeholder="Nachricht… {name} {wort} {x} {y}">`:''} 
         </div>
       </div>
-
-      <!-- If/Else Toggle -->
-      <div class="ifelse-toggle-row">
-        <label class="ifelse-toggle-lbl">
-          <input type="checkbox" ${t.ifElse?'checked':''} onchange="trigSetIfElse('${t.id}',this.checked)">
-          🔀 If/Else-Logik aktivieren
-        </label>
-        <span class="ifelse-hint">Auslöser-Bedingungen feuern den Trigger – IF-Bedingungen entscheiden DANN vs. SONST</span>
-      </div>
-
-      ${t.ifElse ? `
-      <!-- If/Else blocks -->
-      <div class="ifelse-wrapper">
-        <div class="ifelse-if-hdr">
-          🔀 IF – diese Bedingungen entscheiden DANN vs. SONST
-        </div>
-        <div class="ifelse-if-body">
-          <div style="font-size:.61rem;color:var(--text3);margin-bottom:7px">
-            Nur wenn die <b style="color:var(--text2)">Auslöser-Bedingungen</b> oben bereits zugetroffen haben, wird hier geprüft:<br>
-            ✅ <b style="color:#34d399">DANN</b> wenn alle IF-Bedingungen zutreffen &nbsp;·&nbsp; ❌ <b style="color:#fb7185">SONST</b> wenn eine nicht zutrifft.
-            Ohne IF-Bedingungen läuft immer DANN.
-          </div>
-          <div id="ifconds-${t.id}">${(t.ifBedingungen||[]).map((c,ci)=>renderIfCond(bot,t.id,c,ci)).join('')}</div>
-          <div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:2px">
-            <button class="ifelse-if-add-btn" onclick="trigAddIfCond('${t.id}','wort')">+ Wort/Chat</button>
-            <button class="ifelse-if-add-btn" onclick="trigAddIfCond('${t.id}','zone_rect')">+ Zone</button>
-            <button class="ifelse-if-add-btn" onclick="trigAddIfCond('${t.id}','item_traegt')">+ Item trägt</button>
-            <button class="ifelse-if-add-btn" onclick="trigAddIfCond('${t.id}','item_traegt_nicht')">+ Item trägt NICHT</button>
-            <button class="ifelse-if-add-btn" onclick="trigAddIfCond('${t.id}','trigger_war')">+ Vortrigger</button>
-            <button class="ifelse-if-add-btn" onclick="trigAddIfCond('${t.id}','rang')">🏆 Rang</button>
-          </div>
-        </div>
-        <div class="ifelse-dann-hdr">
-          ✅ DANN – IF-Bedingungen treffen zu
-        </div>
-        <div class="ifelse-dann-body">
-          <div id="acts-${t.id}">${(t.aktionen||[]).map((a,ai)=>renderAct(t.id,a,ai,'dann')).join('')}</div>
-          <button class="ifelse-add-btn" onclick="trigAddAct('${t.id}','dann')">+ DANN-Aktion hinzufügen</button>
-        </div>
-        <div class="ifelse-sonst-hdr">
-          ❌ SONST – IF-Bedingungen treffen NICHT zu
-        </div>
-        <div class="ifelse-sonst-body">
-          <div id="acts-sonst-${t.id}">${(t.aktionen_sonst||[]).map((a,ai)=>renderAct(t.id,a,ai,'sonst')).join('')}</div>
-          <button class="ifelse-add-btn sonst" onclick="trigAddAct('${t.id}','sonst')">+ SONST-Aktion hinzufügen</button>
-        </div>
-      </div>
-      ` : `
-      <div class="te-section">
-        <div class="te-section-title">⚡ Aktionen
-          <button onclick="trigAddAct('${t.id}')">+ Aktion</button>
-        </div>
-        <div id="acts-${t.id}">${(t.aktionen||[]).map((a,ai)=>renderAct(t.id,a,ai)).join('')}</div>
-      </div>
-      `}
     </div>
   </div>`;
 }
@@ -5955,11 +5503,10 @@ function _actBeiF(bf) {
   return {ignorieren:'⬇️ Ignorieren – weiter',kette_stoppen:'⏹ Kette stoppen',trigger_ungueltig:'❌ Trigger ungültig'}[bf]??'⬇️ Ignorieren – weiter';
 }
 
-function renderAct(tid, a, ai, branch) {
+function renderAct(tid, a, ai) {
   const b   = _selBot();
   const t   = b?.triggers.find(x=>x.id===tid);
-  const arr = branch === 'sonst' ? (t?.aktionen_sonst ?? []) : (t?.aktionen ?? []);
-  const tot = arr.length;
+  const tot = t?.aktionen?.length ?? 0;
 
   const types = [
     ['chat','💬 Chat senden'],['emote','✨ Emote senden'],['whisper','🤫 Whisper senden'],
@@ -5969,12 +5516,11 @@ function renderAct(tid, a, ai, branch) {
     ['rang','🏆 Rang setzen'],
   ];
   const typeOpts = types.map(([v,l])=>`<option value="${v}" ${a.typ===v?'selected':''}>${l}</option>`).join('');
-  const branchArg = branch ? `,'${branch}'` : '';
 
   let extra = '';
   if (['chat','emote','whisper'].includes(a.typ)) {
     extra = `<textarea class="cf" style="width:100%;resize:vertical;min-height:44px;margin-top:4px" rows="2"
-        oninput="actField('${tid}',${ai},'text',this.value${branch?`,'${branch}'`:''})"
+        oninput="actField('${tid}',${ai},'text',this.value)"
         placeholder="{name} schrieb: {wort} – Pos: {x}/{y}">${escHtml(a.text||'')}</textarea>
       <div style="font-size:.59rem;color:var(--text3);margin-top:2px">Variablen: {name} {wort} {typ} {x} {y}</div>`;
   } else if (a.typ === 'item') {
@@ -5983,36 +5529,36 @@ function renderAct(tid, a, ai, branch) {
     const asLabel = a.antiStrip_itemConfig ? `📦 ${a.antiStrip_itemConfig.group}/${a.antiStrip_itemConfig.asset}`
                   : a.antiStrip_curseName  ? `🔮 ${a.antiStrip_curseName}`
                   : a.antiStrip_ersatz     ? `📦 ${a.antiStrip_gruppe||'?'}/${a.antiStrip_ersatz}`
-                  : '– kein Ersatz – gleiches Item wird wieder angelegt –';
+                  : '– kein Ersatz gewählt (= gleiches Item) –';
     const antiStripRows = a.antiStrip ? `
       <div class="as-act-row">
         <span class="as-act-label">Ersatz-Item:</span>
         <span style="font-size:.68rem;color:var(--text2);flex:1">${escHtml(asLabel)}</span>
-        <button onclick="ipickerOpenForActAntiStrip('${tid}',${ai}${branchArg})" style="font-size:.63rem;padding:3px 9px;background:var(--pd);border:none;color:var(--pl);border-radius:5px;cursor:pointer">📂 Wählen</button>
-        ${a.antiStrip_ersatz && !a.antiStrip_itemConfig ? `<input class="cf" type="color" value="${a.antiStrip_farbe||'#ff0000'}" oninput="actField('${tid}',${ai},'antiStrip_farbe',this.value${branchArg})" style="width:28px;padding:1px;cursor:pointer" title="Farbe">` : ''}
+        <button onclick="ipickerOpenForActAntiStrip('${tid}',${ai})" style="font-size:.63rem;padding:3px 9px;background:var(--pd);border:none;color:var(--pl);border-radius:5px;cursor:pointer">📂 Wählen</button>
+        ${a.antiStrip_ersatz && !a.antiStrip_itemConfig ? `<input class="cf" type="color" value="${a.antiStrip_farbe||'#ff0000'}" oninput="actField('${tid}',${ai},'antiStrip_farbe',this.value)" style="width:28px;padding:1px;cursor:pointer" title="Farbe">` : ''}
       </div>
       <div class="as-act-row">
         <span class="as-act-label">Delay:</span>
         <input class="cf" type="number" value="${a.antiStrip_delay??500}" min="0" step="100"
-          oninput="actField('${tid}',${ai},'antiStrip_delay',+this.value${branchArg})"
+          oninput="actField('${tid}',${ai},'antiStrip_delay',+this.value)"
           style="width:72px;font-size:.68rem"> ms
         <span style="font-size:.6rem;color:var(--text3)">(Wartezeit nach Entfernen)</span>
       </div>` : '';
     extra = `<div style="display:flex;gap:6px;align-items:center;margin-top:4px;flex-wrap:wrap">
         <span style="font-size:.7rem;color:var(--text2);flex:1">${escHtml(label)}${cfgInfo}</span>
-        <button onclick="ipickerOpenForAct('${tid}',${ai}${branchArg})" style="font-size:.63rem;padding:3px 9px;background:var(--pd);border:none;color:var(--pl);border-radius:5px;cursor:pointer">📂 Auswählen…</button>
-        ${a.item && !a.itemConfig ? `<input class="cf" type="color" value="${a.farbe||'#ffffff'}" oninput="actField('${tid}',${ai},'farbe',this.value${branchArg})" style="width:28px;padding:1px;cursor:pointer" title="Farbe">` : ''}
+        <button onclick="ipickerOpenForAct('${tid}',${ai})" style="font-size:.63rem;padding:3px 9px;background:var(--pd);border:none;color:var(--pl);border-radius:5px;cursor:pointer">📂 Auswählen…</button>
+        ${a.item && !a.itemConfig ? `<input class="cf" type="color" value="${a.farbe||'#ffffff'}" oninput="actField('${tid}',${ai},'farbe',this.value)" style="width:28px;padding:1px;cursor:pointer" title="Farbe">` : ''}
       </div>
       <div class="as-act-box">
         <label style="cursor:pointer;display:flex;align-items:center;gap:6px;font-size:.65rem;color:var(--text2)">
-          <input type="checkbox" ${a.antiStrip?'checked':''} onchange="actField('${tid}',${ai},'antiStrip',this.checked${branchArg});actRerender('${tid}',${ai}${branchArg})">
+          <input type="checkbox" ${a.antiStrip?'checked':''} onchange="actField('${tid}',${ai},'antiStrip',this.checked);actRerender('${tid}',${ai})">
           🛡️ AntiStrip – Item wird wieder angelegt wenn der Spieler es entfernt
         </label>
         ${antiStripRows}
       </div>`;
   } else if (a.typ === 'item_entf') {
     extra = `<input class="cf" style="width:100%;margin-top:4px" value="${escHtml(a.gruppe||'')}"
-        oninput="actField('${tid}',${ai},'gruppe',this.value${branchArg})" placeholder="Gruppe (z.B. ItemMouth, ItemArms …)">`;
+        oninput="actField('${tid}',${ai},'gruppe',this.value)" placeholder="Gruppe (z.B. ItemMouth, ItemArms …)">`;
   } else if (a.typ === 'teleport') {
     const slots = a.tpSlots ?? [];
     const slotsHtml = slots.map((s, si) => {
@@ -6020,15 +5566,15 @@ function renderAct(tid, a, ai, branch) {
       return `<div class="tp-slot-row" id="tpslot-${tid}-${ai}-${si}">
         <span class="tp-slot-badge ${si===0?'primary':'fallback'}">${si===0?'Primär':'Fallback '+(si)}</span>
         <span style="font-size:.63rem;color:var(--text3)">X</span>
-        <input class="cf" type="number" style="width:54px" value="${s.x??0}" oninput="tpSlotField('${tid}',${ai},${si},'x',+this.value${branchArg})" placeholder="X">
+        <input class="cf" type="number" style="width:54px" value="${s.x??0}" oninput="tpSlotField('${tid}',${ai},${si},'x',+this.value)" placeholder="X">
         <span style="font-size:.63rem;color:var(--text3)">Y</span>
-        <input class="cf" type="number" style="width:54px" value="${s.y??0}" oninput="tpSlotField('${tid}',${ai},${si},'y',+this.value${branchArg})" placeholder="Y">
+        <input class="cf" type="number" style="width:54px" value="${s.y??0}" oninput="tpSlotField('${tid}',${ai},${si},'y',+this.value)" placeholder="Y">
         <button class="tp-slot-valid ${gueltig?'zählt':'zählt-nicht'}"
-          onclick="tpSlotField('${tid}',${ai},${si},'gueltig',!${gueltig}${branchArg});actRerender('${tid}',${ai}${branchArg})"
+          onclick="tpSlotField('${tid}',${ai},${si},'gueltig',!${gueltig});actRerender('${tid}',${ai})"
           title="${gueltig?'Dieser Slot zählt als Erfolg – klicken um zu ändern':'Dieser Slot gilt als Fehler (bei_fehler greift) – klicken um zu ändern'}">
           ${gueltig?'✅ Gültig':'❌ Fehler'}
         </button>
-        <button onclick="tpSlotRemove('${tid}',${ai},${si}${branchArg})" style="margin-left:auto;background:none;border:none;color:var(--red);cursor:pointer;font-size:.7rem;padding:1px 4px" title="Entfernen">✕</button>
+        <button onclick="tpSlotRemove('${tid}',${ai},${si})" style="margin-left:auto;background:none;border:none;color:var(--red);cursor:pointer;font-size:.7rem;padding:1px 4px" title="Entfernen">✕</button>
       </div>`;
     }).join('');
     extra = `
@@ -6036,18 +5582,18 @@ function renderAct(tid, a, ai, branch) {
         🌀 Teleportiert den Auslöser. Wenn alle Positionen belegt sind → gilt als Fehler.
       </div>
       <div class="tp-slot-list" id="tpslots-${tid}-${ai}">${slotsHtml}</div>
-      <button class="tp-slot-add-btn" onclick="tpSlotAdd('${tid}',${ai}${branchArg})">+ Position / Fallback hinzufügen</button>`;
+      <button class="tp-slot-add-btn" onclick="tpSlotAdd('${tid}',${ai})">+ Position / Fallback hinzufügen</button>`;
   } else if (a.typ === 'money') {
     const moneyName = _money?.settings?.name || 'Gold';
     const mop = a.money_op ?? 'add';
     extra = `<div style="display:flex;gap:8px;align-items:center;margin-top:5px;flex-wrap:wrap">
-      <select class="cf" style="width:130px" onchange="actField('${tid}',${ai},'money_op',this.value${branchArg});actRerender('${tid}',${ai}${branchArg})">
+      <select class="cf" style="width:130px" onchange="actField('${tid}',${ai},'money_op',this.value);actRerender('${tid}',${ai})">
         <option value="add"   ${mop==='add'?'selected':''}>➕ Hinzufügen</option>
         <option value="sub"   ${mop==='sub'?'selected':''}>➖ Abziehen</option>
         <option value="set"   ${mop==='set'?'selected':''}>= Setzen auf</option>
         <option value="reset" ${mop==='reset'?'selected':''}>🔄 Zurücksetzen (0)</option>
       </select>
-      ${mop!=='reset'?`<input class="cf cf-w80" type="number" value="${a.money_val??1}" oninput="actField('${tid}',${ai},'money_val',+this.value${branchArg})">
+      ${mop!=='reset'?`<input class="cf cf-w80" type="number" value="${a.money_val??1}" oninput="actField('${tid}',${ai},'money_val',+this.value)">
       <span style="font-size:.68rem;color:var(--text3)">${escHtml(moneyName)}</span>`:''}
       <span style="font-size:.62rem;color:var(--text3)">Ziel: Auslöser</span>
     </div>`;
@@ -6055,13 +5601,13 @@ function renderAct(tid, a, ai, branch) {
     const rop = a.rang_op ?? 'setzen';
     const ranks = _rankSorted();
     extra = `<div style="display:flex;gap:8px;align-items:center;margin-top:5px;flex-wrap:wrap">
-      <select class="cf" style="width:155px" onchange="actField('${tid}',${ai},'rang_op',this.value${branchArg});actRerender('${tid}',${ai}${branchArg})">
+      <select class="cf" style="width:155px" onchange="actField('${tid}',${ai},'rang_op',this.value);actRerender('${tid}',${ai})">
         <option value="setzen"    ${rop==='setzen'?'selected':''}>🏆 Rang setzen</option>
         <option value="entfernen" ${rop==='entfernen'?'selected':''}>❌ Rang entfernen</option>
         <option value="naechster" ${rop==='naechster'?'selected':''}>⬆️ Nächster Rang</option>
         <option value="vorheriger"${rop==='vorheriger'?'selected':''}>⬇️ Vorheriger Rang</option>
       </select>
-      ${rop==='setzen'?`<select class="cf" style="flex:1;min-width:140px" onchange="actField('${tid}',${ai},'rang_id',this.value${branchArg})">
+      ${rop==='setzen'?`<select class="cf" style="flex:1;min-width:140px" onchange="actField('${tid}',${ai},'rang_id',this.value)">
         <option value="">– Rang wählen –</option>
         ${ranks.map(r=>`<option value="${r.id}" ${a.rang_id===r.id?'selected':''}>${escHtml(r.icon+' '+r.name)} (Lv.${r.level})</option>`).join('')}
       </select>`:''}
@@ -6078,17 +5624,16 @@ function renderAct(tid, a, ai, branch) {
     const typField = field+'_typ';
     const mt = a[typField] ?? 'chat';
     if (!canBranch) return '';
-    const ba = branch ? `,'${branch}'` : '';
     return `<div style="display:flex;gap:5px;align-items:center;margin-top:4px">
       <span style="font-size:.62rem;font-weight:600;color:${color};white-space:nowrap;min-width:42px">${label}</span>
-      <select class="cf" style="width:86px;font-size:.62rem" onchange="actField('${tid}',${ai},'${typField}',this.value${ba});actRerender('${tid}',${ai}${ba})">
+      <select class="cf" style="width:86px;font-size:.62rem" onchange="actField('${tid}',${ai},'${typField}',this.value);actRerender('${tid}',${ai})">
         <option value="nichts"   ${mt==='nichts'?'selected':''}>– nichts</option>
         <option value="chat"    ${mt==='chat'?'selected':''}>💬 Chat</option>
         <option value="emote"   ${mt==='emote'?'selected':''}>✨ Emote</option>
         <option value="whisper" ${mt==='whisper'?'selected':''}>🤫 Whisper</option>
       </select>
       ${mt!=='nichts'?`<input class="cf cf-flex" style="font-size:.68rem" value="${escHtml(val)}"
-        oninput="actField('${tid}',${ai},'${field}',this.value${ba})"
+        oninput="actField('${tid}',${ai},'${field}',this.value)"
         placeholder="${placeholder}">`:''}
     </div>`;
   }
@@ -6102,10 +5647,9 @@ function renderAct(tid, a, ai, branch) {
   // Bei Fehler (canBranch Aktionen können fehlschlagen)
   const bf = a.bei_fehler ?? 'ignorieren';
   const bfColors = {ignorieren:'var(--text3)',kette_stoppen:'#e8a020',trigger_ungueltig:'#e05050'};
-  const ba2 = branch ? `,'${branch}'` : '';
   const bfRow = canBranch ? `<div style="display:flex;gap:6px;align-items:center;margin-top:4px">
     <span style="font-size:.6rem;color:var(--text3);white-space:nowrap">Wenn fehlschlägt:</span>
-    <select class="cf" style="flex:1;color:${bfColors[bf]??'var(--text3)'}" onchange="actField('${tid}',${ai},'bei_fehler',this.value${ba2});actRerender('${tid}',${ai}${ba2})">
+    <select class="cf" style="flex:1;color:${bfColors[bf]??'var(--text3)'}" onchange="actField('${tid}',${ai},'bei_fehler',this.value);actRerender('${tid}',${ai})">
       <option value="ignorieren"        ${bf==='ignorieren'?'selected':''}>⬇️ Weiter mit nächster Aktion</option>
       <option value="kette_stoppen"     ${bf==='kette_stoppen'?'selected':''}>⏹ Kette stoppen (Trigger zählt)</option>
       <option value="trigger_ungueltig" ${bf==='trigger_ungueltig'?'selected':''}>❌ Trigger ungültig (Fallback läuft)</option>
@@ -6113,35 +5657,34 @@ function renderAct(tid, a, ai, branch) {
   </div>` : '';
 
   const bfBorder = {kette_stoppen:'#664400',trigger_ungueltig:'#660000'}[bf] ?? '';
-  const actId = branch === 'sonst' ? `act-sonst-${tid}-${ai}` : `act-${tid}-${ai}`;
-  return `<div class="act-card" id="${actId}" style="${bfBorder?'border-color:'+bfBorder+';background:#0d0906;':''}">
+  return `<div class="act-card" id="act-${tid}-${ai}" style="${bfBorder?'border-color:'+bfBorder+';background:#0d0906;':''}">
     <div style="flex:1">
       <div style="display:flex;gap:4px;align-items:center">
         <span style="display:flex;flex-direction:column;gap:1px;flex-shrink:0">
-          <button class="order-btn" onclick="actMoveUp('${tid}',${ai}${branchArg})" ${ai===0?'disabled':''}>▲</button>
-          <button class="order-btn" onclick="actMoveDown('${tid}',${ai}${branchArg})" ${ai===tot-1?'disabled':''}>▼</button>
+          <button class="order-btn" onclick="actMoveUp('${tid}',${ai})" ${ai===0?'disabled':''}>▲</button>
+          <button class="order-btn" onclick="actMoveDown('${tid}',${ai})" ${ai===tot-1?'disabled':''}>▼</button>
         </span>
         <span class="trig-order-num" style="margin-right:2px">${ai+1}</span>
-        <select class="cf" style="flex:1" onchange="actChangeType('${tid}',${ai},this.value${branchArg})">${typeOpts}</select>
-        <input class="cf cf-w80" type="number" value="${a.delay??0}" oninput="actField('${tid}',${ai},'delay',+this.value${branchArg})" title="Delay nach vorheriger Aktion (ms)"> ms
+        <select class="cf" style="flex:1" onchange="actChangeType('${tid}',${ai},this.value)">${typeOpts}</select>
+        <input class="cf cf-w80" type="number" value="${a.delay??0}" oninput="actField('${tid}',${ai},'delay',+this.value)" title="Delay nach vorheriger Aktion (ms)"> ms
       </div>
       <div style="display:flex;gap:6px;align-items:center;margin-top:5px;padding:5px 8px;background:rgba(96,165,250,0.05);border:1px solid rgba(96,165,250,0.12);border-radius:6px;flex-wrap:wrap">
         <span style="font-size:.62rem;font-weight:700;color:#60a5fa;white-space:nowrap">🎯 Ziel</span>
-        <select class="cf" style="width:150px;font-size:.68rem" onchange="actField('${tid}',${ai},'aktZiel',this.value${branchArg});actRerender('${tid}',${ai}${branchArg})">
+        <select class="cf" style="width:150px;font-size:.68rem" onchange="actField('${tid}',${ai},'aktZiel',this.value);actRerender('${tid}',${ai})">
           <option value="ausloeser" ${(!a.aktZiel||a.aktZiel==='ausloeser')?'selected':''}>👤 Auslöser / Kaufziel</option>
           <option value="shop_kaeufer" ${a.aktZiel==='shop_kaeufer'?'selected':''}>💳 Käufer (bei Shop)</option>
           <option value="alle"      ${a.aktZiel==='alle'?'selected':''}>👥 Alle im Raum</option>
           <option value="whitelist" ${a.aktZiel==='whitelist'?'selected':''}>📋 Whitelist</option>
         </select>
         ${a.aktZiel==='whitelist'?`<input class="cf" style="flex:1;min-width:150px;font-size:.68rem" value="${escHtml((a.aktZielNummern||[]).join(', '))}"
-          oninput="actField('${tid}',${ai},'aktZielNummern',this.value.split(',').map(x=>+x.trim()).filter(x=>x>0)${branchArg})"
+          oninput="actField('${tid}',${ai},'aktZielNummern',this.value.split(',').map(x=>+x.trim()).filter(x=>x>0))"
           placeholder="MemberNummer, z.B. 12345, 67890">`:''}
       </div>
       ${extra}
       ${branchSection}
       ${bfRow}
     </div>
-    <button class="rm-btn" onclick="actRemove('${tid}',${ai}${branchArg})">✕</button>
+    <button class="rm-btn" onclick="actRemove('${tid}',${ai})">✕</button>
   </div>`;
 }
 
@@ -6276,198 +5819,96 @@ function condRerender(tid) {
   document.getElementById('conds-'+tid).innerHTML = (t.bedingungen||[]).map((c,ci)=>renderCond(b,tid,c,ci)).join('');
 }
 
-// ── IF-Bedingungen (zweite Ebene für IF/Else Entscheid) ───────
-function renderIfCond(bot, tid, c, ci) {
-  // Render using regular renderCond then swap all callback names to ifCond* variants
-  return renderCond(bot, tid, c, ci)
-    .replace(/\bcondField\b/g,    'ifCondField')
-    .replace(/\bcondLogik\b/g,    'ifCondLogik')
-    .replace(/\bcondMoveUp\b/g,   'ifCondMoveUp')
-    .replace(/\bcondMoveDown\b/g, 'ifCondMoveDown')
-    .replace(/\bcondRemove\b/g,   'ifCondRemove')
-    .replace(/\bcondRerender\b/g, 'ifCondRerender')
-    .replace(/id="cond-/g,        'id="ifcond-');
-}
-function trigAddIfCond(tid, typ) {
-  const b = _selBot(); if (!b) return;
-  const t = b.triggers.find(x=>x.id===tid); if (!t) return;
-  const defs = {
-    wort:           {typ:'wort',           wort:'',    logik:'und'},
-    zone_rect:      {typ:'zone_rect',       x1:0,y1:0,x2:2,y2:2, logik:'und'},
-    item_traegt:    {typ:'item_traegt',     item:'', gruppe:'', logik:'und'},
-    item_traegt_nicht:{typ:'item_traegt_nicht',item:'',gruppe:'',logik:'und'},
-    trigger_war:    {typ:'trigger_war',     trigId:'', logik:'und'},
-    rang:           {typ:'rang',            rang_op:'=', rang_id:'', logik:'und'},
-  };
-  t.ifBedingungen = t.ifBedingungen ?? [];
-  t.ifBedingungen.push(defs[typ] ?? {typ, logik:'und'});
-  _saveBots();
-  document.getElementById('ifconds-'+tid).innerHTML = (t.ifBedingungen||[]).map((c,ci)=>renderIfCond(b,tid,c,ci)).join('');
-}
-function ifCondField(tid, ci, field, val) {
-  const b = _selBot(); if (!b) return;
-  const t = b.triggers.find(x=>x.id===tid); if (!t) return;
-  if (!t.ifBedingungen?.[ci]) return;
-  t.ifBedingungen[ci][field] = val; _saveBots();
-}
-function ifCondLogik(tid, ci, logik) {
-  const b = _selBot(); if (!b) return;
-  const t = b.triggers.find(x=>x.id===tid); if (!t) return;
-  if (!t.ifBedingungen?.[ci]) return;
-  t.ifBedingungen[ci].logik = logik; _saveBots();
-  ifCondRerender(tid);
-}
-function ifCondMoveUp(tid, ci) {
-  const b = _selBot(); if (!b) return;
-  const t = b.triggers.find(x=>x.id===tid); if (!t || ci<=0) return;
-  [t.ifBedingungen[ci-1], t.ifBedingungen[ci]] = [t.ifBedingungen[ci], t.ifBedingungen[ci-1]];
-  _saveBots(); ifCondRerender(tid);
-}
-function ifCondMoveDown(tid, ci) {
-  const b = _selBot(); if (!b) return;
-  const t = b.triggers.find(x=>x.id===tid); if (!t || ci>=(t.ifBedingungen?.length??0)-1) return;
-  [t.ifBedingungen[ci], t.ifBedingungen[ci+1]] = [t.ifBedingungen[ci+1], t.ifBedingungen[ci]];
-  _saveBots(); ifCondRerender(tid);
-}
-function ifCondRemove(tid, ci) {
-  const b = _selBot(); if (!b) return;
-  const t = b.triggers.find(x=>x.id===tid); if (!t) return;
-  t.ifBedingungen.splice(ci,1); _saveBots();
-  document.getElementById('ifconds-'+tid).innerHTML = (t.ifBedingungen||[]).map((c,ci2)=>renderIfCond(b,tid,c,ci2)).join('');
-}
-function ifCondRerender(tid) {
-  const b = _selBot(); if (!b) return;
-  const t = b.triggers.find(x=>x.id===tid); if (!t) return;
-  document.getElementById('ifconds-'+tid).innerHTML = (t.ifBedingungen||[]).map((c,ci)=>renderIfCond(b,tid,c,ci)).join('');
-}
-
 // Actions
-function trigAddAct(tid, branch) {
+function trigAddAct(tid) {
   const b = _selBot(); if (!b) return;
   const t = b.triggers.find(x=>x.id===tid); if (!t) return;
-  const arr = branch === 'sonst' ? 'aktionen_sonst' : 'aktionen';
-  t[arr] = t[arr] ?? [];
-  t[arr].push({typ:'chat', delay:0, text:''});
+  t.aktionen = t.aktionen ?? [];
+  t.aktionen.push({typ:'chat', delay:0, text:''});
   _saveBots();
-  const listId = branch === 'sonst' ? 'acts-sonst-'+tid : 'acts-'+tid;
-  const el = document.getElementById(listId);
-  if (el) el.innerHTML = t[arr].map((a,ai)=>renderAct(tid,a,ai,branch)).join('');
+  document.getElementById('acts-'+tid).innerHTML = t.aktionen.map((a,ai)=>renderAct(tid,a,ai)).join('');
   document.getElementById('tb-'+tid)?.classList.add('open');
 }
 
-function trigSetIfElse(tid, val) {
+function actField(tid, ai, field, val) {
   const b = _selBot(); if (!b) return;
   const t = b.triggers.find(x=>x.id===tid); if (!t) return;
-  t.ifElse = val;
-  if (val && !t.aktionen_sonst)  t.aktionen_sonst  = [];
-  if (val && !t.ifBedingungen)   t.ifBedingungen   = [];
-  _saveBots();
-  trigRerender(tid);
+  if (!t.aktionen[ai]) return;
+  t.aktionen[ai][field] = val; _saveBots();
 }
 
-function _getActArr(t, branch) {
-  return branch === 'sonst' ? (t.aktionen_sonst ?? []) : (t.aktionen ?? []);
-}
-function _setActArr(t, branch, arr) {
-  if (branch === 'sonst') t.aktionen_sonst = arr;
-  else t.aktionen = arr;
+function actRerender(tid, ai) {
+  const b = _selBot(); if (!b) return;
+  const t = b.triggers.find(x=>x.id===tid); if (!t||!t.aktionen[ai]) return;
+  const el = document.getElementById('act-'+tid+'-'+ai);
+  if (el) { const tmp=document.createElement('div'); tmp.innerHTML=renderAct(tid,t.aktionen[ai],ai); el.replaceWith(tmp.firstElementChild); }
 }
 
-function actField(tid, ai, field, val, branch) {
+function actChangeType(tid, ai, typ) {
   const b = _selBot(); if (!b) return;
   const t = b.triggers.find(x=>x.id===tid); if (!t) return;
-  const arr = _getActArr(t, branch);
-  if (!arr[ai]) return;
-  arr[ai][field] = val; _saveBots();
-}
-
-function actRerender(tid, ai, branch) {
-  const b = _selBot(); if (!b) return;
-  const t = b.triggers.find(x=>x.id===tid); if (!t) return;
-  const arr = _getActArr(t, branch);
-  if (!arr[ai]) return;
-  const actId = branch === 'sonst' ? 'act-sonst-'+tid+'-'+ai : 'act-'+tid+'-'+ai;
-  const el = document.getElementById(actId);
-  if (el) { const tmp=document.createElement('div'); tmp.innerHTML=renderAct(tid,arr[ai],ai,branch); el.replaceWith(tmp.firstElementChild); }
-}
-
-function actChangeType(tid, ai, typ, branch) {
-  const b = _selBot(); if (!b) return;
-  const t = b.triggers.find(x=>x.id===tid); if (!t) return;
-  const arr = _getActArr(t, branch);
-  const delay = arr[ai]?.delay ?? 0;
-  arr[ai] = {typ, delay};
+  const delay = t.aktionen[ai]?.delay ?? 0;
+  t.aktionen[ai] = {typ, delay};
   if (typ === 'teleport') {
-    arr[ai].tpSlots = [{ x: 0, y: 0 }];
-    arr[ai].keinFallbackMsg = '';
+    t.aktionen[ai].tpSlots = [{ x: 0, y: 0 }];
+    t.aktionen[ai].keinFallbackMsg = '';
   }
   _saveBots();
-  const actId = branch === 'sonst' ? 'act-sonst-'+tid+'-'+ai : 'act-'+tid+'-'+ai;
-  const el = document.getElementById(actId);
-  if (el) { const tmp=document.createElement('div'); tmp.innerHTML=renderAct(tid,arr[ai],ai,branch); el.replaceWith(tmp.firstElementChild); }
+  // Re-render just this action card
+  const el = document.getElementById('act-'+tid+'-'+ai);
+  if (el) { const tmp=document.createElement('div'); tmp.innerHTML=renderAct(tid,t.aktionen[ai],ai); el.replaceWith(tmp.firstElementChild); }
 }
 
-function actRemove(tid, ai, branch) {
+function actRemove(tid, ai) {
   const b = _selBot(); if (!b) return;
   const t = b.triggers.find(x=>x.id===tid); if (!t) return;
-  const arr = _getActArr(t, branch);
-  arr.splice(ai,1); _setActArr(t, branch, arr); _saveBots();
-  const listId = branch === 'sonst' ? 'acts-sonst-'+tid : 'acts-'+tid;
-  const el = document.getElementById(listId);
-  if (el) el.innerHTML = arr.map((a,ai2)=>renderAct(tid,a,ai2,branch)).join('');
+  t.aktionen.splice(ai,1); _saveBots();
+  document.getElementById('acts-'+tid).innerHTML = t.aktionen.map((a,ai2)=>renderAct(tid,a,ai2)).join('');
 }
 
-function actMoveUp(tid, ai, branch) {
+function actMoveUp(tid, ai) {
   const b = _selBot(); if (!b) return;
   const t = b.triggers.find(x=>x.id===tid); if (!t||ai<=0) return;
-  const arr = _getActArr(t, branch);
-  [arr[ai-1], arr[ai]] = [arr[ai], arr[ai-1]];
+  [t.aktionen[ai-1], t.aktionen[ai]] = [t.aktionen[ai], t.aktionen[ai-1]];
   _saveBots();
-  const listId = branch === 'sonst' ? 'acts-sonst-'+tid : 'acts-'+tid;
-  const el = document.getElementById(listId);
-  if (el) el.innerHTML = arr.map((a,ai2)=>renderAct(tid,a,ai2,branch)).join('');
+  document.getElementById('acts-'+tid).innerHTML = t.aktionen.map((a,ai2)=>renderAct(tid,a,ai2)).join('');
 }
 
-function actMoveDown(tid, ai, branch) {
+function actMoveDown(tid, ai) {
   const b = _selBot(); if (!b) return;
-  const t = b.triggers.find(x=>x.id===tid); if (!t) return;
-  const arr = _getActArr(t, branch);
-  if (ai >= arr.length-1) return;
-  [arr[ai], arr[ai+1]] = [arr[ai+1], arr[ai]];
+  const t = b.triggers.find(x=>x.id===tid); if (!t||ai>=t.aktionen.length-1) return;
+  [t.aktionen[ai], t.aktionen[ai+1]] = [t.aktionen[ai+1], t.aktionen[ai]];
   _saveBots();
-  const listId = branch === 'sonst' ? 'acts-sonst-'+tid : 'acts-'+tid;
-  const el = document.getElementById(listId);
-  if (el) el.innerHTML = arr.map((a,ai2)=>renderAct(tid,a,ai2,branch)).join('');
+  document.getElementById('acts-'+tid).innerHTML = t.aktionen.map((a,ai2)=>renderAct(tid,a,ai2)).join('');
 }
 
 // ── TP Slot helpers ───────────────────────────────────────────────
-function tpSlotAdd(tid, ai, branch) {
+function tpSlotAdd(tid, ai) {
   const b = _selBot(); if (!b) return;
   const t = b.triggers.find(x=>x.id===tid); if (!t) return;
-  const arr = _getActArr(t, branch);
-  const a = arr[ai]; if (!a) return;
+  const a = t.aktionen[ai]; if (!a) return;
   a.tpSlots = a.tpSlots ?? [];
   a.tpSlots.push({ x: 0, y: 0 });
   _saveBots();
-  actRerender(tid, ai, branch);
+  const el = document.getElementById('act-'+tid+'-'+ai);
+  if (el) { const tmp=document.createElement('div'); tmp.innerHTML=renderAct(tid,a,ai); el.replaceWith(tmp.firstElementChild); }
 }
 
-function tpSlotRemove(tid, ai, si, branch) {
+function tpSlotRemove(tid, ai, si) {
   const b = _selBot(); if (!b) return;
   const t = b.triggers.find(x=>x.id===tid); if (!t) return;
-  const arr = _getActArr(t, branch);
-  const a = arr[ai]; if (!a) return;
+  const a = t.aktionen[ai]; if (!a) return;
   a.tpSlots = a.tpSlots ?? [];
   a.tpSlots.splice(si, 1);
   _saveBots();
-  actRerender(tid, ai, branch);
+  const el = document.getElementById('act-'+tid+'-'+ai);
+  if (el) { const tmp=document.createElement('div'); tmp.innerHTML=renderAct(tid,a,ai); el.replaceWith(tmp.firstElementChild); }
 }
 
-function tpSlotField(tid, ai, si, field, val, branch) {
+function tpSlotField(tid, ai, si, field, val) {
   const b = _selBot(); if (!b) return;
   const t = b.triggers.find(x=>x.id===tid); if (!t) return;
-  const arr = _getActArr(t, branch);
-  const a = arr[ai]; if (!a) return;
+  const a = t.aktionen[ai]; if (!a) return;
   a.tpSlots = a.tpSlots ?? [];
   if (!a.tpSlots[si]) return;
   a.tpSlots[si][field] = val;
@@ -6475,13 +5916,12 @@ function tpSlotField(tid, ai, si, field, val, branch) {
 }
 
 // ── Unified Item/Curse/Profile Picker ─────────────────────────
-function ipickerOpenForAct(tid, ai, branch) {
-  _ipickerForActContext = {tid, ai, branch};
+function ipickerOpenForAct(tid, ai) {
+  _ipickerForActContext = {tid, ai};
   ipickerOpen('item', v => {
     const b = _selBot(); if (!b) return;
-    const t = b.triggers.find(x=>x.id===tid); if (!t) return;
-    const arr = branch === 'sonst' ? (t.aktionen_sonst ?? []) : t.aktionen;
-    const a = arr[ai]; if (!a) return;
+    const t = b.triggers.find(x=>x.id===tid); if (!t||!t.aktionen[ai]) return;
+    const a = t.aktionen[ai];
     // Clear old type data
     delete a.item; delete a.gruppe; delete a.farbe;
     delete a.curseKey; delete a.curseName; delete a.curseEntry;
@@ -6489,6 +5929,7 @@ function ipickerOpenForAct(tid, ai, branch) {
 
     if (v.type === 'item') {
       if (v.itemConfig) {
+        // Full Item Manager config captured
         a.itemConfig = v.itemConfig;
         a.item   = v.itemConfig.asset;
         a.gruppe = v.itemConfig.group;
@@ -6506,16 +5947,17 @@ function ipickerOpenForAct(tid, ai, branch) {
       a.profilItems = PROFILES[v.name]?.items ?? [];
     }
     _saveBots();
-    actRerender(tid, ai, branch);
+    // Re-render action card
+    const el = document.getElementById('act-'+tid+'-'+ai);
+    if (el) { const tmp=document.createElement('div'); tmp.innerHTML=renderAct(tid,a,ai); el.replaceWith(tmp.firstElementChild); }
   });
 }
 
-function ipickerOpenForActAntiStrip(tid, ai, branch) {
+function ipickerOpenForActAntiStrip(tid, ai) {
   ipickerOpen('item', v => {
     const b = _selBot(); if (!b) return;
-    const t = b.triggers.find(x=>x.id===tid); if (!t) return;
-    const arr = branch === 'sonst' ? (t.aktionen_sonst ?? []) : t.aktionen;
-    const a = arr[ai]; if (!a) return;
+    const t = b.triggers.find(x=>x.id===tid); if (!t||!t.aktionen[ai]) return;
+    const a = t.aktionen[ai];
     delete a.antiStrip_ersatz; delete a.antiStrip_gruppe; delete a.antiStrip_farbe;
     delete a.antiStrip_itemConfig; delete a.antiStrip_curseName; delete a.antiStrip_curseEntry;
     if (v.type === 'item') {
@@ -6535,7 +5977,7 @@ function ipickerOpenForActAntiStrip(tid, ai, branch) {
       a.antiStrip_gruppe     = v.entry?.Gruppe ?? '';
     }
     _saveBots();
-    actRerender(tid, ai, branch);
+    actRerender(tid, ai);
   });
 }
 
@@ -6861,21 +6303,12 @@ function _buildBotCode(bot) {
       charSpec: !!t.charSpec, resetOnLeave: !!t.resetOnLeave,
       von: t.von??'alle',
       vonNummern: (t.vonNummern||[]).map(Number),
-      ifElse: !!t.ifElse,
     bedingungen: (t.bedingungen||[]),
-    ifBedingungen: (t.ifBedingungen||[]),
     aktionen: (t.aktionen||[]).map(a => {
       const base = a.typ==='item' && a.curseKey && !a.curseEntry ? {...a, curseEntry: CURSE_DB[a.curseKey]??null}
                  : a.typ==='item' && a.profilName && (!a.profilItems||!a.profilItems.length) ? {...a, profilItems: PROFILES[a.profilName]?.items??[]}
                  : {...a};
-      base.aktZiel = a.aktZiel ?? 'ausloeser';
-      base.aktZielNummern = (a.aktZielNummern||[]).map(Number);
-      return base;
-    }),
-    aktionen_sonst: (t.aktionen_sonst||[]).map(a => {
-      const base = a.typ==='item' && a.curseKey && !a.curseEntry ? {...a, curseEntry: CURSE_DB[a.curseKey]??null}
-                 : a.typ==='item' && a.profilName && (!a.profilItems||!a.profilItems.length) ? {...a, profilItems: PROFILES[a.profilName]?.items??[]}
-                 : {...a};
+      // Ensure aktZiel fields are preserved and numbers are typed correctly
       base.aktZiel = a.aktZiel ?? 'ausloeser';
       base.aktZielNummern = (a.aktZielNummern||[]).map(Number);
       return base;
@@ -6884,7 +6317,7 @@ function _buildBotCode(bot) {
   const safeId   = bot.id.replace(/\W/g,'_');
   const safeName = bot.name.replace(/\\/g,'\\\\').replace(/`/g,'\\`');
 
-  const cfgJson  = JSON.stringify({hearChat:s.hearChat,hearEmote:s.hearEmote,hearWhisper:s.hearWhisper,nurEigene:s.nurEigene,logAktiv:s.logAktiv??true,modus:s.modus,moneyQueryCmd:_money?.settings?.queryCmd??'',moneyQueryTyp:_money?.settings?.queryTyp??'whisper',moneyName:_money?.settings?.name??'Gold',rankQueryCmd:_rankData?.settings?.queryCmd??'',rankQueryTyp:_rankData?.settings?.queryCmdTyp??'whisper',rankQueryText:_rankData?.settings?.queryCmdText??'{name} hat Rang: {rang_icon} {rang}',rankDefs:_rankData?.defs??[],rankPlayers:Object.fromEntries(Object.entries(_rankData?.players??{}).map(([k,v])=>[k,v.rankId??null])),shopCmd:_shop?.settings?.cmd??'!pay',shopConfirmMsg:_shop?.settings?.confirmMsg??'',shopAnnounceMsg:_shop?.settings?.announceMsg??'',shopAnnounceAllMsg:_shop?.settings?.announceAllMsg??'',shopErrorMsg:_shop?.settings?.errorMsg??'',shopPreisU:_shop?.settings?.preisU??0,shopPreisNostrip:_shop?.settings?.preisNostrip??0,shopItems:(_shop?.items??[]).filter(i=>i.aktiv!==false),moneyBalances:Object.fromEntries(Object.entries(_money?.balances??{}).map(([k,v])=>[k,{balance:v.balance??0,name:v.name??''}]))});
+  const cfgJson  = JSON.stringify({hearChat:s.hearChat,hearEmote:s.hearEmote,hearWhisper:s.hearWhisper,nurEigene:s.nurEigene,logAktiv:s.logAktiv??true,modus:s.modus,moneyQueryCmd:_money?.settings?.queryCmd??'',moneyQueryTyp:_money?.settings?.queryTyp??'whisper',moneyName:_money?.settings?.name??'Gold',rankQueryCmd:_rankData?.settings?.queryCmd??'',rankQueryTyp:_rankData?.settings?.queryCmdTyp??'whisper',rankQueryText:_rankData?.settings?.queryCmdText??'{name} hat Rang: {rang_icon} {rang}',rankDefs:_rankData?.defs??[],rankPlayers:Object.fromEntries(Object.entries(_rankData?.players??{}).map(([k,v])=>[k,v.rankId??null])),shopCmd:_shop?.settings?.cmd??'!pay',shopConfirmMsg:_shop?.settings?.confirmMsg??'',shopAnnounceMsg:_shop?.settings?.announceMsg??'',shopAnnounceAllMsg:_shop?.settings?.announceAllMsg??'',shopErrorMsg:_shop?.settings?.errorMsg??'',shopItems:(_shop?.items??[]).filter(i=>i.aktiv!==false),moneyBalances:Object.fromEntries(Object.entries(_money?.balances??{}).map(([k,v])=>[k,{balance:v.balance??0,name:v.name??''}]))});
   const trigsJson = JSON.stringify(triggers).replace(/`/g,'\\`').replace(/\${/g,'\\${');
   const events = (bot.events||[]).filter(e=>e.aktiv).map(e => ({
     id: e.id, name: e.name,
@@ -6919,10 +6352,10 @@ function _buildBotCode(bot) {
 const _BID='${safeId}';
 if(window['_BCBot_'+_BID]){console.warn('[Bot] Bereits aktiv – erst stoppen!');return;}
 // ── AntiStrip ────────────────────────────────────────────────
-// var statt const → Hoisting, damit _asRegister schon in
-// _execAct verfügbar ist bevor _asH unten befüllt wird.
-var _asWatchers = {}; // key: memberNum+'_'+gruppe
-var _asH        = null;
+// Deklaration ganz oben damit _asRegister / _asUnregister
+// von _execAct aufgerufen werden können bevor _asH definiert ist.
+var _asWatchers = {};           // key: memberNum+'_'+gruppe
+var _asH = null;               // wird unten gesetzt
 function _asRegister(C, a) {
   var gruppe = (a.antiStrip_itemConfig && a.antiStrip_itemConfig.group)
     || (a.antiStrip_curseEntry && a.antiStrip_curseEntry.Gruppe)
@@ -6932,19 +6365,14 @@ function _asRegister(C, a) {
     || a.gruppe || '';
   if (!gruppe) { _log('\u26A0 AntiStrip: Gruppe nicht erkannt'); return; }
   var key = C.MemberNumber + '_' + gruppe;
-  // Falls kein explizites Ersatz-Item → gleiches Item (Action-eigene Felder als Fallback)
-  var resolvedItemConfig = a.antiStrip_itemConfig || a.itemConfig || null;
-  var resolvedCurseEntry = a.antiStrip_curseEntry || a.curseEntry || null;
-  var resolvedErsatz     = a.antiStrip_ersatz     || a.item       || null;
-  var resolvedFarbe      = a.antiStrip_farbe      || a.farbe      || '#ffffff';
   _asWatchers[key] = {
-    memberNum:  C.MemberNumber,
-    gruppe:     gruppe,
-    delay:      a.antiStrip_delay != null ? a.antiStrip_delay : 500,
-    ersatz:     resolvedErsatz,
-    farbe:      resolvedFarbe,
-    itemConfig: resolvedItemConfig,
-    curseEntry: resolvedCurseEntry,
+    memberNum: C.MemberNumber,
+    gruppe:    gruppe,
+    delay:     a.antiStrip_delay != null ? a.antiStrip_delay : 500,
+    ersatz:    a.antiStrip_ersatz || null,
+    farbe:     a.antiStrip_farbe  || '#ffffff',
+    itemConfig: a.antiStrip_itemConfig || null,
+    curseEntry: a.antiStrip_curseEntry || null,
   };
   _log('\u{1F6E1}\uFE0F AntiStrip aktiv: ' + C.Name + ' / ' + gruppe
     + (a.antiStrip_ersatz ? ' \u2192 ' + a.antiStrip_ersatz : ' (gleiches Item)'));
@@ -6954,8 +6382,7 @@ function _asUnregister(C, gruppe) {
   var key = C.MemberNumber + '_' + gruppe;
   if (_asWatchers[key]) {
     delete _asWatchers[key];
-    _log('\u{1F6E1}\uFE0F AntiStrip beendet (Bot hat Item geändert/entfernt): '
-      + C.Name + ' / ' + gruppe);
+    _log('\u{1F6E1}\uFE0F AntiStrip beendet (Bot entfernt/ändert Item): ' + C.Name + ' / ' + gruppe);
   }
 }
 // ─────────────────────────────────────────────────────────────
@@ -6996,8 +6423,6 @@ const _shopCfg={
   announceAllMsg:_cfg.shopAnnounceAllMsg??'',
   errorMsg:_cfg.shopErrorMsg??'',
   moneyName:_cfg.moneyName??'Gold',
-  preisU:_cfg.shopPreisU??0,
-  preisNostrip:_cfg.shopPreisNostrip??0,
 };
 // Money-Balances: lokale Kopie für Echtzeit-Prüfungen (wird bei Abbuchung synchron aktualisiert)
 const _moneyBalances=Object.assign({},_cfg.moneyBalances??{});
@@ -7070,64 +6495,7 @@ function _ok(trig,rohText,typKey,C){
     if(c.logik==='oder'||c.logik==='und_oder')groups.push([]);
     groups[groups.length-1].push(c);
   }
-  // At least one group (OR) must be fully satisfied (AND within group)
-  // und_nicht: Bedingung muss FALSCH sein
-  return groups.some(g=>g.every(c=>c.logik==='und_nicht'?!checkOne(c):checkOne(c)));
-}
-
-// ── IF-Bedingungen Check (entscheidet DANN vs. SONST wenn ifElse aktiv) ──
-function _okIf(trig,rohText,typKey,C){
-  const cx=C.X??-999,cy=C.Y??-999;
-  const beds=trig.ifBedingungen??[];
-  if(!beds.length)return true; // keine IF-Beds → immer DANN
-  function checkOne(c){
-    if(c.typ==='wort'){
-      const m=c.typ_msg||'any';
-      if(m!=='any'&&m!==typKey)return false;
-      return!c.wort||(rohText||'').toLowerCase().includes((c.wort||'').toLowerCase());
-    }
-    if(c.typ==='zone'){
-      const p=c.puffer??1;
-      return cx>=c.x-p&&cx<=c.x+p&&cy>=c.y-p&&cy<=c.y+p;
-    }
-    if(c.typ==='zone_rect'){
-      return cx>=Math.min(c.x1,c.x2)&&cx<=Math.max(c.x1,c.x2)&&cy>=Math.min(c.y1,c.y2)&&cy<=Math.max(c.y1,c.y2);
-    }
-    if(c.typ==='item_traegt'){
-      const Cf=ChatRoomCharacter.find(x=>x.MemberNumber===C.MemberNumber)??C;
-      return(Cf.Appearance??[]).some(a=>a.Asset?.Name===c.item);
-    }
-    if(c.typ==='item_traegt_nicht'){
-      const Cf=ChatRoomCharacter.find(x=>x.MemberNumber===C.MemberNumber)??C;
-      return!(Cf.Appearance??[]).some(a=>a.Asset?.Name===c.item);
-    }
-    if(c.typ==='trigger_war'){
-      const ref=_trigMap[c.trigId];
-      return ref?.charSpec?!!_firedChar[c.trigId+'_'+C.MemberNumber]:!!_fired[c.trigId];
-    }
-    if(c.typ==='rang'){
-      const op=c.rang_op??'=';
-      const currentId=_rangState[C.MemberNumber]??null;
-      if(op==='kein') return !currentId;
-      if(!c.rang_id) return false;
-      const defs=(_cfg.rankDefs??[]).sort((a,b)=>a.level-b.level);
-      const targetDef=defs.find(r=>r.id===c.rang_id);
-      const currentDef=defs.find(r=>r.id===currentId);
-      if(!targetDef) return false;
-      if(!currentDef) return false;
-      const tl=targetDef.level, cl=currentDef.level;
-      if(op==='=')   return cl===tl;
-      if(op==='min') return cl>=tl;
-      if(op==='max') return cl<=tl;
-      return false;
-    }
-    return true;
-  }
-  const groups=[[]];
-  for(const c of beds){
-    if(c.logik==='oder'||c.logik==='und_oder')groups.push([]);
-    groups[groups.length-1].push(c);
-  }
+  // UND NICHT: Bedingung muss FALSCH sein
   return groups.some(g=>g.every(c=>c.logik==='und_nicht'?!checkOne(c):checkOne(c)));
 }
 function _istBesetzt(x,y,ausschliessen){
@@ -7289,11 +6657,7 @@ function _execAct(a,C,vars){
     else if(a.typ==='emote'){ServerSend('ChatRoomChat',{Content:_tpl(a.text,vars),Type:'Emote'});ok=true;}
     else if(a.typ==='whisper'){ServerSend('ChatRoomChat',{Content:_tpl(a.text,vars),Type:'Whisper',Target:C.MemberNumber});ok=true;}
     else if(a.typ==='item_entf'){const _entfGruppe=a.gruppe;InventoryRemove(C,_entfGruppe);CharacterRefresh(C);ChatRoomCharacterUpdate(C);_asUnregister(C,_entfGruppe);ok=true;}
-    else if(a.typ==='item'){
-      _applyItemAction(a,C);
-      if(a.antiStrip||vars?.shopNostrip)_asRegister(C,a);
-      ok=true;
-    }
+    else if(a.typ==='item'){_applyItemAction(a,C);if(a.antiStrip)_asRegister(C,a);ok=true;}
     else if(a.typ==='teleport'){ok=_teleport(a,C);}
     else if(a.typ==='money'){
       const op=a.money_op??'add';
@@ -7565,12 +6929,8 @@ function _run(trig,vars){
 
   // ── Aktionen sequenziell mit Basis-Delay starten ─────────
   setTimeout(()=>{
-    // If/Else: Wenn ifElse aktiviert, wähle DANN oder SONST-Aktionen
-    // Bedingungscheck wurde bereits durch _ok() bestätigt → Bedingungen = true → DANN
-    // SONST wird nur ausgelöst wenn Bedingungen NICHT zutreffen – das passiert im Join/Item-Poll
-    const aktionenToRun = trig.aktionen??[];
     _runSeq(
-      aktionenToRun,C,vars,trig,
+      trig.aktionen??[],C,vars,trig,
       // onDone – Trigger erfolgreich gezählt
       ()=>{
         const now=Date.now();
@@ -7590,19 +6950,6 @@ function _run(trig,vars){
           ServerSend('ChatRoomChat',{Content:_tpl(trig.fallbackText,vars),Type:typ});
         }
       }
-    );
-  },trig.delay??0);
-}
-
-// ── If/Else SONST-Branch: läuft wenn Bedingungen NICHT zutreffen ──
-function _runSonst(trig,vars){
-  const C=vars.C??Player;
-  _log('\u{1F504} [Else] "'+trig.name+'" → SONST-Aktionen f\u00fcr '+vars.name);
-  setTimeout(()=>{
-    _runSeq(
-      trig.aktionen_sonst??[],C,vars,trig,
-      ()=>{ _log('\u2705 [Else] "'+trig.name+'" SONST-Zweig abgeschlossen'); },
-      ()=>{ _log('\u274C [Else] "'+trig.name+'" SONST-Zweig ungültig'); }
     );
   },trig.delay??0);
 }
@@ -7637,14 +6984,8 @@ function _parseShopArgs(rest){
   while(pos<rest.length){
     while(pos<rest.length&&rest[pos]===' ')pos++;
     if(pos>=rest.length)break;
-    // Flag-Erkennung: /w, /u, /nostrip (case-insensitive, als eigenes Token)
+    // Flag-Erkennung: /w oder /u (case-insensitive, als eigenes Token)
     if(rest[pos]==='/'&&pos+1<rest.length){
-      const remaining=rest.slice(pos+1);
-      if(/^nostrip\b/i.test(remaining)){
-        flags.add('nostrip');
-        pos+=8; // '/' + 'nostrip'
-        continue;
-      }
       const fl=rest[pos+1].toLowerCase();
       if(fl==='w'||fl==='u'){
         flags.add(fl);
@@ -7691,12 +7032,6 @@ function _handleShopCmd(rohText,buyerC){
 
   const flagWhisper=flags.has('w');   // /w = Ankündigung als Whisper statt Chat
   const flagUnknown=flags.has('u');   // /u = Käufername wird als "Unbekannt" angezeigt
-  const flagNostrip=flags.has('nostrip'); // /nostrip = Item kann nicht abgelegt werden (AntiStrip)
-
-  // Flag-Aufpreise berechnen
-  const preisU      = flagUnknown ? (shopItem.preisU      ?? _shopCfg.preisU      ?? 0) : 0;
-  const preisNostrip= flagNostrip ? (shopItem.preisNostrip ?? _shopCfg.preisNostrip ?? 0) : 0;
-  const flagAufpreis= preisU + preisNostrip;
 
   const itemName=args[0].toLowerCase();
   const shopItem=_shopCfg.items.find(i=>i.name.toLowerCase()===itemName);
@@ -7719,21 +7054,14 @@ function _handleShopCmd(rohText,buyerC){
       ServerSend('ChatRoomChat',{Content:'Niemand im Raum.',Type:'Whisper',Target:buyerC.MemberNumber});
       return;
     }
-    const gesamt=(preis+flagAufpreis)*anzahl;
+    const gesamt=preis*anzahl;
     const buyerBalance=(_moneyBalances[buyerC.MemberNumber]?.balance)??0;
 
     if(buyerBalance<gesamt){
-      let aufpreisInfo='';
-      if(flagAufpreis>0){
-        const parts=[];
-        if(preisU>0)      parts.push('/u: '+preisU+' '+cur);
-        if(preisNostrip>0)parts.push('/nostrip: '+preisNostrip+' '+cur);
-        aufpreisInfo=' (inkl. Flag-Aufpreis: '+parts.join(', ')+')';
-      }
-      const rawMsg=shopItem.errorMsg||_shopCfg.errorMsg||('Nicht genug '+cur+'! Du hast {kontostand} '+cur+', benötigt: {gesamt} '+cur+' ('+anzahl+'×'+(preis+flagAufpreis)+')'+aufpreisInfo+'.');
-      const msg=_shopTpl(rawMsg,buyerC,null,shopItem,preis+flagAufpreis,buyerBalance,anzahl,gesamt);
+      const rawMsg=shopItem.errorMsg||_shopCfg.errorMsg||('Nicht genug '+cur+'! Du hast {kontostand} '+cur+', benötigt: {gesamt} '+cur+' ('+anzahl+'×'+preis+').');
+      const msg=_shopTpl(rawMsg,buyerC,null,shopItem,preis,buyerBalance,anzahl,gesamt);
       ServerSend('ChatRoomChat',{Content:msg,Type:'Whisper',Target:buyerC.MemberNumber});
-      _log('🛒 All-Kauf abgelehnt: '+buyerC.Name+' hat '+buyerBalance+', braucht '+gesamt+' ('+anzahl+'×'+(preis+flagAufpreis)+')');
+      _log('🛒 All-Kauf abgelehnt: '+buyerC.Name+' hat '+buyerBalance+', braucht '+gesamt+' ('+anzahl+'×'+preis+')');
       return;
     }
 
@@ -7745,7 +7073,7 @@ function _handleShopCmd(rohText,buyerC){
       memberNum:buyerC.MemberNumber,name:buyerC.Name,delta:-gesamt},'*');
 
     const newBal=_moneyBalances[buyerC.MemberNumber].balance;
-    _log('🛒 All-Kauf: '+buyerC.Name+' kauft "'+shopItem.name+'" für alle ('+anzahl+'×'+(preis+flagAufpreis)+'='+gesamt+' '+cur+'). Kontostand: '+newBal+(flagUnknown?' [/u]':'')+(flagWhisper?' [/w]':'')+(flagNostrip?' [/nostrip]':''));
+    _log('🛒 All-Kauf: '+buyerC.Name+' kauft "'+shopItem.name+'" für alle ('+anzahl+'×'+preis+'='+gesamt+' '+cur+'). Kontostand: '+newBal+(flagUnknown?' [/u]':'')+(flagWhisper?' [/w]':''));
 
     window.__BCK_popupRef?.postMessage({app:'BCKonfigurator',type:'BOT_SHOP',
       buyerNum:buyerC.MemberNumber,buyerName:buyerC.Name,
@@ -7755,8 +7083,7 @@ function _handleShopCmd(rohText,buyerC){
     // All-Ankündigung
     const rawAnnAll=shopItem.announceAllMsg||_shopCfg.announceAllMsg||
       (displayBuyer.Name+' kauft '+shopItem.icon+' '+shopItem.name+' für alle ('+anzahl+' Spieler, '+gesamt+' '+cur+').');
-    // Bei All-Kauf: {preis} = Gesamtpreis (was bezahlt wurde), {gesamt} ebenfalls Gesamtpreis
-    const annAllTxt=_shopTpl(rawAnnAll,displayBuyer,null,shopItem,gesamt,newBal,anzahl,gesamt);
+    const annAllTxt=_shopTpl(rawAnnAll,displayBuyer,null,shopItem,preis,newBal,anzahl,gesamt);
     if(flagWhisper){
       // Als Whisper an alle Zielspieler
       targets.forEach(tc=>ServerSend('ChatRoomChat',{Content:annAllTxt,Type:'Whisper',Target:tc.MemberNumber}));
@@ -7764,15 +7091,15 @@ function _handleShopCmd(rohText,buyerC){
       ServerSend('ChatRoomChat',{Content:annAllTxt,Type:'Chat'});
     }
 
-    // Bestätigung an Käufer – {preis} = Gesamtpreis
+    // Bestätigung an Käufer
     const rawConf=shopItem.confirmMsg||_shopCfg.confirmMsg||
       ('✅ Gekauft für alle '+anzahl+' Spieler. Bezahlt: '+gesamt+' '+cur+'. Kontostand: '+newBal+' '+cur+'.');
-    ServerSend('ChatRoomChat',{Content:_shopTpl(rawConf,buyerC,null,shopItem,gesamt,newBal,anzahl,gesamt),Type:'Whisper',Target:buyerC.MemberNumber});
+    ServerSend('ChatRoomChat',{Content:_shopTpl(rawConf,buyerC,null,shopItem,preis,newBal,anzahl,gesamt),Type:'Whisper',Target:buyerC.MemberNumber});
 
     // Trigger für jeden Ziel-Spieler
     targets.forEach(targetC=>{
       const shopVars={name:buyerC.Name,wort:rohText,typ:'🛒 Shop All',x:buyerC.X??0,y:buyerC.Y??0,
-        C:targetC,shopBuyer:buyerC,shopItem,shopAnzahl:anzahl,shopGesamt:gesamt,shopNostrip:flagNostrip};
+        C:targetC,shopBuyer:buyerC,shopItem,shopAnzahl:anzahl,shopGesamt:gesamt};
       _trigs.forEach(trig=>{
         const shopConds=(trig.bedingungen??[]).filter(c=>c.typ==='shop_kauf');
         if(!shopConds.length)return;
@@ -7827,33 +7154,25 @@ function _handleShopCmd(rohText,buyerC){
     }
   }
 
-  const preisEffektiv = preis + flagAufpreis;
   const buyerBalance=(_moneyBalances[buyerC.MemberNumber]?.balance)??0;
 
-  if(buyerBalance<preisEffektiv){
-    let aufpreisInfo='';
-    if(flagAufpreis>0){
-      const parts=[];
-      if(preisU>0)      parts.push('/u: '+preisU+' '+cur);
-      if(preisNostrip>0)parts.push('/nostrip: '+preisNostrip+' '+cur);
-      aufpreisInfo=' (inkl. '+parts.join(' + ')+')';
-    }
-    const rawMsg=shopItem.errorMsg||_shopCfg.errorMsg||('Nicht genug '+cur+'! Du hast {kontostand} '+cur+', benötigt: {preis} '+cur+aufpreisInfo+'.');
-    ServerSend('ChatRoomChat',{Content:_shopTpl(rawMsg,buyerC,targetC,shopItem,preisEffektiv,buyerBalance),Type:'Whisper',Target:buyerC.MemberNumber});
-    _log('🛒 Kauf abgelehnt: '+buyerC.Name+' hat '+buyerBalance+' '+cur+', braucht '+preisEffektiv);
+  if(buyerBalance<preis){
+    const rawMsg=shopItem.errorMsg||_shopCfg.errorMsg||('Nicht genug '+cur+'! Du hast {kontostand} '+cur+', benötigt: {preis} '+cur+'.');
+    ServerSend('ChatRoomChat',{Content:_shopTpl(rawMsg,buyerC,targetC,shopItem,preis,buyerBalance),Type:'Whisper',Target:buyerC.MemberNumber});
+    _log('🛒 Kauf abgelehnt: '+buyerC.Name+' hat '+buyerBalance+' '+cur+', braucht '+preis);
     return;
   }
 
   // Coins abziehen
   if(!_moneyBalances[buyerC.MemberNumber])
     _moneyBalances[buyerC.MemberNumber]={balance:0,name:buyerC.Name};
-  _moneyBalances[buyerC.MemberNumber].balance-=preisEffektiv;
+  _moneyBalances[buyerC.MemberNumber].balance-=preis;
   window.__BCK_popupRef?.postMessage({app:'BCKonfigurator',type:'BOT_MONEY',
-    memberNum:buyerC.MemberNumber,name:buyerC.Name,delta:-preisEffektiv},'*');
+    memberNum:buyerC.MemberNumber,name:buyerC.Name,delta:-preis},'*');
 
   const newBal=_moneyBalances[buyerC.MemberNumber].balance;
   const isFremdkauf=targetC.MemberNumber!==buyerC.MemberNumber;
-  _log('🛒 Kauf: '+buyerC.Name+' kauft "'+shopItem.name+'" für '+preisEffektiv+' '+cur+(isFremdkauf?' → Ziel: '+targetC.Name:'')+' | Kontostand: '+newBal+(flagUnknown?' [/u]':'')+(flagWhisper?' [/w]':'')+(flagNostrip?' [/nostrip]':''));
+  _log('🛒 Kauf: '+buyerC.Name+' kauft "'+shopItem.name+'" für '+preis+' '+cur+(isFremdkauf?' → Ziel: '+targetC.Name:'')+' | Kontostand: '+newBal+(flagUnknown?' [/u]':'')+(flagWhisper?' [/w]':''));
 
   window.__BCK_popupRef?.postMessage({app:'BCKonfigurator',type:'BOT_SHOP',
     buyerNum:buyerC.MemberNumber,buyerName:buyerC.Name,
@@ -7862,15 +7181,16 @@ function _handleShopCmd(rohText,buyerC){
 
   // Bestätigungs-Whisper an Käufer
   const rawConf=shopItem.confirmMsg||_shopCfg.confirmMsg||
-    ('✅ '+(isFremdkauf?'Du kaufst '+shopItem.name+' für '+targetC.Name:shopItem.name+' gekauft')+'. Bezahlt: '+preisEffektiv+' '+cur+(flagNostrip?' 🔒 NoStrip':'')+'. Kontostand: '+newBal+' '+cur+'.');
-  ServerSend('ChatRoomChat',{Content:_shopTpl(rawConf,buyerC,targetC,shopItem,preisEffektiv,newBal),Type:'Whisper',Target:buyerC.MemberNumber});
+    ('✅ '+(isFremdkauf?'Du kaufst '+shopItem.name+' für '+targetC.Name:shopItem.name+' gekauft')+'. Bezahlt: '+preis+' '+cur+'. Kontostand: '+newBal+' '+cur+'.');
+  ServerSend('ChatRoomChat',{Content:_shopTpl(rawConf,buyerC,targetC,shopItem,preis,newBal),Type:'Whisper',Target:buyerC.MemberNumber});
 
   // Fremdkauf-Ankündigung (nur wenn für anderen Spieler)
   if(isFremdkauf){
     const rawAnn=shopItem.announceMsg||_shopCfg.announceMsg||
-      (displayBuyer.Name+' hat für '+targetC.Name+' das Item '+shopItem.icon+' '+shopItem.name+' gekauft'+(flagNostrip?' 🔒':'')+'.') ;
-    const annTxt=_shopTpl(rawAnn,displayBuyer,targetC,shopItem,preisEffektiv,newBal);
+      (displayBuyer.Name+' hat für '+targetC.Name+' das Item '+shopItem.icon+' '+shopItem.name+' gekauft.');
+    const annTxt=_shopTpl(rawAnn,displayBuyer,targetC,shopItem,preis,newBal);
     if(flagWhisper){
+      // Whisper direkt an das Ziel
       ServerSend('ChatRoomChat',{Content:annTxt,Type:'Whisper',Target:targetC.MemberNumber});
     } else {
       ServerSend('ChatRoomChat',{Content:annTxt,Type:'Chat'});
@@ -7878,7 +7198,7 @@ function _handleShopCmd(rohText,buyerC){
   }
 
   // Shop-Trigger auslösen
-  const shopVars={name:buyerC.Name,wort:rohText,typ:'🛒 Shop',x:buyerC.X??0,y:buyerC.Y??0,C:targetC,shopBuyer:buyerC,shopItem,shopNostrip:flagNostrip};
+  const shopVars={name:buyerC.Name,wort:rohText,typ:'🛒 Shop',x:buyerC.X??0,y:buyerC.Y??0,C:targetC,shopBuyer:buyerC,shopItem};
   _trigs.forEach(trig=>{
     const shopConds=(trig.bedingungen??[]).filter(c=>c.typ==='shop_kauf');
     if(!shopConds.length)return;
@@ -7956,18 +7276,8 @@ function _proc(rohText,typKey,C){
       return true; // 'alle'
     })();
     if(!vonOk)return;
-    // Alle anderen: _ok prueft Auslöser-Bedingungen (wort, zone, vortrigger)
-    const condOk=_ok(trig,rohText,typKey,C);
-    if(condOk){
-      // Auslöser passt → jetzt IF-Bedingungen prüfen (nur wenn ifElse aktiv und ifBedingungen vorhanden)
-      const ifBeds=trig.ifBedingungen??[];
-      const ifOk=!trig.ifElse||!ifBeds.length||_okIf(trig,rohText,typKey,C);
-      if(ifOk){
-        _run(trig,{name:C.Name,wort:rohText,typ:typLabel,x:pos.X,y:pos.Y,zone:'',C});
-      } else if((trig.aktionen_sonst??[]).length){
-        _runSonst(trig,{name:C.Name,wort:rohText,typ:typLabel,x:pos.X,y:pos.Y,zone:'',C});
-      }
-    }
+    // Alle anderen: _ok prueft Bedingungen (wort, zone, vortrigger)
+    if(_ok(trig,rohText,typKey,C))_run(trig,{name:C.Name,wort:rohText,typ:typLabel,x:pos.X,y:pos.Y,zone:'',C});
   });
 
   // ── Chat-Events prüfen ──
@@ -8066,12 +7376,7 @@ const _itPoll=setInterval(()=>{
           }
           return true;
         });
-        if(otherOk){
-          const ifBeds=trig.ifBedingungen??[];
-          const ifOk=!trig.ifElse||!ifBeds.length||_okIf(trig,'','item',C);
-          if(ifOk) _run(trig,{name:C.Name,wort:'',typ:'Item',x:pos.X,y:pos.Y,zone:'',C});
-          else if((trig.aktionen_sonst??[]).length) _runSonst(trig,{name:C.Name,wort:'',typ:'Item',x:pos.X,y:pos.Y,zone:'',C});
-        }
+        if(otherOk)_run(trig,{name:C.Name,wort:'',typ:'Item',x:pos.X,y:pos.Y,zone:'',C});
       }
       _itState[key]=condMet;
     });
@@ -8182,10 +7487,7 @@ const _joinPoll=setInterval(()=>{
         if(isRejoinTrig){
           rejoinBatch.push(trig); // Rejoin: gesammelt feuern
         } else {
-          const ifBeds=trig.ifBedingungen??[];
-          const ifOk=!trig.ifElse||!ifBeds.length||_okIf(trig,'',null,C);
-          if(ifOk) _run(trig,{name:C.Name,wort:'',typ:label,x:pos.X,y:pos.Y,zone:'',C});
-          else if((trig.aktionen_sonst??[]).length) _runSonst(trig,{name:C.Name,wort:'',typ:label,x:pos.X,y:pos.Y,zone:'',C});
+          _run(trig,{name:C.Name,wort:'',typ:label,x:pos.X,y:pos.Y,zone:'',C});
         }
       });
       // ── Betritt-Events feuern (Events mit player_betritt Bedingung) ──
@@ -8274,16 +7576,10 @@ const _joinPoll=setInterval(()=>{
               _log('⏭ [Rejoin] "'+trig.name+'" – Item-Bedingung nach Sync nicht erfüllt (Appearance jetzt geladen)');
               return;
             }
-            const ifBedsR=trig.ifBedingungen??[];
-            const ifOkR=!trig.ifElse||!ifBedsR.length||_okIf(trig,'',null,Cfresh);
-            if(ifOkR) _run(trig,{name:Cfresh.Name,wort:'',typ:label,x:Cfresh.X??pos.X,y:Cfresh.Y??pos.Y,zone:'',C:Cfresh});
-            else if((trig.aktionen_sonst??[]).length) _runSonst(trig,{name:Cfresh.Name,wort:'',typ:label,x:Cfresh.X??pos.X,y:Cfresh.Y??pos.Y,zone:'',C:Cfresh});
+            _run(trig,{name:Cfresh.Name,wort:'',typ:label,x:Cfresh.X??pos.X,y:Cfresh.Y??pos.Y,zone:'',C:Cfresh});
           }, ITEM_SYNC_DELAY);
         } else {
-          const ifBeds=trig.ifBedingungen??[];
-          const ifOk=!trig.ifElse||!ifBeds.length||_okIf(trig,'',null,C);
-          if(ifOk) _run(trig,{name:C.Name,wort:'',typ:label,x:pos.X,y:pos.Y,zone:'',C});
-          else if((trig.aktionen_sonst??[]).length) _runSonst(trig,{name:C.Name,wort:'',typ:label,x:pos.X,y:pos.Y,zone:'',C});
+          _run(trig,{name:C.Name,wort:'',typ:label,x:pos.X,y:pos.Y,zone:'',C});
         }
       });
     }
@@ -8403,7 +7699,7 @@ _asH = function(data) {
   if (!data || data.Type !== 'Action') return;
   var txt = JSON.stringify(data);
   if (txt.indexOf('ItemRemove') === -1 && txt.indexOf('ActionRemove') === -1) return;
-  // Sender ermitteln – Bot selbst? → kein AntiStrip
+  // Sender: Bot selbst? → kein AntiStrip auslösen
   var sender = null;
   if (Array.isArray(data.Dictionary)) {
     for (var _di = 0; _di < data.Dictionary.length; _di++) {
@@ -8413,10 +7709,10 @@ _asH = function(data) {
     }
   }
   if (sender === null) sender = data.Sender;
-  if (sender === Player.MemberNumber) return;
-  // Alle aktiven Watcher durchgehen
-  var _keys = Object.keys(_asWatchers);
-  for (var _wi = 0; _wi < _keys.length; _wi++) {
+  if (sender === Player.MemberNumber) return; // Bot selbst → ignorieren
+  // Alle Watcher prüfen
+  var keys = Object.keys(_asWatchers);
+  for (var _wi = 0; _wi < keys.length; _wi++) {
     (function(w) {
       var allChars = [Player].concat(ChatRoomCharacter || []);
       var C = null;
@@ -8425,7 +7721,7 @@ _asH = function(data) {
       }
       if (!C) return;
       var item = (typeof InventoryGet === 'function') ? InventoryGet(C, w.gruppe) : null;
-      if (item) return; // Slot noch besetzt
+      if (item) return; // Slot noch besetzt → nichts tun
       _log('\u{1F6E1}\uFE0F AntiStrip: ' + w.gruppe + ' leer bei ' + C.Name + ' \u2192 lege wieder an...');
       setTimeout(function() {
         try {
@@ -8449,11 +7745,12 @@ _asH = function(data) {
             if (typeof col2 === 'string' && col2.indexOf(',') !== -1) col2 = col2.split(',');
             InventoryWear(C, w.curseEntry.ItemName, w.curseEntry.Gruppe,
               col2, 0, Player.MemberNumber, w.curseEntry.Craft || null);
-          } else if (w.ersatz) {
-            InventoryWear(C, w.ersatz, w.gruppe, w.farbe || '#ffffff', 0, Player.MemberNumber);
           } else {
-            _log('\u26A0 AntiStrip: kein Ersatz konfiguriert f\u00fcr ' + w.gruppe);
-            return;
+            // Gleiches Item oder Ersatz ohne Konfig
+            var ersatz = w.ersatz || (w.itemConfig && w.itemConfig.asset);
+            var gruppe  = w.gruppe;
+            if (!ersatz) { _log('\u26A0 AntiStrip: kein Ersatz-Item konfiguriert'); return; }
+            InventoryWear(C, ersatz, gruppe, w.farbe || '#ffffff', 0, Player.MemberNumber);
           }
           CharacterRefresh(C);
           ChatRoomCharacterUpdate(C);
@@ -8462,11 +7759,11 @@ _asH = function(data) {
           _log('\u26A0 AntiStrip Fehler: ' + ex.message);
         }
       }, w.delay != null ? w.delay : 500);
-    })(_asWatchers[_keys[_wi]]);
+    })(_asWatchers[keys[_wi]]);
   }
 };
 ServerSocket.on('ChatRoomMessage', _asH);
-// ─────────────────────────────────────────────────────────────
+// ────────────────────────────────────────────────────────────
 
 const _msgH=function(data){
   if(!['Chat','Emote','Whisper'].includes(data.Type))return;
@@ -8591,149 +7888,5 @@ function botSync() {
   }, 700);
 }
 
-
-// ══════════════════════════════════════════════════════════════
-//  BOT PROFILE  (schnelles Umschalten zwischen Bot-Sets)
-// ══════════════════════════════════════════════════════════════
-const _BP_KEY   = 'BC_BotProfiles_v1';
-const _BP_ICONS = ['🎭','🌙','☀️','🌈','⚡','🔥','🎮','🎲','🎪','🎨','🏰','🌸','🤖','🐉','💎','🚀','🌿','🎵','👑','🔮'];
-let _bpList     = [];
-let _bpActiveId = null;
-
-function _bpLoad() {
-  try {
-    const d = JSON.parse(localStorage.getItem(_BP_KEY) || '{}');
-    _bpList     = d.list     ?? [];
-    _bpActiveId = d.activeId ?? null;
-  } catch {}
-}
-function _bpSave() {
-  try { localStorage.setItem(_BP_KEY, JSON.stringify({ list: _bpList, activeId: _bpActiveId })); } catch {}
-}
-
-function bpToggle() {
-  document.getElementById('bp-head')?.classList.toggle('open');
-  document.getElementById('bp-body')?.classList.toggle('open');
-}
-
-function bpRender() {
-  const el = document.getElementById('bpList'); if (!el) return;
-  if (!_bpList.length) {
-    el.innerHTML = '<div style="padding:10px 14px;font-size:.62rem;color:var(--text3)">Noch keine Profile. Klicke + Neu.</div>';
-    return;
-  }
-  el.innerHTML = _bpList.map(p => {
-    const bots  = p.botIds.map(id => _bots.find(b => b.id === id)).filter(Boolean);
-    const isAct = p.id === _bpActiveId;
-    return `<div class="bp-item${isAct ? ' active' : ''}" onclick="bpActivate('${p.id}')" title="Klicken zum Aktivieren">
-      <div class="bp-icon">${escHtml(p.icon || '🎭')}</div>
-      <div class="bp-info">
-        <div class="bp-name">${escHtml(p.name)}${isAct ? '&nbsp;<span style="font-size:.55rem;background:rgba(139,92,246,.3);color:#c4b5fd;padding:1px 5px;border-radius:3px">AKTIV</span>' : ''}</div>
-        <div class="bp-meta">${bots.length} Bot${bots.length !== 1 ? 's' : ''}</div>
-      </div>
-      <div class="bp-btns" onclick="event.stopPropagation()">
-        <button class="bp-btn edit" onclick="bpEdit('${p.id}')" title="Bearbeiten">✎</button>
-        <button onclick="bpDelete('${p.id}')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.7rem;padding:1px 5px">\u2715</button>
-      </div>
-    </div>`;
-  }).join('');
-}
-
-function bpActivate(id) {
-  if (!_connected) { showStatus('\u274C Nicht mit BC verbunden', 'error'); return; }
-  const p = _bpList.find(x => x.id === id); if (!p) return;
-  _bots.forEach(b => { if (b.laufend && !p.botIds.includes(b.id)) botStopById(b.id); });
-  setTimeout(() => {
-    p.botIds.forEach(bid => {
-      const b = _bots.find(x => x.id === bid);
-      if (b && !b.laufend) botDeployById(b.id);
-    });
-    _bpActiveId = id;
-    _bpSave();
-    showStatus('\u{1F3AD} Profil "' + p.name + '" aktiviert', 'success');
-    bpRender(); renderBotList();
-  }, 400);
-}
-
-function bpNew()    { bpModalOpen(null); }
-function bpEdit(id) { bpModalOpen(id);   }
-
-function bpDelete(id) {
-  const p = _bpList.find(x => x.id === id);
-  if (!p || !confirm('Profil "' + p.name + '" l\u00f6schen?')) return;
-  _bpList = _bpList.filter(x => x.id !== id);
-  if (_bpActiveId === id) _bpActiveId = null;
-  _bpSave(); bpRender();
-}
-
-function bpModalOpen(id) {
-  const ov = document.getElementById('bpModalOverlay'); if (!ov) return;
-  const p  = id ? _bpList.find(x => x.id === id) : null;
-  document.getElementById('bpModalId').value   = id ?? '';
-  document.getElementById('bpModalTitle').textContent = id ? 'Profil bearbeiten' : 'Neues Profil';
-  document.getElementById('bpModalName').value = p?.name ?? '';
-  const curIcon = p?.icon ?? '\u{1F3AD}';
-  document.getElementById('bpIconPicker').innerHTML = _BP_ICONS.map(ic =>
-    `<button class="pm-icon-btn${ic === curIcon ? ' sel' : ''}" onclick="bpIconSel('${ic}')" data-icon="${ic}">${ic}</button>`
-  ).join('');
-  const selIds = p?.botIds ?? [];
-  document.getElementById('bpBotList').innerHTML = _bots.length
-    ? _bots.map(b =>
-        `<label class="pm-bot-row">
-          <input type="checkbox" value="${b.id}" ${selIds.includes(b.id) ? 'checked' : ''}>
-          <span>${escHtml(b.name)}</span>
-          <span style="font-size:.58rem;color:var(--text3);margin-left:auto">${b.laufend ? '\u25B6\uFE0F' : '\u23F8'}</span>
-        </label>`
-      ).join('')
-    : '<div style="font-size:.65rem;color:var(--text3);padding:8px">Noch keine Bots.</div>';
-  ov.style.display = 'flex';
-  setTimeout(() => document.getElementById('bpModalName').focus(), 40);
-}
-
-function bpIconSel(icon) {
-  document.querySelectorAll('#bpIconPicker .pm-icon-btn')
-    .forEach(b => b.classList.toggle('sel', b.dataset.icon === icon));
-}
-function bpModalClose() { document.getElementById('bpModalOverlay').style.display = 'none'; }
-
-function bpModalSave() {
-  const id   = document.getElementById('bpModalId').value || null;
-  const name = document.getElementById('bpModalName').value.trim();
-  if (!name) {
-    document.getElementById('bpModalName').style.outline = '2px solid var(--red)';
-    document.getElementById('bpModalName').focus(); return;
-  }
-  document.getElementById('bpModalName').style.outline = '';
-  const icon   = document.querySelector('#bpIconPicker .pm-icon-btn.sel')?.dataset.icon ?? '\u{1F3AD}';
-  const botIds = [...document.querySelectorAll('#bpBotList input[type=checkbox]:checked')].map(cb => cb.value);
-  if (id) {
-    const p = _bpList.find(x => x.id === id);
-    if (p) { p.name = name; p.icon = icon; p.botIds = botIds; }
-  } else {
-    _bpList.push({ id: 'p' + Date.now(), name, icon, botIds });
-  }
-  _bpSave(); bpModalClose(); bpRender();
-  showStatus('\u2705 Profil gespeichert', 'success');
-}
-
 </script>
-
-<!-- Profil Editor Modal -->
-<div id="bpModalOverlay" class="pm-overlay" style="display:none" onclick="if(event.target===this)bpModalClose()">
-  <div class="pm-box">
-    <h3 id="bpModalTitle">Neues Profil</h3>
-    <input type="hidden" id="bpModalId">
-    <label>Name</label>
-    <input class="cf" id="bpModalName" placeholder="Profilname" style="width:100%">
-    <label>Icon</label>
-    <div class="pm-icons" id="bpIconPicker"></div>
-    <label style="margin-top:12px">Bots in diesem Profil</label>
-    <div class="pm-bot-list" id="bpBotList"></div>
-    <div class="pm-footer">
-      <button onclick="bpModalClose()" style="padding:7px 16px;border:1px solid rgba(255,255,255,.1);background:none;color:var(--text3);border-radius:8px;cursor:pointer;font-family:var(--font-ui);font-size:.78rem">Abbrechen</button>
-      <button onclick="bpModalSave()" style="padding:7px 18px;background:var(--purple);border:none;color:#fff;border-radius:8px;cursor:pointer;font-family:var(--font-ui);font-size:.78rem;font-weight:700">&#x2713; Speichern</button>
-    </div>
-  </div>
-</div>
-
 </body>
