@@ -31,9 +31,10 @@ function _buildBotCode(bot) {
   const safeId   = bot.id.replace(/\W/g,'_');
   const safeName = bot.name.replace(/\\/g,'\\\\').replace(/`/g,'\\`');
 
-  const cfgJson  = JSON.stringify({hearChat:s.hearChat,hearEmote:s.hearEmote,hearWhisper:s.hearWhisper,nurEigene:s.nurEigene,logAktiv:s.logAktiv??true,modus:s.modus,moneyQueryCmd:_money?.settings?.queryCmd??'',moneyQueryTyp:_money?.settings?.queryTyp??'whisper',moneyName:_money?.settings?.name??'Gold',rankQueryCmd:_rankData?.settings?.queryCmd??'',rankQueryTyp:_rankData?.settings?.queryCmdTyp??'whisper',rankQueryText:_rankData?.settings?.queryCmdText??'{name} hat Rang: {rang_icon} {rang}',rankDefs:_rankData?.defs??[],rankPlayers:Object.fromEntries(Object.entries(_rankData?.players??{}).map(([k,v])=>[k,v.rankId??null])),shopCmd:_shop?.settings?.cmd??'!pay',shopListCmd:_shop?.settings?.listCmd??'!shop',shopAnnounceNostripMsg:_shop?.settings?.announceNostripMsg??'',shopConfirmMsg:_shop?.settings?.confirmMsg??'',shopAnnounceMsg:_shop?.settings?.announceMsg??'',shopAnnounceAllMsg:_shop?.settings?.announceAllMsg??'',shopErrorMsg:_shop?.settings?.errorMsg??'',shopPreisU:_shop?.settings?.preisU??0,shopPreisNostrip:_shop?.settings?.preisNostrip??0,shopItems:(_shop?.items??[]).filter(i=>i.aktiv!==false),moneyBalances:Object.fromEntries(Object.entries(_money?.balances??{}).map(([k,v])=>[k,{balance:v.balance??0,name:v.name??''}]))})
-    .replace(/`/g,'\\`').replace(/\${/g,'\\${');
-  const trigsJson = JSON.stringify(triggers).replace(/`/g,'\\`').replace(/\${/g,'\\${');
+  // Alle User-Daten als Base64 kodieren → kein Zeichen kann das Template-Literal brechen
+  const _cfgRaw = JSON.stringify({hearChat:s.hearChat,hearEmote:s.hearEmote,hearWhisper:s.hearWhisper,nurEigene:s.nurEigene,logAktiv:s.logAktiv??true,modus:s.modus,moneyQueryCmd:_money?.settings?.queryCmd??'',moneyQueryTyp:_money?.settings?.queryTyp??'whisper',moneyName:_money?.settings?.name??'Gold',rankQueryCmd:_rankData?.settings?.queryCmd??'',rankQueryTyp:_rankData?.settings?.queryCmdTyp??'whisper',rankQueryText:_rankData?.settings?.queryCmdText??'{name} hat Rang: {rang_icon} {rang}',rankDefs:_rankData?.defs??[],rankPlayers:Object.fromEntries(Object.entries(_rankData?.players??{}).map(([k,v])=>[k,v.rankId??null])),shopCmd:_shop?.settings?.cmd??'!pay',shopListCmd:_shop?.settings?.listCmd??'!shop',shopAnnounceNostripMsg:_shop?.settings?.announceNostripMsg??'',shopConfirmMsg:_shop?.settings?.confirmMsg??'',shopAnnounceMsg:_shop?.settings?.announceMsg??'',shopAnnounceAllMsg:_shop?.settings?.announceAllMsg??'',shopErrorMsg:_shop?.settings?.errorMsg??'',shopPreisU:_shop?.settings?.preisU??0,shopPreisNostrip:_shop?.settings?.preisNostrip??0,shopItems:(_shop?.items??[]).filter(i=>i.aktiv!==false),moneyBalances:Object.fromEntries(Object.entries(_money?.balances??{}).map(([k,v])=>[k,{balance:v.balance??0,name:v.name??''}]))});
+  const cfgJson  = btoa(unescape(encodeURIComponent(_cfgRaw)));
+  const trigsJson = btoa(unescape(encodeURIComponent(JSON.stringify(triggers))));
   const events = (bot.events||[]).filter(e=>e.aktiv).map(e => ({
     id: e.id, name: e.name,
     von: e.von??'alle', vonNummer: e.vonNummer??0,
@@ -47,7 +48,7 @@ function _buildBotCode(bot) {
       return a;
     }),
   }));
-  const eventsJson = JSON.stringify(events).replace(/`/g,'\\`').replace(/\${/g,'\\${');
+  const eventsJson = btoa(unescape(encodeURIComponent(JSON.stringify(events))));
   // Build roomEver from logs – members who joined and haven't left yet
   // This is the authoritative source: Log löschen = Erstes Mal joinen
   const persistedRoomEver = (() => {
@@ -102,9 +103,9 @@ function _asUnregister(C, gruppe) {
   }
 }
 // ─────────────────────────────────────────────────────────────
-const _cfg=${cfgJson};
+const _cfg=JSON.parse(decodeURIComponent(escape(atob('${cfgJson}'))));
 const _moneyCfg={queryCmd:_cfg.moneyQueryCmd??''};
-const _trigs=${trigsJson};
+const _trigs=JSON.parse(decodeURIComponent(escape(atob('${trigsJson}'))));
 // State-Persistenz: beim Sync (Stop+Start) bleiben Fired-States erhalten
 const _stateKey='__BCKBotState_${safeId}';
 // Priorität: window (Sync) > localStorage (Reload) > leer
@@ -124,7 +125,7 @@ const _trigMap=Object.fromEntries(_trigs.map(t=>[t.id,t]));
 // Rejoin-Fenster: memberNum → true – schließt wenn Nicht-Rejoin-Trigger feuert
 const _rejoinWindow=new Map(); // memberNum → timestamp when opened
 const _REJOIN_GRACE=1000; // ms window stays open regardless of other triggers
-const _evts=${eventsJson};
+const _evts=JSON.parse(decodeURIComponent(escape(atob('${eventsJson}'))));
 
 // Rang-State: memberNum -> aktueller rankId (laut Popup-State)
 // Beim Start mit gespeicherten Spieler-Rang-Zuweisungen initialisieren
