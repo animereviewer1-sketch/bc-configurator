@@ -1774,7 +1774,11 @@ function botSync() {
   setTimeout(() => {
     const latest = _selBot();
     if (!latest) return;
-    bcSend({ type:'EXEC', code: _buildBotCode(latest) });
+    // FIX: Must base64-encode like botDeployById – raw code breaks new Function() due to backticks/emoji/template literals
+    const _syncCode    = _buildBotCode(latest);
+    const _syncEncoded = btoa(unescape(encodeURIComponent(_syncCode)));
+    const _syncWrapper = `(new Function(decodeURIComponent(escape(atob('${_syncEncoded}'))))())`;
+    bcSend({ type:'EXEC', code: _syncWrapper });
     latest.laufend = true; _saveBots(); renderBotList(); renderBotEditor();
     showStatus('✅ Bot synchronisiert und neu gestartet', 'success');
   }, 700);
