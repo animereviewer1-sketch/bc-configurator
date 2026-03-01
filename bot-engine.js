@@ -1729,17 +1729,11 @@ function botDeployById(id) {
   const b = _bots.find(x=>x.id===id); if (!b) return;
   if (!_connected) { showStatus('❌ Nicht mit BC verbunden','error'); return; }
   const _code = _buildBotCode(b);
-  // Pre-validate syntax before sending to BC
-  try { new Function(_code); } catch(e) {
-    // Find the token near the error
-    const m = e.message.match(/(\d+)/);
-    const pos = m ? parseInt(m[1]) : -1;
-    const snippet = pos > 0 ? _code.slice(Math.max(0,pos-50),pos+50) : _code.slice(0,100);
-    console.error('[Bot] Syntax-Fehler in Bot-Code:', e.message, '\nStelle:', JSON.stringify(snippet));
-    showStatus('❌ Bot-Code Syntax-Fehler: ' + e.message + ' → ' + JSON.stringify(snippet.slice(0,80)), 'error');
-    return;
-  }
-  bcSend({ type:'EXEC', code: _code });
+  // Base64-kodiert senden → kein Sonderzeichen kann den Übertragungsweg brechen
+  // BC-Seite: new Function(decodeURIComponent(escape(atob(encoded))))()
+  const _encoded = btoa(unescape(encodeURIComponent(_code)));
+  const _wrapper = `(new Function(decodeURIComponent(escape(atob('${_encoded}'))))())`;
+  bcSend({ type:'EXEC', code: _wrapper });
   b.laufend = true; _saveBots(); renderBotList();
   if (_selBotId === id) {
     const bar = document.getElementById('bot-status-bar');
