@@ -1037,7 +1037,7 @@ function _handleShopCmd(rohText,buyerC){
   // NoStrip-Ankündigung
   if(flagNostrip){
     const rawNs=shopItem.announceNostripMsg||_shopCfg.announceNostripMsg||
-      ('\U0001F512 '+targetC.Name+' trägt '+shopItem.icon+' '+shopItem.name+' und kann es nicht ablegen.');
+      ('🔒 '+targetC.Name+' trägt '+shopItem.icon+' '+shopItem.name+' und kann es nicht ablegen.');
     const nsTxt=_shopTpl(rawNs,displayBuyer,targetC,shopItem,preis,newBal,1,preisEffektiv);
     if(flagWhisper)ServerSend('ChatRoomChat',{Content:nsTxt,Type:'Whisper',Target:targetC.MemberNumber});
     else ServerSend('ChatRoomChat',{Content:nsTxt,Type:'Chat'});
@@ -1773,4 +1773,3 @@ function botSync() {
     showStatus('✅ Bot synchronisiert und neu gestartet', 'success');
   }, 700);
 }
-
