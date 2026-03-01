@@ -732,18 +732,94 @@ window.CurseScanner = (() => {
           break;
         }
 
-        case 'EXEC':
-          BCK.info('EXEC | code-L\u00e4nge:', ev.data.code?.length);
+        case 'EXEC': {
+          const _execCode = ev.data.code;
+          const _execLen  = _execCode?.length ?? 0;
+
+          // ── DEBUG: Detaillierte Code-Analyse ─────────────────
+          BCK.info('=== EXEC DEBUG START ===');
+          BCK.info('Code-Laenge     :', _execLen);
+          BCK.info('Typ             :', typeof _execCode);
+
+          // Erkenne Format
+          const _isBase64Wrapper = typeof _execCode === 'string' && _execCode.startsWith('(new Function(decodeURIComponent');
+          const _isRawFn         = typeof _execCode === 'string' && _execCode.trimStart().startsWith('(function()');
+          const _isShortCmd      = typeof _execCode === 'string' && _execLen < 200;
+          BCK.info('Format          :', _isBase64Wrapper ? 'Base64-Wrapper OK' : _isRawFn ? 'WARNUNG: Rohes IIFE' : _isShortCmd ? 'Kurzer Befehl' : 'Unbekannt');
+
+          // Ersten 300 Zeichen (JSON.stringify zeigt Sonderzeichen sichtbar)
+          BCK.info('Code [0..300]   :', JSON.stringify(_execCode?.slice(0, 300)));
+
+          if (!_isShortCmd) {
+            BCK.info('Code [Ende-100] :', JSON.stringify(_execCode?.slice(-100)));
+          }
+
+          // Wenn Base64-Wrapper: inneren Code dekodieren und separat prüfen
+          if (_isBase64Wrapper) {
+            try {
+              const _b64Match = _execCode.match(/atob\('([^']+)'\)/);
+              if (_b64Match) {
+                const _b64Str = _b64Match[1];
+                BCK.info('Base64-Laenge   :', _b64Str.length);
+                const _decoded = decodeURIComponent(escape(atob(_b64Str)));
+                BCK.info('Decoded-Laenge  :', _decoded.length);
+                BCK.info('Decoded[0..200] :', JSON.stringify(_decoded.slice(0, 200)));
+                // Syntax-Check des dekodierten Codes
+                try {
+                  new Function(_decoded);
+                  BCK.ok('Decoded Syntax  : OK');
+                } catch (_pe) {
+                  BCK.err('Decoded Syntax FEHLER:', _pe.message);
+                  const _lineMatch = _pe.message.match(/line (\d+)/i);
+                  if (_lineMatch) {
+                    const _errLine = parseInt(_lineMatch[1]);
+                    const _lines   = _decoded.split('\n');
+                    const _from    = Math.max(0, _errLine - 3);
+                    const _to      = Math.min(_lines.length, _errLine + 2);
+                    BCK.err('Kontext Zeile ' + _errLine + ':', JSON.stringify(_lines.slice(_from, _to).join('\n')));
+                  }
+                }
+              } else {
+                BCK.warn('Kein atob()-Match im Wrapper gefunden!');
+                BCK.warn('Wrapper komplett:', JSON.stringify(_execCode));
+              }
+            } catch (_b64e) {
+              BCK.err('Base64-Dekodierung fehlgeschlagen:', _b64e.message);
+            }
+          } else if (!_isShortCmd) {
+            // Roher Code: auf Sonderzeichen > 127 scannen (erste 5000 Zeichen)
+            const _badChars = [];
+            for (let _i = 0; _i < Math.min(_execLen, 5000); _i++) {
+              const _cc = _execCode.charCodeAt(_i);
+              if (_cc > 127) _badChars.push({ pos: _i, char: _execCode[_i], code: _cc });
+            }
+            if (_badChars.length)
+              BCK.err('Sonderzeichen (>127) gefunden:', JSON.stringify(_badChars.slice(0, 15)));
+            else
+              BCK.info('Zeichen-Scan    : keine Sonderzeichen in ersten 5000 Zeichen');
+          }
+
+          BCK.info('=== EXEC DEBUG END – starte Ausfuehrung ===');
+
           try {
             // eslint-disable-next-line no-new-func
-            new Function(ev.data.code)();
-            BCK.ok('EXEC \u2705');
+            new Function(_execCode)();
+            BCK.ok('EXEC OK');
             src.postMessage({ app: APP, type: 'EXEC_OK' }, ALLOWED_ORIGIN);
           } catch (ex) {
-            BCK.err('EXEC \u274c:', ex.message);
+            BCK.err('EXEC FEHLER:', ex.message);
+            // Zeilennummer aus Error-Stack extrahieren
+            const _lm = ex.message.match(/line (\d+)/i) || (ex.stack || '').match(/<anonymous>:(\d+)/);
+            if (_lm) {
+              const _el = parseInt(_lm[1]) - 1; // new Function() hat 1 Zeile Overhead
+              const _ls = (_execCode || '').split('\n');
+              const _ef = Math.max(0, _el - 3), _et = Math.min(_ls.length, _el + 3);
+              BCK.err('Fehler nahe Zeile ' + _el + ':', JSON.stringify(_ls.slice(_ef, _et).join('\n')));
+            }
             src.postMessage({ app: APP, type: 'EXEC_ERR', msg: ex.message }, ALLOWED_ORIGIN);
           }
           break;
+        }
 
         case 'SCAN_CURSES': {
           BCK.info('SCAN_CURSES');
