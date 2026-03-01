@@ -1,1781 +1,779 @@
-// ── Deploy ────────────────────────────────────────────────────
-function _buildBotCode(bot) {
-  const s = bot.settings;
-  const triggers = (bot.triggers||[]).filter(t=>t.aktiv).map(t => ({
-    id: t.id, name: t.name, delay: t.delay??0,
-      wiederholung: t.wiederholung??'immer', maxMal: t.maxMal??2,
-      fallbackTyp: t.fallbackTyp??'nichts', fallbackText: t.fallbackText??'',
-      charSpec: !!t.charSpec, resetOnLeave: !!t.resetOnLeave,
-      von: t.von??'alle',
-      vonNummern: (t.vonNummern||[]).map(Number),
-      ifElse: !!t.ifElse,
-    bedingungen: (t.bedingungen||[]),
-    ifBedingungen: (t.ifBedingungen||[]),
-    aktionen: (t.aktionen||[]).map(a => {
-      const base = a.typ==='item' && a.curseKey && !a.curseEntry ? {...a, curseEntry: CURSE_DB[a.curseKey]??null}
-                 : a.typ==='item' && a.profilName && (!a.profilItems||!a.profilItems.length) ? {...a, profilItems: PROFILES[a.profilName]?.items??[]}
-                 : {...a};
-      base.aktZiel = a.aktZiel ?? 'ausloeser';
-      base.aktZielNummern = (a.aktZielNummern||[]).map(Number);
-      return base;
-    }),
-    aktionen_sonst: (t.aktionen_sonst||[]).map(a => {
-      const base = a.typ==='item' && a.curseKey && !a.curseEntry ? {...a, curseEntry: CURSE_DB[a.curseKey]??null}
-                 : a.typ==='item' && a.profilName && (!a.profilItems||!a.profilItems.length) ? {...a, profilItems: PROFILES[a.profilName]?.items??[]}
-                 : {...a};
-      base.aktZiel = a.aktZiel ?? 'ausloeser';
-      base.aktZielNummern = (a.aktZielNummern||[]).map(Number);
-      return base;
-    }),
-  }));
-  const safeId   = bot.id.replace(/\W/g,'_');
-  const safeName = bot.name.replace(/\\/g,'\\\\').replace(/`/g,'\\`');
+// ══ BOT ENGINE ══════════════════════════════════════════════
 
-  // Alle User-Daten als Base64 kodieren → kein Zeichen kann das Template-Literal brechen
-  const _cfgRaw = JSON.stringify({hearChat:s.hearChat,hearEmote:s.hearEmote,hearWhisper:s.hearWhisper,nurEigene:s.nurEigene,logAktiv:s.logAktiv??true,modus:s.modus,moneyQueryCmd:_money?.settings?.queryCmd??'',moneyQueryTyp:_money?.settings?.queryTyp??'whisper',moneyName:_money?.settings?.name??'Gold',rankQueryCmd:_rankData?.settings?.queryCmd??'',rankQueryTyp:_rankData?.settings?.queryCmdTyp??'whisper',rankQueryText:_rankData?.settings?.queryCmdText??'{name} hat Rang: {rang_icon} {rang}',rankDefs:_rankData?.defs??[],rankPlayers:Object.fromEntries(Object.entries(_rankData?.players??{}).map(([k,v])=>[k,v.rankId??null])),shopCmd:_shop?.settings?.cmd??'!pay',shopListCmd:_shop?.settings?.listCmd??'!shop',shopAnnounceNostripMsg:_shop?.settings?.announceNostripMsg??'',shopConfirmMsg:_shop?.settings?.confirmMsg??'',shopAnnounceMsg:_shop?.settings?.announceMsg??'',shopAnnounceAllMsg:_shop?.settings?.announceAllMsg??'',shopErrorMsg:_shop?.settings?.errorMsg??'',shopPreisU:_shop?.settings?.preisU??0,shopPreisNostrip:_shop?.settings?.preisNostrip??0,shopItems:(_shop?.items??[]).filter(i=>i.aktiv!==false),moneyBalances:Object.fromEntries(Object.entries(_money?.balances??{}).map(([k,v])=>[k,{balance:v.balance??0,name:v.name??''}]))});
-  const cfgJson  = btoa(unescape(encodeURIComponent(_cfgRaw)));
-  const trigsJson = btoa(unescape(encodeURIComponent(JSON.stringify(triggers))));
-  const events = (bot.events||[]).filter(e=>e.aktiv).map(e => ({
-    id: e.id, name: e.name,
-    von: e.von??'alle', vonNummer: e.vonNummer??0,
-    ziel: e.ziel??'ausloeser', zielListe: e.zielListe??[],
-    wiederholung: e.wiederholung??'immer', maxMal: e.maxMal??2,
-    fallbackTyp: e.fallbackTyp??'nichts', fallbackText: e.fallbackText??'',
-    bedingungen: e.bedingungen??[],
-    aktionen: (e.aktionen||[]).map(a => {
-      if (a.typ==='item' && a.curseKey && !a.curseEntry) return {...a, curseEntry: CURSE_DB[a.curseKey]??null};
-      if (a.typ==='item' && a.profilName && (!a.profilItems||!a.profilItems.length)) return {...a, profilItems: PROFILES[a.profilName]?.items??[]};
-      return a;
-    }),
-  }));
-  const eventsJson = btoa(unescape(encodeURIComponent(JSON.stringify(events))));
-  // Build roomEver from logs – members who joined and haven't left yet
-  // This is the authoritative source: Log löschen = Erstes Mal joinen
-  const persistedRoomEver = (() => {
-    const logs = window._BCBotLog || [];
-    const botLogs = logs.filter(e => e.botId === bot.id && (e.status==='join'||e.status==='join_rejoin'||e.status==='leave'));
-    botLogs.sort((a,b) => a.ts - b.ts);
-    const ever = new Set();
-    botLogs.forEach(e => {
-      if (e.status === 'join' || e.status === 'join_rejoin') ever.add(e.memberNum);
-      // leave doesn't remove from roomEver – only from present
-    });
-    return [...ever];
-  })();
-  const roomEverJson = JSON.stringify(persistedRoomEver);
+const BOT_KEY = 'BC_Bots_v2';
+const MONEY_KEY = 'BC_Money_v1';
 
-  return `(function(){
-const _BID='${safeId}';
-if(window['_BCBot_'+_BID]){console.warn('[Bot] Bereits aktiv – erst stoppen!');return;}
-// ── AntiStrip ────────────────────────────────────────────────
-// var statt const → Hoisting, damit _asRegister schon in
-// _execAct verfügbar ist bevor _asH unten befüllt wird.
-var _asWatchers = {}; // key: memberNum+'_'+gruppe
-var _asH        = null;
-function _asRegister(C, a) {
-  var gruppe = (a.antiStrip_itemConfig && a.antiStrip_itemConfig.group)
-    || (a.antiStrip_curseEntry && a.antiStrip_curseEntry.Gruppe)
-    || a.antiStrip_gruppe
-    || (a.itemConfig && a.itemConfig.group)
-    || (a.curseEntry && a.curseEntry.Gruppe)
-    || a.gruppe || '';
-  if (!gruppe) { _log('\u26A0 AntiStrip: Gruppe nicht erkannt'); return; }
-  var key = C.MemberNumber + '_' + gruppe;
-  _asWatchers[key] = {
-    memberNum:  C.MemberNumber,
-    gruppe:     gruppe,
-    delay:      a.antiStrip_delay != null ? a.antiStrip_delay : 500,
-    ersatz:     a.antiStrip_ersatz     || null,
-    farbe:      a.antiStrip_farbe      || '#ffffff',
-    itemConfig: a.antiStrip_itemConfig || null,
-    curseEntry: a.antiStrip_curseEntry || null,
-  };
-  _log('\u{1F6E1}\uFE0F AntiStrip aktiv: ' + C.Name + ' / ' + gruppe
-    + (a.antiStrip_ersatz ? ' \u2192 ' + a.antiStrip_ersatz : ' (gleiches Item)'));
+// Money storage: { settings: {name, queryCmd}, balances: { memberNum: {name, balance} } }
+let _money = { settings: { name: 'Gold', queryCmd: '!gold', queryTyp: 'whisper' }, balances: {} };
+(()=>{ try { const s=localStorage.getItem(MONEY_KEY); if(s){ const d=JSON.parse(s); _money=Object.assign(_money,d); } } catch{} })();
+function _saveMoney() { try { localStorage.setItem(MONEY_KEY, JSON.stringify(_money)); } catch {} }
+
+let _bots      = [];
+let _selBotId  = null;
+let _ipickerCb = null;
+let _ipickerTab= 'item';
+// Item Manager integration: pending trigger context
+let _trigPending = null; // {tid, ai, cb} – set when IM opened from trigger
+let _ipickerForActContext = null; // {tid, ai} for restoring open state
+
+// ── Persistence ───────────────────────────────────────────────
+function _saveBots() {
+  try { localStorage.setItem(BOT_KEY, JSON.stringify(_bots)); } catch {}
 }
-function _asUnregister(C, gruppe) {
-  if (!gruppe) return;
-  var key = C.MemberNumber + '_' + gruppe;
-  if (_asWatchers[key]) {
-    delete _asWatchers[key];
-    _log('\u{1F6E1}\uFE0F AntiStrip beendet (Bot hat Item geändert/entfernt): '
-      + C.Name + ' / ' + gruppe);
-  }
+function _loadBots() {
+  try { const s = localStorage.getItem(BOT_KEY); if (s) { _bots = JSON.parse(s); _bots.forEach(b => { b.laufend = false; }); } } catch {}
 }
-// ─────────────────────────────────────────────────────────────
-const _cfg=JSON.parse(decodeURIComponent(escape(atob('${cfgJson}'))));
-const _moneyCfg={queryCmd:_cfg.moneyQueryCmd??''};
-const _trigs=JSON.parse(decodeURIComponent(escape(atob('${trigsJson}'))));
-// State-Persistenz: beim Sync (Stop+Start) bleiben Fired-States erhalten
-const _stateKey='__BCKBotState_${safeId}';
-// Priorität: window (Sync) > localStorage (Reload) > leer
-const _lsSaved=(()=>{try{return JSON.parse(localStorage.getItem('__BCKBotStates')||'{}')['${safeId}']??{};}catch(e){return {};}})();
-const _savedState=window[_stateKey]??_lsSaved;
-const _fired    =_savedState.fired    ??{}; // trigId -> last timestamp (global latch)
-const _firedCnt =_savedState.firedCnt ??{}; // trigId -> fire count
-const _firedChar=_savedState.firedChar??{}; // trigId_memberNum -> timestamp
-// FIX: also persist evFiredCnt so einmalig/n_mal events survive bot restart/sync
-const _evFiredCnt=Object.assign({},_savedState.evFiredCnt??{});
-// roomEver: merge window-state + popup-persisted (build-time injected) + log-based
-const _roomEver=new Set([...(_savedState.roomEver??[]),...(${roomEverJson})]);
-// State sofort zurückschreiben damit Referenz live ist
-window[_stateKey]={fired:_fired,firedCnt:_firedCnt,firedChar:_firedChar,roomEver:_roomEver};
-// Quick lookup: trigId -> trigger config (for charSpec)
-const _trigMap=Object.fromEntries(_trigs.map(t=>[t.id,t]));
-// Rejoin-Fenster: memberNum → true – schließt wenn Nicht-Rejoin-Trigger feuert
-const _rejoinWindow=new Map(); // memberNum → timestamp when opened
-const _REJOIN_GRACE=1000; // ms window stays open regardless of other triggers
-const _evts=JSON.parse(decodeURIComponent(escape(atob('${eventsJson}'))));
+function _selBot() { return _bots.find(b => b.id === _selBotId) ?? null; }
 
-// Rang-State: memberNum -> aktueller rankId (laut Popup-State)
-// Beim Start mit gespeicherten Spieler-Rang-Zuweisungen initialisieren
-const _rangState=Object.assign({},_cfg.rankPlayers??{});
+// ── Bot-Gruppen ────────────────────────────────────────────────
+const BOT_GROUP_KEY = 'BC_BotGroups_v1';
+let _botGroups = []; // [{id, name, botIds:[], open:bool}]
 
-// Shop-Konfiguration (Snapshot beim Bot-Start)
-const _shopCfg={
-  cmd:(_cfg.shopCmd||'!pay').trim(),
-  items:_cfg.shopItems??[],
-  confirmMsg:_cfg.shopConfirmMsg??'',
-  announceMsg:_cfg.shopAnnounceMsg??'',
-  announceAllMsg:_cfg.shopAnnounceAllMsg??'',
-  errorMsg:_cfg.shopErrorMsg??'',
-  moneyName:_cfg.moneyName??'Gold',
-  preisU:_cfg.shopPreisU??0,
-  preisNostrip:_cfg.shopPreisNostrip??0,
-  listCmd:(_cfg.shopListCmd||'!shop').trim(),
-  announceNostripMsg:_cfg.shopAnnounceNostripMsg??'',
-};
-// Money-Balances: lokale Kopie für Echtzeit-Prüfungen (wird bei Abbuchung synchron aktualisiert)
-const _moneyBalances=Object.assign({},_cfg.moneyBalances??{});
-
-function _log(...a){if(_cfg.logAktiv)console.log('[Bot:${safeName}]',...a);}
-
-// bei_fehler: 'ignorieren' | 'kette_stoppen' | 'trigger_ungueltig'
-// Executed sequentially – each action's result determines if chain continues
-
-// Direkt C.X/C.Y verwenden – exakt wie funktionierendes ZoneMonitor-Pattern
-// Kein Lookup nötig: [Player,...ChatRoomCharacter] enthält bereits korrekte Positionen
-
-function _ok(trig,rohText,typKey,C){
-  const cx=C.X??-999,cy=C.Y??-999;
-  const beds=trig.bedingungen??[];
-  if(!beds.length)return true;
-  // AND/OR Auswertung: logik-Feld pro Bedingung verbindet mit vorheriger
-  // Ablauf: Bedingungen in OR-Gruppen aufteilen (trennend bei "oder"), dann alle Gruppen mit AND prüfen
-  function checkOne(c){
-    if(c.typ==='wort'){
-      const m=c.typ_msg||'any';
-      if(m!=='any'&&m!==typKey)return false;
-      return!c.wort||(rohText||'').toLowerCase().includes((c.wort||'').toLowerCase());
-    }
-    if(c.typ==='zone'){
-      const p=c.puffer??1;
-      const ok=cx>=c.x-p&&cx<=c.x+p&&cy>=c.y-p&&cy<=c.y+p;
-      if(!ok)_log('Zone miss: X='+cx+' Y='+cy+' erwartet X='+c.x+' Y='+c.y+'±'+p);
-      return ok;
-    }
-    if(c.typ==='zone_rect'){
-      const ok=cx>=Math.min(c.x1,c.x2)&&cx<=Math.max(c.x1,c.x2)&&cy>=Math.min(c.y1,c.y2)&&cy<=Math.max(c.y1,c.y2);
-      return ok;
-    }
-    if(c.typ==='item_traegt'){
-      const Cf=ChatRoomCharacter.find(x=>x.MemberNumber===C.MemberNumber)??C;
-      return(Cf.Appearance??[]).some(a=>a.Asset?.Name===c.item);
-    }
-    if(c.typ==='item_traegt_nicht'){
-      const Cf=ChatRoomCharacter.find(x=>x.MemberNumber===C.MemberNumber)??C;
-      return!(Cf.Appearance??[]).some(a=>a.Asset?.Name===c.item);
-    }
-    if(c.typ==='trigger_war'){
-      const ref=_trigMap[c.trigId];
-      return ref?.charSpec?!!_firedChar[c.trigId+'_'+C.MemberNumber]:!!_fired[c.trigId];
-    }
-    if(c.typ==='rang'){
-      const op=c.rang_op??'=';
-      const currentId=_rangState[C.MemberNumber]??null;
-      if(op==='kein') return !currentId;
-      if(!c.rang_id) return false;
-      const defs=(_cfg.rankDefs??[]).sort((a,b)=>a.level-b.level);
-      const targetDef=defs.find(r=>r.id===c.rang_id);
-      const currentDef=defs.find(r=>r.id===currentId);
-      if(!targetDef) return false;
-      if(!currentDef) return false; // kein Rang → nicht erfüllt wenn level gebraucht
-      const tl=targetDef.level, cl=currentDef.level;
-      if(op==='=')   return cl===tl;
-      if(op==='min') return cl>=tl;
-      if(op==='max') return cl<=tl;
-      return false;
-    }
-    if(c.typ==='shop_kauf') return false; // Nur via _handleShopCmd auslösbar
-    if(c.typ==='player_betritt')return true; // handled by poll
-    return true;
-  }
-  // Split into OR-groups (oder + und_oder both split groups)
-  const groups=[[]];
-  for(const c of beds){
-    if(c.logik==='oder'||c.logik==='und_oder')groups.push([]);
-    groups[groups.length-1].push(c);
-  }
-  // At least one group (OR) must be fully satisfied (AND within group)
-  // und_nicht: Bedingung muss FALSCH sein
-  return groups.some(g=>g.every(c=>c.logik==='und_nicht'?!checkOne(c):checkOne(c)));
+function _saveBotGroups() {
+  try { localStorage.setItem(BOT_GROUP_KEY, JSON.stringify(_botGroups)); } catch {}
+}
+function _loadBotGroups() {
+  try { const s = localStorage.getItem(BOT_GROUP_KEY); if (s) _botGroups = JSON.parse(s); } catch {}
 }
 
-// ── IF-Bedingungen Check (entscheidet DANN vs. SONST wenn ifElse aktiv) ──
-function _okIf(trig,rohText,typKey,C){
-  const cx=C.X??-999,cy=C.Y??-999;
-  const beds=trig.ifBedingungen??[];
-  if(!beds.length)return true; // keine IF-Beds → immer DANN
-  function checkOne(c){
-    if(c.typ==='wort'){
-      const m=c.typ_msg||'any';
-      if(m!=='any'&&m!==typKey)return false;
-      return!c.wort||(rohText||'').toLowerCase().includes((c.wort||'').toLowerCase());
-    }
-    if(c.typ==='zone'){
-      const p=c.puffer??1;
-      return cx>=c.x-p&&cx<=c.x+p&&cy>=c.y-p&&cy<=c.y+p;
-    }
-    if(c.typ==='zone_rect'){
-      return cx>=Math.min(c.x1,c.x2)&&cx<=Math.max(c.x1,c.x2)&&cy>=Math.min(c.y1,c.y2)&&cy<=Math.max(c.y1,c.y2);
-    }
-    if(c.typ==='item_traegt'){
-      const Cf=ChatRoomCharacter.find(x=>x.MemberNumber===C.MemberNumber)??C;
-      return(Cf.Appearance??[]).some(a=>a.Asset?.Name===c.item);
-    }
-    if(c.typ==='item_traegt_nicht'){
-      const Cf=ChatRoomCharacter.find(x=>x.MemberNumber===C.MemberNumber)??C;
-      return!(Cf.Appearance??[]).some(a=>a.Asset?.Name===c.item);
-    }
-    if(c.typ==='trigger_war'){
-      const ref=_trigMap[c.trigId];
-      return ref?.charSpec?!!_firedChar[c.trigId+'_'+C.MemberNumber]:!!_fired[c.trigId];
-    }
-    if(c.typ==='rang'){
-      const op=c.rang_op??'=';
-      const currentId=_rangState[C.MemberNumber]??null;
-      if(op==='kein') return !currentId;
-      if(!c.rang_id) return false;
-      const defs=(_cfg.rankDefs??[]).sort((a,b)=>a.level-b.level);
-      const targetDef=defs.find(r=>r.id===c.rang_id);
-      const currentDef=defs.find(r=>r.id===currentId);
-      if(!targetDef) return false;
-      if(!currentDef) return false;
-      const tl=targetDef.level, cl=currentDef.level;
-      if(op==='=')   return cl===tl;
-      if(op==='min') return cl>=tl;
-      if(op==='max') return cl<=tl;
-      return false;
-    }
-    return true;
-  }
-  const groups=[[]];
-  for(const c of beds){
-    if(c.logik==='oder'||c.logik==='und_oder')groups.push([]);
-    groups[groups.length-1].push(c);
-  }
-  return groups.some(g=>g.every(c=>c.logik==='und_nicht'?!checkOne(c):checkOne(c)));
-}
-function _istBesetzt(x,y,ausschliessen){
-  // Ignore target positions at 0,0 — BC hasn't synced position yet
-  if(x===0&&y===0)return false;
-  return[Player,...(ChatRoomCharacter||[])].some(C=>{
-    if(ausschliessen.includes(C.MemberNumber))return false;
-    if(C.X===0&&C.Y===0)return false; // character position not yet loaded
-    return C.X===x&&C.Y===y;
-  });
+function groupNew() {
+  const inp = document.getElementById('bgNewName');
+  const name = inp ? inp.value.trim() : '';
+  if (!name) return;
+  _botGroups.push({ id: 'g' + Date.now(), name, botIds: [], open: true });
+  inp.value = '';
+  _saveBotGroups();
+  renderBotList();
 }
 
-function _teleport(a,C){
-  const allSlots=a.tpSlots??[];
-  if(!allSlots.length){_log('⚠️ Keine TP-Slots');return false;}
-  // Find first free slot (respecting gueltig flag for return value)
-  const ziel=allSlots.find(s=>!_istBesetzt(s.x,s.y,[C.MemberNumber]));
-  if(!ziel){
-    _log('⚠️ Alle TP-Slots belegt für '+C.Name);
-    return false;
-  }
-  const si=allSlots.indexOf(ziel);
-  ServerSend('ChatRoomChat',{
-    Content:'ChatRoomMapViewTeleport',Type:'Hidden',
-    Dictionary:[{Tag:'MapViewTeleport',Position:{X:ziel.x,Y:ziel.y}}],
-    Target:C.MemberNumber,
-  });
-  _log('🌀 TP '+C.Name+' → X='+ziel.x+' Y='+ziel.y+(si>0?' [Fallback '+si+']':''));
-  // Gültig-Flag: wenn Slot auf ❌ Fehler gesetzt → Aktion gilt als fehlgeschlagen
-  const gueltig=ziel.gueltig??true;
-  if(!gueltig)_log('⚠️ Slot '+si+' hat gueltig=false → gilt als Fehler');
-  return gueltig;
+function groupDelete(gid) {
+  const g = _botGroups.find(x => x.id === gid);
+  if (!g || !confirm(`Gruppe "${g.name}" löschen?`)) return;
+  _botGroups = _botGroups.filter(x => x.id !== gid);
+  _saveBotGroups();
+  renderBotList();
 }
 
-// Tiefkopie eines Appearance-Items für Snapshot
-function _snapItem(i){return{Asset:i.Asset,Group:i.Asset?.Group?.Name??'',Color:JSON.parse(JSON.stringify(i.Color??'#ffffff')),Craft:i.Craft??null,Property:JSON.parse(JSON.stringify(i.Property??{}))};}
-
-// Nach InventoryWear: alle Items wiederherstellen die durch Block/Conflict entfernt wurden
-// Ausnahme: der absichtlich geänderte Slot (targetGroup) wird nicht berührt
-function _restoreDisplaced(C, snapshot, targetGroup){
-  setTimeout(()=>{
-    snapshot.forEach(snap=>{
-      if(snap.Group===targetGroup)return; // dieser Slot wurde absichtlich geändert
-      const stillThere=InventoryGet(C,snap.Group);
-      if(!stillThere&&snap.Asset){
-        // Item wurde durch InventoryWear verdrängt → wiederherstellen
-        _log('♻️ Wiederherstellen: '+snap.Group+'/'+snap.Asset.Name+' (verdrängt durch '+targetGroup+')');
-        try{
-          InventoryWear(C,snap.Asset.Name,snap.Group,snap.Color,0,Player.MemberNumber,snap.Craft);
-          const restored=InventoryGet(C,snap.Group);
-          if(restored&&snap.Property&&Object.keys(snap.Property).length){
-            restored.Property=snap.Property;
-          }
-        }catch(e){_log('⚠️ Wiederherstellen fehlgeschlagen für '+snap.Group+': '+e.message);}
-      }
-    });
-    CharacterRefresh(C);ChatRoomCharacterUpdate(C);
-  },150);
+function groupToggleOpen(gid) {
+  const g = _botGroups.find(x => x.id === gid); if (!g) return;
+  g.open = !g.open;
+  _saveBotGroups();
+  renderBotList();
 }
 
-function _applyItemAction(a, C){
-  try{
-    // Snapshot ALLER aktuellen Items vor dem Anlegen
-    const snapshot=(C.Appearance??[]).filter(i=>i.Asset?.Group?.Name).map(_snapItem);
-
-    if(a.itemConfig){
-      // Full Item Manager config: colors, TypeRecord, props, lock
-      const ic=a.itemConfig;
-      let col=ic.colors??['#ffffff'];
-      if(typeof col==='string'&&col.includes(','))col=col.split(',');
-      InventoryWear(C,ic.asset,ic.group,col,0,Player.MemberNumber,ic.craft??null);
-      // Sofort TypeRecord setzen (vor CharacterRefresh) damit BC es direkt übernimmt
-      const itemNow=InventoryGet(C,ic.group);
-      if(itemNow){
-        itemNow.Color=col;
-        itemNow.Property=itemNow.Property??{};
-        if(ic.tr&&Object.keys(ic.tr).length){
-          itemNow.Property.TypeRecord=ic.tr;
-          itemNow.Property.Type=ic.typeStr??'';
-        }
-        if(ic.props)Object.assign(itemNow.Property,ic.props);
-      }
-      CharacterRefresh(C);
-      ChatRoomCharacterUpdate(C);
-      _restoreDisplaced(C,snapshot,ic.group);
-      // Zweiter Sync nach _restoreDisplaced (stellt sicher dass TypeRecord + Lock erhalten bleibt)
-      setTimeout(()=>{
-        const item=InventoryGet(C,ic.group);
-        if(!item){
-          // Item wurde durch _restoreDisplaced verdrängt → nochmal anlegen
-          InventoryWear(C,ic.asset,ic.group,col,0,Player.MemberNumber,ic.craft??null);
-          const reItem=InventoryGet(C,ic.group);
-          if(reItem){
-            reItem.Property=reItem.Property??{};
-            if(ic.tr&&Object.keys(ic.tr).length){reItem.Property.TypeRecord=ic.tr;reItem.Property.Type=ic.typeStr??'';}
-            if(ic.props)Object.assign(reItem.Property,ic.props);
-          }
-        } else {
-          // TypeRecord nochmal sicherstellen (könnte durch _restoreDisplaced verloren gegangen sein)
-          item.Property=item.Property??{};
-          if(ic.tr&&Object.keys(ic.tr).length){item.Property.TypeRecord=ic.tr;item.Property.Type=ic.typeStr??'';}
-          if(ic.props)Object.assign(item.Property,ic.props);
-        }
-        // Schloss anlegen (nach TypeRecord-Sync)
-        if(ic.lock){
-          const BCX_L=['LewdCrestPadlock','DeviousPadlock','LuziPadlock'];
-          const REL_L=['OwnerPadlock','LoversPadlock','MistressPadlock'];
-          const isBcx=BCX_L.includes(ic.lock);
-          const isRel=REL_L.includes(ic.lock);
-          const lp=ic.lockParams??{};
-          const lockAsset=isBcx
-            ?(Asset.find(a=>a.Name===ic.lock&&a.Group?.Name==='ItemMisc')??Asset.find(a=>a.Name===ic.lock))
-            :Asset.find(a=>a.Name===ic.lock&&a.Group?.Name==='ItemMisc');
-          if(lockAsset){
-            const itemForLock=InventoryGet(C,ic.group);
-            if(itemForLock){
-              InventoryLock(C,itemForLock,{Asset:lockAsset},Player.MemberNumber,true);
-              itemForLock.Property=itemForLock.Property??{};
-              if(lp.timer>0)   itemForLock.Property.RemoveTimer=Date.now()+lp.timer;
-              if(lp.combo)     itemForLock.Property.CombinationNumber=lp.combo;
-              if(lp.password)  itemForLock.Property.Password=lp.password;
-              if(isRel){
-                itemForLock.Property.LockMemberNumber=lp.relMember||Player.MemberNumber;
-                if(lp.relTimer>0)itemForLock.Property.RemoveTimer=Date.now()+lp.relTimer;
-              }
-              CharacterRefresh(C);
-              _log('🔒 Schloss angelegt: '+ic.lock+' auf '+ic.asset+' ('+C.Name+')');
-            }
-          } else {
-            _log('⚠️ Schloss nicht gefunden: '+ic.lock);
-          }
-        }
-        CharacterRefresh(C);ChatRoomCharacterUpdate(C);
-      },500);
-    }else if(a.curseEntry){
-      let col=a.curseEntry.Farbe;if(typeof col==='string'&&col.includes(','))col=col.split(',');
-      InventoryWear(C,a.curseEntry.ItemName,a.curseEntry.Gruppe,col,0,Player.MemberNumber,a.curseEntry.Craft);
-      _restoreDisplaced(C,snapshot,a.curseEntry.Gruppe);
-    }else if(a.profilName){
-      // Profil: alle Items nacheinander anlegen, kein Restore (Profil setzt bewusst mehrere Slots)
-      (a.profilItems??[]).forEach(item=>{
-        let col=item.colors??item.cfg?.Color??'#ffffff';
-        if(typeof col==='string'&&col.includes(','))col=col.split(',');
-        InventoryWear(C,item.asset,item.group,col,0,Player.MemberNumber);CharacterRefresh(C);
-      });
-      ChatRoomCharacterUpdate(C);
-    }else if(a.item){
-      InventoryWear(C,a.item,a.gruppe,a.farbe??'#ffffff',0,Player.MemberNumber);
-      _restoreDisplaced(C,snapshot,a.gruppe);
-    }
-  }catch(ex){_log('item Fehler:',ex.message);}
+function groupAddBot(gid) {
+  const sel = document.getElementById('bg-add-sel-' + gid);
+  if (!sel) return;
+  const bid = sel.value; if (!bid) return;
+  const g = _botGroups.find(x => x.id === gid); if (!g) return;
+  // Remove from other groups first
+  _botGroups.forEach(grp => { grp.botIds = grp.botIds.filter(id => id !== bid); });
+  g.botIds.push(bid);
+  _saveBotGroups();
+  renderBotList();
 }
 
-// Führt eine einzelne Aktion aus; gibt true/false zurück (Erfolg)
-function _execAct(a,C,vars){
-  let ok=false;
-  try{
-    if(a.typ==='chat'){ServerSend('ChatRoomChat',{Content:_tpl(a.text,vars),Type:'Chat'});ok=true;}
-    else if(a.typ==='emote'){ServerSend('ChatRoomChat',{Content:_tpl(a.text,vars),Type:'Emote'});ok=true;}
-    else if(a.typ==='whisper'){ServerSend('ChatRoomChat',{Content:_tpl(a.text,vars),Type:'Whisper',Target:C.MemberNumber});ok=true;}
-    else if(a.typ==='item_entf'){const _entfGruppe=a.gruppe;InventoryRemove(C,_entfGruppe);CharacterRefresh(C);ChatRoomCharacterUpdate(C);_asUnregister(C,_entfGruppe);ok=true;}
-    else if(a.typ==='item'){
-      _applyItemAction(a,C);
-      if(a.antiStrip||vars?.shopNostrip)_asRegister(C,a);
-      if(vars?.shopNostrip){
-        var _nsGr=(a.itemConfig?.group)||(a.curseEntry?.Gruppe)||a.gruppe||'';
-        if(_nsGr)setTimeout(function(){
-          try{
-            var _nsI=InventoryGet(C,_nsGr);
-            if(_nsI){
-              if(!_nsI.Craft||typeof _nsI.Craft!=='object')
-                _nsI.Craft={Name:'',Description:'',Property:'Freeze',Color:(_nsI.Color??'#ffffff'),Lock:'',Item:_nsI.Asset?.Name??'',Private:false,MemberNumber:Player.MemberNumber};
-              else _nsI.Craft.Property='Freeze';
-              CharacterRefresh(C);ChatRoomCharacterUpdate(C);
-              _log('\u{1F512} NoStrip Freeze: '+C.Name+' / '+_nsGr);
-            }
-          }catch(ex){_log('\u26A0 Freeze Fehler:',ex.message);}
-        },700);
-      }
-      ok=true;
-    }
-    else if(a.typ==='teleport'){ok=_teleport(a,C);}
-    else if(a.typ==='money'){
-      const op=a.money_op??'add';
-      const val=a.money_val??0;
-      const delta=op==='add'?val:op==='sub'?-val:0;
-      const setVal=op==='set'?val:op==='reset'?0:undefined;
-      window.__BCK_popupRef?.postMessage({app:'BCKonfigurator',type:'BOT_MONEY',
-        memberNum:C.MemberNumber,name:C.Name,delta,setVal},'*');
-      ok=true;
-    }
-    else if(a.typ==='rang'){
-      const op=a.rang_op??'setzen';
-      const defs=_cfg.rankDefs??[];
-      const sorted=[...defs].sort((x,y)=>x.level-y.level);
-      const currentRankId=_rangState[C.MemberNumber]??null;
-      const curIdx=sorted.findIndex(r=>r.id===currentRankId);
-      let newRankId=currentRankId;
-      if(op==='setzen') newRankId=a.rang_id||null;
-      else if(op==='entfernen') newRankId=null;
-      else if(op==='naechster'){ if(curIdx<sorted.length-1) newRankId=sorted[curIdx+1].id; }
-      else if(op==='vorheriger'){ if(curIdx>0) newRankId=sorted[curIdx-1].id; }
-      _rangState[C.MemberNumber]=newRankId;
-      window.__BCK_popupRef?.postMessage({app:'BCKonfigurator',type:'BOT_RANG',
-        memberNum:C.MemberNumber,name:C.Name,rankId:newRankId},'*');
-      ok=true;
-    }
-    else ok=true;
-  }catch(ex){_log('\u26A0 Aktion '+a.typ+' Fehler:',ex.message);ok=false;}
-  // Dann / Sonst Nachrichten senden
-  const msgField=ok?'dann_msg':'sonst_msg';
-  const msgTypField=msgField+'_typ';
-  const msgTyp=a[msgTypField]??'chat';
-  const msgText=a[msgField];
-  if(msgText&&msgTyp!=='nichts'){
-    setTimeout(()=>{
-      const txt=_tpl(msgText,vars);
-      if(msgTyp==='whisper')ServerSend('ChatRoomChat',{Content:txt,Type:'Whisper',Target:C.MemberNumber});
-      else if(msgTyp==='emote')ServerSend('ChatRoomChat',{Content:txt,Type:'Emote'});
-      else ServerSend('ChatRoomChat',{Content:txt,Type:'Chat'});
-    },200);
-  }
-  return ok;
+function groupRemoveBot(gid, bid) {
+  const g = _botGroups.find(x => x.id === gid); if (!g) return;
+  g.botIds = g.botIds.filter(id => id !== bid);
+  _saveBotGroups();
+  renderBotList();
 }
 
-// Aktionen sequenziell ausführen (Reihenfolge + bei_fehler)
-function _runSeq(aktionen,C,vars,trigBase,onDone,onUngueltig){
-  if(!aktionen.length){onDone();return;}
-  const [a,...rest]=aktionen;
-  setTimeout(()=>{
-    // Ziel-Filter: welche Characters werden durch diese Aktion beeinflusst?
-    const allChars=[Player,...(ChatRoomCharacter||[])];
-    let targets;
-    if(a.aktZiel==='alle'){
-      targets=allChars;
-    } else if(a.aktZiel==='whitelist'){
-      const nrs=(a.aktZielNummern||[]).map(Number);
-      targets=allChars.filter(ch=>nrs.includes(Number(ch.MemberNumber)));
-    } else if(a.aktZiel==='shop_kaeufer'){
-      // Zielt auf den Käufer (vars.shopBuyer), nicht das Kaufziel
-      const buyerNum=vars.shopBuyer?.MemberNumber;
-      const buyerChar=buyerNum?allChars.find(ch=>ch.MemberNumber===buyerNum):null;
-      targets=buyerChar?[buyerChar]:[C];
-    } else {
-      targets=[C]; // 'ausloeser' / default
-    }
-    // Chat/Emote sind Broadcast-Nachrichten → nur 1x senden egal wieviele Ziele
-    // Whisper, Item, Teleport, Money → pro Ziel ausführen
-    let overallOk=true;
-    if(['chat','emote'].includes(a.typ)&&targets.length>0){
-      // Sende einmal mit Variablen des Auslösers
-      const ok=_execAct(a,C,vars);
-      if(!ok)overallOk=false;
-    } else {
-      targets.forEach(ch=>{
-        const chVars=ch===C?vars:{...vars,name:ch.Name,x:ch.X??0,y:ch.Y??0,C:ch};
-        const ok=_execAct(a,ch,chVars);
-        if(!ok)overallOk=false;
-      });
-    }
-    if(!overallOk){
-      const bf=a.bei_fehler??'ignorieren';
-      _log('\u26A0 Aktion '+a.typ+' fehlgeschlagen → '+bf);
-      if(bf==='kette_stoppen'){onDone();return;}
-      if(bf==='trigger_ungueltig'){onUngueltig();return;}
-    }
-    _runSeq(rest,C,vars,trigBase,onDone,onUngueltig);
-  },a.delay??0);
-}
-
-
-// Sendet einen Log-Eintrag an den Tab im Index
-// Sendet Log-Eintrag via PostMessage-Brücke zurück an das Popup
-// ── Events Runtime ────────────────────────────────────────
-const _evTimers={};
-// NOTE: _evFiredCnt is declared above with persisted state
-const _evState={}; // for interval state
-
-function _okEv(ev,C,rohText,typKey){
-  const beds=ev.bedingungen??[];
-  if(!beds.length)return true;
-  const cx=C.X??-999,cy=C.Y??-999;
-  function checkOne(c){
-    if(c.typ==='wort'){
-      if(!rohText)return true; // no chat context → skip wort check (timer/interval)
-      const m=c.typ_msg||'any';
-      if(m!=='any'&&m!==typKey)return false;
-      return!c.wort||(rohText||'').toLowerCase().includes((c.wort||'').toLowerCase());
-    }
-    if(c.typ==='zone'){const p=c.puffer??1;return cx>=c.x-p&&cx<=c.x+p&&cy>=c.y-p&&cy<=c.y+p;}
-    if(c.typ==='zone_rect'){return cx>=Math.min(c.x1,c.x2)&&cx<=Math.max(c.x1,c.x2)&&cy>=Math.min(c.y1,c.y2)&&cy<=Math.max(c.y1,c.y2);}
-    if(c.typ==='item_traegt'){return(C.Appearance??[]).some(a=>a.Asset?.Name===c.item);}
-    if(c.typ==='item_traegt_nicht'){return!(C.Appearance??[]).some(a=>a.Asset?.Name===c.item);}
-    if(c.typ==='trigger_war'){const ref=_trigMap[c.trigId];return ref?.charSpec?!!_firedChar[c.trigId+'_'+C.MemberNumber]:!!_fired[c.trigId];}
-    if(c.typ==='rang'){
-      const op=c.rang_op??'=';
-      const currentId=_rangState[C.MemberNumber]??null;
-      if(op==='kein') return !currentId;
-      if(!c.rang_id) return false;
-      const defs=(_cfg.rankDefs??[]).sort((a,b)=>a.level-b.level);
-      const targetDef=defs.find(r=>r.id===c.rang_id);
-      const currentDef=defs.find(r=>r.id===currentId);
-      if(!targetDef) return false;
-      if(!currentDef) return false;
-      const tl=targetDef.level, cl=currentDef.level;
-      if(op==='=')   return cl===tl;
-      if(op==='min') return cl>=tl;
-      if(op==='max') return cl<=tl;
-      return false;
-    }
-    return true;
-  }
-  const groups=[[]];
-  for(const c of beds){
-    if(c.logik==='oder'||c.logik==='und_oder')groups.push([]);
-    groups[groups.length-1].push(c);
-  }
-  return groups.some(g=>g.every(c=>c.logik==='und_nicht'?!checkOne(c):checkOne(c)));
-}
-
-function _fireEv(ev){
-  // Wiederholung check
-  const cnt=_evFiredCnt[ev.id]??0;
-  if(ev.wiederholung==='einmalig'&&cnt>=1){_log('⏭ Event "'+ev.name+'" bereits (1×)');return;}
-  if(ev.wiederholung==='n_mal'&&cnt>=(ev.maxMal??2)){_log('⏭ Event "'+ev.name+'" max erreicht');return;}
-
-  // Targets
-  const allChars=[Player,...(ChatRoomCharacter||[])];
-  let targets=[];
-  if(ev.ziel==='alle'){targets=allChars;}
-  else if(ev.ziel==='liste'){targets=allChars.filter(C=>(ev.zielListe||[]).includes(C.MemberNumber));}
-  else{// ausloeser / random
-    const eligible=allChars.filter(C=>_okEv(ev,C,ev._rohText,ev._typKey));
-    if(eligible.length)targets=[eligible[Math.floor(Math.random()*eligible.length)]];
-  }
-  if(!targets.length){_log('⚠️ Event "'+ev.name+'" – kein gültiges Ziel');return;}
-
-  _log('⚡ Event "'+ev.name+'" → '+targets.length+' Ziel(e)');
-  targets.forEach(C=>{
-    if(!_okEv(ev,C,ev._rohText,ev._typKey)){_log('⏭ Event "'+ev.name+'" Bed. nicht erfüllt für '+C.Name);return;}
-    const vars={name:C.Name,wort:ev._rohText||'',typ:'Event',x:C.X??0,y:C.Y??0,zone:'',C};
-    _runSeq(ev.aktionen??[],C,vars,ev,
-      ()=>{
-        _evFiredCnt[ev.id]=(cnt+1);
-        _log('✅ Event "'+ev.name+'" abgeschlossen für '+C.Name+' #'+_evFiredCnt[ev.id]);
-        _pushLog({status:'ok'},vars,{name:ev.name,id:ev.id});
-      },
-      ()=>{
-        _log('❌ Event "'+ev.name+'" ungültig für '+C.Name);
-        _pushLog({status:'ungueltig'},vars,{name:ev.name,id:ev.id});
-        if(ev.fallbackTyp&&ev.fallbackTyp!=='nichts'&&ev.fallbackText){
-          const typ={chat:'Chat',emote:'Emote'}[ev.fallbackTyp]??'Chat';
-          ServerSend('ChatRoomChat',{Content:_tpl(ev.fallbackText,vars),Type:typ});
-        }
-      }
-    );
-  });
-}
-
-// Scheduling via condition types ev_timer / ev_interval
-function _scheduleEv(ev){
-  if(!ev.aktiv)return;
-  const beds=ev.bedingungen??[];
-  const timerC=beds.find(c=>c.typ==='ev_timer');
-  const intC=beds.find(c=>c.typ==='ev_interval');
-  if(timerC){
-    const ms=(timerC.sek??10)*1000;
-    _evTimers[ev.id+'_t']=setTimeout(()=>{
-      _fireEv(ev);
-    },ms);
-  }
-  if(intC){
-    const lo=(intC.sek_min??20)*1000, hi=(intC.sek_max??60)*1000;
-    const go=()=>{
-      const cnt=_evFiredCnt[ev.id]??0;
-      if(ev.wiederholung==='einmalig'&&cnt>=1)return;
-      if(ev.wiederholung==='n_mal'&&cnt>=(ev.maxMal??2))return;
-      _fireEv(ev);
-      _evTimers[ev.id+'_i']=setTimeout(go,lo+Math.random()*(hi-lo));
-    };
-    _evTimers[ev.id+'_i']=setTimeout(go,lo+Math.random()*(hi-lo));
-  }
-}
-
-// Start alle aktiven Events die Timer/Interval haben
-_evts.forEach(ev=>{if(ev.aktiv)_scheduleEv(ev);});
-// ──────────────────────────────────────────────────────
-
-function _pushLog(extra,vars,trig){
-  const entry={
-    ts:Date.now(),
-    botId:'${safeId}',
-    botName:'${safeName}',
-    trigName:trig?.name??'?',
-    trigId:trig?.id??'',
-    player:(vars?.name??'?')+' #'+(vars?.C?.MemberNumber??'?'),
-    memberNum:vars?.C?.MemberNumber,
-    x:vars?.x??0,
-    y:vars?.y??0,
-    ...extra,
-  };
-  // Brücke: postMessage zurück an Popup (window.__BCK_popupRef = gespeichert in loader.js)
-  try{
-    window.__BCK_popupRef?.postMessage({app:'BCKonfigurator',type:'BOT_LOG',entry},'*');
-  }catch(e){}
-}
-
-// Sendet roomEver ans Popup zur Persistenz
-function _syncRoomEver(){
-  try{
-    window.__BCK_popupRef?.postMessage({app:'BCKonfigurator',type:'BOT_ROOM_EVER',botId:'${safeId}',members:[..._roomEver]},'*');
-  }catch(e){}
-}
-
-function _run(trig,vars){
-  const C=vars.C??Player;
-
-  // ── Rejoin-Fenster: schließen wenn Nicht-Rejoin-Trigger feuert ──
-  const _isRejoinTrig=(trig.bedingungen??[]).some(c=>c.typ==='player_betritt'&&c.betritt_typ==='rejoin');
-  if(!_isRejoinTrig && _rejoinWindow.has(C.MemberNumber)){
-    const openedAt=_rejoinWindow.get(C.MemberNumber);
-    if(Date.now()-openedAt >= _REJOIN_GRACE){
-      _rejoinWindow.delete(C.MemberNumber);
-      _log('\u{1F6AA} Rejoin-Fenster für #'+C.MemberNumber+' geschlossen (Nicht-Rejoin Trigger "'+trig.name+'")');
-    } else {
-      _log('\u{1F6AA} Rejoin-Gnadenfrist aktiv für #'+C.MemberNumber+' – Fenster noch '+((_REJOIN_GRACE-(Date.now()-openedAt))|0)+'ms offen');
-    }
-  }
-  // Rejoin-Trigger: nur überspringen wenn Fenster geschlossen (nach Gnadenfrist)
-  if(_isRejoinTrig && !_rejoinWindow.has(C.MemberNumber)){
-    _log('\u23ED [Rejoin] "'+trig.name+'" – Fenster geschlossen (Gnadenfrist abgelaufen), übersprungen');
-    return;
-  }
-
-  // ── Wiederholung prüfen ──────────────────────────────────
-  const wdh=trig.wiederholung??'immer';
-  const cnt=_firedCnt[trig.id]??0;
-  if(wdh==='einmalig'&&cnt>=1){
-    _log('⏭ "'+trig.name+'" bereits ausgelöst (1×)');
-    _pushLog({status:'skip_wdh',msg:'1× bereits ausgelöst'},vars,trig);
-    return;
-  }
-  if(wdh==='n_mal'&&cnt>=(trig.maxMal??2)){
-    _log('⏭ "'+trig.name+'" max '+trig.maxMal+'× erreicht');
-    _pushLog({status:'skip_max',msg:'Max '+trig.maxMal+'× erreicht'},vars,trig);
-    return;
-  }
-
-  _log('\u{1F3AF} "'+trig.name+'" von '+vars.name+' | X='+vars.x+' Y='+vars.y+' | #'+(cnt+1)+(wdh==='n_mal'?' von '+trig.maxMal:''));
-
-  // ── Aktionen sequenziell mit Basis-Delay starten ─────────
-  setTimeout(()=>{
-    // If/Else: Wenn ifElse aktiviert, wähle DANN oder SONST-Aktionen
-    // Bedingungscheck wurde bereits durch _ok() bestätigt → Bedingungen = true → DANN
-    // SONST wird nur ausgelöst wenn Bedingungen NICHT zutreffen – das passiert im Join/Item-Poll
-    const aktionenToRun = trig.aktionen??[];
-    _runSeq(
-      aktionenToRun,C,vars,trig,
-      // onDone – Trigger erfolgreich gezählt
-      ()=>{
-        const now=Date.now();
-        _fired[trig.id]=now;
-        _firedChar[trig.id+'_'+C.MemberNumber]=now;
-        _firedCnt[trig.id]=(cnt+1);
-        _log('\u2705 Trigger "'+trig.name+'" abgeschlossen #'+_firedCnt[trig.id]+(trig.charSpec?' [pro Spieler]':' [global]'));
-        _pushLog({status:'ok'},vars,trig);
-        _syncRoomEver();
-      },
-      // onUngueltig – eine Aktion hat ❌ Trigger ungültig ausgelöst
-      ()=>{
-        _log('\u274C Trigger "'+trig.name+'" ungültig – nicht gezählt');
-        _pushLog({status:'ungueltig'},vars,trig);
-        if(trig.fallbackTyp&&trig.fallbackTyp!=='nichts'&&trig.fallbackText){
-          const typ={chat:'Chat',emote:'Emote'}[trig.fallbackTyp]??'Chat';
-          ServerSend('ChatRoomChat',{Content:_tpl(trig.fallbackText,vars),Type:typ});
-        }
-      }
-    );
-  },trig.delay??0);
-}
-
-// ── If/Else SONST-Branch: läuft wenn Bedingungen NICHT zutreffen ──
-function _runSonst(trig,vars){
-  const C=vars.C??Player;
-  _log('\u{1F504} [Else] "'+trig.name+'" → SONST-Aktionen f\u00fcr '+vars.name);
-  setTimeout(()=>{
-    _runSeq(
-      trig.aktionen_sonst??[],C,vars,trig,
-      ()=>{ _log('\u2705 [Else] "'+trig.name+'" SONST-Zweig abgeschlossen'); },
-      ()=>{ _log('\u274C [Else] "'+trig.name+'" SONST-Zweig ungültig'); }
-    );
-  },trig.delay??0);
-}
-
-function _tpl(s,v){
-  const cur=_shopCfg.moneyName||'Gold';
-  return(s??'')
-    .replace(/{name}/gi,v.name??'')
-    .replace(/{wort}/gi,v.wort??'')
-    .replace(/{typ}/gi,v.typ??'')
-    .replace(/{x}/gi,v.x??'')
-    .replace(/{y}/gi,v.y??'')
-    .replace(/{zone}/gi,v.zone??'')
-    .replace(/{käufer}/gi,v.shopBuyer?.Name??v.name??'')
-    .replace(/{kaeufer}/gi,v.shopBuyer?.Name??v.name??'')
-    .replace(/{ziel}/gi,v.C?.Name??v.name??'')
-    .replace(/{item}/gi,v.shopItem?.name??'')
-    .replace(/{preis}/gi,String(v.shopItem?.preis??''))
-    .replace(/{waehrung}/gi,cur)
-    .replace(/{kontostand}/gi,String((_moneyBalances[v.shopBuyer?.MemberNumber??v.C?.MemberNumber]?.balance)??0))
-    .replace(/{anzahl}/gi,String(v.shopAnzahl??''))
-    .replace(/{gesamt}/gi,String(v.shopGesamt??''));
-}
-
-// ── Shop-Befehl Parsing ───────────────────────────────
-function _parseShopArgs(rest){
-  // Parst gequotete und ungequotete Argumente + Flags (/w /u)
-  const args=[];
-  const flags=new Set();
-  let pos=0;
-  rest=rest.trim();
-  while(pos<rest.length){
-    while(pos<rest.length&&rest[pos]===' ')pos++;
-    if(pos>=rest.length)break;
-    // Flag-Erkennung: /w, /u, /nostrip (case-insensitive, als eigenes Token)
-    if(rest[pos]==='/'&&pos+1<rest.length){
-      const remaining=rest.slice(pos+1);
-      if(/^nostrip\b/i.test(remaining)){
-        flags.add('nostrip');
-        pos+=8; // '/' + 'nostrip'
-        continue;
-      }
-      const fl=rest[pos+1].toLowerCase();
-      if(fl==='w'||fl==='u'){
-        flags.add(fl);
-        pos+=2;
-        continue;
-      }
-    }
-    if(rest[pos]==='"'||rest[pos]==="'"){
-      const q=rest[pos]; pos++;
-      const end=rest.indexOf(q,pos);
-      if(end===-1){args.push(rest.slice(pos));break;}
-      args.push(rest.slice(pos,end)); pos=end+1;
-    } else {
-      const sp=rest.indexOf(' ',pos);
-      if(sp===-1){args.push(rest.slice(pos));break;}
-      args.push(rest.slice(pos,sp)); pos=sp+1;
-    }
-  }
-  return {args:args.filter(a=>a.length>0),flags};
-}
-
-// ── Shop-Kauf Handler ────────────────────────────────────
-// Hilfsfunktion: Template mit Shop-Variablen ersetzen (inline, ohne _tpl damit keine C-Abhängigkeit)
-function _shopTpl(raw, buyerC, targetC, shopItem, preis, newBal, anzahl, gesamt){
-  const cur=_shopCfg.moneyName||'Gold';
-  return(raw||'')
-    .replace(/{name}/gi,buyerC.Name)
-    .replace(/{käufer}/gi,buyerC.Name)
-    .replace(/{kaeufer}/gi,buyerC.Name)
-    .replace(/{ziel}/gi,targetC?targetC.Name:'')
-    .replace(/{item}/gi,shopItem.name)
-    .replace(/{preis}/gi,String(preis))
-    .replace(/{waehrung}/gi,cur)
-    .replace(/{kontostand}/gi,String(newBal??0))
-    .replace(/{anzahl}/gi,String(anzahl??''))
-    .replace(/{gesamt}/gi,String(gesamt??''));
-}
-
-function _handleShopCmd(rohText,buyerC){
-  const cmd=_shopCfg.cmd.trim();
-  const rest=rohText.trim().slice(cmd.length);
-  const {args,flags}=_parseShopArgs(rest);
-  if(!args.length)return;
-
-  const flagWhisper=flags.has('w');
-  const flagUnknown=flags.has('u');
-  const flagNostrip=flags.has('nostrip');
-
-  // shopItem ZUERST – muss vor flagAufpreis stehen (sonst TDZ-ReferenceError!)
-  const itemName=args[0].toLowerCase();
-  const shopItem=_shopCfg.items.find(i=>i.name.toLowerCase()===itemName);
-  if(!shopItem){ _log('🛒 Kein Artikel "'+args[0]+'"'); return; }
-
-  const preisU      = flagUnknown ? (shopItem.preisU      ?? _shopCfg.preisU      ?? 0) : 0;
-  const preisNostrip= flagNostrip ? (shopItem.preisNostrip ?? _shopCfg.preisNostrip ?? 0) : 0;
-  const flagAufpreis= preisU + preisNostrip;
-  const preis=Number(shopItem.preis)||0; // '' oder null → 0
-  const cur=_shopCfg.moneyName||'Gold';
-  const allChars=[Player,...(ChatRoomCharacter||[])];
-  // Angezeigter Käufername (für öffentliche Nachrichten)
-  const displayBuyer=flagUnknown?{Name:'Unbekannt',MemberNumber:buyerC.MemberNumber}:buyerC;
-
-  // ── ALL-Kauf ──────────────────────────────────────────
-  if(args[1]&&args[1].toLowerCase()==='all'){
-    const targets=allChars.filter(c=>c.MemberNumber!==Player.MemberNumber);
-    const anzahl=targets.length;
-    if(anzahl===0){
-      ServerSend('ChatRoomChat',{Content:'Niemand im Raum.',Type:'Whisper',Target:buyerC.MemberNumber});
-      return;
-    }
-    const gesamt=(preis+flagAufpreis)*anzahl;
-    const buyerBalance=(_moneyBalances[buyerC.MemberNumber]?.balance)??0;
-
-    if(buyerBalance<gesamt){
-      let aufpreisInfo='';
-      if(flagAufpreis>0){
-        const parts=[];
-        if(preisU>0)      parts.push('/u: '+preisU+' '+cur);
-        if(preisNostrip>0)parts.push('/nostrip: '+preisNostrip+' '+cur);
-        aufpreisInfo=' (inkl. Flag-Aufpreis: '+parts.join(', ')+')';
-      }
-      const rawMsg=shopItem.errorMsg||_shopCfg.errorMsg||('Nicht genug '+cur+'! Du hast {kontostand} '+cur+', benötigt: {gesamt} '+cur+' ('+anzahl+'×'+(preis+flagAufpreis)+')'+aufpreisInfo+'.');
-      const msg=_shopTpl(rawMsg,buyerC,null,shopItem,preis+flagAufpreis,buyerBalance,anzahl,gesamt);
-      ServerSend('ChatRoomChat',{Content:msg,Type:'Whisper',Target:buyerC.MemberNumber});
-      _log('🛒 All-Kauf abgelehnt: '+buyerC.Name+' hat '+buyerBalance+', braucht '+gesamt+' ('+anzahl+'×'+(preis+flagAufpreis)+')');
-      return;
-    }
-
-    // Coins abziehen
-    if(!_moneyBalances[buyerC.MemberNumber])
-      _moneyBalances[buyerC.MemberNumber]={balance:0,name:buyerC.Name};
-    _moneyBalances[buyerC.MemberNumber].balance-=gesamt;
-    window.__BCK_popupRef?.postMessage({app:'BCKonfigurator',type:'BOT_MONEY',
-      memberNum:buyerC.MemberNumber,name:buyerC.Name,delta:-gesamt},'*');
-
-    const newBal=_moneyBalances[buyerC.MemberNumber].balance;
-    _log('🛒 All-Kauf: '+buyerC.Name+' kauft "'+shopItem.name+'" für alle ('+anzahl+'×'+(preis+flagAufpreis)+'='+gesamt+' '+cur+'). Kontostand: '+newBal+(flagUnknown?' [/u]':'')+(flagWhisper?' [/w]':'')+(flagNostrip?' [/nostrip]':''));
-
-    window.__BCK_popupRef?.postMessage({app:'BCKonfigurator',type:'BOT_SHOP',
-      buyerNum:buyerC.MemberNumber,buyerName:buyerC.Name,
-      targetNum:null,targetName:'Alle ('+anzahl+')',
-      itemName:shopItem.name,preis:gesamt,isAll:true,anzahl},'*');
-
-    // All-Ankündigung
-    const rawAnnAll=shopItem.announceAllMsg||_shopCfg.announceAllMsg||
-      (displayBuyer.Name+' kauft '+shopItem.icon+' '+shopItem.name+' für alle ('+anzahl+' Spieler, '+gesamt+' '+cur+').');
-    // Bei All-Kauf: {preis} = Gesamtpreis (was bezahlt wurde), {gesamt} ebenfalls Gesamtpreis
-    const annAllTxt=_shopTpl(rawAnnAll,displayBuyer,null,shopItem,gesamt,newBal,anzahl,gesamt);
-    if(flagWhisper){
-      // Als Whisper an alle Zielspieler
-      targets.forEach(tc=>ServerSend('ChatRoomChat',{Content:annAllTxt,Type:'Whisper',Target:tc.MemberNumber}));
-    } else {
-      ServerSend('ChatRoomChat',{Content:annAllTxt,Type:'Chat'});
-    }
-
-    // Bestätigung an Käufer – {preis} = Gesamtpreis
-    const rawConf=shopItem.confirmMsg||_shopCfg.confirmMsg||
-      ('✅ Gekauft für alle '+anzahl+' Spieler. Bezahlt: '+gesamt+' '+cur+'. Kontostand: '+newBal+' '+cur+'.');
-    ServerSend('ChatRoomChat',{Content:_shopTpl(rawConf,buyerC,null,shopItem,gesamt,newBal,anzahl,gesamt),Type:'Whisper',Target:buyerC.MemberNumber});
-
-    // Trigger für jeden Ziel-Spieler
-    targets.forEach(targetC=>{
-      const shopVars={name:buyerC.Name,wort:rohText,typ:'🛒 Shop All',x:buyerC.X??0,y:buyerC.Y??0,
-        C:targetC,shopBuyer:buyerC,shopItem,shopAnzahl:anzahl,shopGesamt:gesamt,shopNostrip:flagNostrip};
-      _trigs.forEach(trig=>{
-        const shopConds=(trig.bedingungen??[]).filter(c=>c.typ==='shop_kauf');
-        if(!shopConds.length)return;
-        const itemMatch=shopConds.every(c=>!c.shop_id||c.shop_id===shopItem.id);
-        if(!itemMatch)return;
-        const vonOk=(()=>{
-          if(trig.von==='bot')return buyerC.MemberNumber===Player.MemberNumber;
-          if(trig.von==='whitelist')return(trig.vonNummern||[]).map(Number).includes(Number(buyerC.MemberNumber));
-          return true;
-        })();
-        if(!vonOk)return;
-        const otherConds=(trig.bedingungen??[]).filter(c=>c.typ!=='shop_kauf');
-        const otherOk=otherConds.every(c=>{
-          if(c.typ==='rang'){
-            const op=c.rang_op??'=';
-            const cid=_rangState[buyerC.MemberNumber]??null;
-            if(op==='kein') return !cid;
-            if(!c.rang_id) return false;
-            const defs=(_cfg.rankDefs??[]).sort((a,b)=>a.level-b.level);
-            const td=defs.find(r=>r.id===c.rang_id),cd=defs.find(r=>r.id===cid);
-            if(!td||!cd) return false;
-            if(op==='=') return cd.level===td.level;
-            if(op==='min') return cd.level>=td.level;
-            if(op==='max') return cd.level<=td.level;
-          }
-          return true;
-        });
-        if(!otherOk)return;
-        _run(trig,shopVars);
-      });
-    });
-    return;
-  }
-
-  // ── Einzel-Kauf ───────────────────────────────────────
-  let targetC=buyerC;
-
-  if(args[1]){
-    const arg2=args[1].trim();
-    if(/^\d+$/.test(arg2)){
-      const num=parseInt(arg2);
-      targetC=allChars.find(c=>c.MemberNumber===num)||buyerC;
-    } else {
-      const nameMatches=allChars.filter(c=>c.Name.toLowerCase()===arg2.toLowerCase());
-      if(nameMatches.length===1){
-        targetC=nameMatches[0];
-      } else if(nameMatches.length>1){
-        const ids=nameMatches.map(c=>c.Name+' (#'+c.MemberNumber+')').join(', ');
-        ServerSend('ChatRoomChat',{Content:'⚠️ Mehrere Spieler mit dem Namen "'+arg2+'". Bitte MemberNummer verwenden: '+ids,Type:'Whisper',Target:buyerC.MemberNumber});
-        return;
-      }
-    }
-  }
-
-  const preisEffektiv = preis + flagAufpreis;
-  const buyerBalance=(_moneyBalances[buyerC.MemberNumber]?.balance)??0;
-
-  if(buyerBalance<preisEffektiv){
-    let aufpreisInfo='';
-    if(flagAufpreis>0){
-      const parts=[];
-      if(preisU>0)      parts.push('/u: '+preisU+' '+cur);
-      if(preisNostrip>0)parts.push('/nostrip: '+preisNostrip+' '+cur);
-      aufpreisInfo=' (inkl. '+parts.join(' + ')+')';
-    }
-    const rawMsg=shopItem.errorMsg||_shopCfg.errorMsg||('Nicht genug '+cur+'! Du hast {kontostand} '+cur+', benötigt: {gesamt} '+cur+aufpreisInfo+'.');
-    ServerSend('ChatRoomChat',{Content:_shopTpl(rawMsg,buyerC,targetC,shopItem,preis,buyerBalance,1,preisEffektiv),Type:'Whisper',Target:buyerC.MemberNumber});
-    _log('🛒 Kauf abgelehnt: '+buyerC.Name+' hat '+buyerBalance+' '+cur+', braucht '+preisEffektiv);
-    return;
-  }
-
-  // Coins abziehen
-  if(!_moneyBalances[buyerC.MemberNumber])
-    _moneyBalances[buyerC.MemberNumber]={balance:0,name:buyerC.Name};
-  _moneyBalances[buyerC.MemberNumber].balance-=preisEffektiv;
-  window.__BCK_popupRef?.postMessage({app:'BCKonfigurator',type:'BOT_MONEY',
-    memberNum:buyerC.MemberNumber,name:buyerC.Name,delta:-preisEffektiv},'*');
-
-  const newBal=_moneyBalances[buyerC.MemberNumber].balance;
-  const isFremdkauf=targetC.MemberNumber!==buyerC.MemberNumber;
-  _log('🛒 Kauf: '+buyerC.Name+' kauft "'+shopItem.name+'" für '+preisEffektiv+' '+cur+(isFremdkauf?' → Ziel: '+targetC.Name:'')+' | Kontostand: '+newBal+(flagUnknown?' [/u]':'')+(flagWhisper?' [/w]':'')+(flagNostrip?' [/nostrip]':''));
-
-  window.__BCK_popupRef?.postMessage({app:'BCKonfigurator',type:'BOT_SHOP',
-    buyerNum:buyerC.MemberNumber,buyerName:buyerC.Name,
-    targetNum:targetC.MemberNumber,targetName:targetC.Name,
-    itemName:shopItem.name,preis},'*');
-
-  // Bestätigungs-Whisper an Käufer
-  const rawConf=shopItem.confirmMsg||_shopCfg.confirmMsg||
-    ('✅ '+(isFremdkauf?'Du kaufst '+shopItem.name+' für '+targetC.Name:shopItem.name+' gekauft')+'. Bezahlt: '+preisEffektiv+' '+cur+(flagNostrip?' 🔒 NoStrip':'')+'. Kontostand: '+newBal+' '+cur+'.');
-  // {preis}=Basispreis, {gesamt}=Endpreis inkl. Flags
-  ServerSend('ChatRoomChat',{Content:_shopTpl(rawConf,buyerC,targetC,shopItem,preis,newBal,1,preisEffektiv),Type:'Whisper',Target:buyerC.MemberNumber});
-
-  // Fremdkauf-Ankündigung (nur wenn für anderen Spieler)
-  if(isFremdkauf){
-    const rawAnn=shopItem.announceMsg||_shopCfg.announceMsg||
-      (displayBuyer.Name+' hat für '+targetC.Name+' das Item '+shopItem.icon+' '+shopItem.name+' gekauft'+(flagNostrip?' 🔒':'')+'.') ;
-    const annTxt=_shopTpl(rawAnn,displayBuyer,targetC,shopItem,preis,newBal,1,preisEffektiv);
-    if(flagWhisper){
-      ServerSend('ChatRoomChat',{Content:annTxt,Type:'Whisper',Target:targetC.MemberNumber});
-    } else {
-      ServerSend('ChatRoomChat',{Content:annTxt,Type:'Chat'});
-    }
-  }
-
-  // NoStrip-Ankündigung
-  if(flagNostrip){
-    const rawNs=shopItem.announceNostripMsg||_shopCfg.announceNostripMsg||
-      ('🔒 '+targetC.Name+' trägt '+shopItem.icon+' '+shopItem.name+' und kann es nicht ablegen.');
-    const nsTxt=_shopTpl(rawNs,displayBuyer,targetC,shopItem,preis,newBal,1,preisEffektiv);
-    if(flagWhisper)ServerSend('ChatRoomChat',{Content:nsTxt,Type:'Whisper',Target:targetC.MemberNumber});
-    else ServerSend('ChatRoomChat',{Content:nsTxt,Type:'Chat'});
-  }
-  // Shop-Trigger auslösen
-  const shopVars={name:buyerC.Name,wort:rohText,typ:'🛒 Shop',x:buyerC.X??0,y:buyerC.Y??0,C:targetC,shopBuyer:buyerC,shopItem,shopNostrip:flagNostrip};
-  _trigs.forEach(trig=>{
-    const shopConds=(trig.bedingungen??[]).filter(c=>c.typ==='shop_kauf');
-    if(!shopConds.length)return;
-    const itemMatch=shopConds.every(c=>!c.shop_id||c.shop_id===shopItem.id);
-    if(!itemMatch)return;
-    const vonOk=(()=>{
-      if(trig.von==='bot')return buyerC.MemberNumber===Player.MemberNumber;
-      if(trig.von==='whitelist')return(trig.vonNummern||[]).map(Number).includes(Number(buyerC.MemberNumber));
-      return true;
-    })();
-    if(!vonOk)return;
-    const otherConds=(trig.bedingungen??[]).filter(c=>c.typ!=='shop_kauf');
-    const otherOk=otherConds.every(c=>{
-      if(c.typ==='rang'){
-        const op=c.rang_op??'=';
-        const currentId=_rangState[buyerC.MemberNumber]??null;
-        if(op==='kein') return !currentId;
-        if(!c.rang_id) return false;
-        const defs=(_cfg.rankDefs??[]).sort((a,b)=>a.level-b.level);
-        const td=defs.find(r=>r.id===c.rang_id);
-        const cd=defs.find(r=>r.id===currentId);
-        if(!td||!cd) return false;
-        if(op==='=') return cd.level===td.level;
-        if(op==='min') return cd.level>=td.level;
-        if(op==='max') return cd.level<=td.level;
-        return false;
-      }
-      return true;
-    });
-    if(!otherOk)return;
-    _run(trig,shopVars);
-  });
-}
-
-function _proc(rohText,typKey,C){
-  if(!rohText)return;
-  // Money query command
-  const qCmd=(_moneyCfg?.queryCmd||'').trim().toLowerCase();
-  if(qCmd&&rohText.trim().toLowerCase()===qCmd.toLowerCase()){
-    window.__BCK_popupRef?.postMessage({app:'BCKonfigurator',type:'MONEY_QUERY',memberNum:C.MemberNumber,name:C.Name},'*');
-    return;
-  }
-  // Rang query command
-  const rqCmd=(_cfg.rankQueryCmd||'').trim().toLowerCase();
-  if(rqCmd&&rohText.trim().toLowerCase()===rqCmd.toLowerCase()){
-    const defs=_cfg.rankDefs??[];
-    const rankId=_rangState[C.MemberNumber]??null;
-    const rank=defs.find(r=>r.id===rankId);
-    const tpl=s=>s.replace(/{name}/gi,C.Name).replace(/{rang}/gi,rank?.name||'Kein Rang').replace(/{rang_icon}/gi,rank?.icon||'–').replace(/{rang_level}/gi,String(rank?.level||0));
-    const txt=tpl(_cfg.rankQueryText||'{name} hat Rang: {rang_icon} {rang}');
-    const typ=_cfg.rankQueryTyp||'whisper';
-    if(typ==='whisper')ServerSend('ChatRoomChat',{Content:txt,Type:'Whisper',Target:C.MemberNumber});
-    else ServerSend('ChatRoomChat',{Content:txt,Type:'Chat'});
-    return;
-  }
-  // !shop Listen-Befehl
-  const shopListCmd=(_shopCfg.listCmd||'').trim().toLowerCase();
-  if(shopListCmd&&rohText.trim().toLowerCase()===shopListCmd){
-    const cur=_shopCfg.moneyName||'Gold';
-    const aktive=_shopCfg.items.filter(i=>i.aktiv!==false);
-    if(!aktive.length){ServerSend('ChatRoomChat',{Content:'🛒 Noch keine Artikel.',Type:'Whisper',Target:C.MemberNumber});return;}
-    const hdr='🛒 Shop ('+aktive.length+' Artikel):';
-    const chunks=[];let buf=hdr;
-    aktive.forEach(item=>{
-      const ns=item.preisNostrip??_shopCfg.preisNostrip??0;
-      const nsHint=ns>0?' (/nostrip +'+ns+')':(ns===0?'':'' );
-      const line='\\n• '+(item.icon||'🛒')+' '+item.name+' – '+(Number(item.preis)||0)+' '+cur+nsHint;
-      if((buf+line).length>480){chunks.push(buf);buf=line.slice(1);}else buf+=line;
-    });
-    chunks.push(buf);
-    chunks.forEach((ch,i)=>setTimeout(()=>ServerSend('ChatRoomChat',{Content:ch,Type:'Whisper',Target:C.MemberNumber}),i*130));
-    return;
-  }
-  // Shop Pay-Befehl
-  const shopCmd=(_shopCfg.cmd||'').trim().toLowerCase();
-  if(shopCmd&&rohText.trim().toLowerCase().startsWith(shopCmd+' ')||rohText.trim().toLowerCase()===shopCmd){
-    _handleShopCmd(rohText,C);
-    return;
-  }
-  const pos={X:C.X??0,Y:C.Y??0}; // direkt vom Character
-  const typLabel={chat:'\u{1F4AC} Chat',emote:'\u{2728} Emote',whisper:'\u{1F917} Whisper'}[typKey]??typKey;
-  _trigs.forEach(trig=>{
-    // Trigger mit player_betritt -> nur Join-Poll, nie Nachrichten
-    if((trig.bedingungen??[]).some(c=>c.typ==='player_betritt'))return;
-    // Trigger mit item_traegt aber ohne wort -> nur Polling
-    const hasItem=(trig.bedingungen??[]).some(c=>c.typ==='item_traegt');
-    const hasWort=(trig.bedingungen??[]).some(c=>c.typ==='wort');
-    if(hasItem&&!hasWort)return;
-    // Von-Filter: wer darf diesen Trigger auslösen?
-    const vonOk=(()=>{
-      if(trig.von==='bot')return C.MemberNumber===Player.MemberNumber;
-      if(trig.von==='whitelist')return(trig.vonNummern||[]).map(Number).includes(Number(C.MemberNumber));
-      return true; // 'alle'
-    })();
-    if(!vonOk)return;
-    // Alle anderen: _ok prueft Auslöser-Bedingungen (wort, zone, vortrigger)
-    const condOk=_ok(trig,rohText,typKey,C);
-    if(condOk){
-      // Auslöser passt → jetzt IF-Bedingungen prüfen (nur wenn ifElse aktiv und ifBedingungen vorhanden)
-      const ifBeds=trig.ifBedingungen??[];
-      const ifOk=!trig.ifElse||!ifBeds.length||_okIf(trig,rohText,typKey,C);
-      if(ifOk){
-        _run(trig,{name:C.Name,wort:rohText,typ:typLabel,x:pos.X,y:pos.Y,zone:'',C});
-      } else if((trig.aktionen_sonst??[]).length){
-        _runSonst(trig,{name:C.Name,wort:rohText,typ:typLabel,x:pos.X,y:pos.Y,zone:'',C});
-      }
-    }
-  });
-
-  // ── Chat-Events prüfen ──
-  _procEvents(rohText,typKey,C);
-}
-
-function _procEvents(rohText,typKey,C){
-  // FIX: Define typLabel here so it's available whether called from _proc or directly from _msgH
-  const typLabel={chat:'\u{1F4AC} Chat',emote:'\u{2728} Emote',whisper:'\u{1F917} Whisper'}[typKey]??typKey;
-  _evts.forEach(ev=>{
-    if(!ev.aktiv)return;
-    // Chat-Events: brauchen wort-Bedingung und KEIN ev_timer/ev_interval
-    // Von-Filter: wer darf das Event auslösen?
-    const vonOk=(()=>{
-      if(ev.von==='bot')return C.MemberNumber===Player.MemberNumber;
-      if(ev.von==='nummer')return ev.vonNummer&&C.MemberNumber===ev.vonNummer;
-      return true; // 'alle'
-    })();
-    if(!vonOk)return;
-    // Wort-Bedingungen prüfen
-    const hasTimerBed=(ev.bedingungen??[]).some(c=>c.typ==='ev_timer'||c.typ==='ev_interval'||c.typ==='player_betritt');
-    if(hasTimerBed)return; // Timer/Betritt-Events werden anders ausgelöst
-    const wortConds=(ev.bedingungen??[]).filter(c=>c.typ==='wort');
-    if(!wortConds.length)return;
-    ev._rohText=rohText; ev._typKey=typKey; // temp context für _okEv
-    if(_okEv(ev,C,rohText,typKey)){
-      // Ziel bestimmen
-      const allChars=[Player,...(ChatRoomCharacter||[])];
-      let targets=[];
-      if(ev.ziel==='alle')targets=allChars;
-      else if(ev.ziel==='liste')targets=allChars.filter(ch=>(ev.zielListe||[]).includes(ch.MemberNumber));
-      else targets=[C]; // ausloeser = der der schrieb
-      _log('💬 Chat-Event "'+ev.name+'" von '+C.Name+' → '+targets.length+' Ziel(e)');
-      targets.forEach(ch=>{
-        const vars={name:ch.Name,wort:rohText,typ:typLabel,x:ch.X??0,y:ch.Y??0,zone:'',C:ch};
-        // FIX: Read cnt inside callback to avoid all targets writing the same stale value
-        const cntNow=_evFiredCnt[ev.id]??0;
-        if(ev.wiederholung==='einmalig'&&cntNow>=1)return;
-        if(ev.wiederholung==='n_mal'&&cntNow>=(ev.maxMal??2))return;
-        _runSeq(ev.aktionen??[],ch,vars,ev,
-          ()=>{_evFiredCnt[ev.id]=(_evFiredCnt[ev.id]??0)+1;_pushLog({status:'ok'},vars,{name:ev.name,id:ev.id});},
-          ()=>{_pushLog({status:'ungueltig'},vars,{name:ev.name,id:ev.id});}
-        );
-      });
-    }
-    delete ev._rohText; delete ev._typKey;
-  });
-}
-
-// ── Item-Trägt Polling (edge-triggered: feuert 1x wenn Item erscheint) ──
-const _itState={}; // 'memberNum_trigId_typ' -> bool
-// FIX: 500ms is sufficient for item-state changes, 100ms caused unnecessary CPU load
-const _itPoll=setInterval(()=>{
-  const chars=[Player,...(ChatRoomCharacter||[])];
-  _trigs.forEach(trig=>{
-    const itemConds=(trig.bedingungen??[]).filter(c=>c.typ==='item_traegt'||c.typ==='item_traegt_nicht');
-    if(!itemConds.length)return;
-    const hasWort=(trig.bedingungen??[]).some(c=>c.typ==='wort');
-    if(hasWort)return;
-    chars.forEach(C=>{
-      // Check positive (traegt) and negative (traegt_nicht) conditions
-      const condMet=itemConds.every(c=>{
-        const worn=(C.Appearance??[]).some(a=>a.Asset?.Name===c.item);
-        return c.typ==='item_traegt_nicht'?!worn:worn;
-      });
-      const key=C.MemberNumber+'_'+trig.id;
-      const was=_itState[key]??false;
-      if(condMet&&!was){
-        const pos={X:C.X??0,Y:C.Y??0};
-        // Von-Filter
-        const vonOk=(()=>{
-          if(trig.von==='bot')return C.MemberNumber===Player.MemberNumber;
-          if(trig.von==='whitelist')return(trig.vonNummern||[]).map(Number).includes(Number(C.MemberNumber));
-          return true;
-        })();
-        const otherOk=vonOk&&(trig.bedingungen??[]).every(c=>{
-          if(c.typ==='item_traegt'||c.typ==='item_traegt_nicht')return true;
-          if(c.typ==='zone'){const p=c.puffer??1;return pos.X>=c.x-p&&pos.X<=c.x+p&&pos.Y>=c.y-p&&pos.Y<=c.y+p;}
-          if(c.typ==='zone_rect'){return pos.X>=Math.min(c.x1,c.x2)&&pos.X<=Math.max(c.x1,c.x2)&&pos.Y>=Math.min(c.y1,c.y2)&&pos.Y<=Math.max(c.y1,c.y2);}
-          if(c.typ==='trigger_war'){const ref=_trigMap[c.trigId];return ref?.charSpec?!!_firedChar[c.trigId+'_'+C.MemberNumber]:!!_fired[c.trigId];}
-          if(c.typ==='rang'){
-            const op=c.rang_op??'=';
-            const currentId=_rangState[C.MemberNumber]??null;
-            if(op==='kein') return !currentId;
-            if(!c.rang_id) return false;
-            const defs=(_cfg.rankDefs??[]).sort((a,b)=>a.level-b.level);
-            const targetDef=defs.find(r=>r.id===c.rang_id);
-            const currentDef=defs.find(r=>r.id===currentId);
-            if(!targetDef) return false;
-            if(!currentDef) return false;
-            const tl=targetDef.level, cl=currentDef.level;
-            if(op==='=')   return cl===tl;
-            if(op==='min') return cl>=tl;
-            if(op==='max') return cl<=tl;
-            return false;
-          }
-          return true;
-        });
-        if(otherOk){
-          const ifBeds=trig.ifBedingungen??[];
-          const ifOk=!trig.ifElse||!ifBeds.length||_okIf(trig,'','item',C);
-          if(ifOk) _run(trig,{name:C.Name,wort:'',typ:'Item',x:pos.X,y:pos.Y,zone:'',C});
-          else if((trig.aktionen_sonst??[]).length) _runSonst(trig,{name:C.Name,wort:'',typ:'Item',x:pos.X,y:pos.Y,zone:'',C});
-        }
-      }
-      _itState[key]=condMet;
-    });
-  });
-},500);
-
-// ── Spieler-Betritt Polling (feuert 1x beim Betreten) ──
-const _roomPrev=new Set((ChatRoomCharacter||[]).map(c=>c.MemberNumber));
-// _roomEver is now part of persisted state (declared above)
-const _joinPoll=setInterval(()=>{
-  const chars=ChatRoomCharacter||[];
-  const cur=new Set(chars.map(c=>c.MemberNumber));
-
-  // Spieler verlassen → nur loggen; _firedChar bleibt erhalten damit Rejoin-Vortrigger noch greifen
-  for(const prevNum of _roomPrev){
-    if(!cur.has(prevNum)){
-      _log('\u{1F6AA} #'+prevNum+' verlassen');
-      _rejoinWindow.delete(prevNum); // Fenster beim Verlassen schließen (Map)
-      _pushLog({status:'leave', trigName:'Verlassen', trigId:'__system__',
-        player:'#'+prevNum, memberNum:prevNum, x:0, y:0, msg:'Raum verlassen'}, {name:'#'+prevNum,x:0,y:0,C:{MemberNumber:prevNum}}, {name:'System',id:'__system__'});
-      // _zoneState zurücksetzen (Spieler nicht mehr im Raum)
-      for(const k of Object.keys(_zoneState)){
-        if(k.startsWith(prevNum+'_'))delete _zoneState[k];
-      }
-      // _firedChar nur bei Triggern mit resetOnLeave=true zurücksetzen
-      _trigs.forEach(trig=>{
-        if(trig.charSpec&&trig.resetOnLeave){
-          delete _firedChar[trig.id+'_'+prevNum];
-          _log('\u{1F504} State von "'+trig.name+'" für #'+prevNum+' zurückgesetzt');
-        }
-      });
-    }
-  }
-
-  for(const C of chars){
-    if(!_roomPrev.has(C.MemberNumber)){
-      const istNeu=!_roomEver.has(C.MemberNumber);
-      const label=istNeu?'\u{1F195} Neu':'\u{1F504} Rejoin';
-      _log(label+': '+C.Name+' #'+C.MemberNumber);
-      _pushLog({status:istNeu?'join':'join_rejoin',trigName:'',msg:istNeu?'Erstes Mal':'Rejoin'},
-        {name:C.Name+' #'+C.MemberNumber,x:C.X??0,y:C.Y??0,C},{id:'__system__',name:'System'});
-      // Neuer Spieler → Money-Init (nur Erstes Mal, nicht bei Rejoin)
-      if(istNeu){
-        window.__BCK_popupRef?.postMessage({app:'BCKonfigurator',type:'MONEY_INIT_NEW',memberNum:C.MemberNumber,name:C.Name},'*');
-      }
-      // Rang-Init: Spieler registrieren (kein Rang) – bei Rejoin nur Name aktualisieren
-      window.__BCK_popupRef?.postMessage({app:'BCKonfigurator',type:'RANG_INIT',memberNum:C.MemberNumber,name:C.Name},'*');
-      _roomEver.add(C.MemberNumber);
-      _syncRoomEver();
-      // ── Rejoin-Fenster öffnen (nur bei echtem Rejoin) ──
-      if(!istNeu) _rejoinWindow.set(C.MemberNumber, Date.now());
-      // Auto-close window after grace period
-      if(!istNeu) setTimeout(()=>{ _rejoinWindow.delete(C.MemberNumber); _log('\u{1F6AA} Rejoin-Fenster für #'+C.MemberNumber+' automatisch geschlossen (1s)'); },_REJOIN_GRACE);
-
-      // ── Alle passenden Trigger sammeln (Rejoin separat) ──
-      const pos={X:C.X??0,Y:C.Y??0};
-      const rejoinBatch=[]; // Rejoin-Trigger: alle sammeln, dann zusammen feuern
-      _trigs.forEach(trig=>{
-        const bConds=(trig.bedingungen??[]).filter(c=>c.typ==='player_betritt');
-        if(!bConds.length)return;
-        const isRejoinTrig=bConds.some(c=>c.betritt_typ==='rejoin');
-        const bOk=bConds.every(c=>{
-          const bt=c.betritt_typ??'alle';
-          if(bt==='neu')return istNeu;
-          if(bt==='rejoin')return!istNeu;
-          return true;
-        });
-        if(!bOk)return;
-        const vonOk=(()=>{
-          if(trig.von==='bot')return C.MemberNumber===Player.MemberNumber;
-          if(trig.von==='whitelist')return(trig.vonNummern||[]).map(Number).includes(Number(C.MemberNumber));
-          return true;
-        })();
-        const otherOk=vonOk&&(trig.bedingungen??[]).every(c=>{
-          if(c.typ==='player_betritt')return true;
-          if(c.typ==='zone'){const p=c.puffer??1;return pos.X>=c.x-p&&pos.X<=c.x+p&&pos.Y>=c.y-p&&pos.Y<=c.y+p;}
-          if(c.typ==='zone_rect'){return pos.X>=Math.min(c.x1,c.x2)&&pos.X<=Math.max(c.x1,c.x2)&&pos.Y>=Math.min(c.y1,c.y2)&&pos.Y<=Math.max(c.y1,c.y2);}
-          if(c.typ==='trigger_war'){
-            // Rejoin-Trigger blockieren sich NICHT gegenseitig:
-            // trigger_war auf anderen Rejoin-Trigger → immer true (feuern zusammen)
-            if(isRejoinTrig){
-              const refTrig=_trigMap[c.trigId];
-              const refIsRejoin=(refTrig?.bedingungen??[]).some(bc=>bc.typ==='player_betritt'&&bc.betritt_typ==='rejoin');
-              if(refIsRejoin)return true;
-            }
-            const ref=_trigMap[c.trigId];
-            return ref?.charSpec?!!_firedChar[c.trigId+'_'+C.MemberNumber]:!!_fired[c.trigId];
-          }
-          if(c.typ==='rang'){
-            const op=c.rang_op??'=';
-            const currentId=_rangState[C.MemberNumber]??null;
-            if(op==='kein') return !currentId;
-            if(!c.rang_id) return false;
-            const defs=(_cfg.rankDefs??[]).sort((a,b)=>a.level-b.level);
-            const targetDef=defs.find(r=>r.id===c.rang_id);
-            const currentDef=defs.find(r=>r.id===currentId);
-            if(!targetDef) return false;
-            if(!currentDef) return false;
-            const tl=targetDef.level, cl=currentDef.level;
-            if(op==='=')   return cl===tl;
-            if(op==='min') return cl>=tl;
-            if(op==='max') return cl<=tl;
-            return false;
-          }
-          return true;
-        });
-        if(!otherOk)return;
-        if(isRejoinTrig){
-          rejoinBatch.push(trig); // Rejoin: gesammelt feuern
-        } else {
-          const ifBeds=trig.ifBedingungen??[];
-          const ifOk=!trig.ifElse||!ifBeds.length||_okIf(trig,'',null,C);
-          if(ifOk) _run(trig,{name:C.Name,wort:'',typ:label,x:pos.X,y:pos.Y,zone:'',C});
-          else if((trig.aktionen_sonst??[]).length) _runSonst(trig,{name:C.Name,wort:'',typ:label,x:pos.X,y:pos.Y,zone:'',C});
-        }
-      });
-      // ── Betritt-Events feuern (Events mit player_betritt Bedingung) ──
-      _evts.forEach(ev=>{
-        if(!ev.aktiv)return;
-        const betrittConds=(ev.bedingungen??[]).filter(c=>c.typ==='player_betritt');
-        if(!betrittConds.length)return;
-        // betritt_typ Filter
-        const bOk=betrittConds.every(c=>{
-          const bt=c.betritt_typ??'alle';
-          if(bt==='neu')return istNeu;
-          if(bt==='rejoin')return!istNeu;
-          return true;
-        });
-        if(!bOk)return;
-        // Von-Filter: wer darf das Event auslösen (= wer muss der Beitretende sein)?
-        const vonOk=(()=>{
-          if(ev.von==='bot')return C.MemberNumber===Player.MemberNumber;
-          if(ev.von==='nummer')return ev.vonNummer&&C.MemberNumber===+ev.vonNummer;
-          return true; // 'alle' → jeder
-        })();
-        if(!vonOk)return;
-        // Weitere Bedingungen prüfen (z.B. Rang) – player_betritt wurde bereits oben geprüft
-        const evOtherOk=(ev.bedingungen??[]).every(c=>{
-          if(c.typ==='player_betritt')return true;
-          if(c.typ==='rang'){
-            const op=c.rang_op??'=';
-            const currentId=_rangState[C.MemberNumber]??null;
-            if(op==='kein') return !currentId;
-            if(!c.rang_id) return false;
-            const defs=(_cfg.rankDefs??[]).sort((a,b)=>a.level-b.level);
-            const targetDef=defs.find(r=>r.id===c.rang_id);
-            const currentDef=defs.find(r=>r.id===currentId);
-            if(!targetDef) return false;
-            if(!currentDef) return false;
-            const tl=targetDef.level, cl=currentDef.level;
-            if(op==='=')   return cl===tl;
-            if(op==='min') return cl>=tl;
-            if(op==='max') return cl<=tl;
-            return false;
-          }
-          return true;
-        });
-        if(!evOtherOk)return;
-        const evVars={name:C.Name,wort:'',typ:label,x:C.X??0,y:C.Y??0,zone:'',C};
-        const allChars=[Player,...(ChatRoomCharacter||[])];
-        let targets=[];
-        if(ev.ziel==='alle')targets=allChars;
-        else if(ev.ziel==='liste')targets=allChars.filter(ch=>(ev.zielListe||[]).includes(ch.MemberNumber));
-        else targets=[C]; // ausloeser = der beitretende Spieler
-        const cnt=_evFiredCnt[ev.id]??0;
-        if(ev.wiederholung==='einmalig'&&cnt>=1)return;
-        if(ev.wiederholung==='n_mal'&&cnt>=(ev.maxMal??2))return;
-        targets.forEach(ch=>{
-          const vars={name:ch.Name,wort:'',typ:label,x:ch.X??0,y:ch.Y??0,zone:'',C:ch};
-          // FIX: Read cnt inside callback so each target increments independently
-          _runSeq(ev.aktionen??[],ch,vars,ev,
-            ()=>{_evFiredCnt[ev.id]=(_evFiredCnt[ev.id]??0)+1;_pushLog({status:'ok'},vars,{name:ev.name,id:ev.id});},
-            ()=>{_pushLog({status:'ungueltig'},vars,{name:ev.name,id:ev.id});}
-          );
-        });
-      });
-
-      // Alle Rejoin-Trigger feuern (keine gegenseitige Blockade)
-      // Trigger MIT Item-Bedingungen: verzögert – BC-Appearance ist beim Join noch nicht geladen
-      // Trigger OHNE Item-Bedingungen: sofort
-      const ITEM_SYNC_DELAY = 800; // ms warten bis BC Appearance synchronisiert hat
-      rejoinBatch.forEach(trig=>{
-        const hasItemCond=(trig.bedingungen??[]).some(c=>c.typ==='item_traegt'||c.typ==='item_traegt_nicht');
-        if(hasItemCond){
-          // Verzögert feuern + Bedingung nochmal prüfen mit frischen Daten
-          setTimeout(()=>{
-            if(!_rejoinWindow.has(C.MemberNumber)){
-              _log('⏭ [Rejoin] "'+trig.name+'" – Fenster geschlossen vor Appearance-Sync');
-              return;
-            }
-            // Frische Appearance-Daten aus ChatRoomCharacter holen
-            const Cfresh=ChatRoomCharacter.find(x=>x.MemberNumber===C.MemberNumber)??C;
-            // Item-Bedingungen nochmal prüfen
-            const itemOk=(trig.bedingungen??[]).every(c=>{
-              if(c.typ==='item_traegt')return(Cfresh.Appearance??[]).some(a=>a.Asset?.Name===c.item);
-              if(c.typ==='item_traegt_nicht')return!(Cfresh.Appearance??[]).some(a=>a.Asset?.Name===c.item);
-              return true;
-            });
-            if(!itemOk){
-              _log('⏭ [Rejoin] "'+trig.name+'" – Item-Bedingung nach Sync nicht erfüllt (Appearance jetzt geladen)');
-              return;
-            }
-            const ifBedsR=trig.ifBedingungen??[];
-            const ifOkR=!trig.ifElse||!ifBedsR.length||_okIf(trig,'',null,Cfresh);
-            if(ifOkR) _run(trig,{name:Cfresh.Name,wort:'',typ:label,x:Cfresh.X??pos.X,y:Cfresh.Y??pos.Y,zone:'',C:Cfresh});
-            else if((trig.aktionen_sonst??[]).length) _runSonst(trig,{name:Cfresh.Name,wort:'',typ:label,x:Cfresh.X??pos.X,y:Cfresh.Y??pos.Y,zone:'',C:Cfresh});
-          }, ITEM_SYNC_DELAY);
-        } else {
-          const ifBeds=trig.ifBedingungen??[];
-          const ifOk=!trig.ifElse||!ifBeds.length||_okIf(trig,'',null,C);
-          if(ifOk) _run(trig,{name:C.Name,wort:'',typ:label,x:pos.X,y:pos.Y,zone:'',C});
-          else if((trig.aktionen_sonst??[]).length) _runSonst(trig,{name:C.Name,wort:'',typ:label,x:pos.X,y:pos.Y,zone:'',C});
-        }
-      });
-    }
-  }
-  _roomPrev.clear();
-  for(const n of cur)_roomPrev.add(n);
-},100);
-
-// ── Zonen-Betreten Polling – direkt C.X/C.Y (wie ZoneMonitor-Pattern) ──
-const _zoneState={}; // 'memberNum_trigId' -> bool (war zuletzt drin)
-// FIX: 500ms is sufficient for zone detection, 100ms caused unnecessary CPU load
-const _zonePoll=setInterval(()=>{
-  const chars=[Player,...(ChatRoomCharacter||[])];
-  _trigs.forEach(trig=>{
-    const zoneConds=(trig.bedingungen??[]).filter(c=>c.typ==='zone'||c.typ==='zone_rect');
-    if(!zoneConds.length)return;
-    const hasWort=(trig.bedingungen??[]).some(c=>c.typ==='wort');
-    const hasBetritt=(trig.bedingungen??[]).some(c=>c.typ==='player_betritt');
-    if(hasWort||hasBetritt)return;
-    chars.forEach(C=>{
-      if(!C)return;
-      // Direkt C.X / C.Y – kein _getPos Umweg nötig
-      const cx=C.X??-999, cy=C.Y??-999;
-      const inZone=zoneConds.every(c=>{
-        if(c.typ==='zone_rect')return cx>=Math.min(c.x1,c.x2)&&cx<=Math.max(c.x1,c.x2)&&cy>=Math.min(c.y1,c.y2)&&cy<=Math.max(c.y1,c.y2);
-        const p=c.puffer??1;
-        return cx>=c.x-p&&cx<=c.x+p&&cy>=c.y-p&&cy<=c.y+p;
-      });
-      const key=C.MemberNumber+'_'+trig.id;
-      const war=_zoneState[key]??false;
-      if(inZone&&!war){
-        // Prüfe andere Bedingungen (vortrigger, item_traegt)
-        const vonOk=(()=>{
-          if(trig.von==='bot')return C.MemberNumber===Player.MemberNumber;
-          if(trig.von==='whitelist')return(trig.vonNummern||[]).map(Number).includes(Number(C.MemberNumber));
-          return true;
-        })();
-        const otherOk=vonOk&&(trig.bedingungen??[]).every(c=>{
-          if(c.typ==='zone'||c.typ==='zone_rect')return true;
-          if(c.typ==='trigger_war'){const ref=_trigMap[c.trigId];return ref?.charSpec?!!_firedChar[c.trigId+'_'+C.MemberNumber]:!!_fired[c.trigId];}
-          if(c.typ==='item_traegt')return(C.Appearance??[]).some(a=>a.Asset?.Name===c.item);
-          if(c.typ==='item_traegt_nicht')return!(C.Appearance??[]).some(a=>a.Asset?.Name===c.item);
-          if(c.typ==='rang'){
-            const op=c.rang_op??'=';
-            const currentId=_rangState[C.MemberNumber]??null;
-            if(op==='kein') return !currentId;
-            if(!c.rang_id) return false;
-            const defs=(_cfg.rankDefs??[]).sort((a,b)=>a.level-b.level);
-            const targetDef=defs.find(r=>r.id===c.rang_id);
-            const currentDef=defs.find(r=>r.id===currentId);
-            if(!targetDef) return false;
-            if(!currentDef) return false;
-            const tl=targetDef.level, cl=currentDef.level;
-            if(op==='=')   return cl===tl;
-            if(op==='min') return cl>=tl;
-            if(op==='max') return cl<=tl;
-            return false;
-          }
-          return true;
-        });
-        if(otherOk){
-          _log('\u{1F4CD} Zone: '+C.Name+' X='+cx+' Y='+cy+' \u2192 "'+trig.name+'"');
-          _run(trig,{name:C.Name,wort:'',typ:'\u{1F4CD} Zone',x:cx,y:cy,zone:'',C});
-        }
-      }
-      _zoneState[key]=inZone;
-    });
-  });
-},500);
-
-// Eigene Nachrichten via hookFunction – Mod bekommt unique Namen (Timestamp) um Kollisionen beim Live-Sync zu vermeiden
-let _mod = null;
-try {
-  const _modName = 'BCBot_${safeId}_' + Date.now();
-  _mod = bcModSdk.registerMod({name: _modName, fullName:'${safeName}', version:'1.0'});
-  _mod.hookFunction('ChatRoomSendChat', 0, (args, next) => {
-    // BC löscht InputChat.value vor dem Hook → args[0].Content ist zuverlässiger
-    const msgData = args[0];
-    const raw = (typeof msgData === 'object' ? msgData?.Content : null)
-             ?? document.getElementById('InputChat')?.value?.trim()
-             ?? '';
-    if (raw) {
-      const msgType = (typeof msgData === 'object' ? msgData?.Type : null) ?? '';
-      const isE = msgType === 'Emote' || (!msgType && raw.startsWith('*') && raw.endsWith('*'));
-      const isW = msgType === 'Whisper' || (!msgType && (raw.startsWith('/w ') || raw.startsWith('/whisper ')));
-      const tk = isE ? 'emote' : isW ? 'whisper' : 'chat';
-      const hearOk=(_cfg.hearChat && tk==='chat')||(_cfg.hearEmote && tk==='emote')||(_cfg.hearWhisper && tk==='whisper');
-      if(hearOk)_proc(raw,tk,Player);
-      else _procEvents(raw,tk,Player); // Events immer prüfen
-    }
-    return next(args);
-  });
-  _log('✅ hookFunction aktiv');
-} catch(hookErr) {
-  _log('⚠️ hookFunction nicht verfügbar (eigene Nachrichten via Socket):', hookErr.message);
-  // Fallback: eigene Nachrichten via ServerSocket mitschneiden
-  // BC sendet keine eigenen Nachrichten zurück, daher InputChat-Observer als Alternative
-  const _origSend = window.ServerSend;
-  if (typeof _origSend === 'function') {
-    window.__BCBot_origSend_${safeId} = _origSend;
-    window.ServerSend = function(channel, data, ...rest) {
-      if (channel === 'ChatRoomChat' && data?.Content && ['Chat','Emote','Whisper'].includes(data?.Type ?? 'Chat')) {
-        const tk = (data.Type||'Chat').toLowerCase();
-        const ssHearOk=(_cfg.hearChat&&tk==='chat')||(_cfg.hearEmote&&tk==='emote')||(_cfg.hearWhisper&&tk==='whisper');
-        // FIX: removed redundant double-check of ssHearOk inside the already-matching if-block
-        setTimeout(() => { if(ssHearOk)_proc(data.Content,tk,Player); else _procEvents(data.Content,tk,Player); }, 0);
-      }
-      return _origSend.call(this, channel, data, ...rest);
-    };
-  }
-}
-
-// ── ServerSocket: alle Spieler im Raum (IMMER aktiv, unabhaengig von nurEigene) ──
-// Eigene Nachrichten kommen NICHT via Socket zurueck – die kommen via hookFunction
-// ── AntiStrip Listener ──────────────────────────────────────
-_asH = function(data) {
-  if (!data || data.Type !== 'Action') return;
-  var txt = JSON.stringify(data);
-  if (txt.indexOf('ItemRemove') === -1 && txt.indexOf('ActionRemove') === -1) return;
-  // Sender ermitteln – Bot selbst? → kein AntiStrip
-  var sender = null;
-  if (Array.isArray(data.Dictionary)) {
-    for (var _di = 0; _di < data.Dictionary.length; _di++) {
-      if (data.Dictionary[_di].SourceCharacter != null) {
-        sender = data.Dictionary[_di].SourceCharacter; break;
-      }
-    }
-  }
-  if (sender === null) sender = data.Sender;
-  if (sender === Player.MemberNumber) return;
-  // Alle aktiven Watcher durchgehen
-  var _keys = Object.keys(_asWatchers);
-  for (var _wi = 0; _wi < _keys.length; _wi++) {
-    (function(w) {
-      var allChars = [Player].concat(ChatRoomCharacter || []);
-      var C = null;
-      for (var _ci = 0; _ci < allChars.length; _ci++) {
-        if (allChars[_ci].MemberNumber === w.memberNum) { C = allChars[_ci]; break; }
-      }
-      if (!C) return;
-      var item = (typeof InventoryGet === 'function') ? InventoryGet(C, w.gruppe) : null;
-      if (item) return; // Slot noch besetzt
-      _log('\u{1F6E1}\uFE0F AntiStrip: ' + w.gruppe + ' leer bei ' + C.Name + ' \u2192 lege wieder an...');
-      setTimeout(function() {
-        try {
-          if (w.itemConfig) {
-            var ic = w.itemConfig;
-            var col = ic.colors || ['#ffffff'];
-            if (typeof col === 'string' && col.indexOf(',') !== -1) col = col.split(',');
-            InventoryWear(C, ic.asset, ic.group, col, 0, Player.MemberNumber, ic.craft || null);
-            var itemNow = InventoryGet(C, ic.group);
-            if (itemNow) {
-              itemNow.Color = col;
-              itemNow.Property = itemNow.Property || {};
-              if (ic.tr && Object.keys(ic.tr).length) {
-                itemNow.Property.TypeRecord = ic.tr;
-                itemNow.Property.Type = ic.typeStr || '';
-              }
-              if (ic.props) Object.assign(itemNow.Property, ic.props);
-            }
-          } else if (w.curseEntry) {
-            var col2 = w.curseEntry.Farbe;
-            if (typeof col2 === 'string' && col2.indexOf(',') !== -1) col2 = col2.split(',');
-            InventoryWear(C, w.curseEntry.ItemName, w.curseEntry.Gruppe,
-              col2, 0, Player.MemberNumber, w.curseEntry.Craft || null);
-          } else if (w.ersatz) {
-            InventoryWear(C, w.ersatz, w.gruppe, w.farbe || '#ffffff', 0, Player.MemberNumber);
-          } else {
-            _log('\u26A0 AntiStrip: kein Ersatz konfiguriert f\u00fcr ' + w.gruppe);
-            return;
-          }
-          CharacterRefresh(C);
-          ChatRoomCharacterUpdate(C);
-          _log('\u2705 AntiStrip: ' + (w.ersatz || 'Item') + ' wieder angelegt auf ' + C.Name);
-        } catch(ex) {
-          _log('\u26A0 AntiStrip Fehler: ' + ex.message);
-        }
-      }, w.delay != null ? w.delay : 500);
-    })(_asWatchers[_keys[_wi]]);
-  }
-};
-ServerSocket.on('ChatRoomMessage', _asH);
-// ─────────────────────────────────────────────────────────────
-
-const _msgH=function(data){
-  if(!['Chat','Emote','Whisper'].includes(data.Type))return;
-  if(data.Sender===Player.MemberNumber)return; // eigene via hookFunction abgefangen
-  const tk=data.Type.toLowerCase();
-  const C=ChatRoomCharacter.find(c=>c.MemberNumber===data.Sender)
-        ??(Player.MemberNumber===data.Sender?Player:null);
-  if(!C)return;
-  // Trigger: nur wenn hear* aktiv; Events: immer (eigene Einstellung via Von-Filter)
-  const hearOk=(tk==='chat'&&_cfg.hearChat)||(tk==='emote'&&_cfg.hearEmote)||(tk==='whisper'&&_cfg.hearWhisper);
-  if(hearOk)_proc(data.Content,tk,C);
-  else _procEvents(data.Content,tk,C); // Events trotzdem prüfen
-};
-ServerSocket.on('ChatRoomMessage',_msgH);
-
-window['_BCBot_'+_BID]={
-  stop(){
-    clearInterval(_itPoll);
-    clearInterval(_joinPoll);
-    clearInterval(_zonePoll);
-    try{ if(_mod) _mod.removePatches(); } catch(e){}
-    // Restore ServerSend if we patched it as fallback
-    if(window.__BCBot_origSend_${safeId}) {
-      window.ServerSend = window.__BCBot_origSend_${safeId};
-      delete window.__BCBot_origSend_${safeId};
-    }
-    if(_asH)  ServerSocket.off('ChatRoomMessage',_asH);
-    if(_msgH) ServerSocket.off('ChatRoomMessage',_msgH);
-    // Events timer stoppen
-    Object.values(_evTimers).forEach(h=>clearTimeout(h)); // clears both _t and _i timers
-    delete window['_BCBot_'+_BID];
-    // State im window-Objekt + localStorage sichern (überlebt Page-Reload)
-    window[_stateKey].roomEver=[..._roomEver];
-    try{
-      const ls=JSON.parse(localStorage.getItem('__BCKBotStates')||'{}');
-      ls['${safeId}']={
-        fired:_fired, firedCnt:_firedCnt,
-        firedChar:_firedChar, roomEver:[..._roomEver],
-        evFiredCnt:_evFiredCnt,
-        ts:Date.now()
-      };
-      localStorage.setItem('__BCKBotStates',JSON.stringify(ls));
-    }catch(e){}
-    console.log('\u23F9\uFE0F [Bot:${safeName}] gestoppt | States gesichert (Mem+LS)');
-  },
-  // Sofortiges Event feuern (ignoriert Timer/Wiederholung-Check)
-  fireEventNow(eid){
-    const ev=_evts.find(e=>e.id===eid);
-    if(!ev){console.warn('[Bot] Event nicht gefunden:',eid);return;}
-    _log('▶️ Sofort feuern: "'+ev.name+'"');
-    // Temporär Wiederholung ignorieren
-    const savedWdh=ev.wiederholung;
-    ev.wiederholung='immer';
-    _fireEv(ev);
-    ev.wiederholung=savedWdh;
-  },
-  // Kompatibilität
-  fireEvent(eid){this.fireEventNow(eid);},
-  // Manuelles State-Reset (z.B. aus der Konsole: window['_BCBot_...'].clearState())
-  clearState(){
-    window[_stateKey]={fired:{},firedCnt:{},firedChar:{},roomEver:[],evFiredCnt:{}};
-    try{const ls=JSON.parse(localStorage.getItem('__BCKBotStates')||'{}');delete ls['${safeId}'];localStorage.setItem('__BCKBotStates',JSON.stringify(ls));}catch(e){}
-    Object.keys(_fired).forEach(k=>delete _fired[k]);
-    Object.keys(_firedCnt).forEach(k=>delete _firedCnt[k]);
-    Object.keys(_firedChar).forEach(k=>delete _firedChar[k]);
-    Object.keys(_evFiredCnt).forEach(k=>delete _evFiredCnt[k]);
-    _roomEver.clear();
-    console.log('\u{1F9F9} [Bot:${safeName}] States zurückgesetzt (Mem+LS)');
-  }
-};
-console.log('\u25B6\uFE0F [Bot:${safeName}] | Trigger:',_trigs.length,'| Modus:',_cfg.nurEigene?'Nur eigene':'Alle Spieler');
-})();`;
-}
-
-function botDeployById(id) {
-  const b = _bots.find(x=>x.id===id); if (!b) return;
-  if (!_connected) { showStatus('❌ Nicht mit BC verbunden','error'); return; }
-  const _code = _buildBotCode(b);
-  // Base64-kodiert senden → kein Sonderzeichen kann den Übertragungsweg brechen
-  // BC-Seite: new Function(decodeURIComponent(escape(atob(encoded))))()
-  const _encoded = btoa(unescape(encodeURIComponent(_code)));
-  const _wrapper = `(new Function(decodeURIComponent(escape(atob('${_encoded}'))))())`;
-  bcSend({ type:'EXEC', code: _wrapper });
-  b.laufend = true; _saveBots(); renderBotList();
-  if (_selBotId === id) {
-    const bar = document.getElementById('bot-status-bar');
-    if (bar) { bar.className='bot-status running'; bar.textContent='▶️ Bot "'+b.name+'" läuft'; }
-    // Re-render topbar button
-    renderBotEditor();
-  }
-  showStatus('▶️ Bot "'+b.name+'" gestartet!','success');
-}
-
-function botStopById(id) {
-  const b = _bots.find(x=>x.id===id); if (!b) return;
-  if (!_connected) { showStatus('❌ Nicht mit BC verbunden','error'); return; }
-  const safeId = b.id.replace(/\W/g,'_');
-  bcSend({ type:'EXEC', code:`if(window['_BCBot_${safeId}'])window['_BCBot_${safeId}'].stop();` });
-  b.laufend = false; _saveBots(); renderBotList();
-  if (_selBotId === id) renderBotEditor();
-  showStatus('⏹ Bot "'+b.name+'" gestoppt','success');
-}
-
-function botDeploy() { const b=_selBot(); if(b) botDeployById(b.id); }
-function botStop()   { const b=_selBot(); if(b) botStopById(b.id);   }
-
-function botSync() {
-  const b = _selBot();
-  if (!b) return;
+function groupDeployAll(gid) {
   if (!_connected) { showStatus('❌ Nicht mit BC verbunden', 'error'); return; }
-  if (!b.laufend)  { showStatus('ℹ️ Bot läuft nicht – einfach Starten klicken', 'info'); return; }
+  const g = _botGroups.find(x => x.id === gid); if (!g) return;
+  let started = 0;
+  g.botIds.forEach(bid => {
+    const b = _bots.find(x => x.id === bid); if (!b) return;
+    if (!b.laufend) { botDeployById(bid); started++; }
+  });
+  showStatus(`▶️ Gruppe "${g.name}": ${started} Bot(s) gestartet`, 'success');
+}
 
-  const btn = document.getElementById('syncBtn');
-  if (btn) { btn.disabled = true; btn.textContent = '⏳ Sync…'; }
+function groupStopAll(gid) {
+  if (!_connected) { showStatus('❌ Nicht mit BC verbunden', 'error'); return; }
+  const g = _botGroups.find(x => x.id === gid); if (!g) return;
+  let stopped = 0;
+  g.botIds.forEach(bid => {
+    const b = _bots.find(x => x.id === bid); if (!b) return;
+    if (b.laufend) { botStopById(bid); stopped++; }
+  });
+  showStatus(`⏹ Gruppe "${g.name}": ${stopped} Bot(s) gestoppt`, 'success');
+}
 
-  // Step 1: Stop
+function renderBotGroupList() {
+  const el = document.getElementById('botGroupList');
+  if (!el) return;
+  if (!_botGroups.length) {
+    el.innerHTML = '';
+    return;
+  }
+  el.innerHTML = _botGroups.map(g => {
+    const memberBots = g.botIds.map(bid => _bots.find(b => b.id === bid)).filter(Boolean);
+    const runningCount = memberBots.filter(b => b.laufend).length;
+    const dotCls = runningCount === 0 ? '' : runningCount === memberBots.length ? 'all-on' : 'any-on';
+    const ungroupedBots = _bots.filter(b => !_botGroups.some(grp => grp.botIds.includes(b.id)));
+    const addOptions = ungroupedBots.map(b => `<option value="${b.id}">${escHtml(b.name)}</option>`).join('');
+
+    return `
+    <div class="bg-section">
+      <div class="bg-hdr${g.open ? ' open' : ''}" onclick="groupToggleOpen('${g.id}')">
+        <span class="bg-arrow">▶</span>
+        <span class="bg-status-dot ${dotCls}"></span>
+        <span class="bg-title">${escHtml(g.name)}</span>
+        <span class="bg-count">${runningCount}/${memberBots.length}</span>
+        <button class="bg-run-btn" onclick="event.stopPropagation();groupDeployAll('${g.id}')" title="Alle starten">▶ Alle</button>
+        <button class="bg-stop-btn" onclick="event.stopPropagation();groupStopAll('${g.id}')" title="Alle stoppen">⏹ Alle</button>
+        <button class="bg-del-btn" onclick="event.stopPropagation();groupDelete('${g.id}')" title="Gruppe löschen">✕</button>
+      </div>
+      <div class="bg-body${g.open ? ' open' : ''}">
+        ${memberBots.length ? memberBots.map(b => `
+          <div class="bg-bot-row${b.id === _selBotId ? ' sel' : ''}" onclick="botSelect('${b.id}')">
+            <span class="bg-dot${b.laufend ? ' on' : ''}"></span>
+            <span class="bg-bot-name">${escHtml(b.name)}</span>
+            <button class="bot-toggle ${b.laufend ? 'on' : 'off'}" onclick="event.stopPropagation();botToggleLaufend('${b.id}')" title="${b.laufend ? 'Läuft' : 'Gestoppt'}"></button>
+            <button class="bg-rm-btn" onclick="event.stopPropagation();groupRemoveBot('${g.id}','${b.id}')" title="Aus Gruppe entfernen">✕</button>
+          </div>`).join('') : `<div style="padding:6px 14px;font-size:.69rem;color:var(--text3);font-style:italic">Keine Bots in dieser Gruppe</div>`}
+        ${addOptions ? `
+        <div class="bg-add-row">
+          <select id="bg-add-sel-${g.id}">
+            <option value="">Bot hinzufügen…</option>
+            ${addOptions}
+          </select>
+          <button onclick="groupAddBot('${g.id}')">+ Hinzufügen</button>
+        </div>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+
+// ── Tab entry ─────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════
+//  BOT LOG SYSTEM
+// ══════════════════════════════════════════════════════
+window._BCBotLog = window._BCBotLog ?? [];
+// Logs aus localStorage laden (persistiert über Konfigurator-Neustarts)
+if (!window._BCBotLog.length) {
+  try { const s=localStorage.getItem('BCBot_Logs'); if(s) window._BCBotLog=JSON.parse(s); } catch(e) {}
+}
+let _logFilter = '';
+
+function logPush(entry) {
+  window._BCBotLog.unshift(entry); // Neueste zuerst
+  if (window._BCBotLog.length > 2000) window._BCBotLog.length = 2000; // Max 2000 Einträge
+  _saveLogsToStorage(); // Persistent
+  // Live-Update wenn Log-Tab aktiv
+  if (document.getElementById('tab-log')?.classList.contains('active')) renderLogTab();
+  // Badge auf Tab-Button aktualisieren
+  const btn = document.getElementById('tab-log-btn');
+  if (btn) btn.textContent = '📋 Logs' + (window._BCBotLog.length ? ' ('+window._BCBotLog.length+')' : '');
+}
+
+function logFilter(f) {
+  _logFilter = f;
+  ['all','ok','ug','skip','join','leave'].forEach(k => document.getElementById('logf-'+k)?.classList.remove('active'));
+  const map = {'':'all','ok':'ok','ungueltig':'ug','skip':'skip','join':'join','leave':'leave'};
+  document.getElementById('logf-'+(map[f]??'all'))?.classList.add('active');
+  renderLogTab();
+}
+
+function _logEntries() {
+  if (!_logFilter) return window._BCBotLog;
+  return window._BCBotLog.filter(e => {
+    if (_logFilter === 'skip') return e.status.startsWith('skip');
+    if (_logFilter === 'join') return e.status.startsWith('join') || e.status === 'leave';
+    return e.status === _logFilter;
+  });
+}
+
+// Gibt zurück ob ein Spieler laut Logs als "bekannt" gilt (war schon im Raum)
+function _logKnownPlayers(botId) {
+  const known = new Set();
+  // Durchsuche Logs rückwärts (älteste zuerst = letztes Element im Array)
+  const logs = [...window._BCBotLog].reverse();
+  logs.forEach(e => {
+    if (!botId || e.botId === botId) {
+      if (e.status === 'join' || e.status === 'join_rejoin') {
+        if (e.memberNum) known.add(e.memberNum);
+      }
+    }
+  });
+  return known;
+}
+
+function renderLogTab() {
+  const entries = _logEntries();
+  const count = document.getElementById('log-count');
+  if (count) count.textContent = entries.length + ' / ' + window._BCBotLog.length + ' Einträge';
+
+  const statusLabel = {
+    ok:          '<span class="log-badge ok">✅ Ausgelöst</span>',
+    ungueltig:   '<span class="log-badge ungueltig">❌ Ungültig</span>',
+    skip_wdh:    '<span class="log-badge skip">⏭ Einmalig</span>',
+    skip_max:    '<span class="log-badge skip">⏭ Max erreicht</span>',
+    join:        '<span class="log-badge" style="background:#0a1a0a;color:#5f5;border:1px solid #1a5a1a">🆕 Erstes Mal</span>',
+    join_rejoin: '<span class="log-badge" style="background:#0a0a2a;color:#88f;border:1px solid #1a1a5a">🔄 Rejoin</span>',
+    leave:       '<span class="log-badge" style="background:#111;color:#777;border:1px solid #333">🚪 Verlassen</span>',
+  };
+
+  const html = entries.map((e, i) => {
+    const d = new Date(e.ts);
+    const ts = d.toLocaleTimeString('de-DE', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    const pos = (e.x||e.y) ? `X${e.x} Y${e.y}` : '';
+    const badge = statusLabel[e.status] ?? `<span class="log-badge skip">⏭ ${escHtml(e.status)}</span>`;
+    const isJoinLeave = ['join','join_rejoin','leave'].includes(e.status);
+    const cls = e.status === 'ok' ? 'log-ok' : e.status === 'ungueltig' ? 'log-ungueltig' : isJoinLeave ? '' : 'log-skip';
+    const realIdx = window._BCBotLog.indexOf(e);
+    const trigPart = isJoinLeave ? '' : `<span style="color:var(--text3);font-size:.65rem">→</span><span class="log-trig">🎯 ${escHtml(e.trigName||'')}</span><span style="color:var(--text3);font-size:.65rem">von</span>`;
+    return `<div class="log-entry ${cls}" id="loge-${realIdx}">
+      <span class="log-ts">${ts}</span>
+      ${badge}
+      <span class="log-bot">${escHtml(e.botName||'')}</span>
+      ${trigPart}
+      <span class="log-player">👤 ${escHtml(e.player||'')}</span>
+      ${pos ? `<span class="log-pos">📍 ${pos}</span>` : ''}
+      ${e.msg ? `<span style="font-size:.62rem;color:var(--text3);font-style:italic">${escHtml(e.msg)}</span>` : ''}
+      <button onclick="logDeleteEntry(${realIdx})" style="margin-left:auto;background:none;border:none;color:var(--text3);cursor:pointer;font-size:.7rem;padding:1px 5px;opacity:.5" onmouseover="this.style.opacity=1;this.style.color='var(--red)'" onmouseout="this.style.opacity=.5;this.style.color='var(--text3)'">✕</button>
+    </div>`;
+  }).join('');
+
+  document.getElementById('log-entries').innerHTML = html || `<div style="color:var(--text3);font-size:.75rem;text-align:center;margin-top:40px">Noch keine Einträge</div>`;
+}
+
+function logDeleteEntry(idx) {
+  window._BCBotLog.splice(idx, 1);
+  _saveLogsToStorage();
+  renderLogTab();
+  const btn = document.getElementById('tab-log-btn');
+  if (btn) btn.textContent = '📋 Logs' + (window._BCBotLog.length ? ' ('+window._BCBotLog.length+')' : '');
+}
+
+function logClearFiltered() {
+  const entries = _logEntries();
+  entries.forEach(e => {
+    const i = window._BCBotLog.indexOf(e);
+    if (i >= 0) window._BCBotLog.splice(i, 1);
+  });
+  _saveLogsToStorage();
+  renderLogTab();
+}
+
+function logClearAll() {
+  window._BCBotLog.length = 0;
+  // Auch Bot-States in BC zurücksetzen (alle laufenden Bots)
+  _bots.forEach(b=>{
+    const safeId = b.id.replace(/\W/g,'_');
+    if (b.laufend) bcSend({ type:'EXEC', code:`if(window['_BCBot_${safeId}'])window['_BCBot_${safeId}'].clearState();else{delete window['__BCKBotState_${safeId}'];}` });
+    // RoomEver löschen = nächstes Mal ist jeder "neu"
+  });
+  try { localStorage.removeItem('BC_RoomEver_v1'); } catch {}
+  renderLogTab();
+  const btn = document.getElementById('tab-log-btn');
+  if (btn) btn.textContent = '📋 Logs';
+}
+
+// ══════════════════════════════════════════════════════
+//  EVENTS SYSTEM
+// ══════════════════════════════════════════════════════
+
+function renderEventsTab() {
+  const bot = _selBot();
+  const container = document.getElementById('events-container');
+  if (!container) return;
+  if (!bot) {
+    container.innerHTML = `<div style="color:var(--text3);font-size:.75rem;text-align:center;margin-top:40px">Wähle zuerst einen Bot im 🤖 Bot-Tab.</div>`;
+    return;
+  }
+  const events = bot.events ?? [];
+  const html = `
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+      <span style="font-weight:600;font-size:.85rem">⚡ Events — Bot: <span style="color:var(--pl)">${escHtml(bot.name)}</span></span>
+      <button class="be-addevent" onclick="eventNew()" style="width:auto;padding:4px 14px;display:inline-block">+ Event hinzufügen</button>
+    </div>
+    ${events.map((e,i)=>renderEventCard(bot,e,i)).join('')}
+    ${events.length ? '' : '<div style="color:var(--text3);font-size:.73rem;text-align:center;margin-top:30px">Noch keine Events.<br>Events feuern Aktionen manuell oder automatisch auf Spieler im Raum.</div>'}
+  `;
+  container.innerHTML = html;
+}
+
+function _evBadge(e) {
+  const beds = e.bedingungen ?? [];
+  if (!e.aktiv) return {cls:'manual', lbl:'⏸ Pausiert'};
+  if (beds.some(c=>c.typ==='ev_interval')) return {cls:'interval', lbl:'🔁 Intervall'};
+  if (beds.some(c=>c.typ==='ev_timer'))    return {cls:'auto',     lbl:'⏱ Timer'};
+  if (beds.some(c=>c.typ==='player_betritt')) return {cls:'betritt-ev', lbl:'🚪 Betritt'};
+  if (beds.some(c=>c.typ==='wort'))        return {cls:'chat-ev',  lbl:'💬 Chat'};
+  return {cls:'manual', lbl:'🖱 Manuell'};
+}
+
+function renderEventCard(bot, e, i) {
+  const total = (bot.events||[]).length;
+  const actN = (e.aktionen||[]).length;
+  const condN = (e.bedingungen||[]).length;
+  const bodyOpen = document.getElementById('evb-'+e.id)?.classList.contains('open');
+  const ziel = e.ziel ?? 'ausloeser';
+  const wdh = e.wiederholung ?? 'immer';
+  const evVon = e.von ?? 'alle';
+  const badge = _evBadge(e);
+
+  const vonHtml = `<label style="font-size:.65rem;color:var(--text3)">Von:
+    <select class="cf" style="margin-left:4px" onchange="evField('${e.id}','von',this.value);evRerender('${e.id}')">
+      <option value="alle"   ${evVon==='alle'?'selected':''}>👥 Alle</option>
+      <option value="bot"    ${evVon==='bot'?'selected':''}>🤖 Bot (ich)</option>
+      <option value="nummer" ${evVon==='nummer'?'selected':''}>🔢 Nummer…</option>
+    </select></label>
+  ${evVon==='nummer'?`<input class="cf cf-w80" type="number" placeholder="MemberNr" value="${e.vonNummer??''}" oninput="evField('${e.id}','vonNummer',+this.value)">`:``}`;
+
+  return `<div class="event-card ${e.aktiv?'ev-on':''}" id="ec-${e.id}">
+    <div class="event-head" onclick="evToggleBody('${e.id}')">
+      <span style="display:flex;flex-direction:column;gap:1px">
+        <button class="order-btn" onclick="event.stopPropagation();evMoveUp('${e.id}')" ${i===0?'disabled':''}>▲</button>
+        <button class="order-btn" onclick="event.stopPropagation();evMoveDown('${e.id}')" ${i===total-1?'disabled':''}>▼</button>
+      </span>
+      <input type="checkbox" ${e.aktiv?'checked':''} onclick="event.stopPropagation();evField('${e.id}','aktiv',this.checked)" style="accent-color:var(--purple)">
+      <span class="ev-type-badge ${badge.cls}">${badge.lbl}</span>
+      <span class="ev-label">${escHtml(e.name||'Event')}</span>
+      <span class="ev-meta">${condN} Bed. · ${actN} Akt.</span>
+      <button onclick="event.stopPropagation();evFireImmediate('${e.id}')" style="font-size:.62rem;padding:2px 9px;background:var(--pd);border:none;color:var(--pl);border-radius:4px;cursor:pointer" title="Sofort auslösen (ignoriert Timer/Wdh)">▶️ Feuern</button>
+      <button onclick="event.stopPropagation();evDelete('${e.id}')" class="rm-btn">✕</button>
+    </div>
+    <div class="event-body ${bodyOpen?'open':''}" id="evb-${e.id}">
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
+        <label style="font-size:.65rem;color:var(--text3)">Name:
+          <input class="cf cf-w160" style="margin-left:4px" value="${escHtml(e.name||'')}" oninput="evField('${e.id}','name',this.value)">
+        </label>
+        ${vonHtml}
+        <label style="font-size:.65rem;color:var(--text3)">Ziel:
+          <select class="cf" style="margin-left:4px" onchange="evField('${e.id}','ziel',this.value);evRerender('${e.id}')">
+            <option value="ausloeser" ${ziel==='ausloeser'?'selected':''}>👤 Player (Auslöser/Random)</option>
+            <option value="alle"      ${ziel==='alle'?'selected':''}>👥 Alle im Raum</option>
+            <option value="liste"     ${ziel==='liste'?'selected':''}>📋 Liste</option>
+          </select>
+        </label>
+        ${ziel==='liste'?`<input class="cf" style="width:180px;font-size:.65rem" placeholder="MemberNr: 1234,5678"
+          value="${escHtml((e.zielListe||[]).join(','))}"
+          oninput="evField('${e.id}','zielListe',this.value.split(',').map(x=>+x.trim()).filter(Boolean))">`:``}
+        <label style="font-size:.65rem;color:var(--text3)">🔁 Wdh.:
+          <select class="cf" style="margin-left:4px" onchange="evField('${e.id}','wiederholung',this.value);evRerender('${e.id}')">
+            <option value="immer"    ${wdh==='immer'?'selected':''}>∞ Unbegrenzt</option>
+            <option value="einmalig" ${wdh==='einmalig'?'selected':''}>1× Einmalig</option>
+            <option value="n_mal"    ${wdh==='n_mal'?'selected':''}>N× N-mal</option>
+          </select>
+        </label>
+        ${wdh==='n_mal'?`<input class="cf cf-w80" type="number" min="1" value="${e.maxMal??2}" oninput="evField('${e.id}','maxMal',+this.value)">×`:''}
+      </div>
+
+      <div class="te-section">
+        <div class="te-section-title">🔎 Bedingungen
+          <button onclick="evAddCond('${e.id}','ev_timer')" title="Einmalig nach X Sekunden">⏱ Timer</button>
+          <button onclick="evAddCond('${e.id}','ev_interval')" title="Wiederholt alle X-Y Sekunden">🔁 Intervall</button>
+          <button onclick="evAddCond('${e.id}','player_betritt')" title="Wenn Spieler den Raum betritt">🚪 Betritt</button>
+          <button onclick="evAddCond('${e.id}','wort')">+ Wort</button>
+          <button onclick="evAddCond('${e.id}','zone_rect')">+ Zone Bereich</button>
+          <button onclick="evAddCond('${e.id}','zone')">+ Zone Punkt</button>
+          <button onclick="evAddCond('${e.id}','item_traegt')">+ Item trägt</button>
+          <button onclick="evAddCond('${e.id}','item_traegt_nicht')">+ Item trägt NICHT</button>
+          <button onclick="evAddCond('${e.id}','trigger_war')">+ Vortrigger</button>
+          <button onclick="evAddCond('${e.id}','rang')">🏆 Rang</button>
+        </div>
+        <div id="evconds-${e.id}">${(e.bedingungen||[]).map((c,ci)=>renderEvCond(bot,e.id,c,ci)).join('')}</div>
+      </div>
+
+      <div class="te-section">
+        <div class="te-section-title">⚡ Aktionen
+          <button onclick="evAddAct('${e.id}')">+ Aktion</button>
+        </div>
+        <div id="evacts-${e.id}">${(e.aktionen||[]).map((a,ai)=>renderEvAct(e.id,a,ai)).join('')}</div>
+      </div>
+
+      <div class="te-section">
+        <div class="te-section-title">🔙 Fallback
+          <small style="font-weight:normal;text-transform:none">(bei ❌ Trigger ungültig)</small>
+        </div>
+        <div style="display:flex;gap:6px;align-items:center">
+          <select class="cf" style="width:140px" onchange="evField('${e.id}','fallbackTyp',this.value);evRerender('${e.id}')">
+            <option value="nichts" ${(!e.fallbackTyp||e.fallbackTyp==='nichts')?'selected':''}>Nichts</option>
+            <option value="chat"   ${e.fallbackTyp==='chat'?'selected':''}>💬 Chat</option>
+            <option value="emote"  ${e.fallbackTyp==='emote'?'selected':''}>✨ Emote</option>
+          </select>
+          ${e.fallbackTyp&&e.fallbackTyp!=='nichts'?`<input class="cf cf-flex" value="${escHtml(e.fallbackText||'')}" oninput="evField('${e.id}','fallbackText',this.value)" placeholder="Nachricht…">`:``}
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderEvCond(bot, eid, c, ci) {
+  // Special standalone conditions (timer, interval, betritt)
+  if (c.typ === 'ev_timer') {
+    return `<div class="cond-group" id="evcond-${eid}-${ci}">
+      <div class="cond-when-lbl">⏱ Timer</div>
+      <div class="cond-card" style="background:#0a2a0a;border-color:#1a5a1a">
+        <div class="card-fields">
+          <span style="font-size:.65rem;color:var(--text3)">Einmalig nach</span>
+          <input class="cf cf-w80" type="number" min="0.1" step="0.1" value="${c.sek??10}"
+            oninput="evCondField('${eid}',${ci},'sek',+this.value)">
+          <span style="font-size:.65rem;color:var(--text3)">Sek</span>
+        </div>
+        <button class="rm-btn" onclick="evCondRemove('${eid}',${ci})">✕</button>
+      </div></div>`;
+  }
+  if (c.typ === 'ev_interval') {
+    return `<div class="cond-group" id="evcond-${eid}-${ci}">
+      <div class="cond-when-lbl">🔁 Intervall</div>
+      <div class="cond-card" style="background:#0a1a2a;border-color:#1a3a5a">
+        <div class="card-fields">
+          <span style="font-size:.65rem;color:var(--text3)">Alle</span>
+          <input class="cf cf-w70" type="number" min="1" value="${c.sek_min??20}"
+            oninput="evCondField('${eid}',${ci},'sek_min',+this.value)">
+          <span style="font-size:.62rem;color:var(--text3)">–</span>
+          <input class="cf cf-w70" type="number" min="1" value="${c.sek_max??60}"
+            oninput="evCondField('${eid}',${ci},'sek_max',+this.value)">
+          <span style="font-size:.65rem;color:var(--text3)">Sek</span>
+        </div>
+        <button class="rm-btn" onclick="evCondRemove('${eid}',${ci})">✕</button>
+      </div></div>`;
+  }
+  if (c.typ === 'player_betritt') {
+    const bt = c.betritt_typ ?? 'alle';
+    return `<div class="cond-group" id="evcond-${eid}-${ci}">
+      <div class="cond-when-lbl">🚪 Betritt</div>
+      <div class="cond-card" style="background:#1a0a2a;border-color:#5a1a7a">
+        <div class="card-fields">
+          <select class="cf" onchange="evCondField('${eid}',${ci},'betritt_typ',this.value)">
+            <option value="alle"   ${bt==='alle'?'selected':''}>Alle Spieler</option>
+            <option value="neu"    ${bt==='neu'?'selected':''}>🆕 Nur Neue</option>
+            <option value="rejoin" ${bt==='rejoin'?'selected':''}>🔄 Nur Rejoin</option>
+          </select>
+        </div>
+        <button class="rm-btn" onclick="evCondRemove('${eid}',${ci})">✕</button>
+      </div></div>`;
+  }
+  // Standard conditions (same as trigger, different callbacks)
+  const icons = {wort:'💬',zone:'🗺️',zone_rect:'📐',item_traegt:'👗',item_traegt_nicht:'🚫',trigger_war:'🔗',rang:'🏆'};
+  let inner = '';
+  if (c.typ === 'wort') {
+    inner = `<input class="cf cf-w120" value="${escHtml(c.wort||'')}" oninput="evCondField('${eid}',${ci},'wort',this.value)" placeholder="Triggerwort">
+      <select class="cf" onchange="evCondField('${eid}',${ci},'typ_msg',this.value)">
+        <option value="any" ${(!c.typ_msg||c.typ_msg==='any')?'selected':''}>Chat+Emote+Whisper</option>
+        <option value="chat" ${c.typ_msg==='chat'?'selected':''}>Nur Chat</option>
+        <option value="emote" ${c.typ_msg==='emote'?'selected':''}>Nur Emote</option>
+        <option value="whisper" ${c.typ_msg==='whisper'?'selected':''}>Nur Whisper</option>
+      </select>`;
+  } else if (c.typ === 'zone') {
+    inner = `<input class="cf cf-w100" value="${escHtml(c.name||'')}" oninput="evCondField('${eid}',${ci},'name',this.value)" placeholder="Zonenname">
+      X<input class="cf" style="width:46px" type="number" value="${c.x??0}" oninput="evCondField('${eid}',${ci},'x',+this.value)">
+      Y<input class="cf" style="width:46px" type="number" value="${c.y??0}" oninput="evCondField('${eid}',${ci},'y',+this.value)">
+      ±<input class="cf" style="width:38px" type="number" value="${c.puffer??1}" oninput="evCondField('${eid}',${ci},'puffer',+this.value)">`;
+  } else if (c.typ === 'zone_rect') {
+    inner = `<span style="font-size:.62rem;color:var(--text3)">Von</span>
+      X<input class="cf" style="width:44px" type="number" value="${c.x1??0}" oninput="evCondField('${eid}',${ci},'x1',+this.value)">
+      Y<input class="cf" style="width:44px" type="number" value="${c.y1??0}" oninput="evCondField('${eid}',${ci},'y1',+this.value)">
+      <span style="font-size:.62rem;color:var(--text3)">Bis</span>
+      X<input class="cf" style="width:44px" type="number" value="${c.x2??2}" oninput="evCondField('${eid}',${ci},'x2',+this.value)">
+      Y<input class="cf" style="width:44px" type="number" value="${c.y2??2}" oninput="evCondField('${eid}',${ci},'y2',+this.value)">`;
+  } else if (c.typ === 'item_traegt' || c.typ === 'item_traegt_nicht') {
+    const negLabel = c.typ === 'item_traegt_nicht' ? '<span style="color:#e55;font-size:.65rem;font-weight:600;margin-right:4px">🚫 NICHT</span>' : '';
+    inner = `${negLabel}<span style="font-size:.68rem;color:var(--text2)">${c.gruppe?escHtml(c.gruppe)+' / ':''}<b>${escHtml(c.item||'–')}</b></span>
+      <button onclick="ipickerOpen('item',v=>{evCondField('${eid}',${ci},'item',v.asset||v.name);evCondField('${eid}',${ci},'gruppe',v.group);evCondRerender('${eid}');})" style="font-size:.62rem;padding:2px 7px;background:var(--pd);border:none;color:var(--pl);border-radius:4px;cursor:pointer">📦 Wählen</button>`;
+  } else if (c.typ === 'trigger_war') {
+    const trigs = bot?.triggers ?? [];
+    const opts = trigs.map(t=>`<option value="${t.id}" ${c.trigId===t.id?'selected':''}>${escHtml(t.name||t.id)}</option>`).join('');
+    inner = `<select class="cf cf-w160" onchange="evCondField('${eid}',${ci},'trigId',this.value)">
+        <option value="">– Trigger wählen –</option>${opts}
+      </select>
+      <span style="font-size:.62rem;color:var(--text3)">muss ausgelöst worden sein</span>`;
+  } else if (c.typ === 'rang') {
+    const rop = c.rang_op ?? '=';
+    const ranks = _rankSorted();
+    inner = `
+      <select class="cf" style="width:80px" onchange="evCondField('${eid}',${ci},'rang_op',this.value);evCondRerender('${eid}')">
+        <option value="="   ${rop==='='  ?'selected':''}>= Genau</option>
+        <option value="min" ${rop==='min'?'selected':''}>≥ Min.</option>
+        <option value="max" ${rop==='max'?'selected':''}>≤ Max.</option>
+        <option value="kein"${rop==='kein'?'selected':''}>∅ Kein Rang</option>
+      </select>
+      ${rop!=='kein'?`<select class="cf" style="flex:1;min-width:130px" onchange="evCondField('${eid}',${ci},'rang_id',this.value)">
+        <option value="">– Rang wählen –</option>
+        ${ranks.map(r=>`<option value="${r.id}" ${c.rang_id===r.id?'selected':''}>${escHtml(r.icon+' '+r.name)} (Lv.${r.level})</option>`).join('')}
+      </select>`:''}`;
+  }
+  const logik = c.logik ?? 'und';
+  const logikBadge = ci === 0
+    ? `<div class="cond-when-lbl">WENN</div>`
+    : `<div style="display:flex;align-items:center;gap:0;margin:2px 0;padding-left:6px">
+        <button onclick="evCondLogik('${eid}',${ci},'und')" class="logik-btn ${logik==='und'?'active':''}">UND</button>
+        <button onclick="evCondLogik('${eid}',${ci},'oder')" class="logik-btn ${logik==='oder'?'active':''}">ODER</button>
+        <button onclick="evCondLogik('${eid}',${ci},'und_nicht')" class="logik-btn ${logik==='und_nicht'?'active active-nicht':''}" style="border-left:none;border-radius:0 3px 3px 0" title="UND NICHT">UND NICHT</button>
+      </div>`;
+  return `<div class="cond-group ${logik==='oder'?'cond-group-oder':logik==='und_nicht'?'cond-group-nicht':''}" id="evcond-${eid}-${ci}">
+    ${logikBadge}
+    <div class="cond-card cond-op">
+      <div class="card-fields">
+        <span class="cond-num">${ci+1}</span>
+        <span style="font-size:.7rem;font-weight:600;color:var(--purple)">${icons[c.typ]??'❓'}</span>
+        ${inner}
+      </div>
+      <button class="rm-btn" onclick="evCondRemove('${eid}',${ci})">✕</button>
+    </div>
+  </div>`;
+}
+
+// Event actions reuse renderAct but with ev-specific field update
+function renderEvAct(eid, a, ai) {
+  // Temporarily set context for renderAct to use ev callbacks
+  // Simple approach: render a stripped-down action card for events
+  const types = [
+    ['chat','💬 Chat'],['emote','✨ Emote'],['whisper','🤫 Whisper'],
+    ['item','📦 Item'],['item_entf','🗑️ Item entf.'],['teleport','🌀 TP'],['money','💰 Money'],['rang','🏆 Rang'],
+  ];
+  const typeOpts = types.map(([v,l])=>`<option value="${v}" ${a.typ===v?'selected':''}>${l}</option>`).join('');
+  let extra = '';
+  if (['chat','emote','whisper'].includes(a.typ)) {
+    extra = `<textarea class="cf" style="width:100%;resize:vertical;min-height:38px;margin-top:4px" rows="2"
+        oninput="evActField('${eid}',${ai},'text',this.value)">${escHtml(a.text||'')}</textarea>
+      <div style="font-size:.59rem;color:var(--text3);margin-top:2px">Variablen: {name} {wort} {x} {y}</div>`;
+  } else if (a.typ === 'item') {
+    const cfgInfo = a.itemConfig ? ` <span style="font-size:.58rem;background:var(--gd);color:var(--green);padding:1px 4px;border-radius:3px">✓ Konfig</span>` : '';
+    const label = a.itemConfig ? `📦 ${a.itemConfig.group}/${a.itemConfig.asset}` : a.profilName ? `👗 ${a.profilName}` : a.curseName ? `🔮 ${a.curseName}` : a.item ? `📦 ${a.gruppe||'?'}/${a.item}` : '– nichts gewählt –';
+    extra = `<div style="display:flex;gap:6px;align-items:center;margin-top:4px;flex-wrap:wrap">
+        <span style="font-size:.7rem;color:var(--text2);flex:1">${escHtml(label)}${cfgInfo}</span>
+        <button onclick="ipickerOpenForEvAct('${eid}',${ai})" style="font-size:.63rem;padding:3px 9px;background:var(--pd);border:none;color:var(--pl);border-radius:5px;cursor:pointer">📂 Wählen</button>
+      </div>`;
+  } else if (a.typ === 'item_entf') {
+    extra = `<input class="cf" style="width:100%;margin-top:4px" value="${escHtml(a.gruppe||'')}"
+        oninput="evActField('${eid}',${ai},'gruppe',this.value)" placeholder="Gruppe (z.B. ItemMouth)">`;
+  } else if (a.typ === 'teleport') {
+    const slots = a.tpSlots ?? [];
+    const slotsHtml = slots.map((s,si) => `<div class="tp-slot-row">
+      <span class="tp-slot-badge ${si===0?'primary':'fallback'}">${si===0?'Primär':'FB '+(si)}</span>
+      X<input class="cf" type="number" style="width:50px" value="${s.x??0}" oninput="evTpField('${eid}',${ai},${si},'x',+this.value)">
+      Y<input class="cf" type="number" style="width:50px" value="${s.y??0}" oninput="evTpField('${eid}',${ai},${si},'y',+this.value)">
+      <button onclick="evTpRemove('${eid}',${ai},${si})" style="background:none;border:none;color:var(--red);cursor:pointer">✕</button>
+    </div>`).join('');
+    extra = `<div class="tp-slot-list">${slotsHtml}</div>
+      <button class="tp-slot-add-btn" onclick="evTpAdd('${eid}',${ai})">+ Position/Fallback</button>`;
+  } else if (a.typ === 'money') {
+    const mop = a.money_op ?? 'add';
+    const moneyName = _money?.settings?.name || 'Gold';
+    extra = `<div style="display:flex;gap:8px;align-items:center;margin-top:5px;flex-wrap:wrap">
+      <select class="cf" style="width:130px" onchange="evActField('${eid}',${ai},'money_op',this.value)">
+        <option value="add" ${mop==='add'?'selected':''}>➕ Hinzufügen</option>
+        <option value="sub" ${mop==='sub'?'selected':''}>➖ Abziehen</option>
+        <option value="set" ${mop==='set'?'selected':''}>= Setzen auf</option>
+        <option value="reset" ${mop==='reset'?'selected':''}>🔄 Zurücksetzen</option>
+      </select>
+      ${mop!=='reset'?`<input class="cf cf-w80" type="number" value="${a.money_val??1}" oninput="evActField('${eid}',${ai},'money_val',+this.value)">
+        <span style="font-size:.68rem;color:var(--text3)">${escHtml(moneyName)}</span>`:''}
+    </div>`;
+  } else if (a.typ === 'rang') {
+    const rop = a.rang_op ?? 'setzen';
+    const ranks = _rankSorted();
+    extra = `<div style="display:flex;gap:8px;align-items:center;margin-top:5px;flex-wrap:wrap">
+      <select class="cf" style="width:155px" onchange="evActField('${eid}',${ai},'rang_op',this.value);document.getElementById('evacts-'+\`${eid}\`).innerHTML=((_selBot()?.events?.find(x=>x.id==='${eid}')?.aktionen)||[]).map((a2,ai2)=>renderEvAct('${eid}',a2,ai2)).join('')">
+        <option value="setzen"    ${rop==='setzen'?'selected':''}>🏆 Rang setzen</option>
+        <option value="entfernen" ${rop==='entfernen'?'selected':''}>❌ Rang entfernen</option>
+        <option value="naechster" ${rop==='naechster'?'selected':''}>⬆️ Nächster Rang</option>
+        <option value="vorheriger"${rop==='vorheriger'?'selected':''}>⬇️ Vorheriger Rang</option>
+      </select>
+      ${rop==='setzen'?`<select class="cf" style="flex:1;min-width:140px" onchange="evActField('${eid}',${ai},'rang_id',this.value)">
+        <option value="">– Rang wählen –</option>
+        ${ranks.map(r=>`<option value="${r.id}" ${a.rang_id===r.id?'selected':''}>${escHtml(r.icon+' '+r.name)} (Lv.${r.level})</option>`).join('')}
+      </select>`:''}
+    </div>`;
+  }
+  const bf = a.bei_fehler ?? 'ignorieren';
+  return `<div class="act-card" id="evact-${eid}-${ai}">
+    <div style="flex:1">
+      <div style="display:flex;gap:6px;align-items:center">
+        <span class="trig-order-num">${ai+1}</span>
+        <select class="cf" style="flex:1" onchange="evActChangeType('${eid}',${ai},this.value)">${typeOpts}</select>
+        <input class="cf cf-w80" type="number" value="${a.delay??0}" oninput="evActField('${eid}',${ai},'delay',+this.value)"> ms
+      </div>
+      <div style="display:flex;gap:6px;align-items:center;margin-top:5px;padding:5px 8px;background:rgba(96,165,250,0.05);border:1px solid rgba(96,165,250,0.12);border-radius:6px;flex-wrap:wrap">
+        <span style="font-size:.62rem;font-weight:700;color:#60a5fa;white-space:nowrap">🎯 Ziel</span>
+        <select class="cf" style="width:150px;font-size:.68rem" onchange="evActField('${eid}',${ai},'aktZiel',this.value);document.getElementById('evacts-'+\`${eid}\`).innerHTML=((_selBot()?.events?.find(x=>x.id==='${eid}')?.aktionen)||[]).map((a2,ai2)=>renderEvAct('${eid}',a2,ai2)).join('')">
+          <option value="ausloeser" ${(!a.aktZiel||a.aktZiel==='ausloeser')?'selected':''}>👤 Auslöser</option>
+          <option value="shop_kaeufer" ${a.aktZiel==='shop_kaeufer'?'selected':''}>💳 Käufer (bei Shop)</option>
+          <option value="alle"      ${a.aktZiel==='alle'?'selected':''}>👥 Alle im Raum</option>
+          <option value="whitelist" ${a.aktZiel==='whitelist'?'selected':''}>📋 Whitelist</option>
+        </select>
+        ${a.aktZiel==='whitelist'?`<input class="cf" style="flex:1;min-width:150px;font-size:.68rem" value="${escHtml((a.aktZielNummern||[]).join(', '))}"
+          oninput="evActField('${eid}',${ai},'aktZielNummern',this.value.split(',').map(x=>+x.trim()).filter(x=>x>0))"
+          placeholder="MemberNummer, z.B. 12345, 67890">`:''}
+      </div>
+      ${extra}
+    </div>
+    <button class="rm-btn" onclick="evActRemove('${eid}',${ai})">✕</button>
+  </div>`;
+}
+
+// ── Event CRUD ───────────────────────────────────────────────
+function eventNew() {
+  const b = _selBot(); if (!b) return;
+  if (!b.events) b.events = [];
+  const e = {
+    id:'ev'+Date.now(), name:'Neues Event', aktiv:true,
+    ziel:'ausloeser', zielListe:[], wiederholung:'immer', maxMal:2,
+    von:'alle', vonNummer:0,
+    bedingungen:[], aktionen:[], fallbackTyp:'nichts', fallbackText:''
+  };
+  b.events.push(e); _saveBots(); renderEventsTab();
+  setTimeout(()=>document.getElementById('evb-'+e.id)?.classList.add('open'),50);
+}
+
+function evDelete(eid) {
+  const b = _selBot(); if (!b) return;
+  b.events = (b.events||[]).filter(e=>e.id!==eid); _saveBots(); renderEventsTab();
+}
+
+function evToggleBody(eid) {
+  document.getElementById('evb-'+eid)?.classList.toggle('open');
+}
+
+function evRerender(eid) {
+  const b = _selBot(); if (!b) return;
+  const e = b.events?.find(x=>x.id===eid); if (!e) return;
+  const i = b.events.indexOf(e);
+  const el = document.getElementById('ec-'+eid); if (!el) return;
+  const wasOpen = document.getElementById('evb-'+eid)?.classList.contains('open');
+  const tmp = document.createElement('div');
+  tmp.innerHTML = renderEventCard(b, e, i);
+  if (wasOpen) tmp.firstElementChild.querySelector('.event-body')?.classList.add('open');
+  el.replaceWith(tmp.firstElementChild);
+}
+
+function evField(eid, key, val) {
+  const b = _selBot(); if (!b) return;
+  const e = b.events?.find(x=>x.id===eid); if (!e) return;
+  e[key] = val; _saveBots();
+  if (key === 'name') evRerender(eid);
+}
+
+function evMoveUp(eid) {
+  const b = _selBot(); if (!b) return;
+  const i = b.events.findIndex(e=>e.id===eid); if (i<=0) return;
+  [b.events[i-1],b.events[i]]=[b.events[i],b.events[i-1]]; _saveBots(); renderEventsTab();
+}
+function evMoveDown(eid) {
+  const b = _selBot(); if (!b) return;
+  const i = b.events.findIndex(e=>e.id===eid); if (i<0||i>=b.events.length-1) return;
+  [b.events[i],b.events[i+1]]=[b.events[i+1],b.events[i]]; _saveBots(); renderEventsTab();
+}
+
+// Condition CRUD for events
+function evAddCond(eid, typ) {
+  const b = _selBot(); if (!b) return;
+  const e = b.events?.find(x=>x.id===eid); if (!e) return;
+  e.bedingungen = e.bedingungen || [];
+  const def = {wort:{typ:'wort',wort:'',logik:'und'},zone:{typ:'zone',x:0,y:0,puffer:1,logik:'und'},item_traegt:{typ:'item_traegt',item:'',gruppe:'',logik:'und'},trigger_war:{typ:'trigger_war',trigId:'',logik:'und'},rang:{typ:'rang',rang_op:'=',rang_id:'',logik:'und'}};
+  e.bedingungen.push(def[typ]||{typ,logik:'und'}); _saveBots();
+  evCondRerender(eid);
+}
+function evCondRemove(eid, ci) {
+  const b = _selBot(); if (!b) return;
+  const e = b.events?.find(x=>x.id===eid); if (!e) return;
+  e.bedingungen.splice(ci,1); _saveBots(); evCondRerender(eid);
+}
+function evCondField(eid, ci, key, val) {
+  const b = _selBot(); if (!b) return;
+  const e = b.events?.find(x=>x.id===eid); if (!e) return;
+  if (e.bedingungen[ci]) e.bedingungen[ci][key]=val; _saveBots();
+}
+function evCondLogik(eid, ci, val) {
+  evCondField(eid, ci, 'logik', val); evCondRerender(eid);
+}
+function evCondRerender(eid) {
+  const b = _selBot(); if (!b) return;
+  const e = b.events?.find(x=>x.id===eid); if (!e) return;
+  const el = document.getElementById('evconds-'+eid); if (!el) return;
+  el.innerHTML = (e.bedingungen||[]).map((c,ci)=>renderEvCond(b,eid,c,ci)).join('');
+}
+
+// Action CRUD for events
+function evAddAct(eid) {
+  const b = _selBot(); if (!b) return;
+  const e = b.events?.find(x=>x.id===eid); if (!e) return;
+  e.aktionen = e.aktionen || [];
+  e.aktionen.push({typ:'chat', text:'', delay:0}); _saveBots();
+  document.getElementById('evacts-'+eid).innerHTML = (e.aktionen||[]).map((a,ai)=>renderEvAct(eid,a,ai)).join('');
+}
+function evActRemove(eid, ai) {
+  const b = _selBot(); if (!b) return;
+  const e = b.events?.find(x=>x.id===eid); if (!e) return;
+  e.aktionen.splice(ai,1); _saveBots();
+  document.getElementById('evacts-'+eid).innerHTML = (e.aktionen||[]).map((a,ai2)=>renderEvAct(eid,a,ai2)).join('');
+}
+function evActField(eid, ai, key, val) {
+  const b = _selBot(); if (!b) return;
+  const e = b.events?.find(x=>x.id===eid); if (!e) return;
+  if (e.aktionen[ai]) e.aktionen[ai][key]=val; _saveBots();
+}
+function evActChangeType(eid, ai, typ) {
+  const b = _selBot(); if (!b) return;
+  const e = b.events?.find(x=>x.id===eid); if (!e) return;
+  e.aktionen[ai] = {typ, delay:e.aktionen[ai]?.delay??0}; _saveBots();
+  document.getElementById('evacts-'+eid).innerHTML = (e.aktionen||[]).map((a,ai2)=>renderEvAct(eid,a,ai2)).join('');
+}
+function evTpAdd(eid, ai) {
+  const b = _selBot(); if (!b) return;
+  const e = b.events?.find(x=>x.id===eid); if (!e) return;
+  e.aktionen[ai].tpSlots = e.aktionen[ai].tpSlots||[];
+  e.aktionen[ai].tpSlots.push({x:0,y:0,gueltig:true}); _saveBots();
+  document.getElementById('evacts-'+eid).innerHTML = (e.aktionen||[]).map((a,ai2)=>renderEvAct(eid,a,ai2)).join('');
+}
+function evTpRemove(eid, ai, si) {
+  const b = _selBot(); if (!b) return;
+  const e = b.events?.find(x=>x.id===eid); if (!e) return;
+  e.aktionen[ai].tpSlots?.splice(si,1); _saveBots();
+  document.getElementById('evacts-'+eid).innerHTML = (e.aktionen||[]).map((a,ai2)=>renderEvAct(eid,a,ai2)).join('');
+}
+function evTpField(eid, ai, si, key, val) {
+  const b = _selBot(); if (!b) return;
+  const e = b.events?.find(x=>x.id===eid); if (!e) return;
+  const slots = e.aktionen[ai].tpSlots||[];
+  if (slots[si]) slots[si][key]=val; _saveBots();
+}
+function ipickerOpenForEvAct(eid, ai) {
+  ipickerOpen('item', v => {
+    const b = _selBot(); if (!b) return;
+    const e = b.events?.find(x=>x.id===eid); if (!e) return;
+    const a = e.aktionen[ai]; if (!a) return;
+    // Clear old type data (same as trigger)
+    delete a.item; delete a.gruppe; delete a.farbe;
+    delete a.curseKey; delete a.curseName; delete a.curseEntry;
+    delete a.profilName; delete a.profilItems; delete a.itemConfig;
+    if (v.type === 'item') {
+      if (v.itemConfig) {
+        a.itemConfig = v.itemConfig;
+        a.item   = v.itemConfig.asset;
+        a.gruppe = v.itemConfig.group;
+      } else {
+        a.item   = v.asset || v.name;
+        a.gruppe = v.group;
+        a.farbe  = '#ffffff';
+      }
+    } else if (v.type === 'curse') {
+      a.curseKey   = v.key;
+      a.curseName  = v.name;
+      a.curseEntry = v.entry;
+    } else if (v.type === 'profil') {
+      a.profilName  = v.name;
+      a.profilItems = PROFILES[v.name]?.items ?? [];
+    }
+    _saveBots();
+    document.getElementById('evacts-'+eid).innerHTML = (e.aktionen||[]).map((a2,ai2)=>renderEvAct(eid,a2,ai2)).join('');
+  });
+}
+
+// Fire event manually from popup
+function evFire(eid) { evFireImmediate(eid); }
+function evFireImmediate(eid) {
+  const b = _selBot(); if (!b) return;
+  if (!_connected) { showStatus('❌ Nicht verbunden','error'); return; }
   const safeId = b.id.replace(/\W/g,'_');
-  bcSend({ type:'EXEC', code:`if(window['_BCBot_${safeId}'])window['_BCBot_${safeId}'].stop();` });
-
-  // Step 2: After stop delay, redeploy with latest saved config
-  setTimeout(() => {
-    const latest = _selBot();
-    if (!latest) return;
-    bcSend({ type:'EXEC', code: _buildBotCode(latest) });
-    latest.laufend = true; _saveBots(); renderBotList(); renderBotEditor();
-    showStatus('✅ Bot synchronisiert und neu gestartet', 'success');
-  }, 700);
+  bcSend({ type:'EXEC', code:`if(window['_BCBot_${safeId}'])window['_BCBot_${safeId}'].fireEventNow('${eid}');else console.warn('[Bot] Nicht aktiv – erst starten');` });
+  showStatus('▶️ Event sofort ausgelöst','success');
 }
