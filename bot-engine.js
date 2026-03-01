@@ -1111,7 +1111,7 @@ function _proc(rohText,typKey,C){
     aktive.forEach(item=>{
       const ns=item.preisNostrip??_shopCfg.preisNostrip??0;
       const nsHint=ns>0?' (/nostrip +'+ns+')':(ns===0?'':'' );
-      const line='\n• '+(item.icon||'🛒')+' '+item.name+' – '+(Number(item.preis)||0)+' '+cur+nsHint;
+      const line='\\n• '+(item.icon||'🛒')+' '+item.name+' – '+(Number(item.preis)||0)+' '+cur+nsHint;
       if((buf+line).length>480){chunks.push(buf);buf=line.slice(1);}else buf+=line;
     });
     chunks.push(buf);
@@ -1774,11 +1774,7 @@ function botSync() {
   setTimeout(() => {
     const latest = _selBot();
     if (!latest) return;
-    // FIX: Must base64-encode like botDeployById – raw code breaks new Function() due to backticks/emoji/template literals
-    const _syncCode    = _buildBotCode(latest);
-    const _syncEncoded = btoa(unescape(encodeURIComponent(_syncCode)));
-    const _syncWrapper = `(new Function(decodeURIComponent(escape(atob('${_syncEncoded}'))))())`;
-    bcSend({ type:'EXEC', code: _syncWrapper });
+    bcSend({ type:'EXEC', code: _buildBotCode(latest) });
     latest.laufend = true; _saveBots(); renderBotList(); renderBotEditor();
     showStatus('✅ Bot synchronisiert und neu gestartet', 'success');
   }, 700);
