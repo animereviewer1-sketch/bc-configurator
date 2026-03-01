@@ -21,7 +21,7 @@ function _saveBots() {
   try { localStorage.setItem(BOT_KEY, JSON.stringify(_bots)); } catch {}
 }
 function _loadBots() {
-  try { const s = localStorage.getItem(BOT_KEY); if (s) _bots = JSON.parse(s); } catch {}
+  try { const s = localStorage.getItem(BOT_KEY); if (s) { _bots = JSON.parse(s); _bots.forEach(b => { b.laufend = false; }); } } catch {}
 }
 function _selBot() { return _bots.find(b => b.id === _selBotId) ?? null; }
 
@@ -777,4 +777,3 @@ function evFireImmediate(eid) {
   bcSend({ type:'EXEC', code:`if(window['_BCBot_${safeId}'])window['_BCBot_${safeId}'].fireEventNow('${eid}');else console.warn('[Bot] Nicht aktiv – erst starten');` });
   showStatus('▶️ Event sofort ausgelöst','success');
 }
-
