@@ -7039,7 +7039,8 @@ function _okIf(trig,rohText,typKey,C){
     groups[groups.length-1].push(c);
   }
   return groups.some(g=>g.every(c=>c.logik==='und_nicht'?!checkOne(c):checkOne(c)));
-}(x,y,ausschliessen){
+}
+function _istBesetzt(x,y,ausschliessen){
   // Ignore target positions at 0,0 — BC hasn't synced position yet
   if(x===0&&y===0)return false;
   return[Player,...(ChatRoomCharacter||[])].some(C=>{
