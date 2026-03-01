@@ -1727,7 +1727,18 @@ console.log('\u25B6\uFE0F [Bot:${safeName}] | Trigger:',_trigs.length,'| Modus:'
 function botDeployById(id) {
   const b = _bots.find(x=>x.id===id); if (!b) return;
   if (!_connected) { showStatus('❌ Nicht mit BC verbunden','error'); return; }
-  bcSend({ type:'EXEC', code: _buildBotCode(b) });
+  const _code = _buildBotCode(b);
+  // Pre-validate syntax before sending to BC
+  try { new Function(_code); } catch(e) {
+    // Find the token near the error
+    const m = e.message.match(/(\d+)/);
+    const pos = m ? parseInt(m[1]) : -1;
+    const snippet = pos > 0 ? _code.slice(Math.max(0,pos-50),pos+50) : _code.slice(0,100);
+    console.error('[Bot] Syntax-Fehler in Bot-Code:', e.message, '\nStelle:', JSON.stringify(snippet));
+    showStatus('❌ Bot-Code Syntax-Fehler: ' + e.message + ' → ' + JSON.stringify(snippet.slice(0,80)), 'error');
+    return;
+  }
+  bcSend({ type:'EXEC', code: _code });
   b.laufend = true; _saveBots(); renderBotList();
   if (_selBotId === id) {
     const bar = document.getElementById('bot-status-bar');
