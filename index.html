@@ -5796,6 +5796,7 @@ function renderAct(tid, a, ai, branch) {
     ['rang','🏆 Rang setzen'],
   ];
   const typeOpts = types.map(([v,l])=>`<option value="${v}" ${a.typ===v?'selected':''}>${l}</option>`).join('');
+  const branchArg = branch ? `,'${branch}'` : '';
 
   let extra = '';
   if (['chat','emote','whisper'].includes(a.typ)) {
@@ -5939,7 +5940,6 @@ function renderAct(tid, a, ai, branch) {
   </div>` : '';
 
   const bfBorder = {kette_stoppen:'#664400',trigger_ungueltig:'#660000'}[bf] ?? '';
-  const branchArg = branch ? `,'${branch}'` : '';
   const actId = branch === 'sonst' ? `act-sonst-${tid}-${ai}` : `act-${tid}-${ai}`;
   return `<div class="act-card" id="${actId}" style="${bfBorder?'border-color:'+bfBorder+';background:#0d0906;':''}">
     <div style="flex:1">
