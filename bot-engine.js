@@ -548,6 +548,12 @@ function _handleShopCmd(rohText,buyerC){
   const itemName=args[0].toLowerCase();
   const shopItem=_shopCfg.items.find(i=>i.name.toLowerCase()===itemName);
   if(!shopItem){_log('\u{1F6D2} Kein Artikel "'+args[0]+'"');return;}
+  // FIX: Nur verarbeiten wenn passender Trigger mit shop_kauf Bedingung fuer dieses Item existiert
+  const _matchingTrigs=_trigs.filter(trig=>{
+    const sc=(trig.bedingungen??[]).filter(c=>c.typ==='shop_kauf');if(!sc.length)return false;
+    return sc.every(c=>!c.shop_id||c.shop_id===shopItem.id);
+  });
+  if(!_matchingTrigs.length){_log('\u{1F6D2} Kein Trigger fuer "'+shopItem.name+'" - ignoriert');return;}
   const preisU=flagUnknown?(shopItem.preisU??_shopCfg.preisU??0):0;
   const preisNostrip=flagNostrip?(shopItem.preisNostrip??_shopCfg.preisNostrip??0):0;
   const flagAufpreis=preisU+preisNostrip;
@@ -575,12 +581,7 @@ function _handleShopCmd(rohText,buyerC){
     const newBal=_moneyBalances[buyerC.MemberNumber].balance;
     _log('\u{1F6D2} All-Kauf: '+buyerC.Name+' kauft "'+shopItem.name+'" fuer alle ('+anzahl+'x'+(preis+flagAufpreis)+'='+gesamt+' '+cur+'). Kontostand: '+newBal+(flagNostrip?' [/nostrip]':''));
     window.__BCK_popupRef?.postMessage({app:'BCKonfigurator',type:'BOT_SHOP',buyerNum:buyerC.MemberNumber,buyerName:buyerC.Name,targetNum:null,targetName:'Alle ('+anzahl+')',itemName:shopItem.name,preis:gesamt,isAll:true,anzahl},'*');
-    const rawAnnAll=shopItem.announceAllMsg||_shopCfg.announceAllMsg||(displayBuyer.Name+' kauft '+shopItem.icon+' '+shopItem.name+' fuer alle ('+anzahl+' Spieler, '+gesamt+' '+cur+').');
-    const annAllTxt=_shopTpl(rawAnnAll,displayBuyer,null,shopItem,gesamt,newBal,anzahl,gesamt);
-    if(flagWhisper){targets.forEach(tc=>ServerSend('ChatRoomChat',{Content:annAllTxt,Type:'Whisper',Target:tc.MemberNumber}));}
-    else ServerSend('ChatRoomChat',{Content:annAllTxt,Type:'Chat'});
-    const rawConf=shopItem.confirmMsg||_shopCfg.confirmMsg||('\u2705 Gekauft fuer alle '+anzahl+' Spieler. Bezahlt: '+gesamt+' '+cur+'. Kontostand: '+newBal+' '+cur+'.');
-    ServerSend('ChatRoomChat',{Content:_shopTpl(rawConf,buyerC,null,shopItem,gesamt,newBal,anzahl,gesamt),Type:'Whisper',Target:buyerC.MemberNumber});
+    // FIX: Keine auto-Nachrichten - Trigger Dann/Sonst-Messages uebernehmen
     targets.forEach(targetC=>{
       const shopVars={name:buyerC.Name,wort:rohText,typ:'\u{1F6D2} Shop All',x:buyerC.X??0,y:buyerC.Y??0,C:targetC,shopBuyer:buyerC,shopItem,shopAnzahl:anzahl,shopGesamt:gesamt,shopNostrip:flagNostrip};
       _trigs.forEach(trig=>{
@@ -623,20 +624,7 @@ function _handleShopCmd(rohText,buyerC){
   const isFremdkauf=targetC.MemberNumber!==buyerC.MemberNumber;
   _log('\u{1F6D2} Kauf: '+buyerC.Name+' kauft "'+shopItem.name+'" fuer '+preisEffektiv+' '+cur+(isFremdkauf?' \u2192 Ziel: '+targetC.Name:'')+' | Kontostand: '+newBal+(flagNostrip?' [/nostrip]':''));
   window.__BCK_popupRef?.postMessage({app:'BCKonfigurator',type:'BOT_SHOP',buyerNum:buyerC.MemberNumber,buyerName:buyerC.Name,targetNum:targetC.MemberNumber,targetName:targetC.Name,itemName:shopItem.name,preis:preisEffektiv,isAll:false,anzahl:1},'*');
-  const rawConf=shopItem.confirmMsg||_shopCfg.confirmMsg||('\u2705 '+(isFremdkauf?'Du kaufst '+shopItem.name+' fuer '+targetC.Name:shopItem.name+' gekauft')+'. Bezahlt: '+preisEffektiv+' '+cur+(flagNostrip?' \u{1F512} NoStrip':'')+'. Kontostand: '+newBal+' '+cur+'.');
-  ServerSend('ChatRoomChat',{Content:_shopTpl(rawConf,buyerC,targetC,shopItem,preis,newBal,1,preisEffektiv),Type:'Whisper',Target:buyerC.MemberNumber});
-  if(isFremdkauf){
-    const rawAnn=shopItem.announceMsg||_shopCfg.announceMsg||(displayBuyer.Name+' hat fuer '+targetC.Name+' das Item '+shopItem.icon+' '+shopItem.name+' gekauft'+(flagNostrip?' \u{1F512}':'')+'.') ;
-    const annTxt=_shopTpl(rawAnn,displayBuyer,targetC,shopItem,preis,newBal,1,preisEffektiv);
-    if(flagWhisper)ServerSend('ChatRoomChat',{Content:annTxt,Type:'Whisper',Target:targetC.MemberNumber});
-    else ServerSend('ChatRoomChat',{Content:annTxt,Type:'Chat'});
-  }
-  if(flagNostrip){
-    const rawNs=shopItem.announceNostripMsg||_shopCfg.announceNostripMsg||('\u{1F512} '+targetC.Name+' traegt '+shopItem.icon+' '+shopItem.name+' und kann es nicht ablegen.');
-    const nsTxt=_shopTpl(rawNs,displayBuyer,targetC,shopItem,preis,newBal,1,preisEffektiv);
-    if(flagWhisper)ServerSend('ChatRoomChat',{Content:nsTxt,Type:'Whisper',Target:targetC.MemberNumber});
-    else ServerSend('ChatRoomChat',{Content:nsTxt,Type:'Chat'});
-  }
+  // FIX: Keine auto-Nachrichten - Trigger Dann/Sonst-Messages uebernehmen Kommunikation
   // Shop-Trigger ausloesen - shopNostrip:flagNostrip weitergeben damit Item-Aktion AntiStrip registriert
   const shopVars={name:buyerC.Name,wort:rohText,typ:'\u{1F6D2} Shop',x:buyerC.X??0,y:buyerC.Y??0,C:targetC,shopBuyer:buyerC,shopItem,shopNostrip:flagNostrip};
   _trigs.forEach(trig=>{
