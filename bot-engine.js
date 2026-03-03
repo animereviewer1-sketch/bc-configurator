@@ -624,7 +624,22 @@ function _handleShopCmd(rohText,buyerC){
   const isFremdkauf=targetC.MemberNumber!==buyerC.MemberNumber;
   _log('\u{1F6D2} Kauf: '+buyerC.Name+' kauft "'+shopItem.name+'" fuer '+preisEffektiv+' '+cur+(isFremdkauf?' \u2192 Ziel: '+targetC.Name:'')+' | Kontostand: '+newBal+(flagNostrip?' [/nostrip]':''));
   window.__BCK_popupRef?.postMessage({app:'BCKonfigurator',type:'BOT_SHOP',buyerNum:buyerC.MemberNumber,buyerName:buyerC.Name,targetNum:targetC.MemberNumber,targetName:targetC.Name,itemName:shopItem.name,preis:preisEffektiv,isAll:false,anzahl:1},'*');
-  // FIX: Keine auto-Nachrichten - Trigger Dann/Sonst-Messages uebernehmen Kommunikation
+  // Kauf-Bestätigung an Käufer (Whisper)
+  const rawConf=shopItem.confirmMsg||_shopCfg.confirmMsg||('\u2705 '+(isFremdkauf?'Du kaufst '+shopItem.icon+' '+shopItem.name+' fuer '+targetC.Name:shopItem.icon+' '+shopItem.name+' gekauft')+'. Bezahlt: '+preisEffektiv+' '+cur+(flagNostrip?' \u{1F512} NoStrip':'')+'. Kontostand: '+newBal+' '+cur+'.');
+  ServerSend('ChatRoomChat',{Content:_shopTpl(rawConf,buyerC,targetC,shopItem,preis,newBal,1,preisEffektiv),Type:'Whisper',Target:buyerC.MemberNumber});
+  // Ankündigung im Chat wenn Fremdkauf
+  if(isFremdkauf){
+    const rawAnn=shopItem.announceMsg||_shopCfg.announceMsg||(displayBuyer.Name+' hat fuer '+targetC.Name+' das Item '+shopItem.icon+' '+shopItem.name+' gekauft'+(flagNostrip?' \u{1F512}':'')+'.');
+    const annTxt=_shopTpl(rawAnn,displayBuyer,targetC,shopItem,preis,newBal,1,preisEffektiv);
+    if(flagWhisper)ServerSend('ChatRoomChat',{Content:annTxt,Type:'Whisper',Target:targetC.MemberNumber});
+    else ServerSend('ChatRoomChat',{Content:annTxt,Type:'Chat'});
+  }
+  // 🔒 NoStrip-Ankündigung im Chat
+  if(flagNostrip){
+    const rawNs=shopItem.announceNostripMsg||_shopCfg.announceNostripMsg||('\u{1F512} '+targetC.Name+' traegt '+shopItem.icon+' '+shopItem.name+' und kann es nicht ablegen.');
+    const nsTxt=_shopTpl(rawNs,displayBuyer,targetC,shopItem,preis,newBal,1,preisEffektiv);
+    ServerSend('ChatRoomChat',{Content:nsTxt,Type:'Chat'});
+  }
   // Shop-Trigger ausloesen - shopNostrip:flagNostrip weitergeben damit Item-Aktion AntiStrip registriert
   const shopVars={name:buyerC.Name,wort:rohText,typ:'\u{1F6D2} Shop',x:buyerC.X??0,y:buyerC.Y??0,C:targetC,shopBuyer:buyerC,shopItem,shopNostrip:flagNostrip};
   _trigs.forEach(trig=>{
@@ -890,6 +905,8 @@ _asH=function(data){
       var allChars=[Player].concat(ChatRoomCharacter||[]);
       var C=null;for(var _ci=0;_ci<allChars.length;_ci++){if(allChars[_ci].MemberNumber===w.memberNum){C=allChars[_ci];break;}}
       if(!C)return;
+      // FIX: 150ms warten damit BC Appearance aktualisiert hat (Race Condition fix)
+      setTimeout(function(){
       var item=(typeof InventoryGet==='function')?InventoryGet(C,w.gruppe):null;
       if(item)return;
       _log('\u{1F6E1}\uFE0F AntiStrip: '+w.gruppe+' leer bei '+C.Name+' \u2192 lege wieder an...');
@@ -927,6 +944,7 @@ _asH=function(data){
           }
         }catch(ex){_log('\u26A0 AntiStrip Fehler: '+ex.message);}
       },w.delay!=null?w.delay:500);
+      },150);// end race-condition timeout
     })(_asWatchers[_keys[_wi]]);
   }
 };
