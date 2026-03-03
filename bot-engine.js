@@ -32,8 +32,8 @@ function _buildBotCode(bot) {
   const safeName = bot.name.replace(/\\/g,'\\\\').replace(/`/g,'\\`');
 
   const _cfgRaw = JSON.stringify({hearChat:s.hearChat,hearEmote:s.hearEmote,hearWhisper:s.hearWhisper,nurEigene:s.nurEigene,logAktiv:s.logAktiv??true,modus:s.modus,moneyQueryCmd:_money?.settings?.queryCmd??'',moneyQueryTyp:_money?.settings?.queryTyp??'whisper',moneyName:_money?.settings?.name??'Gold',rankQueryCmd:_rankData?.settings?.queryCmd??'',rankQueryTyp:_rankData?.settings?.queryCmdTyp??'whisper',rankQueryText:_rankData?.settings?.queryCmdText??'{name} hat Rang: {rang_icon} {rang}',rankDefs:_rankData?.defs??[],rankPlayers:Object.fromEntries(Object.entries(_rankData?.players??{}).map(([k,v])=>[k,v.rankId??null])),shopCmd:_shop?.settings?.cmd??'!pay',shopListCmd:_shop?.settings?.listCmd??'!shop',shopAnnounceNostripMsg:_shop?.settings?.announceNostripMsg??'',shopConfirmMsg:_shop?.settings?.confirmMsg??'',shopAnnounceMsg:_shop?.settings?.announceMsg??'',shopAnnounceAllMsg:_shop?.settings?.announceAllMsg??'',shopErrorMsg:_shop?.settings?.errorMsg??'',shopPreisU:_shop?.settings?.preisU??0,shopPreisNostrip:_shop?.settings?.preisNostrip??0,shopItems:(_shop?.items??[]).filter(i=>i.aktiv!==false),moneyBalances:Object.fromEntries(Object.entries(_money?.balances??{}).map(([k,v])=>[k,{balance:v.balance??0,name:v.name??''}]))});
-  const cfgJson  = btoa(unescape(encodeURIComponent(_cfgRaw)));
-  const trigsJson = btoa(unescape(encodeURIComponent(JSON.stringify(triggers))));
+  const cfgJson  = btoa(unescape(encodeURIComponent(_cfgRaw))).replace(/\s/g, '');
+  const trigsJson = btoa(unescape(encodeURIComponent(JSON.stringify(triggers)))).replace(/\s/g, '');
   const events = (bot.events||[]).filter(e=>e.aktiv).map(e => ({
     id: e.id, name: e.name,
     von: e.von??'alle', vonNummer: e.vonNummer??0,
@@ -47,7 +47,7 @@ function _buildBotCode(bot) {
       return a;
     }),
   }));
-  const eventsJson = btoa(unescape(encodeURIComponent(JSON.stringify(events))));
+  const eventsJson = btoa(unescape(encodeURIComponent(JSON.stringify(events)))).replace(/\s/g, '');
   const persistedRoomEver = (() => {
     const logs = window._BCBotLog || [];
     const botLogs = logs.filter(e => e.botId === bot.id && (e.status==='join'||e.status==='join_rejoin'||e.status==='leave'));
@@ -992,7 +992,7 @@ function botDeployById(id) {
   const b = _bots.find(x=>x.id===id); if (!b) return;
   if (!_connected) { showStatus('❌ Nicht mit BC verbunden','error'); return; }
   const _code = _buildBotCode(b);
-  const _encoded = btoa(unescape(encodeURIComponent(_code)));
+  const _encoded = btoa(unescape(encodeURIComponent(_code))).replace(/\s/g, '');
   const _wrapper = `(new Function(decodeURIComponent(escape(atob('${_encoded}'))))())`;
   bcSend({ type:'EXEC', code: _wrapper });
   b.laufend = true; _saveBots(); renderBotList();
@@ -1029,7 +1029,7 @@ function botSync() {
   setTimeout(() => {
     const latest = _selBot(); if (!latest) return;
     const _code = _buildBotCode(latest);
-    const _encoded = btoa(unescape(encodeURIComponent(_code)));
+    const _encoded = btoa(unescape(encodeURIComponent(_code))).replace(/\s/g, '');
     const _wrapper = `(new Function(decodeURIComponent(escape(atob('${_encoded}'))))())`;
     bcSend({ type:'EXEC', code: _wrapper });
     latest.laufend = true; _saveBots(); renderBotList(); renderBotEditor();
