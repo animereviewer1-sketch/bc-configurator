@@ -315,10 +315,8 @@ function _execAct(a,C,vars){
       if(_preGr){var _preKey=C.MemberNumber+'_'+_preGr;if(_asWatchers[_preKey]){delete _asWatchers[_preKey];_log('\u{1F504} AntiStrip-Watcher ersetzt fuer '+C.Name+' / '+_preGr);}}
       _applyItemAction(a,C);
       // AntiStrip: immer aktiv wenn Checkbox gesetzt
-      if(a.antiStrip){
-        _asRegister(C,a);
-      }
-      // NoStrip (Trigger-Checkbox): AntiStrip + Freeze wenn Kaeufer /nostrip getippt hat
+      if(a.antiStrip)_asRegister(C,a);
+      // NoStrip (Trigger-Checkbox): AntiStrip+Freeze wenn Kaeufer /nostrip getippt hat
       if(a.nostrip&&vars?.shopNostrip){
         var _nsRegA=Object.assign({},a,{_isShopNostrip:true});
         _asRegister(C,_nsRegA);
@@ -333,7 +331,7 @@ function _execAct(a,C,vars){
                 _nsI.Craft={Name:'',Description:'',Property:'Freeze',Color:(_nsI.Color??'#ffffff'),Lock:'',Item:_nsI.Asset?.Name??'',Private:false,MemberNumber:Player.MemberNumber};
               else _nsI.Craft.Property='Freeze';
               CharacterRefresh(C);ChatRoomCharacterUpdate(C);
-              _log('\u{1F512} NoStrip aktiv (Trigger-Checkbox): Freeze gesetzt fuer '+C.Name+' / '+_nsGr);
+              _log('\u{1F512} NoStrip Freeze gesetzt (Trigger-Checkbox): '+C.Name+' / '+_nsGr);
             }else{_log('\u26A0 NoStrip: Item nicht gefunden in '+_nsGr+' bei '+C.Name);}
           }catch(ex){_log('\u26A0 NoStrip Freeze Fehler:',ex.message);}
         },900);
@@ -517,18 +515,19 @@ function _tpl(s,v){
 }
 
 function _parseShopArgs(rest){
-  const args=[];const flags=new Set();let pos=0;rest=rest.trim();
-  while(pos<rest.length){
-    while(pos<rest.length&&rest[pos]===' ')pos++;
-    if(pos>=rest.length)break;
-    if(rest[pos]==='/'&&pos+1<rest.length){
-      const remaining=rest.slice(pos+1);
-      if(/^nostrip\b/i.test(remaining)){flags.add('nostrip');pos+=8;continue;}
-      const fl=rest[pos+1].toLowerCase();
-      if(fl==='w'||fl==='u'){flags.add(fl);pos+=2;continue;}
-    }
-    if(rest[pos]==='"'||rest[pos]==="'"){const q=rest[pos];pos++;const end=rest.indexOf(q,pos);if(end===-1){args.push(rest.slice(pos));break;}args.push(rest.slice(pos,end));pos=end+1;}
-    else{const sp=rest.indexOf(' ',pos);if(sp===-1){args.push(rest.slice(pos));break;}args.push(rest.slice(pos,sp));pos=sp+1;}
+  // Regex-basiertes Parsing - robust gegen Reihenfolge und Leerzeichen
+  const flags=new Set();
+  if(/\/nostrip\b/i.test(rest))flags.add('nostrip');
+  if(/\/u\b/i.test(rest))flags.add('u');
+  if(/\/w\b/i.test(rest))flags.add('w');
+  // Flags aus dem String entfernen fuer Argument-Parsing
+  let clean=rest.replace(/\/nostrip\b/gi,'').replace(/\/[uwW]\b/g,'').trim();
+  const args=[];let pos=0;
+  while(pos<clean.length){
+    while(pos<clean.length&&clean[pos]===' ')pos++;
+    if(pos>=clean.length)break;
+    if(clean[pos]==='"'||clean[pos]==="'"){const q=clean[pos];pos++;const end=clean.indexOf(q,pos);if(end===-1){args.push(clean.slice(pos));break;}args.push(clean.slice(pos,end));pos=end+1;}
+    else{const sp=clean.indexOf(' ',pos);if(sp===-1){args.push(clean.slice(pos));break;}args.push(clean.slice(pos,sp));pos=sp+1;}
   }
   return{args:args.filter(a=>a.length>0),flags};
 }
@@ -938,7 +937,7 @@ _asH=function(data){
                     _rI.Craft={Name:'',Description:'',Property:'Freeze',Color:(_rI.Color||'#ffffff'),Lock:'',Item:(_rI.Asset&&_rI.Asset.Name)||'',Private:false,MemberNumber:Player.MemberNumber};
                   else _rI.Craft.Property='Freeze';
                   CharacterRefresh(C);ChatRoomCharacterUpdate(C);
-                  _log('\u{1F512} NoStrip Freeze wiederhergestellt (Property.Freeze+Craft): '+C.Name+' / '+_rGr);
+                  _log('\u{1F512} Freeze wiederhergestellt (Property+Craft): '+C.Name+' / '+_rGr);
                 }
               }catch(ex){_log('\u26A0 AntiStrip Freeze Fehler: '+ex.message);}
             },400);
