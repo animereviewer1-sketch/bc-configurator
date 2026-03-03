@@ -332,7 +332,7 @@ function _execAct(a,C,vars){
                 _nsI.Craft={Name:'',Description:'',Property:'Freeze',Color:(_nsI.Color??'#ffffff'),Lock:'',Item:_nsI.Asset?.Name??'',Private:false,MemberNumber:Player.MemberNumber};
               else _nsI.Craft.Property='Freeze';
               CharacterRefresh(C);ChatRoomCharacterUpdate(C);
-              _log('\u{1F512} NoStrip Freeze+Property gesetzt: '+C.Name+' / '+_nsGr);
+              _log('\u{1F512} Freeze gesetzt (Property.Freeze+Craft): '+C.Name+' / '+_nsGr);
             }else{_log('\u26A0 NoStrip Freeze: Item nicht gefunden in '+_nsGr+' bei '+C.Name);}
           }catch(ex){_log('\u26A0 Freeze Fehler:',ex.message);}
         },900);
@@ -624,10 +624,11 @@ function _handleShopCmd(rohText,buyerC){
   window.__BCK_popupRef?.postMessage({app:'BCKonfigurator',type:'BOT_MONEY',memberNum:buyerC.MemberNumber,name:buyerC.Name,delta:-preisEffektiv},'*');
   const newBal=_moneyBalances[buyerC.MemberNumber].balance;
   const isFremdkauf=targetC.MemberNumber!==buyerC.MemberNumber;
-  const _flagInfo=(flagNostrip?'[/nostrip +'+preisNostrip+']':'')+(flagUnknown?'[/u +'+preisU+']':'');
-  _log('\u{1F6D2} Kauf: '+buyerC.Name+' kauft "'+shopItem.name+'" '+preisEffektiv+' '+cur+(flagAufpreis>0?' (Basis:'+preis+' '+_flagInfo+')':'')+' | '+targetC.Name+(isFremdkauf?' [Fremdkauf]':'')+' | Kontostand: '+newBal);
+  const _diagNs='[/nostrip item='+shopItem.preisNostrip+' global='+_shopCfg.preisNostrip+' eff='+preisNostrip+']';
+  const _diagInfo=(flagNostrip?_diagNs:'')+(flagUnknown?'[/u eff='+preisU+']':'');
+  _log('\u{1F6D2} Kauf: '+buyerC.Name+' kauft "'+shopItem.name+'" '+preis+(flagAufpreis?' +'+flagAufpreis:'')+'='+preisEffektiv+' '+cur+(_diagInfo?' '+_diagInfo:'')+(isFremdkauf?' \u2192 '+targetC.Name:'')+' | Kto: '+newBal);
   window.__BCK_popupRef?.postMessage({app:'BCKonfigurator',type:'BOT_SHOP',buyerNum:buyerC.MemberNumber,buyerName:buyerC.Name,targetNum:targetC.MemberNumber,targetName:targetC.Name,itemName:shopItem.name,preis:preisEffektiv,isAll:false,anzahl:1},'*');
-  // Bestätigung (Whisper)
+  // Bestätigung (Whisper an Käufer)
   const rawConf=shopItem.confirmMsg||_shopCfg.confirmMsg||('\u2705 '+(isFremdkauf?'Du kaufst '+shopItem.icon+' '+shopItem.name+' fuer '+targetC.Name:shopItem.icon+' '+shopItem.name+' gekauft')+'. Bezahlt: '+preisEffektiv+' '+cur+(flagNostrip?' \u{1F512} NoStrip':'')+'. Kontostand: '+newBal+' '+cur+'.');
   ServerSend('ChatRoomChat',{Content:_shopTpl(rawConf,buyerC,targetC,shopItem,preis,newBal,1,preisEffektiv),Type:'Whisper',Target:buyerC.MemberNumber});
   if(isFremdkauf){
@@ -905,10 +906,10 @@ _asH=function(data){
       var allChars=[Player].concat(ChatRoomCharacter||[]);
       var C=null;for(var _ci=0;_ci<allChars.length;_ci++){if(allChars[_ci].MemberNumber===w.memberNum){C=allChars[_ci];break;}}
       if(!C)return;
-      // FIX: 150ms warten - BC aktualisiert Appearance erst nach dem Event
+      // FIX: 150ms - BC aktualisiert Appearance nach dem Event (Race Condition)
       setTimeout(function(){
       var item=(typeof InventoryGet==='function')?InventoryGet(C,w.gruppe):null;
-      if(item){_log('\u{1F6E1}\uFE0F AntiStrip: '+w.gruppe+' noch vorhanden bei '+C.Name+' - kein Eingriff');return;}
+      if(item){_log('\u{1F6E1}\uFE0F AntiStrip: '+w.gruppe+' noch vorhanden (kein Eingriff)');return;}
       _log('\u{1F6E1}\uFE0F AntiStrip: '+w.gruppe+' leer bei '+C.Name+' \u2192 lege wieder an...');
       setTimeout(function(){
         try{
@@ -939,7 +940,7 @@ _asH=function(data){
                     _rI.Craft={Name:'',Description:'',Property:'Freeze',Color:(_rI.Color||'#ffffff'),Lock:'',Item:(_rI.Asset&&_rI.Asset.Name)||'',Private:false,MemberNumber:Player.MemberNumber};
                   else _rI.Craft.Property='Freeze';
                   CharacterRefresh(C);ChatRoomCharacterUpdate(C);
-                  _log('\u{1F512} AntiStrip Freeze+Property wiederhergestellt: '+C.Name+' / '+_rGr);
+                  _log('\u{1F512} Freeze wiederhergestellt (Property.Freeze+Craft): '+C.Name+' / '+_rGr);
                 }
               }catch(ex){_log('\u26A0 AntiStrip Freeze Fehler: '+ex.message);}
             },400);
