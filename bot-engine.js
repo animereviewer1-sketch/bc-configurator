@@ -326,11 +326,14 @@ function _execAct(a,C,vars){
           try{
             var _nsI=InventoryGet(C,_nsGr);
             if(_nsI){
+              // FIX: Property.Freeze=true ist die echte BC-Sperre; Craft.Property ist nur Label
+              _nsI.Property=_nsI.Property||{};
+              _nsI.Property.Freeze=true;
               if(!_nsI.Craft||typeof _nsI.Craft!=='object')
                 _nsI.Craft={Name:'',Description:'',Property:'Freeze',Color:(_nsI.Color??'#ffffff'),Lock:'',Item:_nsI.Asset?.Name??'',Private:false,MemberNumber:Player.MemberNumber};
               else _nsI.Craft.Property='Freeze';
               CharacterRefresh(C);ChatRoomCharacterUpdate(C);
-              _log('\u{1F512} NoStrip Freeze gesetzt: '+C.Name+' / '+_nsGr);
+              _log('\u{1F512} NoStrip Freeze+Craft gesetzt: '+C.Name+' / '+_nsGr);
             }else{_log('\u26A0 NoStrip Freeze: Item nicht gefunden in '+_nsGr+' bei '+C.Name);}
           }catch(ex){_log('\u26A0 Freeze Fehler:',ex.message);}
         },900);
@@ -624,10 +627,10 @@ function _handleShopCmd(rohText,buyerC){
   const isFremdkauf=targetC.MemberNumber!==buyerC.MemberNumber;
   _log('\u{1F6D2} Kauf: '+buyerC.Name+' kauft "'+shopItem.name+'" fuer '+preisEffektiv+' '+cur+(isFremdkauf?' \u2192 Ziel: '+targetC.Name:'')+' | Kontostand: '+newBal+(flagNostrip?' [/nostrip]':''));
   window.__BCK_popupRef?.postMessage({app:'BCKonfigurator',type:'BOT_SHOP',buyerNum:buyerC.MemberNumber,buyerName:buyerC.Name,targetNum:targetC.MemberNumber,targetName:targetC.Name,itemName:shopItem.name,preis:preisEffektiv,isAll:false,anzahl:1},'*');
-  // Kauf-Bestätigung an Käufer (Whisper)
+  // Bestätigungs-Whisper an Käufer ({gesamt} = preisEffektiv inkl. Flags)
   const rawConf=shopItem.confirmMsg||_shopCfg.confirmMsg||('\u2705 '+(isFremdkauf?'Du kaufst '+shopItem.icon+' '+shopItem.name+' fuer '+targetC.Name:shopItem.icon+' '+shopItem.name+' gekauft')+'. Bezahlt: '+preisEffektiv+' '+cur+(flagNostrip?' \u{1F512} NoStrip':'')+'. Kontostand: '+newBal+' '+cur+'.');
   ServerSend('ChatRoomChat',{Content:_shopTpl(rawConf,buyerC,targetC,shopItem,preis,newBal,1,preisEffektiv),Type:'Whisper',Target:buyerC.MemberNumber});
-  // Ankündigung im Chat wenn Fremdkauf
+  // Announce im Chat wenn Fremdkauf
   if(isFremdkauf){
     const rawAnn=shopItem.announceMsg||_shopCfg.announceMsg||(displayBuyer.Name+' hat fuer '+targetC.Name+' das Item '+shopItem.icon+' '+shopItem.name+' gekauft'+(flagNostrip?' \u{1F512}':'')+'.');
     const annTxt=_shopTpl(rawAnn,displayBuyer,targetC,shopItem,preis,newBal,1,preisEffektiv);
@@ -637,8 +640,7 @@ function _handleShopCmd(rohText,buyerC){
   // 🔒 NoStrip-Ankündigung im Chat
   if(flagNostrip){
     const rawNs=shopItem.announceNostripMsg||_shopCfg.announceNostripMsg||('\u{1F512} '+targetC.Name+' traegt '+shopItem.icon+' '+shopItem.name+' und kann es nicht ablegen.');
-    const nsTxt=_shopTpl(rawNs,displayBuyer,targetC,shopItem,preis,newBal,1,preisEffektiv);
-    ServerSend('ChatRoomChat',{Content:nsTxt,Type:'Chat'});
+    ServerSend('ChatRoomChat',{Content:_shopTpl(rawNs,displayBuyer,targetC,shopItem,preis,newBal,1,preisEffektiv),Type:'Chat'});
   }
   // Shop-Trigger ausloesen - shopNostrip:flagNostrip weitergeben damit Item-Aktion AntiStrip registriert
   const shopVars={name:buyerC.Name,wort:rohText,typ:'\u{1F6D2} Shop',x:buyerC.X??0,y:buyerC.Y??0,C:targetC,shopBuyer:buyerC,shopItem,shopNostrip:flagNostrip};
@@ -905,7 +907,7 @@ _asH=function(data){
       var allChars=[Player].concat(ChatRoomCharacter||[]);
       var C=null;for(var _ci=0;_ci<allChars.length;_ci++){if(allChars[_ci].MemberNumber===w.memberNum){C=allChars[_ci];break;}}
       if(!C)return;
-      // FIX: 150ms warten damit BC Appearance aktualisiert hat (Race Condition fix)
+      // FIX: 150ms warten - BC aktualisiert Appearance nach dem Event (Race Condition)
       setTimeout(function(){
       var item=(typeof InventoryGet==='function')?InventoryGet(C,w.gruppe):null;
       if(item)return;
@@ -933,18 +935,21 @@ _asH=function(data){
               try{
                 var _rI=InventoryGet(C,_rGr);
                 if(_rI){
+                  // FIX: Property.Freeze=true ist die echte BC-Sperre
+                  _rI.Property=_rI.Property||{};
+                  _rI.Property.Freeze=true;
                   if(!_rI.Craft||typeof _rI.Craft!=='object')
                     _rI.Craft={Name:'',Description:'',Property:'Freeze',Color:(_rI.Color||'#ffffff'),Lock:'',Item:(_rI.Asset&&_rI.Asset.Name)||'',Private:false,MemberNumber:Player.MemberNumber};
                   else _rI.Craft.Property='Freeze';
                   CharacterRefresh(C);ChatRoomCharacterUpdate(C);
-                  _log('\u{1F512} AntiStrip Freeze wiederhergestellt: '+C.Name+' / '+_rGr);
+                  _log('\u{1F512} AntiStrip Freeze+Craft wiederhergestellt: '+C.Name+' / '+_rGr);
                 }
               }catch(ex){_log('\u26A0 AntiStrip Freeze Fehler: '+ex.message);}
             },400);
           }
         }catch(ex){_log('\u26A0 AntiStrip Fehler: '+ex.message);}
       },w.delay!=null?w.delay:500);
-      },150);// end race-condition timeout
+      },150); // Race Condition Fix
     })(_asWatchers[_keys[_wi]]);
   }
 };
