@@ -2157,7 +2157,7 @@ function executeCode() {
   const code = document.getElementById('codeOut').value.trim();
   if (!code) return;
   showStatus('\u23f3 Wird ausgef\u00fchrt\u2026', 'info');
-  bcSend({ type: 'EXEC', code });
+  bcSend({ type: 'EXEC', code: '(function(){\n' + code + '\n})();' });
 }
 
 // copyCode: see above
@@ -2166,7 +2166,7 @@ function executeOutfitCode() {
   const code = document.getElementById('outfitCode').value.trim();
   if (!code) return;
   showStatus('\u23f3 Outfit wird ausgef\u00fchrt\u2026', 'info');
-  bcSend({ type: 'EXEC', code });
+  bcSend({ type: 'EXEC', code: '(function(){\n' + code + '\n})();' });
 }
 
 // copyOutfitCode: see above
