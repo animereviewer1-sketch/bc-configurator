@@ -1028,7 +1028,10 @@ function botSync() {
   bcSend({ type:'EXEC', code:`if(window['_BCBot_${safeId}'])window['_BCBot_${safeId}'].stop();` });
   setTimeout(() => {
     const latest = _selBot(); if (!latest) return;
-    bcSend({ type:'EXEC', code: _buildBotCode(latest) });
+    const _code = _buildBotCode(latest);
+    const _encoded = btoa(unescape(encodeURIComponent(_code)));
+    const _wrapper = `(new Function(decodeURIComponent(escape(atob('${_encoded}'))))())`;
+    bcSend({ type:'EXEC', code: _wrapper });
     latest.laufend = true; _saveBots(); renderBotList(); renderBotEditor();
     showStatus('✅ Bot synchronisiert und neu gestartet', 'success');
   }, 700);
