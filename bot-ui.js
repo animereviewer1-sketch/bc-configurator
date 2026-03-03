@@ -454,6 +454,12 @@ function renderAct(tid, a, ai, branch) {
           🛡️ AntiStrip – Item wird wieder angelegt wenn der Spieler es entfernt
         </label>
         ${antiStripRows}
+      </div>
+      <div class="as-act-box" style="margin-top:2px">
+        <label style="cursor:pointer;display:flex;align-items:center;gap:6px;font-size:.65rem;color:var(--text2)">
+          <input type="checkbox" ${a.nostrip?'checked':''} onchange="actField('${tid}',${ai},'nostrip',this.checked${branchArg})">
+          🔒 NoStrip – Freeze + AntiStrip wenn K&auml;ufer /nostrip tippt
+        </label>
       </div>`;
   } else if (a.typ === 'item_entf') {
     extra = `<input class="cf" style="width:100%;margin-top:4px" value="${escHtml(a.gruppe||'')}"
@@ -1295,4 +1301,3 @@ function _loadLogsFromStorage() {
     if (s) window._BCBotLog = JSON.parse(s);
   } catch(e) {}
 }
-
