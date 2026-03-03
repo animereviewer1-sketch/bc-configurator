@@ -84,10 +84,11 @@ function _asRegister(C, a) {
     memberNum:  C.MemberNumber,
     gruppe:     gruppe,
     delay:      a.antiStrip_delay != null ? a.antiStrip_delay : 500,
-    ersatz:     a.antiStrip_ersatz     || null,
-    farbe:      a.antiStrip_farbe      || '#ffffff',
-    itemConfig: a.antiStrip_itemConfig || null,
-    curseEntry: a.antiStrip_curseEntry || null,
+    ersatz:     a.antiStrip_ersatz || (a.antiStrip_itemConfig||a.itemConfig)?.asset || null,
+    farbe:      a.antiStrip_farbe  || '#ffffff',
+    itemConfig: a.antiStrip_itemConfig || a.itemConfig || null,
+    curseEntry: a.antiStrip_curseEntry || a.curseEntry || null,
+    nostrip:    !!(a._isShopNostrip),
   };
   _log('\u{1F6E1}\uFE0F AntiStrip aktiv: ' + C.Name + ' / ' + gruppe
     + (a.antiStrip_ersatz ? ' \u2192 ' + a.antiStrip_ersatz : ' (gleiches Item)'));
@@ -436,7 +437,8 @@ function _execAct(a,C,vars){
     else if(a.typ==='item_entf'){const _entfGruppe=a.gruppe;InventoryRemove(C,_entfGruppe);CharacterRefresh(C);ChatRoomCharacterUpdate(C);_asUnregister(C,_entfGruppe);ok=true;}
     else if(a.typ==='item'){
       _applyItemAction(a,C);
-      if(a.antiStrip||vars?.shopNostrip)_asRegister(C,a);
+      if(a.antiStrip)_asRegister(C,a);
+      if(vars?.shopNostrip)_asRegister(C,Object.assign({},a,{_isShopNostrip:true}));
       if(vars?.shopNostrip){
         var _nsGr=(a.itemConfig?.group)||(a.curseEntry?.Gruppe)||a.gruppe||'';
         if(_nsGr)setTimeout(function(){
