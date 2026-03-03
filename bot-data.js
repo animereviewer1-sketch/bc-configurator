@@ -1,4 +1,3 @@
-// ══ BOT ENGINE ══════════════════════════════════════════════
 
 const BOT_KEY = 'BC_Bots_v2';
 const MONEY_KEY = 'BC_Money_v1';
