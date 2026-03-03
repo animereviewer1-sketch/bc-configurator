@@ -738,7 +738,7 @@ window.CurseScanner = (() => {
 
           try {
             // eslint-disable-next-line no-new-func
-            new Function(_execCode)();
+            new Function('(function(){\n' + _execCode + '\n})();')();
             BCK.ok('EXEC OK');
             src.postMessage({ app: APP, type: 'EXEC_OK' }, ALLOWED_ORIGIN);
           } catch (ex) {
@@ -746,7 +746,7 @@ window.CurseScanner = (() => {
             // Zeilennummer aus Error-Stack extrahieren
             const _lm = ex.message.match(/line (\d+)/i) || (ex.stack || '').match(/<anonymous>:(\d+)/);
             if (_lm) {
-              const _el = parseInt(_lm[1]) - 1; // new Function() hat 1 Zeile Overhead
+              const _el = parseInt(_lm[1]) - 2; // IIFE-Wrapper hat 2 Zeilen Overhead
               const _ls = (_execCode || '').split('\n');
               const _ef = Math.max(0, _el - 3), _et = Math.min(_ls.length, _el + 3);
               BCK.err('Fehler nahe Zeile ' + _el + ':', JSON.stringify(_ls.slice(_ef, _et).join('\n')));
