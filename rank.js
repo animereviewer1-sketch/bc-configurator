@@ -4,10 +4,31 @@ let _rankData = {
   defs: [],
   players: {}
 };
-(()=>{
-  try { const s=localStorage.getItem(RANK_KEY); if(s) _rankData = Object.assign({settings:{queryCmd:'!rang',queryCmdTyp:'whisper',queryCmdText:'{name} hat Rang: {rang_icon} {rang}'},defs:[],players:{}},JSON.parse(s)); } catch{}
+
+// Async load from IndexedDB on startup
+(async () => {
+  try {
+    const saved = await idbGet(RANK_KEY);
+    if (saved) {
+      _rankData = Object.assign(
+        { settings: { queryCmd: '!rang', queryCmdTyp: 'whisper', queryCmdText: '{name} hat Rang: {rang_icon} {rang}' }, defs: [], players: {} },
+        saved
+      );
+    }
+  } catch (err) {
+    console.warn('[Rank] IDB load error:', err);
+  }
+  // Re-render if tab is already open
+  if (document.getElementById('tab-rank')?.classList.contains('active')) renderRankTab();
+  // Update tab badge
+  const btn = document.getElementById('tab-rank-btn');
+  if (btn) {
+    const total = Object.values(_rankData.players).filter(x => x.rankId).length;
+    btn.textContent = '🏆 Rang (' + total + ')';
+  }
 })();
-function _saveRank() { try { localStorage.setItem(RANK_KEY, JSON.stringify(_rankData)); } catch {} }
+
+function _saveRank() { idbSet(RANK_KEY, _rankData); }
 function _rankById(id) { return _rankData.defs.find(r=>r.id===id)??null; }
 function _rankSorted() { return [..._rankData.defs].sort((a,b)=>a.level-b.level); }
 
@@ -215,4 +236,3 @@ function rankImport() {
       _saveRank(); renderRankTab(); showStatus('Rang-System importiert','success');
     }catch(err){showStatus('Fehler: '+err.message,'error');} }; r.readAsText(e.target.files[0]); }; inp.click();
 }
-

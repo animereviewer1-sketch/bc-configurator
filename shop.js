@@ -7,10 +7,28 @@ let _shop = {
   items: [],
   log: []
 };
-(()=>{
-  try { const s=localStorage.getItem(SHOP_KEY); if(s) _shop = Object.assign({settings:{cmd:'!pay',confirmMsg:'',errorMsg:'',preisU:0,preisNostrip:0},items:[],log:[]},JSON.parse(s)); } catch{}
+
+// Async load from IndexedDB on startup
+(async () => {
+  try {
+    const saved = await idbGet(SHOP_KEY);
+    if (saved) {
+      _shop = Object.assign(
+        { settings: { cmd: '!pay', listCmd: '!shop', confirmMsg: '', errorMsg: '', preisU: 0, preisNostrip: 0, announceNostripMsg: '' }, items: [], log: [] },
+        saved
+      );
+    }
+  } catch (err) {
+    console.warn('[Shop] IDB load error:', err);
+  }
+  // Re-render if tab is already open
+  if (document.getElementById('tab-shop')?.classList.contains('active')) renderShopTab();
+  // Update tab badge
+  const btn = document.getElementById('tab-shop-btn');
+  if (btn) btn.textContent = '🛒 Shop (' + _shop.items.filter(i => i.aktiv).length + ')';
 })();
-function _saveShop() { try { localStorage.setItem(SHOP_KEY, JSON.stringify(_shop)); } catch {} }
+
+function _saveShop() { idbSet(SHOP_KEY, _shop); }
 function _shopById(id) { return _shop.items.find(i=>i.id===id)??null; }
 
 function renderShopTab() {
@@ -211,4 +229,3 @@ function _shopLogPurchase(data) {
   _saveShop();
   if (document.getElementById('tab-shop')?.classList.contains('active')) renderShopLog();
 }
-

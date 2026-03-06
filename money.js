@@ -1,6 +1,36 @@
 // ══════════════════════════════════════════════════════
 //  MONEY SYSTEM
 // ══════════════════════════════════════════════════════
+const MONEY_KEY = 'BC_Money_v1';
+let _money = {
+  settings: { name: 'Gold', queryCmd: '!gold', queryTyp: 'whisper' },
+  balances: {}
+};
+
+// Async load from IndexedDB on startup
+(async () => {
+  try {
+    const saved = await idbGet(MONEY_KEY);
+    if (saved) {
+      _money = Object.assign(
+        { settings: { name: 'Gold', queryCmd: '!gold', queryTyp: 'whisper' }, balances: {} },
+        saved
+      );
+    }
+  } catch (err) {
+    console.warn('[Money] IDB load error:', err);
+  }
+  // Re-render if tab is already open
+  if (document.getElementById('tab-money')?.classList.contains('active')) renderMoneyTab();
+  // Update tab badge
+  const btn = document.getElementById('tab-money-btn');
+  if (btn) btn.textContent = '💰 Money (' + Object.keys(_money.balances).length + ')';
+})();
+
+function _saveMoney() {
+  idbSet(MONEY_KEY, _money);
+}
+
 function renderMoneyTab() {
   // Init UI values
   document.getElementById('money-name-inp').value = _money.settings.name ?? 'Gold';

@@ -392,29 +392,60 @@ window.CurseScanner = (() => {
   let database = {};
   let lscgTable = {};
 
-  // ── Eigener persistenter LSCG-Cache (localStorage) ──────────────────────
+  // ── Eigener persistenter Cache via IndexedDB (kein localStorage-Quota-Problem) ──
   const LSCG_CACHE_KEY  = 'CurseScanner_lscgCache_v1';
   const CRAFT_CACHE_KEY = 'CurseScanner_craftCache_v1';
 
-  const lscgCache = (() => {
-    try { return JSON.parse(localStorage.getItem(LSCG_CACHE_KEY) || '{}'); }
-    catch { return {}; }
+  // Minimaler IndexedDB-Wrapper (läuft auf BC's Origin)
+  const _CS_IDB = (() => {
+    const DB_NAME = 'BCKonfigurator_CS';
+    const STORE   = 'kv';
+    let _db = null;
+    function _open() {
+      if (_db) return Promise.resolve(_db);
+      return new Promise((res, rej) => {
+        const r = indexedDB.open(DB_NAME, 1);
+        r.onupgradeneeded = e => { const db = e.target.result; if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE); };
+        r.onsuccess = e => { _db = e.target.result; res(_db); };
+        r.onerror   = e => rej(e.target.error);
+      });
+    }
+    return {
+      get: async key => { try { const db = await _open(); return await new Promise((res,rej)=>{ const r=db.transaction(STORE,'readonly').objectStore(STORE).get(key); r.onsuccess=e=>res(e.target.result??null); r.onerror=e=>rej(e.target.error); }); } catch { return null; } },
+      set: async (key, val) => { try { const db = await _open(); await new Promise((res,rej)=>{ const r=db.transaction(STORE,'readwrite').objectStore(STORE).put(val,key); r.onsuccess=()=>res(); r.onerror=e=>rej(e.target.error); }); } catch(e) { console.warn('[CS-IDB] set error:', e); } },
+    };
   })();
 
-  // Alle je gesehenen Crafts – persistent in BC's localStorage
-  // Key: "memberNum:itemName:craftName" (gleich wie database-Key)
-  const craftCache = (() => {
-    try { return JSON.parse(localStorage.getItem(CRAFT_CACHE_KEY) || '{}'); }
-    catch { return {}; }
+  // In-Memory Caches – werden async aus IDB befüllt
+  const lscgCache  = {};
+  const craftCache = {};
+
+  // Einmalige Migration aus localStorage → IDB + RAM
+  (async () => {
+    for (const [key, target] of [[LSCG_CACHE_KEY, lscgCache],[CRAFT_CACHE_KEY, craftCache]]) {
+      try {
+        // Erst IDB laden
+        const idbVal = await _CS_IDB.get(key);
+        if (idbVal) Object.assign(target, idbVal);
+        // Dann ggf. localStorage migrieren (falls noch vorhanden)
+        const lsRaw = localStorage.getItem(key);
+        if (lsRaw) {
+          Object.assign(target, JSON.parse(lsRaw));
+          await _CS_IDB.set(key, target);
+          localStorage.removeItem(key);
+          console.info('[CurseScanner] Migriert aus localStorage:', key);
+        }
+      } catch(e) { console.warn('[CurseScanner] Cache-Init-Fehler:', key, e); }
+    }
+    console.log('[CurseScanner] Craft-Cache: ' + Object.keys(craftCache).length + ' Einträge, LSCG-Cache: ' + Object.keys(lscgCache).length + ' Einträge');
   })();
-  console.log('[CurseScanner] Craft-Cache geladen: ' + Object.keys(craftCache).length + ' Einträge, LSCG-Cache: ' + Object.keys(lscgCache).length + ' Einträge');
 
   let _persistTimer = null;
   function _persistLscgCache() {
     if (_persistTimer) return;
     _persistTimer = setTimeout(() => {
       _persistTimer = null;
-      try { localStorage.setItem(LSCG_CACHE_KEY, JSON.stringify(lscgCache)); } catch {}
+      _CS_IDB.set(LSCG_CACHE_KEY, lscgCache);
     }, 2000);
   }
 
@@ -423,7 +454,7 @@ window.CurseScanner = (() => {
     if (_craftPersistTimer) return;
     _craftPersistTimer = setTimeout(() => {
       _craftPersistTimer = null;
-      try { localStorage.setItem(CRAFT_CACHE_KEY, JSON.stringify(craftCache)); } catch {}
+      _CS_IDB.set(CRAFT_CACHE_KEY, craftCache);
     }, 2000);
   }
 
