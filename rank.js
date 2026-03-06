@@ -18,8 +18,7 @@ let _rankData = {
   } catch (err) {
     console.warn('[Rank] IDB load error:', err);
   }
-  // Re-render if tab is already open
-  if (document.getElementById('tab-rank')?.classList.contains('active')) renderRankTab();
+  renderRankTab();
   // Update tab badge
   const btn = document.getElementById('tab-rank-btn');
   if (btn) {

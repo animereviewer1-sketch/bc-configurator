@@ -20,8 +20,7 @@ let _money = {
   } catch (err) {
     console.warn('[Money] IDB load error:', err);
   }
-  // Re-render if tab is already open
-  if (document.getElementById('tab-money')?.classList.contains('active')) renderMoneyTab();
+  renderMoneyTab();
   // Update tab badge
   const btn = document.getElementById('tab-money-btn');
   if (btn) btn.textContent = '💰 Money (' + Object.keys(_money.balances).length + ')';

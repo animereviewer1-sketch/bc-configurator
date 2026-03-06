@@ -75,8 +75,8 @@ const _IDB = (() => {
     }
   }
 
-  // Run migration immediately for all three module keys
-  migrateFromLocalStorage(['BC_Money_v1', 'BC_Rank_v1', 'BC_Shop_v1']);
+  // Run migration immediately for all module keys
+  migrateFromLocalStorage(['BC_Money_v1', 'BC_Rank_v1', 'BC_Shop_v1', 'BC_Bots_v2', 'BC_BotGroups_v1', 'BCBot_Logs']);
 
   return { idbGet, idbSet };
 })();

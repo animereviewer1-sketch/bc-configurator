@@ -1427,19 +1427,12 @@ let CURSE_DB    = {};   // key → entry (from CurseScanner.database)
 let CURSE_LSCG  = {};   // key → entry (from CurseScanner.lscgTable)
 let CURSE_CACHE_LSCG = {}; // from lscgCache
 
-// Comments: persisted in localStorage
+// Comments: persisted in IndexedDB
 let CURSE_COMMENTS = {};
-try { CURSE_COMMENTS = JSON.parse(localStorage.getItem('BC_CURSE_COMMENTS_v1') || '{}'); } catch {}
-
-function _saveCurseComments() {
-  try { localStorage.setItem('BC_CURSE_COMMENTS_v1', JSON.stringify(CURSE_COMMENTS)); } catch {}
-}
+function _saveCurseComments() { idbSet('BC_CURSE_COMMENTS_v1', CURSE_COMMENTS); }
 // ── Favoriten ────────────────────────────────────────────────
 let CURSE_FAVOURITES = new Set();
-try { CURSE_FAVOURITES = new Set(JSON.parse(localStorage.getItem('BC_CURSE_FAV_v1') || '[]')); } catch {}
-function _saveCurseFavourites() {
-  try { localStorage.setItem('BC_CURSE_FAV_v1', JSON.stringify([...CURSE_FAVOURITES])); } catch {}
-}
+function _saveCurseFavourites() { idbSet('BC_CURSE_FAV_v1', [...CURSE_FAVOURITES]); }
 function toggleCurseFavourite(dbKey, cellEl) {
   const wasFav = CURSE_FAVOURITES.has(dbKey);
   if (wasFav) CURSE_FAVOURITES.delete(dbKey); else CURSE_FAVOURITES.add(dbKey);
@@ -1477,6 +1470,11 @@ function curseScan() {
 
 // ── Handle SCAN_RESULT ────────────────────────────────
 // called from postMessage handler
+
+function _saveCurseDB() {
+  idbSet('BC_CURSE_DB_v1', {database:CURSE_DB,lscgTable:CURSE_LSCG,lscgCache:CURSE_CACHE_LSCG,favourites:[...CURSE_FAVOURITES]});
+}
+
 function _handleCurseData(data) {
   if (data.err) { showStatus('❌ Curse-Scan: ' + data.err, 'error'); return; }
   const prevDB = {...CURSE_DB};
@@ -1505,7 +1503,7 @@ function _handleCurseData(data) {
     showStatus(statusText, added.length + updated.length > 0 ? 'success' : 'info');
   }
   // persist
-  try { localStorage.setItem('BC_CURSE_DB_v1', JSON.stringify({database:CURSE_DB,lscgTable:CURSE_LSCG,lscgCache:CURSE_CACHE_LSCG,favourites:[...CURSE_FAVOURITES]})); } catch {}
+  _saveCurseDB();
 }
 
 
@@ -1676,6 +1674,7 @@ function renderCurseTab() {
           (function(){ _curseEntryMap[rowId] = dbKey; return ''; })()+
           '<button class="curse-apply-btn" data-rid="' + rowId + '" data-tgt="" onclick="wearCurseByData(this)" title="Auf mich anwenden">👤</button>'+
           (_selectedMemberNum ? '<button class="curse-apply-btn other" data-rid="' + rowId + '" data-tgt="' + _selectedMemberNum + '" onclick="wearCurseByData(this)" title="Auf #'+_selectedMemberNum+'">👥 #'+_selectedMemberNum+'</button>' : '')+
+          '<button onclick="deleteCurseEntry(\'' + dbKey.replace(/\x27/g,"&apos;") + '\')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.8rem;padding:2px 5px;margin-left:2px" title="Eintrag l\xc3�schen (kommt beim n\xc3�chsten Scan wieder)">✕</button>'+
         '</td>';
 
       tbody.appendChild(tr);
@@ -1743,6 +1742,15 @@ function saveCurseComment(key, val) {
   _saveCurseComments();
 }
 
+function deleteCurseEntry(dbKey) {
+  if (!CURSE_DB[dbKey]) return;
+  delete CURSE_DB[dbKey];
+  _saveCurseDB();
+  _updateCurseStats();
+  renderCurseTab();
+  showStatus('🗑️ Eintrag gelöscht – kommt beim nächsten Scan wieder', 'info');
+}
+
 function wearCurseByData(btn) {
   const rowId = btn.dataset.rid;
   const tgt   = btn.dataset.tgt;
@@ -1771,7 +1779,7 @@ function _tryFinishExport() {
   const mergedCraft = Object.assign({}, CURSE_DB, _exportCraftCache);
   Object.assign(CURSE_CACHE_LSCG, _exportLscgCache);
   Object.assign(CURSE_DB, _exportCraftCache);
-  try { localStorage.setItem('BC_CURSE_DB_v1', JSON.stringify({database:CURSE_DB,lscgTable:CURSE_LSCG,lscgCache:CURSE_CACHE_LSCG,favourites:[...CURSE_FAVOURITES]})); } catch {}
+  _saveCurseDB();
   const payload = {
     _meta: { exportedAt: new Date().toISOString(), version: 3 },
     database: mergedCraft,
@@ -1817,7 +1825,7 @@ function curseImport() {
         CURSE_CACHE_LSCG = d.lscgCache ?? {};
         if (d.comments) Object.assign(CURSE_COMMENTS, d.comments);
         _saveCurseComments();
-        try { localStorage.setItem('BC_CURSE_DB_v1', JSON.stringify({database:CURSE_DB,lscgTable:CURSE_LSCG,lscgCache:CURSE_CACHE_LSCG,favourites:[...CURSE_FAVOURITES]})); } catch {}
+        _saveCurseDB();
         if (_connected && Object.keys(CURSE_DB).length > 0) {
           bcSend({ type: 'LOAD_CURSE_DB', database: CURSE_DB }, true);
           if (Object.keys(CURSE_CACHE_LSCG).length > 0) {
@@ -1844,7 +1852,7 @@ function curseClear() {
   CURSE_DB         = {};
   CURSE_LSCG       = {};
   CURSE_CACHE_LSCG = {};
-  try { localStorage.removeItem('BC_CURSE_DB_v1'); } catch {}
+  _saveCurseDB();
   _updateCurseStats();
   renderCurseTab();
   showStatus('🗑️ Datenbank geleert', 'success');
@@ -1859,26 +1867,39 @@ function curseClearAndScan() {
   CURSE_DB         = {};
   CURSE_LSCG       = {};
   CURSE_CACHE_LSCG = {};
-  try { localStorage.removeItem('BC_CURSE_DB_v1'); } catch {}
+  _saveCurseDB();
   _updateCurseStats();
   renderCurseTab();
   curseScan();
   showStatus('🔄 Datenbank geleert – Scan läuft...', 'info');
 }
 
-// ── Load curse DB from localStorage on startup ────────
-(function() {
+// ── Load curse DB + comments + favourites from IndexedDB on startup ────
+(async function() {
   try {
-    const s = localStorage.getItem('BC_CURSE_DB_v1');
-    if (s) {
-      const d = JSON.parse(s);
+    for (const key of ['BC_CURSE_DB_v1', 'BC_CURSE_COMMENTS_v1', 'BC_CURSE_FAV_v1']) {
+      const lsRaw = localStorage.getItem(key);
+      if (lsRaw) {
+        const existing = await idbGet(key);
+        if (!existing) await idbSet(key, JSON.parse(lsRaw));
+        localStorage.removeItem(key);
+      }
+    }
+    const d = await idbGet('BC_CURSE_DB_v1');
+    if (d) {
       CURSE_DB         = d.database  ?? {};
       CURSE_LSCG       = d.lscgTable ?? {};
       CURSE_CACHE_LSCG = d.lscgCache ?? {};
+      if (d.favourites) d.favourites.forEach(k => CURSE_FAVOURITES.add(k));
       _updateCurseStats();
       console.log('[BCK-Popup] Curse DB geladen: ' + Object.keys(CURSE_DB).length + ' Crafts');
+      if (document.getElementById('curseBody')) renderCurseTab();
     }
-  } catch {}
+    const comments = await idbGet('BC_CURSE_COMMENTS_v1');
+    if (comments) Object.assign(CURSE_COMMENTS, comments);
+    const favs = await idbGet('BC_CURSE_FAV_v1');
+    if (Array.isArray(favs)) favs.forEach(k => CURSE_FAVOURITES.add(k));
+  } catch(e) { console.warn('[BCK-Popup] Curse IDB load error:', e); }
 })();
 
 // ══════════════════════════════════════════════════════

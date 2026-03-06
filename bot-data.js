@@ -20,21 +20,26 @@ function _selBot() { return _bots.find(b => b.id === _selBotId) ?? null; }
   try {
     for (const [key, target] of [[BOT_KEY, _bots], [BOT_GROUP_KEY, _botGroups]]) {
       const idbVal = await idbGet(key);
-      if (idbVal && Array.isArray(idbVal)) {
+      // idbVal.length > 0 check: leeres Array bedeutet noch keine IDB-Daten -> localStorage migrieren
+      if (idbVal && Array.isArray(idbVal) && idbVal.length > 0) {
         target.push(...idbVal);
       } else {
         const raw2 = localStorage.getItem(key);
         if (raw2) {
           const parsed = JSON.parse(raw2);
-          target.push(...parsed);
-          await idbSet(key, parsed);
-          localStorage.removeItem(key);
+          if (parsed.length > 0) {
+            target.push(...parsed);
+            await idbSet(key, parsed);
+            localStorage.removeItem(key);
+            console.info('[bot-data] Migriert aus localStorage:', key, parsed.length, 'Eintraege');
+          }
         }
       }
     }
     _bots.forEach(b => { b.laufend = false; });
   } catch(err) { console.warn('[bot-data] IDB init:', err); }
-  if (document.getElementById('tab-bots')?.classList.contains('active')) renderBotTab();
+  // Immer re-rendern nach async init (nicht nur wenn Tab aktiv)
+  renderBotTab();
 })()
 
 function groupNew() {
