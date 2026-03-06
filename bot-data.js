@@ -20,19 +20,24 @@ function _selBot() { return _bots.find(b => b.id === _selBotId) ?? null; }
   try {
     for (const [key, target] of [[BOT_KEY, _bots], [BOT_GROUP_KEY, _botGroups]]) {
       const idbVal = await idbGet(key);
-      // idbVal.length > 0 check: leeres Array bedeutet noch keine IDB-Daten -> localStorage migrieren
-      if (idbVal && Array.isArray(idbVal) && idbVal.length > 0) {
-        target.push(...idbVal);
-      } else {
-        const raw2 = localStorage.getItem(key);
-        if (raw2) {
-          const parsed = JSON.parse(raw2);
-          if (parsed.length > 0) {
-            target.push(...parsed);
-            await idbSet(key, parsed);
-            localStorage.removeItem(key);
-            console.info('[bot-data] Migriert aus localStorage:', key, parsed.length, 'Eintraege');
-          }
+      const source = (idbVal && Array.isArray(idbVal) && idbVal.length > 0)
+        ? idbVal
+        : (() => { // Migration aus localStorage
+            const raw2 = localStorage.getItem(key);
+            if (!raw2) return [];
+            const parsed = JSON.parse(raw2);
+            if (parsed.length > 0) {
+              idbSet(key, parsed);
+              localStorage.removeItem(key);
+              console.info('[bot-data] Migriert aus localStorage:', key, parsed.length, 'Eintraege');
+            }
+            return parsed;
+          })();
+      // Deduplizieren: IDB-Eintraege nur hinzufuegen wenn nicht schon im Array (z.B. durch botNew vor IDB-Load)
+      if (source.length > 0) {
+        const existingIds = new Set(target.map(x => x.id));
+        for (const item of source) {
+          if (!existingIds.has(item.id)) target.push(item);
         }
       }
     }

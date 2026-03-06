@@ -12,10 +12,14 @@ let _money = {
   try {
     const saved = await idbGet(MONEY_KEY);
     if (saved) {
+      const pending = Object.assign({}, _money.balances);
       _money = Object.assign(
         { settings: { name: 'Gold', queryCmd: '!gold', queryTyp: 'whisper' }, balances: {} },
         saved
       );
+      for (const [id, e] of Object.entries(pending)) {
+        if (!_money.balances[id]) _money.balances[id] = e;
+      }
     }
   } catch (err) {
     console.warn('[Money] IDB load error:', err);

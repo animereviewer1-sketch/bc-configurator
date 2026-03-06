@@ -1826,18 +1826,18 @@ function curseImport() {
         if (d.comments) Object.assign(CURSE_COMMENTS, d.comments);
         _saveCurseComments();
         _saveCurseDB();
+        if (d.favourites) { d.favourites.forEach(k => CURSE_FAVOURITES.add(k)); _saveCurseFavourites(); }
+        // Daten gespeichert -> Erfolg melden BEVOR Render (Render-Fehler sollen Import nicht blockieren)
+        showStatus('✅ Import: ' + Object.keys(CURSE_DB).length + ' Crafts', 'success');
+        // BC updaten
         if (_connected && Object.keys(CURSE_DB).length > 0) {
           bcSend({ type: 'LOAD_CURSE_DB', database: CURSE_DB }, true);
-          if (Object.keys(CURSE_CACHE_LSCG).length > 0) {
-            bcSend({ type: 'LOAD_LSCG_CACHE', cache: CURSE_CACHE_LSCG }, true);
-          }
-          // Craft-Cache ebenfalls in BC localStorage schreiben
+          if (Object.keys(CURSE_CACHE_LSCG).length > 0) bcSend({ type: 'LOAD_LSCG_CACHE', cache: CURSE_CACHE_LSCG }, true);
           bcSend({ type: 'LOAD_CRAFT_CACHE', cache: CURSE_DB }, true);
         }
-        _updateCurseStats();
-        if (_activeTab === 'curse') renderCurseTab();
-        if (d.favourites) { d.favourites.forEach(k => CURSE_FAVOURITES.add(k)); _saveCurseFavourites(); }
-                showStatus('✅ Import: ' + Object.keys(CURSE_DB).length + ' Crafts', 'success');
+        // Render separat (Fehler hier sollen Erfolg nicht rueckgaengig machen)
+        try { _updateCurseStats(); } catch(e) { console.warn('[Curse Import] stats render error:', e); }
+        try { if (_activeTab === 'curse') renderCurseTab(); } catch(e) { console.warn('[Curse Import] tab render error:', e); }
       } catch (err) { showStatus('❌ Import fehlgeschlagen: ' + err.message, 'error'); }
     };
     r.readAsText(e.target.files[0]);
@@ -2042,6 +2042,7 @@ window.addEventListener('message', function(ev) {
         if (document.getElementById('tab-rank')?.classList.contains('active')) renderRankPlayers();
         const btn = document.getElementById('tab-rank-btn');
         if (btn) { const total = Object.values(_rankData.players).filter(x=>x.rankId).length; btn.textContent = '🏆 Rang ('+total+')'; }
+        if (document.getElementById('tab-rank')?.classList.contains('active')) renderRankPlayers();
       } else if (rid && _rankData.players[rid]) {
         // Name aktuell halten bei Rejoin
         _rankData.players[rid].name = ev.data.name || _rankData.players[rid].name;
@@ -2054,9 +2055,15 @@ window.addEventListener('message', function(ev) {
       // Neuer Spieler - nur eintragen wenn noch nicht vorhanden (0 Gold)
       const mn = ev.data.memberNum;
       if (mn && !_money.balances[mn]) {
-        _money.balances[mn] = { name: ev.data.name, balance: 0 };
+        _money.balances[mn] = { name: ev.data.name || ('#'+mn), balance: 0 };
         _saveMoney();
+        // Tab-Badge immer aktualisieren (nicht nur wenn Tab aktiv)
+        const _moneyBtn = document.getElementById('tab-money-btn');
+        if (_moneyBtn) _moneyBtn.textContent = '💰 Money (' + Object.keys(_money.balances).length + ')';
         if (document.getElementById('tab-money')?.classList.contains('active')) renderMoneyTab();
+      } else if (mn && _money.balances[mn] && ev.data.name) {
+        // Name aktuell halten bei Rejoin
+        _money.balances[mn].name = ev.data.name;
       }
       break;
     }
