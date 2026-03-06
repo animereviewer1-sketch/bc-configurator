@@ -1,39 +1,41 @@
-
-const BOT_KEY = 'BC_Bots_v2';
-const MONEY_KEY = 'BC_Money_v1';
-
-// Money storage: { settings: {name, queryCmd}, balances: { memberNum: {name, balance} } }
-let _money = { settings: { name: 'Gold', queryCmd: '!gold', queryTyp: 'whisper' }, balances: {} };
-(()=>{ try { const s=localStorage.getItem(MONEY_KEY); if(s){ const d=JSON.parse(s); _money=Object.assign(_money,d); } } catch{} })();
-function _saveMoney() { try { localStorage.setItem(MONEY_KEY, JSON.stringify(_money)); } catch {} }
+const BOT_KEY       = 'BC_Bots_v2';
+const BOT_GROUP_KEY = 'BC_BotGroups_v1';
+// NOTE: MONEY_KEY / _money / _saveMoney sind in money.js definiert
 
 let _bots      = [];
 let _selBotId  = null;
 let _ipickerCb = null;
 let _ipickerTab= 'item';
-// Item Manager integration: pending trigger context
-let _trigPending = null; // {tid, ai, cb} – set when IM opened from trigger
-let _ipickerForActContext = null; // {tid, ai} for restoring open state
+let _trigPending = null;
+let _ipickerForActContext = null;
+let _botGroups = [];
 
-// ── Persistence ───────────────────────────────────────────────
-function _saveBots() {
-  try { localStorage.setItem(BOT_KEY, JSON.stringify(_bots)); } catch {}
-}
-function _loadBots() {
-  try { const s = localStorage.getItem(BOT_KEY); if (s) { _bots = JSON.parse(s); _bots.forEach(b => { b.laufend = false; }); } } catch {}
-}
+function _saveBots()      { idbSet(BOT_KEY,      _bots);      }
+function _saveBotGroups() { idbSet(BOT_GROUP_KEY, _botGroups); }
+function _loadBots()      {} // no-op: async init
+function _loadBotGroups() {} // no-op: async init
 function _selBot() { return _bots.find(b => b.id === _selBotId) ?? null; }
 
-// ── Bot-Gruppen ────────────────────────────────────────────────
-const BOT_GROUP_KEY = 'BC_BotGroups_v1';
-let _botGroups = []; // [{id, name, botIds:[], open:bool}]
-
-function _saveBotGroups() {
-  try { localStorage.setItem(BOT_GROUP_KEY, JSON.stringify(_botGroups)); } catch {}
-}
-function _loadBotGroups() {
-  try { const s = localStorage.getItem(BOT_GROUP_KEY); if (s) _botGroups = JSON.parse(s); } catch {}
-}
+(async () => {
+  try {
+    for (const [key, target] of [[BOT_KEY, _bots], [BOT_GROUP_KEY, _botGroups]]) {
+      const idbVal = await idbGet(key);
+      if (idbVal && Array.isArray(idbVal)) {
+        target.push(...idbVal);
+      } else {
+        const raw2 = localStorage.getItem(key);
+        if (raw2) {
+          const parsed = JSON.parse(raw2);
+          target.push(...parsed);
+          await idbSet(key, parsed);
+          localStorage.removeItem(key);
+        }
+      }
+    }
+    _bots.forEach(b => { b.laufend = false; });
+  } catch(err) { console.warn('[bot-data] IDB init:', err); }
+  if (document.getElementById('tab-bots')?.classList.contains('active')) renderBotTab();
+})()
 
 function groupNew() {
   const inp = document.getElementById('bgNewName');
@@ -153,9 +155,23 @@ function renderBotGroupList() {
 //  BOT LOG SYSTEM
 // ══════════════════════════════════════════════════════
 window._BCBotLog = window._BCBotLog ?? [];
-// Logs aus localStorage laden (persistiert über Konfigurator-Neustarts)
 if (!window._BCBotLog.length) {
-  try { const s=localStorage.getItem('BCBot_Logs'); if(s) window._BCBotLog=JSON.parse(s); } catch(e) {}
+  (async () => {
+    try {
+      const saved = await idbGet('BCBot_Logs');
+      if (saved && Array.isArray(saved)) {
+        window._BCBotLog = saved;
+      } else {
+        const raw2 = localStorage.getItem('BCBot_Logs');
+        if (raw2) {
+          window._BCBotLog = JSON.parse(raw2);
+          await idbSet('BCBot_Logs', window._BCBotLog);
+          localStorage.removeItem('BCBot_Logs');
+        }
+      }
+    } catch(e) { console.warn('[bot-data] Log IDB load:', e); }
+    if (document.getElementById('tab-log')?.classList.contains('active')) renderLogTab();
+  })();
 }
 let _logFilter = '';
 

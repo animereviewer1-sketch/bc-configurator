@@ -1291,13 +1291,10 @@ function _rebuildRoomEverFromLogs(botId) {
   bcSend({type:'EXEC', code:`(()=>{const s=window['__BCKBotState_${safeId}']??{};s.roomEver=${everArr};window['__BCKBotState_${safeId}']=s;try{const ls=JSON.parse(localStorage.getItem('__BCKBotStates')||'{}');ls['${safeId}']=s;localStorage.setItem('__BCKBotStates',JSON.stringify(ls));}catch(e){}console.log('[Bot] roomEver aus Logs: ',${everArr}.length,' bekannt');})();`});
 }
 
-// Logs in localStorage persistieren
+// Logs in IndexedDB persistieren
 function _saveLogsToStorage() {
-  try { localStorage.setItem('BCBot_Logs', JSON.stringify(window._BCBotLog||[])); } catch(e) {}
+  idbSet('BCBot_Logs', window._BCBotLog || []);
 }
 function _loadLogsFromStorage() {
-  try {
-    const s = localStorage.getItem('BCBot_Logs');
-    if (s) window._BCBotLog = JSON.parse(s);
-  } catch(e) {}
+  // no-op: wird async in bot-data.js geladen
 }
