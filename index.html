@@ -1131,7 +1131,7 @@ button { cursor: pointer; }
 
 <!-- TOPBAR -->
 <div class="topbar">
-  <h1>🔒 BC Konfigurator <span style="font-weight:400;font-size:.72rem;opacity:.4;-webkit-text-fill-color:#94a3b8;background:none">v12</span></h1>
+  <h1>🔒 BC Konfigurator <span style="font-weight:400;font-size:.72rem;opacity:.4;-webkit-text-fill-color:#94a3b8;background:none">v12</span> <span id="engineVer" style="font-weight:400;font-size:.72rem;opacity:.4;-webkit-text-fill-color:#94a3b8;background:none"></span></h1>
   <span class="tbadge" id="connStatus" style="color:#fb7185" title="Verbindungsstatus mit dem Bondage Club">🔴 Nicht verbunden</span>
   <span class="tbadge" id="playerInfo" style="display:none" title="Aktueller Spieler"></span>
   <span class="tbadge" id="cacheInfo" title="Geladene Item-Daten">Kein Cache</span>
@@ -1821,4 +1821,10 @@ button { cursor: pointer; }
 <script src="bot-data.js"></script>
 <script src="bot-ui.js"></script>
 <script src="bot-engine.js"></script>
+<script>
+  // Engine-Version in Topbar anzeigen
+  if(window.BOT_ENGINE_VERSION){
+    document.getElementById('engineVer').textContent='| Engine v'+window.BOT_ENGINE_VERSION;
+  }
+</script>
 </body>
