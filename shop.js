@@ -127,7 +127,7 @@ function renderShopItems() {
       item.kategorie ? `<span style="font-size:.55rem;background:rgba(96,165,250,0.12);border:1px solid rgba(96,165,250,0.3);color:#60a5fa;padding:1px 5px;border-radius:3px">${escHtml(item.kategorie)}</span>` : '',
       item.cooldownMin > 0 ? `<span style="font-size:.55rem;background:rgba(251,191,36,0.12);border:1px solid rgba(251,191,36,0.3);color:#fbbf24;padding:1px 5px;border-radius:3px">⏱ ${item.cooldownMin}min</span>` : '',
       hasSale ? `<span style="font-size:.55rem;background:rgba(52,211,153,0.15);border:1px solid rgba(52,211,153,0.3);color:#34d399;padding:1px 5px;border-radius:3px;font-weight:700">🔥 SALE ${item.salePreis}💰</span>` : '',
-      item.minRang ? `<span style="font-size:.55rem;background:rgba(234,179,8,0.12);border:1px solid rgba(234,179,8,0.3);color:#eab308;padding:1px 5px;border-radius:3px">👑 Ab ${escHtml(item.minRang)}</span>` : '',
+      item.minRang ? (()=>{ const _r=typeof _rankById==='function'?_rankById(item.minRang):null; return _r?`<span style="font-size:.55rem;background:${_r.farbe}18;border:1px solid ${_r.farbe}44;color:${_r.farbe};padding:1px 5px;border-radius:3px">👑 Ab ${escHtml(_r.icon+' '+_r.name)}</span>`:`<span style="font-size:.55rem;background:rgba(234,179,8,0.12);border:1px solid rgba(234,179,8,0.3);color:#eab308;padding:1px 5px;border-radius:3px">👑 Ab ${escHtml(item.minRang)}</span>`; })() : '',
       uPreis>0 ? `<span style="font-size:.55rem;background:rgba(139,92,246,0.15);border:1px solid rgba(139,92,246,0.3);color:#a78bfa;padding:1px 5px;border-radius:3px">/u +${uPreis}💰</span>` : '',
       !nsErlaubt ? `<span style="font-size:.55rem;background:rgba(248,113,113,0.10);border:1px solid rgba(248,113,113,0.25);color:#f87171;padding:1px 5px;border-radius:3px">/nostrip gesperrt</span>` :
       nostripPreis>0 ? `<span style="font-size:.55rem;background:rgba(248,113,113,0.12);border:1px solid rgba(248,113,113,0.3);color:#f87171;padding:1px 5px;border-radius:3px">/nostrip +${nostripPreis}💰</span>` : (nostripPreis===0?`<span style="font-size:.55rem;background:rgba(248,113,113,0.07);border:1px solid rgba(248,113,113,0.2);color:#f87171;padding:1px 5px;border-radius:3px">/nostrip ✓</span>`:''),
@@ -208,6 +208,14 @@ function _shopNostripHint(){
   }
 }
 
+// Feature: Min-Rang Dropdown dynamisch aus Rang-System befüllen
+function _shopPopulateMinRang(selectedId) {
+  const sel = document.getElementById('shop-modal-min-rang'); if (!sel) return;
+  const defs = (typeof _rankSorted === 'function') ? _rankSorted() : (typeof _rankData !== 'undefined' ? [..._rankData.defs].sort((a,b)=>a.level-b.level) : []);
+  sel.innerHTML = '<option value="">-- Kein Rang nötig --</option>' +
+    defs.map(r => `<option value="${r.id}" ${selectedId===r.id?'selected':''}>${escHtml(r.icon+' '+r.name)} (Lv.${r.level})</option>`).join('');
+}
+
 function shopItemNew() {
   document.getElementById('shop-modal-id').value = '';
   document.getElementById('shop-modal-title').textContent = '🛒 Neuer Artikel';
@@ -233,8 +241,8 @@ function shopItemNew() {
   const spEl = document.getElementById('shop-modal-sale-preis'); if (spEl) spEl.value = '';
   const ssEl = document.getElementById('shop-modal-sale-start'); if (ssEl) ssEl.value = '';
   const seEl = document.getElementById('shop-modal-sale-end'); if (seEl) seEl.value = '';
-  // Feature: Min-Rang reset
-  const mrEl = document.getElementById('shop-modal-min-rang'); if (mrEl) mrEl.value = '';
+  // Feature: Min-Rang (dynamisch aus Rang-System)
+  _shopPopulateMinRang('');
   document.getElementById('shop-modal-overlay').style.display = 'flex';
   _shopNostripHint();
 }
@@ -267,8 +275,8 @@ function shopItemEdit(id) {
   if (ssEl) ssEl.value = item.saleStart ? new Date(item.saleStart).toISOString().slice(0,16) : '';
   const seEl = document.getElementById('shop-modal-sale-end');
   if (seEl) seEl.value = item.saleEnd ? new Date(item.saleEnd).toISOString().slice(0,16) : '';
-  // Feature: Min-Rang
-  const mrEl = document.getElementById('shop-modal-min-rang'); if (mrEl) mrEl.value = item.minRang || '';
+  // Feature: Min-Rang (dynamisch aus Rang-System)
+  _shopPopulateMinRang(item.minRang || '');
   document.getElementById('shop-modal-overlay').style.display = 'flex';
   _shopNostripHint();
 }
