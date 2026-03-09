@@ -919,6 +919,22 @@ function _handleShopCmd(rohText,buyerC){
       return;
     }
     const gesamt=(preis+flagAufpreis)*anzahl;
+
+    // Feature: Min-Rang Prüfung (All-Kauf)
+    if(shopItem.minRang && typeof _rankById==='function'){
+      const reqRank=_rankById(shopItem.minRang);
+      if(reqRank){
+        const playerRankId=(typeof _rankData!=='undefined'&&_rankData.players[buyerC.MemberNumber])?_rankData.players[buyerC.MemberNumber].rankId:null;
+        const playerRank=playerRankId?_rankById(playerRankId):null;
+        if(!playerRank||playerRank.level<reqRank.level){
+          const cur2=_shopCfg.currency||'Coins';
+          ServerSend('ChatRoomChat',{Content:'\u274C Du brauchst mindestens den Rang '+reqRank.icon+' '+reqRank.name+' (Lv.'+reqRank.level+') um diesen Artikel zu kaufen!'+(playerRank?' Dein Rang: '+playerRank.icon+' '+playerRank.name+' (Lv.'+playerRank.level+')':' Du hast noch keinen Rang.'),Type:'Whisper',Target:buyerC.MemberNumber});
+          _log('\uD83D\uDED2 All-Kauf abgelehnt: '+buyerC.Name+' hat nicht den Mindest-Rang '+reqRank.name+' (Lv.'+reqRank.level+')');
+          return;
+        }
+      }
+    }
+
     const buyerBalance=(_moneyBalances[buyerC.MemberNumber]?.balance)??0;
 
     if(buyerBalance<gesamt){
@@ -1038,6 +1054,21 @@ function _handleShopCmd(rohText,buyerC){
   }
 
   const preisEffektiv = preis + flagAufpreis;
+
+  // Feature: Min-Rang Prüfung (Einzel-Kauf)
+  if(shopItem.minRang && typeof _rankById==='function'){
+    const reqRank=_rankById(shopItem.minRang);
+    if(reqRank){
+      const playerRankId=(typeof _rankData!=='undefined'&&_rankData.players[buyerC.MemberNumber])?_rankData.players[buyerC.MemberNumber].rankId:null;
+      const playerRank=playerRankId?_rankById(playerRankId):null;
+      if(!playerRank||playerRank.level<reqRank.level){
+        ServerSend('ChatRoomChat',{Content:'\u274C Du brauchst mindestens den Rang '+reqRank.icon+' '+reqRank.name+' (Lv.'+reqRank.level+') um diesen Artikel zu kaufen!'+(playerRank?' Dein Rang: '+playerRank.icon+' '+playerRank.name+' (Lv.'+playerRank.level+')':' Du hast noch keinen Rang.'),Type:'Whisper',Target:buyerC.MemberNumber});
+        _log('\uD83D\uDED2 Kauf abgelehnt: '+buyerC.Name+' hat nicht den Mindest-Rang '+reqRank.name+' (Lv.'+reqRank.level+')');
+        return;
+      }
+    }
+  }
+
   const buyerBalance=(_moneyBalances[buyerC.MemberNumber]?.balance)??0;
 
   if(buyerBalance<preisEffektiv){
