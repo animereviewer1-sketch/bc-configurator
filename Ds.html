@@ -24,8 +24,10 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',-apple-system,Bl
 .btn-small{padding:7px 14px;font-size:12px;border-radius:var(--radius-xs)}
 .btn-icon{width:38px;height:38px;padding:0;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:16px;background:var(--glass);border:1px solid var(--glass-border);backdrop-filter:blur(8px)}
 .btn-icon:hover{background:rgba(255,255,255,.08)}
-.card{background:var(--card);border-radius:var(--radius);padding:16px;margin-bottom:14px;position:relative;border:1px solid var(--border);box-shadow:var(--shadow);transition:var(--transition)}
-.card:hover{border-color:rgba(255,255,255,.1)}
+.card{background:linear-gradient(145deg,var(--card),rgba(26,26,46,.8));border-radius:var(--radius);padding:16px;margin-bottom:14px;position:relative;border:1px solid var(--border);box-shadow:var(--shadow);transition:var(--transition);overflow:hidden}
+.card::after{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.06),transparent)}
+.card:hover{border-color:rgba(255,255,255,.1);transform:translateY(-1px);box-shadow:0 4px 16px rgba(0,0,0,.3)}
+.card:active{transform:translateY(0)}
 .card-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
 .card-actions{display:flex;gap:6px;align-items:center}
 input,select,textarea{background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px 14px;font-size:14px;width:100%;outline:none;transition:var(--transition);font-family:inherit}
@@ -42,23 +44,26 @@ textarea{resize:vertical;min-height:60px}
 .proof-thumb{width:48px;height:48px;object-fit:cover;border-radius:8px;cursor:pointer;border:2px solid var(--surface)}
 .proof-overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.9);display:flex;align-items:center;justify-content:center;z-index:10000;cursor:pointer}
 .proof-overlay img{max-width:95%;max-height:90%;border-radius:12px}
-.proof-upload-area{border:2px dashed var(--muted);border-radius:12px;padding:24px;text-align:center;cursor:pointer;margin:12px 0;transition:border-color .2s}
-.proof-upload-area:hover{border-color:var(--accent)}
+.proof-upload-area{border:2px dashed rgba(255,255,255,.12);border-radius:var(--radius);padding:28px;text-align:center;cursor:pointer;margin:12px 0;transition:var(--transition);background:var(--glass)}
+.proof-upload-area:hover{border-color:var(--accent);background:rgba(224,85,119,.04)}
 .proof-preview{max-width:100%;max-height:200px;border-radius:8px;margin:8px 0}
 .badge-proof{background:rgba(52,152,219,.15);color:var(--blue);font-size:11px;padding:2px 8px;border-radius:6px;margin-left:6px}
-.points-display{font-size:28px;font-weight:800;color:var(--gold);text-align:center;margin:8px 0 12px;letter-spacing:-.02em}
+.points-display{font-size:26px;font-weight:800;background:linear-gradient(135deg,var(--gold),var(--orange));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;text-align:center;margin:4px 0 10px;letter-spacing:-.03em;filter:drop-shadow(0 2px 8px rgba(240,192,64,.2))}
 .status-dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:6px}
 .status-online{background:var(--green);box-shadow:0 0 8px rgba(52,199,123,.5)}
 .status-offline{background:var(--muted)}
-.topbar{display:flex;justify-content:space-between;align-items:center;padding:12px 0;margin-bottom:12px;border-bottom:1px solid var(--border)}
+.topbar{display:flex;justify-content:space-between;align-items:center;padding:14px 4px;margin-bottom:6px;border-bottom:1px solid var(--border);background:linear-gradient(180deg,rgba(15,15,26,.5),transparent)}
 .topbar h2{font-size:17px;font-weight:700;display:flex;align-items:center;gap:8px;letter-spacing:-.01em}
+.topbar h2 svg{width:20px;height:20px;stroke:var(--accent);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 .tabs{display:flex;gap:4px;padding:4px;background:var(--surface);border-radius:var(--radius-sm);margin-bottom:16px;overflow-x:auto}
 .tab{padding:10px 16px;border-radius:var(--radius-xs);font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;transition:var(--transition);color:var(--muted);border:none;background:transparent}
 .tab.active{background:rgba(224,85,119,.12);color:var(--accent)}
-.modal-overlay{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.6);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);z-index:100;align-items:center;justify-content:center;padding:16px}
+.modal-overlay{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.5);backdrop-filter:blur(16px) saturate(1.2);-webkit-backdrop-filter:blur(16px) saturate(1.2);z-index:100;align-items:flex-end;justify-content:center;padding:0}
 .modal-overlay.active{display:flex}
-.modal{background:var(--surface);border-radius:20px;padding:24px;width:100%;max-width:420px;max-height:85vh;overflow-y:auto;border:1px solid var(--glass-border);box-shadow:0 8px 32px rgba(0,0,0,.4)}
-.modal h3{margin-bottom:16px;font-size:17px;font-weight:700;letter-spacing:-.01em}
+.modal{background:linear-gradient(180deg,var(--surface),var(--bg));border-radius:24px 24px 0 0;padding:24px 20px 32px;width:100%;max-width:100%;max-height:90vh;overflow-y:auto;border:1px solid var(--glass-border);border-bottom:none;box-shadow:0 -8px 40px rgba(0,0,0,.5);animation:slideUp .3s cubic-bezier(.4,0,.2,1)}
+@keyframes slideUp{from{transform:translateY(100%);opacity:0}to{transform:translateY(0);opacity:1}}
+.modal::before{content:'';display:block;width:36px;height:4px;background:rgba(255,255,255,.2);border-radius:2px;margin:0 auto 18px}
+.modal h3{margin-bottom:16px;font-size:18px;font-weight:700;letter-spacing:-.02em}
 .form-group{margin-bottom:16px}
 .form-group label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px;font-weight:600;text-transform:uppercase;letter-spacing:.04em}
 .form-row{display:flex;gap:8px}
@@ -66,10 +71,10 @@ textarea{resize:vertical;min-height:60px}
 .timer-display{font-size:13px;font-weight:700;padding:4px 10px;border-radius:8px;display:inline-flex;align-items:center;gap:4px}
 .timer-active{background:rgba(243,156,18,.15);color:var(--orange)}
 .timer-expired{background:rgba(231,76,60,.15);color:var(--red)}
-.log-entry{padding:10px 14px;border-left:3px solid var(--accent);margin-bottom:8px;background:var(--glass);border-radius:0 var(--radius-xs) var(--radius-xs) 0;font-size:13px;transition:var(--transition)}
-.log-entry:hover{background:rgba(255,255,255,.04)}
-.log-entry .log-time{color:var(--muted);font-size:11px;margin-bottom:2px}
-.log-entry .log-text{color:var(--text)}
+.log-entry{padding:12px 14px;border-left:3px solid var(--accent);margin-bottom:8px;background:var(--glass);border-radius:0 var(--radius-xs) var(--radius-xs) 0;font-size:13px;transition:var(--transition);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px)}
+.log-entry:hover{background:rgba(255,255,255,.05);border-left-width:4px}
+.log-entry .log-time{color:var(--muted);font-size:10px;margin-bottom:3px;font-weight:500;letter-spacing:.02em}
+.log-entry .log-text{color:var(--text);line-height:1.45}
 .log-entry.log-task{border-left-color:var(--blue)}
 .log-entry.log-reward{border-left-color:var(--gold)}
 .log-entry.log-punish{border-left-color:var(--red)}
@@ -79,11 +84,13 @@ textarea{resize:vertical;min-height:60px}
 .archive-card{opacity:.65;border-style:dashed}
 .repeat-badge{font-size:10px;padding:2px 8px;border-radius:10px;background:rgba(52,152,219,.2);color:var(--blue)}
 .section-title{font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin:24px 0 12px;display:flex;align-items:center;gap:8px}
-.empty-state{text-align:center;padding:40px 24px;color:var(--muted);font-size:14px;line-height:1.6}
-.top-tabs{display:flex;gap:2px;padding:3px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;background:var(--glass);border:1px solid var(--glass-border);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-radius:var(--radius-sm);margin:0 4px 14px}
+.empty-state{text-align:center;padding:48px 24px;color:var(--muted);font-size:14px;line-height:1.6;background:var(--glass);border:1px dashed var(--glass-border);border-radius:var(--radius);margin:8px 0}
+.top-tabs{display:flex;gap:0;padding:3px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;background:rgba(15,15,26,.6);border:1px solid var(--glass-border);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border-radius:var(--radius);margin:0 0 16px;position:sticky;top:0;z-index:20}
 .top-tabs::-webkit-scrollbar{display:none}
-.top-tab{flex-shrink:0;padding:8px 14px;border-radius:var(--radius-xs);border:none;background:transparent;color:var(--muted);font-size:12px;font-weight:600;cursor:pointer;transition:var(--transition);white-space:nowrap;position:relative}
-.top-tab.active{background:rgba(224,85,119,.12);color:var(--accent)}
+.top-tab{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 6px;border-radius:var(--radius-sm);border:none;background:transparent;color:var(--muted);font-size:10px;font-weight:600;cursor:pointer;transition:var(--transition);white-space:nowrap;position:relative;letter-spacing:.02em}
+.top-tab svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;transition:var(--transition)}
+.top-tab.active{background:linear-gradient(135deg,rgba(224,85,119,.15),rgba(124,92,191,.1));color:var(--accent);box-shadow:0 2px 8px rgba(224,85,119,.12)}
+.top-tab.active svg{stroke:var(--accent);filter:drop-shadow(0 0 4px rgba(224,85,119,.3))}
 .top-tab:hover:not(.active){color:var(--text);background:rgba(255,255,255,.04)}
 .tab-badge{display:inline-flex;align-items:center;justify-content:center;min-width:16px;height:16px;padding:0 4px;border-radius:8px;background:var(--accent);color:#fff;font-size:10px;font-weight:700;margin-left:4px;line-height:1}
 .subtab-pill{position:relative}
@@ -109,16 +116,17 @@ textarea{resize:vertical;min-height:60px}
 
 .chat-container{display:flex;flex-direction:column;height:calc(100vh - 280px)}
 .chat-messages{flex:1;overflow-y:auto;padding:12px 8px;display:flex;flex-direction:column;gap:6px}
-.chat-bubble{max-width:78%;padding:10px 14px;border-radius:18px;font-size:14px;line-height:1.5;word-wrap:break-word;transition:var(--transition)}
-.chat-bubble-self{align-self:flex-end;background:linear-gradient(135deg,var(--accent),#c94a6a);color:#fff;border-bottom-right-radius:4px}
-.chat-bubble-other{align-self:flex-start;background:var(--surface);color:var(--text);border:1px solid var(--border);border-bottom-left-radius:4px}
-.chat-bubble .chat-time{font-size:10px;opacity:.5;margin-top:4px}
-.chat-input-area{display:flex;gap:8px;padding:12px 0;border-top:1px solid var(--border)}
+.chat-bubble{max-width:78%;padding:11px 15px;border-radius:20px;font-size:14px;line-height:1.5;word-wrap:break-word;transition:var(--transition);animation:fadeIn .25s ease}
+.chat-bubble-self{align-self:flex-end;background:linear-gradient(135deg,var(--accent),#b8426a);color:#fff;border-bottom-right-radius:6px;box-shadow:0 2px 8px rgba(224,85,119,.2)}
+.chat-bubble-other{align-self:flex-start;background:var(--surface);color:var(--text);border:1px solid var(--glass-border);border-bottom-left-radius:6px;box-shadow:0 1px 4px rgba(0,0,0,.15)}
+.chat-bubble .chat-time{font-size:10px;opacity:.45;margin-top:4px;font-weight:500}
+.chat-input-area{display:flex;gap:8px;padding:12px 0;border-top:1px solid var(--border);background:linear-gradient(0deg,var(--bg),transparent);position:sticky;bottom:0}
 .stats-bar-container{display:flex;align-items:flex-end;gap:4px;height:120px;padding:10px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);margin:12px 0}
 .stats-bar{flex:1;border-radius:4px 4px 0 0;min-height:4px;transition:height .4s cubic-bezier(.4,0,.2,1);position:relative}
 .stats-bar-label{position:absolute;bottom:-18px;left:50%;transform:translateX(-50%);font-size:9px;color:var(--muted);white-space:nowrap}
 .stats-summary{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:14px 0}
-.stats-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px;text-align:center;transition:var(--transition)}
+.stats-card{background:linear-gradient(145deg,var(--surface),rgba(30,30,54,.6));border:1px solid var(--border);border-radius:var(--radius);padding:16px;text-align:center;transition:var(--transition);position:relative;overflow:hidden}
+.stats-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,var(--accent),var(--accent2));opacity:.5;border-radius:2px 2px 0 0}
 .stats-card:hover{border-color:rgba(255,255,255,.1)}
 .stats-card .stats-value{font-size:22px;font-weight:800;letter-spacing:-.02em}
 .stats-card .stats-label{font-size:11px;color:var(--muted);margin-top:4px}
@@ -128,9 +136,10 @@ textarea{resize:vertical;min-height:60px}
 .cat-btn.active{color:#fff}
 .cat-btn:not(.active){background:var(--surface);color:var(--muted)}
 .category-badge{display:inline-flex;align-items:center;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700}
-.search-bar{position:relative;margin-bottom:12px}
-.search-bar input{padding-left:36px;background:var(--surface);border:1px solid rgba(255,255,255,.1)}
-.search-bar::before{content:'\1F50D';position:absolute;left:12px;top:50%;transform:translateY(-50%);font-size:14px;opacity:.5}
+.search-bar{position:relative;margin-bottom:14px}
+.search-bar input{padding-left:40px;background:var(--glass);border:1px solid var(--glass-border);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border-radius:var(--radius-sm)}
+.search-bar::before{content:'';position:absolute;left:13px;top:50%;transform:translateY(-50%);width:16px;height:16px;border:2px solid var(--muted);border-radius:50%;opacity:.5}
+.search-bar::after{content:'';position:absolute;left:26px;top:calc(50% + 6px);width:2px;height:6px;background:var(--muted);transform:rotate(-45deg);opacity:.5}
 .streak-display{display:flex;align-items:center;gap:10px;padding:10px 16px;background:linear-gradient(135deg,rgba(237,169,79,.1),rgba(224,85,85,.06));border:1px solid rgba(237,169,79,.12);border-radius:var(--radius);margin-bottom:14px}
 .streak-fire{font-size:22px}
 .streak-info{flex:1}
@@ -207,11 +216,11 @@ textarea{resize:vertical;min-height:60px}
 .heatmap-months{display:flex;font-size:9px;color:var(--muted);margin-bottom:2px}
 .heatmap-months span{flex:1;min-width:0}
 /* === REDESIGN: SUB-TAB PILLS === */
-.subtab-pills{display:flex;gap:2px;padding:3px;background:var(--glass);border:1px solid var(--glass-border);backdrop-filter:blur(8px);border-radius:var(--radius-xs);margin-bottom:14px;overflow-x:auto;-webkit-overflow-scrolling:touch}
+.subtab-pills{display:flex;gap:4px;padding:4px;background:var(--glass);border:1px solid var(--glass-border);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-radius:var(--radius-sm);margin-bottom:16px;overflow-x:auto;-webkit-overflow-scrolling:touch}
 .subtab-pills::-webkit-scrollbar{display:none}
-.subtab-pill{padding:6px 14px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;transition:var(--transition);color:var(--muted);border:none;background:transparent}
-.subtab-pill.active{background:rgba(224,85,119,.1);color:var(--accent)}
-.subtab-pill:hover:not(.active){color:var(--text);background:rgba(255,255,255,.03)}
+.subtab-pill{padding:7px 16px;border-radius:var(--radius-xs);font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;transition:var(--transition);color:var(--muted);border:none;background:transparent;position:relative}
+.subtab-pill.active{background:linear-gradient(135deg,rgba(224,85,119,.12),rgba(124,92,191,.08));color:var(--accent);box-shadow:0 1px 6px rgba(224,85,119,.1)}
+.subtab-pill:hover:not(.active){color:var(--text);background:rgba(255,255,255,.05)}
 /* === PRIORITY SYSTEM === */
 .priority-high{border-left:4px solid var(--red) !important}
 .priority-medium{border-left:4px solid var(--orange) !important}
@@ -321,22 +330,22 @@ textarea{resize:vertical;min-height:60px}
 <!-- DOM DASHBOARD -->
 <div id="domScreen" class="screen">
 <div class="topbar">
-<h2>&#9813; Dom Dashboard</h2>
-<div style="display:flex;align-items:center;gap:10px">
+<h2><svg viewBox="0 0 24 24"><path d="M2 4l3 12h14l3-12"/><path d="M8 16a3 3 0 1 0 0 6 3 3 0 0 0 0-6z"/><circle cx="17" cy="19" r="3"/><path d="M12 2v6"/><path d="M9 5l3-3 3 3"/></svg> Dom Dashboard</h2>
+<div style="display:flex;align-items:center;gap:8px">
 <span id="domPartnerStatus"></span>
-<button class="btn-icon btn-outline" onclick="openNotifications()" title="Benachrichtigungen" style="position:relative">&#128276;<span id="notifCount" class="counter-badge" style="display:none;position:absolute;top:-4px;right:-4px">0</span></button>
-<button class="btn-icon btn-outline" onclick="openSettings()" title="Einstellungen">&#9881;</button>
+<button class="btn-icon btn-outline" onclick="openNotifications()" title="Benachrichtigungen" style="position:relative"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg><span id="notifCount" class="counter-badge" style="display:none;position:absolute;top:-4px;right:-4px">0</span></button>
+<button class="btn-icon btn-outline" onclick="openSettings()" title="Einstellungen"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
 </div>
 </div>
 <div id="domRankBadge" style="text-align:center"></div>
 <div class="points-display">&#9733; <span id="domPoints">0</span> Punkte</div>
 <div id="domStreakDisplay"></div>
 <div class="top-tabs" id="domTopTabs">
-<button class="top-tab active" onclick="switchDomTab('tasks')">&#9745; Aufgaben</button>
-<button class="top-tab" onclick="switchDomTab('rewards')">&#9733; Belohnungen</button>
-<button class="top-tab" onclick="switchDomTab('progress')">&#128202; Fortschritt</button>
-<button class="top-tab" onclick="switchDomTab('comm')">&#128172; Kommunik.</button>
-<button class="top-tab" onclick="switchDomTab('more')">&#9776; Mehr</button>
+<button class="top-tab active" onclick="switchDomTab('tasks')"><svg viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>Aufgaben</button>
+<button class="top-tab" onclick="switchDomTab('rewards')"><svg viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>Belohnungen</button>
+<button class="top-tab" onclick="switchDomTab('progress')"><svg viewBox="0 0 24 24"><path d="M18 20V10"/><path d="M12 20V4"/><path d="M6 20v-6"/></svg>Fortschritt</button>
+<button class="top-tab" onclick="switchDomTab('comm')"><svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>Kommunik.</button>
+<button class="top-tab" onclick="switchDomTab('more')"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>Mehr</button>
 </div>
 <div id="domTabContent"></div>
 </div>
@@ -344,22 +353,22 @@ textarea{resize:vertical;min-height:60px}
 <!-- SUB DASHBOARD -->
 <div id="subScreen" class="screen">
 <div class="topbar">
-<h2>&#9823; Sub Dashboard</h2>
-<div style="display:flex;align-items:center;gap:10px">
+<h2><svg viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78L12 21.23l8.84-8.84a5.5 5.5 0 0 0 0-7.78z"/></svg> Sub Dashboard</h2>
+<div style="display:flex;align-items:center;gap:8px">
 <span id="subPartnerStatus"></span>
-<button class="btn-icon btn-outline" onclick="openNotifications()" title="Benachrichtigungen" style="position:relative">&#128276;<span id="subNotifCount" class="counter-badge" style="display:none;position:absolute;top:-4px;right:-4px">0</span></button>
-<button class="btn-icon btn-outline" onclick="openSettings()" title="Einstellungen">&#9881;</button>
+<button class="btn-icon btn-outline" onclick="openNotifications()" title="Benachrichtigungen" style="position:relative"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg><span id="subNotifCount" class="counter-badge" style="display:none;position:absolute;top:-4px;right:-4px">0</span></button>
+<button class="btn-icon btn-outline" onclick="openSettings()" title="Einstellungen"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
 </div>
 </div>
 <div id="subRankBadge" style="text-align:center"></div>
 <div class="points-display">&#9733; <span id="subPoints">0</span> Punkte</div>
 <div id="subStreakDisplay"></div>
 <div class="top-tabs" id="subTopTabs">
-<button class="top-tab active" onclick="switchSubTab('overview')">&#9745; Aufgaben</button>
-<button class="top-tab" onclick="switchSubTab('rewards')">&#9733; Belohnungen</button>
-<button class="top-tab" onclick="switchSubTab('progress')">&#128202; Fortschritt</button>
-<button class="top-tab" onclick="switchSubTab('comm')">&#128172; Kommunik.</button>
-<button class="top-tab" onclick="switchSubTab('more')">&#9776; Mehr</button>
+<button class="top-tab active" onclick="switchSubTab('overview')"><svg viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>Aufgaben</button>
+<button class="top-tab" onclick="switchSubTab('rewards')"><svg viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>Belohnungen</button>
+<button class="top-tab" onclick="switchSubTab('progress')"><svg viewBox="0 0 24 24"><path d="M18 20V10"/><path d="M12 20V4"/><path d="M6 20v-6"/></svg>Fortschritt</button>
+<button class="top-tab" onclick="switchSubTab('comm')"><svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>Kommunik.</button>
+<button class="top-tab" onclick="switchSubTab('more')"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>Mehr</button>
 </div>
 <div id="subTabContent"></div>
 </div>
