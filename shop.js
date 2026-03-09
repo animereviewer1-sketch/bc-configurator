@@ -3,12 +3,14 @@
 // ══════════════════════════════════════════════════════
 const SHOP_KEY = 'BC_Shop_v1';
 let _shop = {
-  settings: { cmd: '!pay', listCmd: '!shop', confirmMsg: '', errorMsg: '', preisU: 0, preisNostrip: 0, announceNostripMsg: '' },
+  settings: { cmd: '!pay', listCmd: '!shop', historyCmd: '!meinkaeufe', confirmMsg: '', errorMsg: '', preisU: 0, preisNostrip: 0, announceNostripMsg: '' },
   categories: [],
   items: [],
   log: []
 };
 let _shopFilterCat = ''; // aktiver Kategorie-Filter ('' = alle)
+let _shopSearchText = ''; // Feature #17: Suchfilter für Shop-Items
+let _shopLogFilterName = ''; // Feature #6: Log-Filter nach Spielername
 
 // Async load from IndexedDB on startup
 (async () => {
@@ -16,7 +18,7 @@ let _shopFilterCat = ''; // aktiver Kategorie-Filter ('' = alle)
     const saved = await idbGet(SHOP_KEY);
     if (saved) {
       _shop = Object.assign(
-        { settings: { cmd: '!pay', listCmd: '!shop', confirmMsg: '', errorMsg: '', preisU: 0, preisNostrip: 0, announceNostripMsg: '' }, categories: [], items: [], log: [] },
+        { settings: { cmd: '!pay', listCmd: '!shop', historyCmd: '!meinkaeufe', confirmMsg: '', errorMsg: '', preisU: 0, preisNostrip: 0, announceNostripMsg: '' }, categories: [], items: [], log: [] },
         saved
       );
       if (!_shop.categories) _shop.categories = [];
@@ -53,6 +55,9 @@ function renderShopTab() {
   if (uEl) uEl.value = _shop.settings.preisU ?? 0;
   const nsEl = document.getElementById('shop-preis-nostrip-inp');
   if (nsEl) nsEl.value = _shop.settings.preisNostrip ?? 0;
+  // Feature #6: History Command sync
+  const hcEl = document.getElementById('shop-history-cmd-inp');
+  if (hcEl) hcEl.value = _shop.settings.historyCmd ?? '!meinkaeufe';
   renderShopCatFilter();
   renderShopItems();
   renderShopLog();
@@ -110,7 +115,9 @@ function renderShopItems() {
   const el = document.getElementById('shop-item-list'); if (!el) return;
   let items = _shop.items;
   if (_shopFilterCat) items = items.filter(i => i.kategorie === _shopFilterCat);
-  if (!items.length) { el.innerHTML = '<div style="font-size:.7rem;color:var(--text3);text-align:center;padding:12px 0">' + (_shopFilterCat ? 'Keine Artikel in "'+escHtml(_shopFilterCat)+'".' : 'Noch keine Artikel.') + '</div>'; return; }
+  // Feature #17: Suchfilter
+  if (_shopSearchText) { const s=_shopSearchText.toLowerCase(); items=items.filter(i=>(i.name||'').toLowerCase().includes(s)||(i.beschreibung||'').toLowerCase().includes(s)||(i.kategorie||'').toLowerCase().includes(s)); }
+  if (!items.length) { el.innerHTML = '<div style="font-size:.7rem;color:var(--text3);text-align:center;padding:12px 0">' + (_shopSearchText ? 'Keine Treffer f\u00fcr "'+escHtml(_shopSearchText)+'".' : _shopFilterCat ? 'Keine Artikel in "'+escHtml(_shopFilterCat)+'".' : 'Noch keine Artikel.') + '</div>'; return; }
   el.innerHTML = items.map(item => {
     const nostripPreis = item.preisNostrip != null ? item.preisNostrip : (_shop.settings.preisNostrip??0);
     const uPreis       = item.preisU       != null ? item.preisU       : (_shop.settings.preisU??0);
@@ -120,6 +127,7 @@ function renderShopItems() {
       item.kategorie ? `<span style="font-size:.55rem;background:rgba(96,165,250,0.12);border:1px solid rgba(96,165,250,0.3);color:#60a5fa;padding:1px 5px;border-radius:3px">${escHtml(item.kategorie)}</span>` : '',
       item.cooldownMin > 0 ? `<span style="font-size:.55rem;background:rgba(251,191,36,0.12);border:1px solid rgba(251,191,36,0.3);color:#fbbf24;padding:1px 5px;border-radius:3px">⏱ ${item.cooldownMin}min</span>` : '',
       hasSale ? `<span style="font-size:.55rem;background:rgba(52,211,153,0.15);border:1px solid rgba(52,211,153,0.3);color:#34d399;padding:1px 5px;border-radius:3px;font-weight:700">🔥 SALE ${item.salePreis}💰</span>` : '',
+      item.minRang ? `<span style="font-size:.55rem;background:rgba(234,179,8,0.12);border:1px solid rgba(234,179,8,0.3);color:#eab308;padding:1px 5px;border-radius:3px">👑 Ab ${escHtml(item.minRang)}</span>` : '',
       uPreis>0 ? `<span style="font-size:.55rem;background:rgba(139,92,246,0.15);border:1px solid rgba(139,92,246,0.3);color:#a78bfa;padding:1px 5px;border-radius:3px">/u +${uPreis}💰</span>` : '',
       !nsErlaubt ? `<span style="font-size:.55rem;background:rgba(248,113,113,0.10);border:1px solid rgba(248,113,113,0.25);color:#f87171;padding:1px 5px;border-radius:3px">/nostrip gesperrt</span>` :
       nostripPreis>0 ? `<span style="font-size:.55rem;background:rgba(248,113,113,0.12);border:1px solid rgba(248,113,113,0.3);color:#f87171;padding:1px 5px;border-radius:3px">/nostrip +${nostripPreis}💰</span>` : (nostripPreis===0?`<span style="font-size:.55rem;background:rgba(248,113,113,0.07);border:1px solid rgba(248,113,113,0.2);color:#f87171;padding:1px 5px;border-radius:3px">/nostrip ✓</span>`:''),
@@ -144,9 +152,13 @@ function renderShopItems() {
 
 function renderShopLog() {
   const el = document.getElementById('shop-log-list'); if (!el) return;
-  const log = [...(_shop.log||[])].reverse();
+  const allLog = [...(_shop.log||[])].reverse();
+  // Feature: Filter by player name
+  const log = _shopLogFilterName
+    ? allLog.filter(e => (e.buyerName||'').toLowerCase().includes(_shopLogFilterName.toLowerCase()) || (e.targetName||'').toLowerCase().includes(_shopLogFilterName.toLowerCase()))
+    : allLog;
   const cntEl = document.getElementById('shop-log-count');
-  if (cntEl) cntEl.textContent = log.length + ' Käufe';
+  if (cntEl) cntEl.textContent = log.length + (_shopLogFilterName ? ' / ' + allLog.length : '') + ' Käufe';
   if (!log.length) {
     el.innerHTML = '<div class="shop-empty">🛒 Noch keine Käufe.<br><span style="font-size:.72rem;color:var(--text3)">Käufe erscheinen hier wenn der Bot aktiv ist und ein Spieler einen Artikel kauft.</span></div>';
     return;
@@ -221,6 +233,8 @@ function shopItemNew() {
   const spEl = document.getElementById('shop-modal-sale-preis'); if (spEl) spEl.value = '';
   const ssEl = document.getElementById('shop-modal-sale-start'); if (ssEl) ssEl.value = '';
   const seEl = document.getElementById('shop-modal-sale-end'); if (seEl) seEl.value = '';
+  // Feature: Min-Rang reset
+  const mrEl = document.getElementById('shop-modal-min-rang'); if (mrEl) mrEl.value = '';
   document.getElementById('shop-modal-overlay').style.display = 'flex';
   _shopNostripHint();
 }
@@ -253,6 +267,8 @@ function shopItemEdit(id) {
   if (ssEl) ssEl.value = item.saleStart ? new Date(item.saleStart).toISOString().slice(0,16) : '';
   const seEl = document.getElementById('shop-modal-sale-end');
   if (seEl) seEl.value = item.saleEnd ? new Date(item.saleEnd).toISOString().slice(0,16) : '';
+  // Feature: Min-Rang
+  const mrEl = document.getElementById('shop-modal-min-rang'); if (mrEl) mrEl.value = item.minRang || '';
   document.getElementById('shop-modal-overlay').style.display = 'flex';
   _shopNostripHint();
 }
@@ -284,6 +300,8 @@ function shopModalSave() {
     salePreis: document.getElementById('shop-modal-sale-preis')?.value.trim() !== '' ? parseInt(document.getElementById('shop-modal-sale-preis').value) || 0 : null,
     saleStart: document.getElementById('shop-modal-sale-start')?.value ? new Date(document.getElementById('shop-modal-sale-start').value).getTime() : null,
     saleEnd: document.getElementById('shop-modal-sale-end')?.value ? new Date(document.getElementById('shop-modal-sale-end').value).getTime() : null,
+    // Feature: Min-Rang
+    minRang: document.getElementById('shop-modal-min-rang')?.value || '',
   };
   if (id) {
     const item = _shopById(id); if (item) Object.assign(item, data);
@@ -325,6 +343,24 @@ function shopImport() {
     r.readAsText(f);
   };
   inp.click();
+}
+
+// Feature: History Command setting
+function shopSetHistoryCmd(v) {
+  _shop.settings.historyCmd = v.trim() || '!meinkaeufe';
+  _saveShop();
+}
+
+// Feature: Search items
+function shopSearchItems(v) {
+  _shopSearchText = v;
+  renderShopItems();
+}
+
+// Feature: Filter log by player name
+function shopFilterLog(v) {
+  _shopLogFilterName = v;
+  renderShopLog();
 }
 
 // Called from bot via postMessage when a purchase occurs
