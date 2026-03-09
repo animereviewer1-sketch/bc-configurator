@@ -441,6 +441,7 @@ function _execAct(a,C,vars){
       if(vars?.shopNostrip)_asRegister(C,Object.assign({},a,{_isShopNostrip:true}));
       if(vars?.shopNostrip){
         var _nsGr=(a.itemConfig?.group)||(a.curseEntry?.Gruppe)||a.gruppe||'';
+        // FIX B: 1200ms statt 700ms – sicher NACH _applyItemAction's 500ms-Timer + CharacterRefresh
         if(_nsGr)setTimeout(function(){
           try{
             var _nsI=InventoryGet(C,_nsGr);
@@ -452,7 +453,7 @@ function _execAct(a,C,vars){
               _log('\u{1F512} NoStrip Freeze: '+C.Name+' / '+_nsGr);
             }
           }catch(ex){_log('\u26A0 Freeze Fehler:',ex.message);}
-        },700);
+        },1200);
       }
       ok=true;
     }
@@ -1053,6 +1054,8 @@ function _handleShopCmd(rohText,buyerC){
     if(flagWhisper)ServerSend('ChatRoomChat',{Content:nsTxt,Type:'Whisper',Target:targetC.MemberNumber});
     else ServerSend('ChatRoomChat',{Content:nsTxt,Type:'Chat'});
   }
+  // FIX C: nostrip – Zaehler ob ein Trigger mit Item-Aktion gefeuert hat
+  let _nsItemTrigFired=false;
   // Shop-Trigger auslösen
   const shopVars={name:buyerC.Name,wort:rohText,typ:'🛒 Shop',x:buyerC.X??0,y:buyerC.Y??0,C:targetC,shopBuyer:buyerC,shopItem,shopNostrip:flagNostrip};
   _trigs.forEach(trig=>{
@@ -1085,8 +1088,15 @@ function _handleShopCmd(rohText,buyerC){
       return true;
     });
     if(!otherOk)return;
+    // FIX C: pruefen ob dieser Trigger eine Item-Aktion hat
+    if(flagNostrip&&(trig.aktionen??[]).some(a=>a.typ==='item'))_nsItemTrigFired=true;
     _run(trig,shopVars);
   });
+  // FIX C: Warnung wenn /nostrip aktiv aber kein Trigger mit Item-Aktion
+  if(flagNostrip&&!_nsItemTrigFired){
+    _log('\u26A0 /nostrip hat keinen Effekt – es fehlt ein shop_kauf-Trigger mit Item-Aktion für diesen Artikel.');
+    ServerSend('ChatRoomChat',{Content:'\u26A0 /nostrip hat keinen Effekt \u2013 es fehlt ein shop_kauf-Trigger mit Item-Aktion f\u00fcr diesen Artikel.',Type:'Whisper',Target:buyerC.MemberNumber});
+  }
 }
 
 function _proc(rohText,typKey,C){
@@ -1652,6 +1662,21 @@ _asH = function(data) {
           CharacterRefresh(C);
           ChatRoomCharacterUpdate(C);
           _log('\u2705 AntiStrip: ' + (w.ersatz || 'Item') + ' wieder angelegt auf ' + C.Name);
+          // FIX A: nostrip – Craft.Property='Freeze' nach Re-Equip erneut setzen
+          if(w.nostrip){
+            setTimeout(function(){
+              try{
+                var reItem=InventoryGet(C,w.gruppe);
+                if(reItem){
+                  if(!reItem.Craft||typeof reItem.Craft!=='object')
+                    reItem.Craft={Name:'',Description:'',Property:'Freeze',Color:(reItem.Color??'#ffffff'),Lock:'',Item:reItem.Asset?.Name??'',Private:false,MemberNumber:Player.MemberNumber};
+                  else reItem.Craft.Property='Freeze';
+                  CharacterRefresh(C);ChatRoomCharacterUpdate(C);
+                  _log('\u{1F512} NoStrip Re-Freeze: '+C.Name+' / '+w.gruppe);
+                }
+              }catch(ex2){_log('\u26A0 Re-Freeze Fehler:',ex2.message);}
+            },600);
+          }
         } catch(ex) {
           _log('\u26A0 AntiStrip Fehler: ' + ex.message);
         }
