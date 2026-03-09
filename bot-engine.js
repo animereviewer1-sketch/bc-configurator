@@ -817,9 +817,9 @@ function _parseShopArgs(rest){
     .replace(/[\u2018\u2019\u201A\u201B]/g,"'");
   // Regex-basierte Flag-Extraktion VOR dem Argument-Parsen
   // Matcht /nostrip, /w, /u als eigenstaendige Tokens (case-insensitive)
-  rest=rest.replace(/(?:^|\s)\/nostrip\b/gi,(_)=>{flags.add('nostrip');return '';});
-  rest=rest.replace(/(?:^|\s)\/w\b/gi,(_)=>{flags.add('w');return '';});
-  rest=rest.replace(/(?:^|\s)\/u\b/gi,(_)=>{flags.add('u');return '';});
+  rest=rest.replace(/(?:^|\\s)\\/nostrip\\b/gi,(_)=>{flags.add('nostrip');return '';});
+  rest=rest.replace(/(?:^|\\s)\\/w\\b/gi,(_)=>{flags.add('w');return '';});
+  rest=rest.replace(/(?:^|\\s)\\/u\\b/gi,(_)=>{flags.add('u');return '';});
   rest=rest.trim();
   // Jetzt nur noch Argumente parsen (Flags sind schon extrahiert)
   let pos=0;
@@ -991,7 +991,7 @@ function _handleShopCmd(rohText,buyerC){
 
   if(args[1]){
     const arg2=args[1].trim();
-    if(/^\d+$/.test(arg2)){
+    if(/^\\d+$/.test(arg2)){
       const num=parseInt(arg2);
       targetC=allChars.find(c=>c.MemberNumber===num)||buyerC;
     } else {
