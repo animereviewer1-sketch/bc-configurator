@@ -927,6 +927,8 @@ function _handleShopCmd(rohText,buyerC){
       ('✅ Gekauft für alle '+anzahl+' Spieler. Bezahlt: '+gesamt+' '+cur+'. Kontostand: '+newBal+' '+cur+'.');
     ServerSend('ChatRoomChat',{Content:_shopTpl(rawConf,buyerC,null,shopItem,gesamt,newBal,anzahl,gesamt),Type:'Whisper',Target:buyerC.MemberNumber});
 
+    // FIX: nostrip – Zähler ob mindestens ein Trigger mit Item-Aktion gefeuert hat (einmalig für alle Targets)
+    let _nsAllItemTrigFired=false;
     // Trigger für jeden Ziel-Spieler
     targets.forEach(targetC=>{
       const shopVars={name:buyerC.Name,wort:rohText,typ:'🛒 Shop All',x:buyerC.X??0,y:buyerC.Y??0,
@@ -959,9 +961,16 @@ function _handleShopCmd(rohText,buyerC){
           return true;
         });
         if(!otherOk)return;
+        // FIX: nostrip – prüfen ob dieser Trigger eine Item-Aktion hat
+        if(flagNostrip&&(trig.aktionen??[]).some(a=>a.typ==='item'))_nsAllItemTrigFired=true;
         _run(trig,shopVars);
       });
     });
+    // FIX: nostrip – einmalige Warnung wenn /nostrip aktiv aber kein Trigger mit Item-Aktion
+    if(flagNostrip&&!_nsAllItemTrigFired){
+      _log('\u26A0 /nostrip hat keinen Effekt (All-Kauf): Kein shop_kauf-Trigger mit Item-Aktion für "'+shopItem.name+'" gefunden.');
+      ServerSend('ChatRoomChat',{Content:'\u26A0\uFE0F /nostrip hat keinen Effekt \u2013 es fehlt ein shop_kauf-Trigger mit Item-Aktion f\u00fcr diesen Artikel.',Type:'Whisper',Target:buyerC.MemberNumber});
+    }
     return;
   }
 

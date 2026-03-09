@@ -123,6 +123,20 @@ function shopSetError(v)      { _shop.settings.errorMsg = v; _saveShop(); }
 function shopSetPreisU(v)     { _shop.settings.preisU = parseInt(v)||0; _saveShop(); }
 function shopSetPreisNostrip(v){ _shop.settings.preisNostrip = parseInt(v)||0; _saveShop(); }
 
+// FIX: nostrip – Hinweis-Banner im Modal anzeigen
+function _shopNostripHint(){
+  const anchor=document.getElementById('shop-modal-preis-nostrip');
+  if(!anchor)return;
+  let hint=document.getElementById('shop-nostrip-hint');
+  if(!hint){
+    hint=document.createElement('div');
+    hint.id='shop-nostrip-hint';
+    hint.style.cssText='font-size:.62rem;color:#f87171;background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.2);border-radius:4px;padding:5px 8px;margin-top:6px;line-height:1.4';
+    hint.textContent='\u26A0\uFE0F Hinweis: /nostrip funktioniert nur wenn ein Trigger mit Bedingung "shop_kauf" und einer Item-Aktion f\u00fcr diesen Artikel existiert. Ohne passenden Trigger hat /nostrip keinen Effekt.';
+    anchor.parentNode.insertBefore(hint,anchor.nextSibling);
+  }
+}
+
 function shopItemNew() {
   document.getElementById('shop-modal-id').value = '';
   document.getElementById('shop-modal-title').textContent = '🛒 Neuer Artikel';
@@ -138,6 +152,7 @@ function shopItemNew() {
   document.getElementById('shop-modal-preis-u').value = '';
   document.getElementById('shop-modal-preis-nostrip').value = '';
   document.getElementById('shop-modal-overlay').style.display = 'flex';
+  _shopNostripHint(); // FIX: nostrip
 }
 
 function shopItemEdit(id) {
@@ -156,6 +171,7 @@ function shopItemEdit(id) {
   document.getElementById('shop-modal-preis-u').value = item.preisU != null ? item.preisU : '';
   document.getElementById('shop-modal-preis-nostrip').value = item.preisNostrip != null ? item.preisNostrip : '';
   document.getElementById('shop-modal-overlay').style.display = 'flex';
+  _shopNostripHint(); // FIX: nostrip
 }
 
 function shopModalClose() { document.getElementById('shop-modal-overlay').style.display = 'none'; }
