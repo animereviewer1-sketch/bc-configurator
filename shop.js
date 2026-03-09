@@ -64,8 +64,10 @@ function renderShopItems() {
   el.innerHTML = items.map(item => {
     const nostripPreis = item.preisNostrip != null ? item.preisNostrip : (_shop.settings.preisNostrip??0);
     const uPreis       = item.preisU       != null ? item.preisU       : (_shop.settings.preisU??0);
+    const nsErlaubt = item.nostripErlaubt !== false; // default true
     const flagBadges   = [
       uPreis>0       ? `<span style="font-size:.55rem;background:rgba(139,92,246,0.15);border:1px solid rgba(139,92,246,0.3);color:#a78bfa;padding:1px 5px;border-radius:3px">/u +${uPreis}💰</span>` : '',
+      !nsErlaubt     ? `<span style="font-size:.55rem;background:rgba(248,113,113,0.10);border:1px solid rgba(248,113,113,0.25);color:#f87171;padding:1px 5px;border-radius:3px">/nostrip gesperrt</span>` :
       nostripPreis>0 ? `<span style="font-size:.55rem;background:rgba(248,113,113,0.12);border:1px solid rgba(248,113,113,0.3);color:#f87171;padding:1px 5px;border-radius:3px">/nostrip +${nostripPreis}💰</span>` : (nostripPreis===0?`<span style="font-size:.55rem;background:rgba(248,113,113,0.07);border:1px solid rgba(248,113,113,0.2);color:#f87171;padding:1px 5px;border-radius:3px">/nostrip ✓</span>`:''),
     ].filter(Boolean).join(' ');
     return `
@@ -151,6 +153,8 @@ function shopItemNew() {
   document.getElementById('shop-modal-error').value = '';
   document.getElementById('shop-modal-preis-u').value = '';
   document.getElementById('shop-modal-preis-nostrip').value = '';
+  const nsChk = document.getElementById('shop-modal-nostrip-erlaubt');
+  if (nsChk) nsChk.checked = true; // default: nostrip erlaubt
   document.getElementById('shop-modal-overlay').style.display = 'flex';
   _shopNostripHint(); // FIX: nostrip
 }
@@ -170,6 +174,8 @@ function shopItemEdit(id) {
   document.getElementById('shop-modal-error').value = item.errorMsg||'';
   document.getElementById('shop-modal-preis-u').value = item.preisU != null ? item.preisU : '';
   document.getElementById('shop-modal-preis-nostrip').value = item.preisNostrip != null ? item.preisNostrip : '';
+  const nsChk = document.getElementById('shop-modal-nostrip-erlaubt');
+  if (nsChk) nsChk.checked = item.nostripErlaubt !== false; // default true
   document.getElementById('shop-modal-overlay').style.display = 'flex';
   _shopNostripHint(); // FIX: nostrip
 }
@@ -192,6 +198,7 @@ function shopModalSave() {
     errorMsg: document.getElementById('shop-modal-error').value.trim(),
     preisU: document.getElementById('shop-modal-preis-u').value.trim()!=='' ? parseInt(document.getElementById('shop-modal-preis-u').value)||0 : null,
     preisNostrip: document.getElementById('shop-modal-preis-nostrip').value.trim()!=='' ? parseInt(document.getElementById('shop-modal-preis-nostrip').value)||0 : null,
+    nostripErlaubt: document.getElementById('shop-modal-nostrip-erlaubt')?.checked !== false,
   };
   if (id) {
     const item = _shopById(id); if (item) Object.assign(item, data);
