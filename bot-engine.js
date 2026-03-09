@@ -1,3 +1,6 @@
+const BOT_ENGINE_VERSION = '1.1.0';
+window.BOT_ENGINE_VERSION = BOT_ENGINE_VERSION;
+
 function _buildBotCode(bot) {
   const s = bot.settings;
   const triggers = (bot.triggers||[]).filter(t=>t.aktiv).map(t => ({
@@ -65,6 +68,7 @@ function _buildBotCode(bot) {
 
   return `(function(){
 const _BID='${safeId}';
+const _VER='${BOT_ENGINE_VERSION}';
 if(window['_BCBot_'+_BID]){console.warn('[Bot] Bereits aktiv – erst stoppen!');return;}
 // ── AntiStrip ────────────────────────────────────────────────
 // var statt const → Hoisting, damit _asRegister schon in
@@ -1776,7 +1780,7 @@ window['_BCBot_'+_BID]={
       };
       localStorage.setItem('__BCKBotStates',JSON.stringify(ls));
     }catch(e){}
-    console.log('\u23F9\uFE0F [Bot:${safeName}] gestoppt | States gesichert (Mem+LS)');
+    console.log('\u23F9\uFE0F [Bot:${safeName}] v'+_VER+' gestoppt | States gesichert (Mem+LS)');
   },
   // Sofortiges Event feuern (ignoriert Timer/Wiederholung-Check)
   fireEventNow(eid){
@@ -1803,7 +1807,7 @@ window['_BCBot_'+_BID]={
     console.log('\u{1F9F9} [Bot:${safeName}] States zurückgesetzt (Mem+LS)');
   }
 };
-console.log('\u25B6\uFE0F [Bot:${safeName}] | Trigger:',_trigs.length,'| Modus:',_cfg.nurEigene?'Nur eigene':'Alle Spieler');
+console.log('\u25B6\uFE0F [Bot:${safeName}] v'+_VER+' | Trigger:',_trigs.length,'| Modus:',_cfg.nurEigene?'Nur eigene':'Alle Spieler');
 })();`;
 }
 
