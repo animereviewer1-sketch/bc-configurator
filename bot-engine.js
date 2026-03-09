@@ -880,10 +880,10 @@ function _handleShopCmd(rohText,buyerC){
   }
 
   // ── Feature: Cooldown-Check ──
-  if(shopItem.cooldown && shopItem.cooldown>0){
+  if(shopItem.cooldownMin && shopItem.cooldownMin>0){
     const cdKey=buyerC.MemberNumber+'_'+shopItem.id;
     const lastBuy=_shopCooldowns[cdKey]||0;
-    const cdMs=shopItem.cooldown*60*1000; // cooldown ist in Minuten
+    const cdMs=shopItem.cooldownMin*60*1000; // cooldown ist in Minuten
     const diff=Date.now()-lastBuy;
     if(diff<cdMs){
       const restMin=Math.ceil((cdMs-diff)/60000);
@@ -896,11 +896,11 @@ function _handleShopCmd(rohText,buyerC){
 
   // ── Feature: Sale-Preis ──
   const _now=Date.now();
-  const _hasSale=shopItem.sale && shopItem.sale.active && shopItem.sale.percent>0
-    && (!shopItem.sale.start || _now>=new Date(shopItem.sale.start).getTime())
-    && (!shopItem.sale.end   || _now<=new Date(shopItem.sale.end).getTime());
+  const _hasSale=shopItem.salePreis!=null
+    && (!shopItem.saleStart || _now>=shopItem.saleStart)
+    && (!shopItem.saleEnd   || _now<=shopItem.saleEnd);
   const basisPreis=Number(shopItem.preis)||0;
-  const preis=_hasSale ? Math.round(basisPreis*(1-shopItem.sale.percent/100)) : basisPreis;
+  const preis=_hasSale ? Number(shopItem.salePreis) : basisPreis;
 
   const preisU      = flagUnknown ? (shopItem.preisU      ?? _shopCfg.preisU      ?? 0) : 0;
   const preisNostrip= flagNostrip ? (shopItem.preisNostrip ?? _shopCfg.preisNostrip ?? 0) : 0;
@@ -943,7 +943,7 @@ function _handleShopCmd(rohText,buyerC){
     window.__BCK_popupRef?.postMessage({app:'BCKonfigurator',type:'BOT_MONEY',
       memberNum:buyerC.MemberNumber,name:buyerC.Name,delta:-gesamt},'*');
     // Cooldown setzen (All-Kauf)
-    if(shopItem.cooldown && shopItem.cooldown>0) _shopCooldowns[buyerC.MemberNumber+'_'+shopItem.id]=Date.now();
+    if(shopItem.cooldownMin && shopItem.cooldownMin>0) _shopCooldowns[buyerC.MemberNumber+'_'+shopItem.id]=Date.now();
 
     const newBal=_moneyBalances[buyerC.MemberNumber].balance;
     _log('🛒 All-Kauf: '+buyerC.Name+' kauft "'+shopItem.name+'" für alle ('+anzahl+'×'+(preis+flagAufpreis)+'='+gesamt+' '+cur+'). Kontostand: '+newBal+(flagUnknown?' [/u]':'')+(flagWhisper?' [/w]':'')+(flagNostrip?' [/nostrip]':''));
@@ -1061,7 +1061,7 @@ function _handleShopCmd(rohText,buyerC){
   window.__BCK_popupRef?.postMessage({app:'BCKonfigurator',type:'BOT_MONEY',
     memberNum:buyerC.MemberNumber,name:buyerC.Name,delta:-preisEffektiv},'*');
   // Cooldown setzen (Einzel-Kauf)
-  if(shopItem.cooldown && shopItem.cooldown>0) _shopCooldowns[buyerC.MemberNumber+'_'+shopItem.id]=Date.now();
+  if(shopItem.cooldownMin && shopItem.cooldownMin>0) _shopCooldowns[buyerC.MemberNumber+'_'+shopItem.id]=Date.now();
 
   const newBal=_moneyBalances[buyerC.MemberNumber].balance;
   const isFremdkauf=targetC.MemberNumber!==buyerC.MemberNumber;
@@ -1178,17 +1178,17 @@ function _proc(rohText,typKey,C){
       const nsHint=ns>0?' (/nostrip +'+ns+')':(ns===0?'':'');
       const basisP=Number(item.preis)||0;
       // Sale-Preis prüfen
-      const hasSale=item.sale && item.sale.active && item.sale.percent>0
-        && (!item.sale.start || _nowList>=new Date(item.sale.start).getTime())
-        && (!item.sale.end   || _nowList<=new Date(item.sale.end).getTime());
-      const effP=hasSale ? Math.round(basisP*(1-item.sale.percent/100)) : basisP;
-      const preisStr=hasSale ? effP+' '+cur+' (statt '+basisP+' 🔥-'+item.sale.percent+'%)' : effP+' '+cur;
+      const hasSale=item.salePreis!=null
+        && (!item.saleStart || _nowList>=item.saleStart)
+        && (!item.saleEnd   || _nowList<=item.saleEnd);
+      const effP=hasSale ? Number(item.salePreis) : basisP;
+      const preisStr=hasSale ? effP+' '+cur+' (SALE, statt '+basisP+')' : effP+' '+cur;
       // Cooldown-Info
       let cdHint='';
-      if(item.cooldown && item.cooldown>0){
+      if(item.cooldownMin && item.cooldownMin>0){
         const cdKey=C.MemberNumber+'_'+item.id;
         const lastB=_shopCooldowns[cdKey]||0;
-        const cdMs=item.cooldown*60*1000;
+        const cdMs=item.cooldownMin*60*1000;
         const diff=_nowList-lastB;
         if(lastB && diff<cdMs){
           const restMin=Math.ceil((cdMs-diff)/60000);
