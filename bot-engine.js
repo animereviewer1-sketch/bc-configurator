@@ -860,12 +860,14 @@ function _shopTpl(raw, buyerC, targetC, shopItem, preis, newBal, anzahl, gesamt)
 function _handleShopCmd(rohText,buyerC){
   const cmd=_shopCfg.cmd.trim();
   const rest=rohText.trim().slice(cmd.length);
+  _log('\u{1F6E0} ShopDebug: rohText="'+rohText+'" cmd="'+cmd+'" rest="'+rest+'"');
   const {args,flags}=_parseShopArgs(rest);
   if(!args.length)return;
 
   const flagWhisper=flags.has('w');
   const flagUnknown=flags.has('u');
   const flagNostrip=flags.has('nostrip');
+  _log('\u{1F6E0} ShopDebug: args='+JSON.stringify(args)+' flags=['+[...flags].join(',')+'] flagNostrip='+flagNostrip);
 
   // shopItem ZUERST – muss vor flagAufpreis stehen (sonst TDZ-ReferenceError!)
   const itemName=args[0].toLowerCase();
