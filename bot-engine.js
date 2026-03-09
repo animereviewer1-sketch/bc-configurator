@@ -803,29 +803,25 @@ function _tpl(s,v){
 
 // ── Shop-Befehl Parsing ───────────────────────────────
 function _parseShopArgs(rest){
-  // Parst gequotete und ungequotete Argumente + Flags (/w /u)
+  // Parst gequotete und ungequotete Argumente + Flags (/w /u /nostrip)
   const args=[];
   const flags=new Set();
-  let pos=0;
+  // Normalisiere: alle Unicode-Slashes und Fancy-Quotes zu ASCII
+  rest=rest.trim()
+    .replace(/[\u2044\uFF0F\u2215]/g,'/')
+    .replace(/[\u201C\u201D\u201E\u201F]/g,'"')
+    .replace(/[\u2018\u2019\u201A\u201B]/g,"'");
+  // Regex-basierte Flag-Extraktion VOR dem Argument-Parsen
+  // Matcht /nostrip, /w, /u als eigenstaendige Tokens (case-insensitive)
+  rest=rest.replace(/(?:^|\s)\/nostrip\b/gi,(_)=>{flags.add('nostrip');return '';});
+  rest=rest.replace(/(?:^|\s)\/w\b/gi,(_)=>{flags.add('w');return '';});
+  rest=rest.replace(/(?:^|\s)\/u\b/gi,(_)=>{flags.add('u');return '';});
   rest=rest.trim();
+  // Jetzt nur noch Argumente parsen (Flags sind schon extrahiert)
+  let pos=0;
   while(pos<rest.length){
     while(pos<rest.length&&rest[pos]===' ')pos++;
     if(pos>=rest.length)break;
-    // Flag-Erkennung: /w, /u, /nostrip (case-insensitive, als eigenes Token)
-    if(rest[pos]==='/'&&pos+1<rest.length){
-      const remaining=rest.slice(pos+1);
-      if(/^nostrip\b/i.test(remaining)){
-        flags.add('nostrip');
-        pos+=8; // '/' + 'nostrip'
-        continue;
-      }
-      const fl=rest[pos+1].toLowerCase();
-      if(fl==='w'||fl==='u'){
-        flags.add(fl);
-        pos+=2;
-        continue;
-      }
-    }
     if(rest[pos]==='"'||rest[pos]==="'"){
       const q=rest[pos]; pos++;
       const end=rest.indexOf(q,pos);
@@ -860,14 +856,12 @@ function _shopTpl(raw, buyerC, targetC, shopItem, preis, newBal, anzahl, gesamt)
 function _handleShopCmd(rohText,buyerC){
   const cmd=_shopCfg.cmd.trim();
   const rest=rohText.trim().slice(cmd.length);
-  _log('\u{1F6E0} ShopDebug: rohText="'+rohText+'" cmd="'+cmd+'" rest="'+rest+'"');
   const {args,flags}=_parseShopArgs(rest);
   if(!args.length)return;
 
   const flagWhisper=flags.has('w');
   const flagUnknown=flags.has('u');
   const flagNostrip=flags.has('nostrip');
-  _log('\u{1F6E0} ShopDebug: args='+JSON.stringify(args)+' flags=['+[...flags].join(',')+'] flagNostrip='+flagNostrip);
 
   // shopItem ZUERST – muss vor flagAufpreis stehen (sonst TDZ-ReferenceError!)
   const itemName=args[0].toLowerCase();
