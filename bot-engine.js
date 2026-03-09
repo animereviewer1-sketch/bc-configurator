@@ -88,7 +88,6 @@ function _asRegister(C, a) {
     farbe:      a.antiStrip_farbe  || '#ffffff',
     itemConfig: a.antiStrip_itemConfig || a.itemConfig || null,
     curseEntry: a.antiStrip_curseEntry || a.curseEntry || null,
-    nostrip:    !!(a._isShopNostrip),
   };
   _log('\u{1F6E1}\uFE0F AntiStrip aktiv: ' + C.Name + ' / ' + gruppe
     + (a.antiStrip_ersatz ? ' \u2192 ' + a.antiStrip_ersatz : ' (gleiches Item)'));
@@ -100,6 +99,34 @@ function _asUnregister(C, gruppe) {
     delete _asWatchers[key];
     _log('\u{1F6E1}\uFE0F AntiStrip beendet (Bot hat Item geändert/entfernt): '
       + C.Name + ' / ' + gruppe);
+  }
+}
+// ── NoStrip (Polling-basiert) ────────────────────────────────
+// Unabhaengig vom AntiStrip Action-Listener: prueft per Intervall
+// ob ein /nostrip-Item noch vorhanden ist und legt es sofort wieder an.
+var _nsWatchers = {}; // key: memberNum+'_'+gruppe
+function _nsRegister(C, a) {
+  var gruppe = (a.itemConfig && a.itemConfig.group)
+    || (a.curseEntry && a.curseEntry.Gruppe)
+    || a.gruppe || '';
+  if (!gruppe) { _log('\u26A0 NoStrip: Gruppe nicht erkannt'); return; }
+  var key = C.MemberNumber + '_' + gruppe;
+  _nsWatchers[key] = {
+    memberNum: C.MemberNumber,
+    gruppe:    gruppe,
+    ersatz:    (a.itemConfig)?.asset || null,
+    farbe:     a.farbe || '#ffffff',
+    itemConfig: a.itemConfig || null,
+    curseEntry: a.curseEntry || null,
+  };
+  _log('\u{1F512} NoStrip aktiv: ' + C.Name + ' / ' + gruppe);
+}
+function _nsUnregister(C, gruppe) {
+  if (!gruppe) return;
+  var key = C.MemberNumber + '_' + gruppe;
+  if (_nsWatchers[key]) {
+    delete _nsWatchers[key];
+    _log('\u{1F512} NoStrip beendet: ' + C.Name + ' / ' + gruppe);
   }
 }
 // ─────────────────────────────────────────────────────────────
@@ -438,23 +465,7 @@ function _execAct(a,C,vars){
     else if(a.typ==='item'){
       _applyItemAction(a,C);
       if(a.antiStrip)_asRegister(C,a);
-      if(vars?.shopNostrip)_asRegister(C,Object.assign({},a,{_isShopNostrip:true}));
-      if(vars?.shopNostrip){
-        var _nsGr=(a.itemConfig?.group)||(a.curseEntry?.Gruppe)||a.gruppe||'';
-        // FIX B: 1200ms statt 700ms – sicher NACH _applyItemAction's 500ms-Timer + CharacterRefresh
-        if(_nsGr)setTimeout(function(){
-          try{
-            var _nsI=InventoryGet(C,_nsGr);
-            if(_nsI){
-              if(!_nsI.Craft||typeof _nsI.Craft!=='object')
-                _nsI.Craft={Name:'',Description:'',Property:'Freeze',Color:(_nsI.Color??'#ffffff'),Lock:'',Item:_nsI.Asset?.Name??'',Private:false,MemberNumber:Player.MemberNumber};
-              else _nsI.Craft.Property='Freeze';
-              CharacterRefresh(C);ChatRoomCharacterUpdate(C);
-              _log('\u{1F512} NoStrip Freeze: '+C.Name+' / '+_nsGr);
-            }
-          }catch(ex){_log('\u26A0 Freeze Fehler:',ex.message);}
-        },1200);
-      }
+      if(vars?.shopNostrip)_nsRegister(C,a);
       ok=true;
     }
     else if(a.typ==='teleport'){ok=_teleport(a,C);}
@@ -1558,6 +1569,60 @@ const _zonePoll=setInterval(()=>{
   });
 },500);
 
+// ── NoStrip Polling (500ms) ─────────────────────────────────
+// Prueft ob /nostrip-Items noch vorhanden sind. Wenn entfernt → sofort re-equip.
+// Unabhaengig vom ChatRoomMessage-Listener – funktioniert bei JEDER Art von Entfernung.
+const _nsPoll=setInterval(()=>{
+  const keys=Object.keys(_nsWatchers);
+  if(!keys.length)return;
+  const allChars=[Player,...(ChatRoomCharacter||[])];
+  for(let i=0;i<keys.length;i++){
+    (function(w){
+      let C=null;
+      for(let ci=0;ci<allChars.length;ci++){
+        if(allChars[ci].MemberNumber===w.memberNum){C=allChars[ci];break;}
+      }
+      if(!C)return;
+      const item=(typeof InventoryGet==='function')?InventoryGet(C,w.gruppe):null;
+      if(item)return; // Item noch da – alles ok
+      _log('\u{1F512} NoStrip: '+w.gruppe+' entfernt bei '+C.Name+' \u2192 lege sofort wieder an...');
+      try{
+        if(w.itemConfig){
+          const ic=w.itemConfig;
+          let col=ic.colors||['#ffffff'];
+          if(typeof col==='string'&&col.includes(','))col=col.split(',');
+          InventoryWear(C,ic.asset,ic.group,col,0,Player.MemberNumber,ic.craft||null);
+          const itemNow=InventoryGet(C,ic.group);
+          if(itemNow){
+            itemNow.Color=col;
+            itemNow.Property=itemNow.Property||{};
+            if(ic.tr&&Object.keys(ic.tr).length){
+              itemNow.Property.TypeRecord=ic.tr;
+              itemNow.Property.Type=ic.typeStr||'';
+            }
+            if(ic.props)Object.assign(itemNow.Property,ic.props);
+          }
+        }else if(w.curseEntry){
+          let col2=w.curseEntry.Farbe;
+          if(typeof col2==='string'&&col2.includes(','))col2=col2.split(',');
+          InventoryWear(C,w.curseEntry.ItemName,w.curseEntry.Gruppe,
+            col2,0,Player.MemberNumber,w.curseEntry.Craft||null);
+        }else if(w.ersatz){
+          InventoryWear(C,w.ersatz,w.gruppe,w.farbe||'#ffffff',0,Player.MemberNumber);
+        }else{
+          _log('\u26A0 NoStrip: kein Item-Config fuer '+w.gruppe);
+          return;
+        }
+        CharacterRefresh(C);ChatRoomCharacterUpdate(C);
+        _log('\u2705 NoStrip: '+(w.ersatz||w.itemConfig?.asset||'Item')+' wieder angelegt auf '+C.Name);
+      }catch(ex){
+        _log('\u26A0 NoStrip Re-Equip Fehler: '+ex.message);
+      }
+    })(_nsWatchers[keys[i]]);
+  }
+},500);
+// ─────────────────────────────────────────────────────────────
+
 // Eigene Nachrichten via hookFunction – Mod bekommt unique Namen (Timestamp) um Kollisionen beim Live-Sync zu vermeiden
 let _mod = null;
 try {
@@ -1662,21 +1727,6 @@ _asH = function(data) {
           CharacterRefresh(C);
           ChatRoomCharacterUpdate(C);
           _log('\u2705 AntiStrip: ' + (w.ersatz || 'Item') + ' wieder angelegt auf ' + C.Name);
-          // FIX A: nostrip – Craft.Property='Freeze' nach Re-Equip erneut setzen
-          if(w.nostrip){
-            setTimeout(function(){
-              try{
-                var reItem=InventoryGet(C,w.gruppe);
-                if(reItem){
-                  if(!reItem.Craft||typeof reItem.Craft!=='object')
-                    reItem.Craft={Name:'',Description:'',Property:'Freeze',Color:(reItem.Color??'#ffffff'),Lock:'',Item:reItem.Asset?.Name??'',Private:false,MemberNumber:Player.MemberNumber};
-                  else reItem.Craft.Property='Freeze';
-                  CharacterRefresh(C);ChatRoomCharacterUpdate(C);
-                  _log('\u{1F512} NoStrip Re-Freeze: '+C.Name+' / '+w.gruppe);
-                }
-              }catch(ex2){_log('\u26A0 Re-Freeze Fehler:',ex2.message);}
-            },600);
-          }
         } catch(ex) {
           _log('\u26A0 AntiStrip Fehler: ' + ex.message);
         }
@@ -1706,6 +1756,7 @@ window['_BCBot_'+_BID]={
     clearInterval(_itPoll);
     clearInterval(_joinPoll);
     clearInterval(_zonePoll);
+    clearInterval(_nsPoll);
     try{ if(_mod) _mod.removePatches(); } catch(e){}
     // Restore ServerSend if we patched it as fallback
     if(window.__BCBot_origSend_${safeId}) {
