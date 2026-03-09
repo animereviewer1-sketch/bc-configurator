@@ -1696,6 +1696,8 @@ button { cursor: pointer; }
       <div style="display:flex;gap:6px;align-items:center;margin-bottom:8px">
         <button onclick="shopAddCategory()" style="font-size:.6rem;padding:3px 8px;background:rgba(96,165,250,0.1);border:1px solid rgba(96,165,250,0.3);color:#60a5fa;border-radius:5px;cursor:pointer">+ Kategorie</button>
       </div>
+      <!-- Feature: Artikelsuche -->
+      <input type="text" placeholder="🔍 Artikel suchen..." oninput="shopSearchItems(this.value)" style="width:100%;padding:6px 10px;font-size:.68rem;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:6px;color:var(--text1);margin-bottom:8px;box-sizing:border-box" class="cf">
       <div id="shop-item-list"></div>
       <button class="shop-add-btn" onclick="shopItemNew()">+ Neuen Artikel hinzufügen</button>
 
@@ -1708,6 +1710,10 @@ button { cursor: pointer; }
         <label style="font-size:.65rem;color:var(--text3);margin-top:8px;display:block">Listen-Befehl (!shop – leer = deaktiviert):
           <input id="shop-list-cmd-inp" class="cf" style="width:100%;margin-top:3px" placeholder="!shop"
             value="" oninput="shopSetListCmd(this.value)">
+        </label>
+        <label style="font-size:.65rem;color:var(--text3);margin-top:8px;display:block">Kaufhistorie-Befehl (Spieler sieht eigene Käufe):
+          <input id="shop-history-cmd-inp" class="cf" style="width:100%;margin-top:3px" placeholder="!meinkaeufe"
+            value="" oninput="shopSetHistoryCmd(this.value)">
         </label>
         <label style="font-size:.65rem;color:var(--text3);margin-top:8px;display:block">Standard-Bestätigung (Whisper an Käufer):
           <input id="shop-confirm-inp" class="cf" style="width:100%;margin-top:3px"
@@ -1770,6 +1776,8 @@ button { cursor: pointer; }
         <span style="font-size:.85rem;font-weight:700;color:var(--text1)">📋 Kauf-Verlauf</span>
         <span id="shop-log-count" style="font-size:.65rem;color:var(--text3)"></span>
       </div>
+      <!-- Feature: Log-Filter -->
+      <input type="text" placeholder="🔍 Spieler filtern..." oninput="shopFilterLog(this.value)" style="width:100%;padding:6px 10px;font-size:.68rem;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:6px;color:var(--text1);margin-bottom:8px;box-sizing:border-box" class="cf">
       <div id="shop-log-list">
         <div class="shop-empty">🛒 Noch keine Käufe.<br><span style="font-size:.72rem;color:var(--text3)">Käufe erscheinen hier wenn der Bot aktiv ist und ein Spieler einen Artikel kauft.</span></div>
       </div>
@@ -1830,6 +1838,20 @@ button { cursor: pointer; }
           <input class="cf" id="shop-modal-sale-end" type="datetime-local" style="width:100%;margin-top:2px">
         </label>
       </div>
+    </div>
+    <!-- Feature: Min-Rang -->
+    <div style="margin-top:12px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.07)">
+      <label style="font-size:.66rem;font-weight:700;color:#eab308;margin-bottom:6px;display:block">👑 Mindest-Rang (leer = kein Rang nötig):
+        <select id="shop-modal-min-rang" class="cf" style="width:100%;margin-top:3px">
+          <option value="">-- Kein Rang nötig --</option>
+          <option value="Neuling">Neuling</option>
+          <option value="Fortgeschritten">Fortgeschritten</option>
+          <option value="Erfahren">Erfahren</option>
+          <option value="Veteran">Veteran</option>
+          <option value="Elite">Elite</option>
+          <option value="Legende">Legende</option>
+        </select>
+      </label>
     </div>
     <div style="margin-top:12px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.07)">
       <div style="font-size:.66rem;font-weight:700;color:var(--purple);margin-bottom:6px">🚩 Flag-Aufpreis (Artikel-Override, leer = globale Einstellung)</div>
