@@ -865,12 +865,18 @@ function _handleShopCmd(rohText,buyerC){
 
   const flagWhisper=flags.has('w');
   const flagUnknown=flags.has('u');
-  const flagNostrip=flags.has('nostrip');
+  let flagNostrip=flags.has('nostrip');
 
   // shopItem ZUERST – muss vor flagAufpreis stehen (sonst TDZ-ReferenceError!)
   const itemName=args[0].toLowerCase();
   const shopItem=_shopCfg.items.find(i=>i.name.toLowerCase()===itemName);
   if(!shopItem){ _log('🛒 Kein Artikel "'+args[0]+'"'); return; }
+  // NoStrip gesperrt? Flag ignorieren + Hinweis
+  if(flagNostrip && shopItem.nostripErlaubt===false){
+    _log('\u26A0 /nostrip gesperrt f\u00fcr "'+shopItem.name+'" \u2013 Flag wird ignoriert.');
+    ServerSend('ChatRoomChat',{Content:'\u26A0\uFE0F /nostrip ist f\u00fcr diesen Artikel nicht verf\u00fcgbar.',Type:'Whisper',Target:buyerC.MemberNumber});
+    flagNostrip=false;
+  }
 
   const preisU      = flagUnknown ? (shopItem.preisU      ?? _shopCfg.preisU      ?? 0) : 0;
   const preisNostrip= flagNostrip ? (shopItem.preisNostrip ?? _shopCfg.preisNostrip ?? 0) : 0;
