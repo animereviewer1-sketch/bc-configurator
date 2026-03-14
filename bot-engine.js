@@ -176,6 +176,7 @@ const _shopCfg={
   listCmd:(_cfg.shopListCmd||'!shop').trim(),
   announceNostripMsg:_cfg.shopAnnounceNostripMsg??'',
 };
+const _shopCooldowns={}; // Feature: Cooldown pro Item (MemberNumber_itemId -> timestamp)
 // Money-Balances: lokale Kopie für Echtzeit-Prüfungen (wird bei Abbuchung synchron aktualisiert)
 const _moneyBalances=Object.assign({},_cfg.moneyBalances??{});
 
@@ -817,9 +818,9 @@ function _parseShopArgs(rest){
     .replace(/[\u2018\u2019\u201A\u201B]/g,"'");
   // Regex-basierte Flag-Extraktion VOR dem Argument-Parsen
   // Matcht /nostrip, /w, /u als eigenstaendige Tokens (case-insensitive)
-  rest=rest.replace(/(?:^|\s)\/nostrip\b/gi,(_)=>{flags.add('nostrip');return '';});
-  rest=rest.replace(/(?:^|\s)\/w\b/gi,(_)=>{flags.add('w');return '';});
-  rest=rest.replace(/(?:^|\s)\/u\b/gi,(_)=>{flags.add('u');return '';});
+  rest=rest.replace(/(?:^|\\s)\\/nostrip\\b/gi,(_)=>{flags.add('nostrip');return '';});
+  rest=rest.replace(/(?:^|\\s)\\/w\\b/gi,(_)=>{flags.add('w');return '';});
+  rest=rest.replace(/(?:^|\\s)\\/u\\b/gi,(_)=>{flags.add('u');return '';});
   rest=rest.trim();
   // Jetzt nur noch Argumente parsen (Flags sind schon extrahiert)
   let pos=0;
@@ -865,17 +866,45 @@ function _handleShopCmd(rohText,buyerC){
 
   const flagWhisper=flags.has('w');
   const flagUnknown=flags.has('u');
-  const flagNostrip=flags.has('nostrip');
+  let flagNostrip=flags.has('nostrip');
 
   // shopItem ZUERST – muss vor flagAufpreis stehen (sonst TDZ-ReferenceError!)
   const itemName=args[0].toLowerCase();
   const shopItem=_shopCfg.items.find(i=>i.name.toLowerCase()===itemName);
   if(!shopItem){ _log('🛒 Kein Artikel "'+args[0]+'"'); return; }
+  // NoStrip gesperrt? Flag ignorieren + Hinweis
+  if(flagNostrip && shopItem.nostripErlaubt===false){
+    _log('\u26A0 /nostrip gesperrt f\u00fcr "'+shopItem.name+'" \u2013 Flag wird ignoriert.');
+    ServerSend('ChatRoomChat',{Content:'\u26A0\uFE0F /nostrip ist f\u00fcr diesen Artikel nicht verf\u00fcgbar.',Type:'Whisper',Target:buyerC.MemberNumber});
+    flagNostrip=false;
+  }
+
+  // ── Feature: Cooldown-Check ──
+  if(shopItem.cooldownMin && shopItem.cooldownMin>0){
+    const cdKey=buyerC.MemberNumber+'_'+shopItem.id;
+    const lastBuy=_shopCooldowns[cdKey]||0;
+    const cdMs=shopItem.cooldownMin*60*1000; // cooldown ist in Minuten
+    const diff=Date.now()-lastBuy;
+    if(diff<cdMs){
+      const restMin=Math.ceil((cdMs-diff)/60000);
+      const restTxt=restMin>=60?Math.floor(restMin/60)+'h '+restMin%60+'min':restMin+' Min';
+      ServerSend('ChatRoomChat',{Content:'⏳ Cooldown aktiv! Du kannst "'+shopItem.name+'" erst wieder in '+restTxt+' kaufen.',Type:'Whisper',Target:buyerC.MemberNumber});
+      _log('🛒 Cooldown: '+buyerC.Name+' muss noch '+restTxt+' warten für "'+shopItem.name+'"');
+      return;
+    }
+  }
+
+  // ── Feature: Sale-Preis ──
+  const _now=Date.now();
+  const _hasSale=shopItem.salePreis!=null
+    && (!shopItem.saleStart || _now>=shopItem.saleStart)
+    && (!shopItem.saleEnd   || _now<=shopItem.saleEnd);
+  const basisPreis=Number(shopItem.preis)||0;
+  const preis=_hasSale ? Number(shopItem.salePreis) : basisPreis;
 
   const preisU      = flagUnknown ? (shopItem.preisU      ?? _shopCfg.preisU      ?? 0) : 0;
   const preisNostrip= flagNostrip ? (shopItem.preisNostrip ?? _shopCfg.preisNostrip ?? 0) : 0;
   const flagAufpreis= preisU + preisNostrip;
-  const preis=Number(shopItem.preis)||0; // '' oder null → 0
   const cur=_shopCfg.moneyName||'Gold';
   const allChars=[Player,...(ChatRoomCharacter||[])];
   // Angezeigter Käufername (für öffentliche Nachrichten)
@@ -890,6 +919,22 @@ function _handleShopCmd(rohText,buyerC){
       return;
     }
     const gesamt=(preis+flagAufpreis)*anzahl;
+
+    // Feature: Min-Rang Prüfung (All-Kauf)
+    if(shopItem.minRang && typeof _rankById==='function'){
+      const reqRank=_rankById(shopItem.minRang);
+      if(reqRank){
+        const playerRankId=(typeof _rankData!=='undefined'&&_rankData.players[buyerC.MemberNumber])?_rankData.players[buyerC.MemberNumber].rankId:null;
+        const playerRank=playerRankId?_rankById(playerRankId):null;
+        if(!playerRank||playerRank.level<reqRank.level){
+          const cur2=_shopCfg.currency||'Coins';
+          ServerSend('ChatRoomChat',{Content:'\u274C Du brauchst mindestens den Rang '+reqRank.icon+' '+reqRank.name+' (Lv.'+reqRank.level+') um diesen Artikel zu kaufen!'+(playerRank?' Dein Rang: '+playerRank.icon+' '+playerRank.name+' (Lv.'+playerRank.level+')':' Du hast noch keinen Rang.'),Type:'Whisper',Target:buyerC.MemberNumber});
+          _log('\uD83D\uDED2 All-Kauf abgelehnt: '+buyerC.Name+' hat nicht den Mindest-Rang '+reqRank.name+' (Lv.'+reqRank.level+')');
+          return;
+        }
+      }
+    }
+
     const buyerBalance=(_moneyBalances[buyerC.MemberNumber]?.balance)??0;
 
     if(buyerBalance<gesamt){
@@ -913,6 +958,8 @@ function _handleShopCmd(rohText,buyerC){
     _moneyBalances[buyerC.MemberNumber].balance-=gesamt;
     window.__BCK_popupRef?.postMessage({app:'BCKonfigurator',type:'BOT_MONEY',
       memberNum:buyerC.MemberNumber,name:buyerC.Name,delta:-gesamt},'*');
+    // Cooldown setzen (All-Kauf)
+    if(shopItem.cooldownMin && shopItem.cooldownMin>0) _shopCooldowns[buyerC.MemberNumber+'_'+shopItem.id]=Date.now();
 
     const newBal=_moneyBalances[buyerC.MemberNumber].balance;
     _log('🛒 All-Kauf: '+buyerC.Name+' kauft "'+shopItem.name+'" für alle ('+anzahl+'×'+(preis+flagAufpreis)+'='+gesamt+' '+cur+'). Kontostand: '+newBal+(flagUnknown?' [/u]':'')+(flagWhisper?' [/w]':'')+(flagNostrip?' [/nostrip]':''));
@@ -991,7 +1038,7 @@ function _handleShopCmd(rohText,buyerC){
 
   if(args[1]){
     const arg2=args[1].trim();
-    if(/^\d+$/.test(arg2)){
+    if(/^\\d+$/.test(arg2)){
       const num=parseInt(arg2);
       targetC=allChars.find(c=>c.MemberNumber===num)||buyerC;
     } else {
@@ -1007,6 +1054,21 @@ function _handleShopCmd(rohText,buyerC){
   }
 
   const preisEffektiv = preis + flagAufpreis;
+
+  // Feature: Min-Rang Prüfung (Einzel-Kauf)
+  if(shopItem.minRang && typeof _rankById==='function'){
+    const reqRank=_rankById(shopItem.minRang);
+    if(reqRank){
+      const playerRankId=(typeof _rankData!=='undefined'&&_rankData.players[buyerC.MemberNumber])?_rankData.players[buyerC.MemberNumber].rankId:null;
+      const playerRank=playerRankId?_rankById(playerRankId):null;
+      if(!playerRank||playerRank.level<reqRank.level){
+        ServerSend('ChatRoomChat',{Content:'\u274C Du brauchst mindestens den Rang '+reqRank.icon+' '+reqRank.name+' (Lv.'+reqRank.level+') um diesen Artikel zu kaufen!'+(playerRank?' Dein Rang: '+playerRank.icon+' '+playerRank.name+' (Lv.'+playerRank.level+')':' Du hast noch keinen Rang.'),Type:'Whisper',Target:buyerC.MemberNumber});
+        _log('\uD83D\uDED2 Kauf abgelehnt: '+buyerC.Name+' hat nicht den Mindest-Rang '+reqRank.name+' (Lv.'+reqRank.level+')');
+        return;
+      }
+    }
+  }
+
   const buyerBalance=(_moneyBalances[buyerC.MemberNumber]?.balance)??0;
 
   if(buyerBalance<preisEffektiv){
@@ -1029,6 +1091,8 @@ function _handleShopCmd(rohText,buyerC){
   _moneyBalances[buyerC.MemberNumber].balance-=preisEffektiv;
   window.__BCK_popupRef?.postMessage({app:'BCKonfigurator',type:'BOT_MONEY',
     memberNum:buyerC.MemberNumber,name:buyerC.Name,delta:-preisEffektiv},'*');
+  // Cooldown setzen (Einzel-Kauf)
+  if(shopItem.cooldownMin && shopItem.cooldownMin>0) _shopCooldowns[buyerC.MemberNumber+'_'+shopItem.id]=Date.now();
 
   const newBal=_moneyBalances[buyerC.MemberNumber].balance;
   const isFremdkauf=targetC.MemberNumber!==buyerC.MemberNumber;
@@ -1139,10 +1203,30 @@ function _proc(rohText,typKey,C){
     if(!aktive.length){ServerSend('ChatRoomChat',{Content:'🛒 Noch keine Artikel.',Type:'Whisper',Target:C.MemberNumber});return;}
     const hdr='🛒 Shop ('+aktive.length+' Artikel):';
     const chunks=[];let buf=hdr;
+    const _nowList=Date.now();
     aktive.forEach(item=>{
       const ns=item.preisNostrip??_shopCfg.preisNostrip??0;
-      const nsHint=ns>0?' (/nostrip +'+ns+')':(ns===0?'':'' );
-      const line='\\n• '+(item.icon||'🛒')+' '+item.name+' – '+(Number(item.preis)||0)+' '+cur+nsHint;
+      const nsHint=ns>0?' (/nostrip +'+ns+')':(ns===0?'':'');
+      const basisP=Number(item.preis)||0;
+      // Sale-Preis prüfen
+      const hasSale=item.salePreis!=null
+        && (!item.saleStart || _nowList>=item.saleStart)
+        && (!item.saleEnd   || _nowList<=item.saleEnd);
+      const effP=hasSale ? Number(item.salePreis) : basisP;
+      const preisStr=hasSale ? effP+' '+cur+' (SALE, statt '+basisP+')' : effP+' '+cur;
+      // Cooldown-Info
+      let cdHint='';
+      if(item.cooldownMin && item.cooldownMin>0){
+        const cdKey=C.MemberNumber+'_'+item.id;
+        const lastB=_shopCooldowns[cdKey]||0;
+        const cdMs=item.cooldownMin*60*1000;
+        const diff=_nowList-lastB;
+        if(lastB && diff<cdMs){
+          const restMin=Math.ceil((cdMs-diff)/60000);
+          cdHint=' ⏳'+( restMin>=60?Math.floor(restMin/60)+'h'+restMin%60+'m':restMin+'min');
+        }
+      }
+      const line='\\n• '+(item.icon||'🛒')+' '+item.name+' – '+preisStr+nsHint+cdHint;
       if((buf+line).length>480){chunks.push(buf);buf=line.slice(1);}else buf+=line;
     });
     chunks.push(buf);
