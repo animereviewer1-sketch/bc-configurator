@@ -1,4 +1,33 @@
 // ══════════════════════════════════════════════════════
+//  IndexedDB Helper - direkt in items.js eingebaut (erstes Script)
+// ══════════════════════════════════════════════════════
+const _IDB_NAME = 'BCKonfigurator', _IDB_STORE = 'kv';
+let _IDB_DB = null;
+function _idbOpen() {
+  if (_IDB_DB) return Promise.resolve(_IDB_DB);
+  return new Promise((res, rej) => {
+    const r = indexedDB.open(_IDB_NAME, 1);
+    r.onupgradeneeded = e => { if (!e.target.result.objectStoreNames.contains(_IDB_STORE)) e.target.result.createObjectStore(_IDB_STORE); };
+    r.onsuccess = e => { _IDB_DB = e.target.result; res(_IDB_DB); };
+    r.onerror   = e => rej(e.target.error);
+  });
+}
+async function idbGet(key) {
+  try { const db = await _idbOpen(); return await new Promise((res,rej) => { const r=db.transaction(_IDB_STORE,'readonly').objectStore(_IDB_STORE).get(key); r.onsuccess=e=>res(e.target.result??null); r.onerror=e=>rej(e.target.error); }); }
+  catch(e) { console.warn('[IDB] get:',e); return null; }
+}
+async function idbSet(key, val) {
+  try { const db = await _idbOpen(); await new Promise((res,rej) => { const r=db.transaction(_IDB_STORE,'readwrite').objectStore(_IDB_STORE).put(val,key); r.onsuccess=()=>res(); r.onerror=e=>rej(e.target.error); }); }
+  catch(e) { console.warn('[IDB] set:',e); }
+}
+(async function _idbMigrate() {
+  for (const k of ['BC_Money_v1','BC_Rank_v1','BC_Shop_v1','BC_Bots_v2','BC_BotGroups_v1',
+                    'BCBot_Logs','BC_CURSE_DB_v1','BC_CURSE_COMMENTS_v1','BC_CURSE_FAV_v1']) {
+    try { const raw=localStorage.getItem(k); if(!raw) continue; if((await idbGet(k))===null) await idbSet(k,JSON.parse(raw)); localStorage.removeItem(k); } catch(e){}
+  }
+})();
+
+// ══════════════════════════════════════════════════════
 //  IndexedDB Helper – globale Funktionen, hier definiert
 //  damit money.js / rank.js / shop.js / bot-data.js sie nutzen können
 // ══════════════════════════════════════════════════════
@@ -1646,11 +1675,12 @@ function renderCurseTab() {
   }
   empty.style.display = 'none';
 
-  // Group by owner
+  // Group by owner (Einträge ohne gültigen Besitzer überspringen)
   const byOwner = {};
   entries.forEach((e, idx) => {
-    const key = e.Besitzer?.Nummer + ':' + e.Besitzer?.Name;
-    if (!byOwner[key]) byOwner[key] = { name: e.Besitzer?.Name, num: e.Besitzer?.Nummer, items: [] };
+    if (!e?.Besitzer?.Nummer) return;
+    const key = e.Besitzer.Nummer + ':' + e.Besitzer.Name;
+    if (!byOwner[key]) byOwner[key] = { name: e.Besitzer.Name, num: e.Besitzer.Nummer, items: [] };
     byOwner[key].items.push({ ...e, _idx: idx });
   });
 
@@ -1698,6 +1728,7 @@ function renderCurseTab() {
 
     const tbody = document.getElementById('cb_' + owner.num);
     owner.items.forEach((entry, rowIdx) => {
+      if (!entry?.Besitzer?.Nummer) return; // Eintrag ohne Besitzer überspringen
       const dbKey = entry.Besitzer.Nummer + ':' + entry.ItemName + ':' + entry.CraftName;
       const rowId = 'cr_' + owner.num + '_' + rowIdx;
       const detId = 'cd_' + owner.num + '_' + rowIdx;
