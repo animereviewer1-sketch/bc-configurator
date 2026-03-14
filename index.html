@@ -1096,9 +1096,6 @@ button { cursor: pointer; }
 .shop-add-btn:hover { border-color: var(--green); color: var(--green); background: rgba(52,211,153,0.05); }
 .shop-right { overflow-y: auto; background: var(--bg); padding: 20px 24px; }
 .shop-empty { text-align: center; padding: 60px 20px; color: var(--text3); font-size: .85rem; }
-.shop-cat-btn { font-size:.6rem;padding:3px 10px;background:rgba(96,165,250,0.08);border:1px solid rgba(96,165,250,0.2);color:#60a5fa;border-radius:12px;cursor:pointer;transition:all .15s; }
-.shop-cat-btn:hover { background:rgba(96,165,250,0.15); }
-.shop-cat-btn.active { background:rgba(96,165,250,0.25);border-color:#60a5fa;color:#93c5fd;font-weight:700; }
 .shop-modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.8); z-index: 800; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(8px); }
 .shop-modal { background: var(--bg3); border: 1px solid rgba(52,211,153,0.3); border-radius: 16px; padding: 24px; min-width: 380px; max-width: 480px; box-shadow: 0 12px 48px rgba(0,0,0,.8); }
 .shop-modal h3 { font-size: .95rem; font-weight: 800; color: #6ee7b7; margin-bottom: 16px; }
@@ -1691,13 +1688,6 @@ button { cursor: pointer; }
         Befehl: <code style="color:var(--green)">&lt;!pay&gt; "Artikelname"</code> · Für anderen: <code style="color:var(--green)">&lt;!pay&gt; "Artikel" "Spielername"</code> · Für alle: <code style="color:var(--yellow)">&lt;!pay&gt; "Artikel" All</code><br>
         Flags: <code style="color:#a78bfa">/u</code> = anonym &nbsp;·&nbsp; <code style="color:#f87171">/nostrip</code> = Item kann nicht abgelegt werden &nbsp;·&nbsp; <code style="color:var(--text3)">/w</code> = Flüstern
       </div>
-      <!-- Kategorie-Filter -->
-      <div id="shop-cat-filter" style="display:none;gap:6px;flex-wrap:wrap;margin-bottom:10px"></div>
-      <div style="display:flex;gap:6px;align-items:center;margin-bottom:8px">
-        <button onclick="shopAddCategory()" style="font-size:.6rem;padding:3px 8px;background:rgba(96,165,250,0.1);border:1px solid rgba(96,165,250,0.3);color:#60a5fa;border-radius:5px;cursor:pointer">+ Kategorie</button>
-      </div>
-      <!-- Feature: Artikelsuche -->
-      <input type="text" placeholder="🔍 Artikel suchen..." oninput="shopSearchItems(this.value)" style="width:100%;padding:6px 10px;font-size:.68rem;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:6px;color:var(--text1);margin-bottom:8px;box-sizing:border-box" class="cf">
       <div id="shop-item-list"></div>
       <button class="shop-add-btn" onclick="shopItemNew()">+ Neuen Artikel hinzufügen</button>
 
@@ -1710,10 +1700,6 @@ button { cursor: pointer; }
         <label style="font-size:.65rem;color:var(--text3);margin-top:8px;display:block">Listen-Befehl (!shop – leer = deaktiviert):
           <input id="shop-list-cmd-inp" class="cf" style="width:100%;margin-top:3px" placeholder="!shop"
             value="" oninput="shopSetListCmd(this.value)">
-        </label>
-        <label style="font-size:.65rem;color:var(--text3);margin-top:8px;display:block">Kaufhistorie-Befehl (Spieler sieht eigene Käufe):
-          <input id="shop-history-cmd-inp" class="cf" style="width:100%;margin-top:3px" placeholder="!meinkaeufe"
-            value="" oninput="shopSetHistoryCmd(this.value)">
         </label>
         <label style="font-size:.65rem;color:var(--text3);margin-top:8px;display:block">Standard-Bestätigung (Whisper an Käufer):
           <input id="shop-confirm-inp" class="cf" style="width:100%;margin-top:3px"
@@ -1776,8 +1762,6 @@ button { cursor: pointer; }
         <span style="font-size:.85rem;font-weight:700;color:var(--text1)">📋 Kauf-Verlauf</span>
         <span id="shop-log-count" style="font-size:.65rem;color:var(--text3)"></span>
       </div>
-      <!-- Feature: Log-Filter -->
-      <input type="text" placeholder="🔍 Spieler filtern..." oninput="shopFilterLog(this.value)" style="width:100%;padding:6px 10px;font-size:.68rem;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:6px;color:var(--text1);margin-bottom:8px;box-sizing:border-box" class="cf">
       <div id="shop-log-list">
         <div class="shop-empty">🛒 Noch keine Käufe.<br><span style="font-size:.72rem;color:var(--text3)">Käufe erscheinen hier wenn der Bot aktiv ist und ein Spieler einen Artikel kauft.</span></div>
       </div>
@@ -1803,17 +1787,6 @@ button { cursor: pointer; }
       <option value="true">✅ Aktiv</option>
       <option value="false">❌ Deaktiviert</option>
     </select>
-    <!-- Feature: Kategorie -->
-    <label>Kategorie</label>
-    <select class="cf" id="shop-modal-kategorie"><option value="">-- Keine --</option></select>
-    <!-- Feature: Cooldown -->
-    <label>Cooldown nach Kauf (Minuten, 0 = kein Cooldown)</label>
-    <input class="cf" id="shop-modal-cooldown" type="number" min="0" value="0" placeholder="0 = kein Cooldown">
-    <label style="display:flex;align-items:center;gap:8px;margin-top:11px;cursor:pointer">
-      <input type="checkbox" id="shop-modal-nostrip-erlaubt" checked style="width:16px;height:16px;accent-color:#f87171;cursor:pointer">
-      <span style="font-size:.67rem;color:#f87171;font-weight:700;letter-spacing:.04em">🔒 /nostrip erlauben</span>
-      <span style="font-size:.58rem;color:var(--text3);font-weight:400">(deaktivieren = Item ist immer ablegbar)</span>
-    </label>
     <label>Bestätigungsnachricht (leer = Standard)</label>
     <input class="cf" id="shop-modal-confirm" placeholder="Leer = Standard-Nachricht">
     <label>Fremdkauf-Ankündigung (öffentlicher Chat, leer = Standard)</label>
@@ -1823,30 +1796,6 @@ button { cursor: pointer; }
     <label>Fehlermeldung bei zu wenig Coins (leer = Standard)</label>
     <input class="cf" id="shop-modal-error" placeholder="Leer = Standard-Nachricht">
     <div style="font-size:.59rem;color:var(--text3);margin-top:4px">Variablen: {name} {ziel} {item} {preis} {waehrung} {kontostand} · All-Kauf: {anzahl} {gesamt}</div>
-    <!-- Feature: Timed Sale -->
-    <div style="margin-top:12px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.07)">
-      <div style="font-size:.66rem;font-weight:700;color:#34d399;margin-bottom:6px">🔥 Sale / Rabatt (optional)</div>
-      <div style="font-size:.58rem;color:var(--text3);margin-bottom:6px">Leer = kein Sale. Zeitraum optional (ohne = dauerhaft aktiv).</div>
-      <label style="font-size:.63rem;color:var(--text3)">Sale-Preis (Coins):
-        <input class="cf" id="shop-modal-sale-preis" type="number" min="0" placeholder="leer = kein Sale" style="width:100%;margin-top:2px">
-      </label>
-      <div style="display:flex;gap:10px;margin-top:6px">
-        <label style="font-size:.63rem;color:var(--text3);flex:1">Start (optional):
-          <input class="cf" id="shop-modal-sale-start" type="datetime-local" style="width:100%;margin-top:2px">
-        </label>
-        <label style="font-size:.63rem;color:var(--text3);flex:1">Ende (optional):
-          <input class="cf" id="shop-modal-sale-end" type="datetime-local" style="width:100%;margin-top:2px">
-        </label>
-      </div>
-    </div>
-    <!-- Feature: Min-Rang -->
-    <div style="margin-top:12px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.07)">
-      <label style="font-size:.66rem;font-weight:700;color:#eab308;margin-bottom:6px;display:block">👑 Mindest-Rang (leer = kein Rang nötig):
-        <select id="shop-modal-min-rang" class="cf" style="width:100%;margin-top:3px">
-          <option value="">-- Kein Rang nötig --</option>
-        </select>
-      </label>
-    </div>
     <div style="margin-top:12px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.07)">
       <div style="font-size:.66rem;font-weight:700;color:var(--purple);margin-bottom:6px">🚩 Flag-Aufpreis (Artikel-Override, leer = globale Einstellung)</div>
       <div style="display:flex;gap:10px">

@@ -769,7 +769,7 @@ window.CurseScanner = (() => {
 
           try {
             // eslint-disable-next-line no-new-func
-            new Function(_execCode)();
+            new Function('(function(){\n' + _execCode + '\n})();')();
             BCK.ok('EXEC OK');
             src.postMessage({ app: APP, type: 'EXEC_OK' }, ALLOWED_ORIGIN);
           } catch (ex) {
