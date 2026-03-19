@@ -2187,32 +2187,54 @@ function stripAllItems() {
 
   const tgtCode = tgt ? String(Number(tgt)) : 'null';
 
-  const code = `(function(){
-  // ══════════════════════════════════════════════════════════
-  //  STRIP ALL v3 – bcModSdk ChatRoomSyncSingle interception
-  //  PRE:  Bundle bereinigen bevor DOGS es liest
-  //  POST: DOGS' Re-Apply rückgängig machen (kein Server-Sync → kein Loop)
-  // ══════════════════════════════════════════════════════════
+  // ── Safeword-Strategie ────────────────────────────────────────────────
+  // BC's ChatRoomSafewordChatCommand() entfernt alle Restraints auf dem
+  // eigenen Charakter und überträgt das zum Server. DOGS *darf* den Safeword
+  // per Design nicht blockieren und tut es auch nicht.
+  //
+  // Für andere Spieler gibt es keinen direkten „Remote-Safeword"-Call, daher:
+  //  • Eigener Charakter (Player)  → ChatRoomSafewordChatCommand()
+  //  • Anderer Spieler             → bcModSdk-Hook + direkter Appearance-Strip
+  //    (DOGS' ChatRoomSyncSingle-Hook wird als outermost wrapper abgefangen)
+  // ─────────────────────────────────────────────────────────────────────
 
+  const code = `(function(){
+  var _tgtNum = ${tgtCode};
+  var _isPlayer = !_tgtNum || _tgtNum === Player.MemberNumber;
+
+  // ════════════════════════════════════════════════
+  //  FALL A: Eigener Charakter → nativer Safeword
+  // ════════════════════════════════════════════════
+  if (_isPlayer) {
+    try {
+      // ChatRoomSafewordChatCommand() ist der offizielle BC-Safeword-Befehl.
+      // Entfernt alle Restraints und synct zum Server.
+      // DOGS blockiert diesen Pfad nicht (wäre gegen BC-Policy).
+      if (typeof ChatRoomSafewordChatCommand === 'function') {
+        ChatRoomSafewordChatCommand();
+        console.log('[StripAll] Safeword ausgelöst via ChatRoomSafewordChatCommand()');
+        return;
+      }
+    } catch(e) {
+      console.warn('[StripAll] ChatRoomSafewordChatCommand fehlgeschlagen:', e.message);
+    }
+    // Fallback falls die Funktion nicht existiert (ältere BC-Version)
+    try {
+      if (typeof ActionSafeword === 'function') { ActionSafeword(Player); return; }
+    } catch(e){}
+  }
+
+  // ════════════════════════════════════════════════
+  //  FALL B: Anderer Spieler → bcModSdk-Hook bypass
+  // ════════════════════════════════════════════════
   var _ACTIVE     = true;
   var _hookHandle = null;
-  var _tgtNum     = ${tgtCode};
 
-  // ── Hilfsfunktion: Lock-Properties aus einem Item löschen ──
   function _cleanItem(item) {
     if (!item || !item.Property) return;
-    delete item.Property.LockedBy;
-    delete item.Property.LockMemberNumber;
-    delete item.Property.MemberNumberListKeys;
-    delete item.Property.RemoveOnlyMemberNumber;
-    delete item.Property.AllowRemove;
-    delete item.Property.DogsLock;
-    delete item.Property.DOGS;
-    delete item.Property.deviousLock;
-    delete item.Property.DeviousPadlock;
-    delete item.Property.dogsLocked;
-    delete item.Property.LSCGCursed;
-    delete item.Property.cursed;
+    ['LockedBy','LockMemberNumber','MemberNumberListKeys','RemoveOnlyMemberNumber',
+     'AllowRemove','DogsLock','DOGS','deviousLock','DeviousPadlock',
+     'dogsLocked','LSCGCursed','cursed'].forEach(function(k){ delete item.Property[k]; });
     if (Array.isArray(item.Property.Effect)) {
       item.Property.Effect = item.Property.Effect.filter(function(e){ return e !== 'Lock'; });
       if (!item.Property.Effect.length) delete item.Property.Effect;
@@ -2221,7 +2243,6 @@ function stripAllItems() {
     }
   }
 
-  // ── Hilfsfunktion: Character vollständig strippen ──
   function _stripChar(C) {
     if (!C || !C.Appearance) return 0;
     C.Appearance.forEach(_cleanItem);
@@ -2233,106 +2254,71 @@ function stripAllItems() {
     return before - C.Appearance.length;
   }
 
-  // ── Ziel-Charakter ──────────────────────────────────────
-  var C = null;
-  if (_tgtNum) {
-    C = (typeof ChatRoomCharacter !== 'undefined' ? ChatRoomCharacter : [])
-          .find(function(c){ return c.MemberNumber === _tgtNum; }) || null;
-  }
-  if (!C) C = Player;
-  if (!C) { console.error('[StripAll] Kein Charakter gefunden'); return; }
-  var _isPlayer = (C.MemberNumber === Player.MemberNumber);
+  var C = (typeof ChatRoomCharacter !== 'undefined' ? ChatRoomCharacter : [])
+            .find(function(c){ return c.MemberNumber === _tgtNum; }) || null;
+  if (!C) { console.error('[StripAll] Ziel nicht im Raum: #' + _tgtNum); return; }
 
-  // ── bcModSdk-Hook registrieren ──────────────────────────
-  // Priorität 999999 = höchste verfügbare → outermost wrapper
-  //   PRE-Code  (vor next()) läuft als allererster
-  //   POST-Code (nach next()) läuft als allerletzter – nach DOGS
+  // bcModSdk-Hook: höchste Priorität = outermost wrapper
+  // PRE:  Bundle bereinigen bevor DOGS ihn liest
+  // POST: DOGS' Re-Apply rückgängig machen (kein ChatRoomCharacterUpdate → kein Loop)
   if (window.bcModSdk && typeof bcModSdk.hookFunction === 'function') {
     try {
       _hookHandle = bcModSdk.hookFunction('ChatRoomSyncSingle', 999999, function(args, next) {
         if (!_ACTIVE) return next(args);
-
-        // ── PRE: Eingehenden Bundle bereinigen BEVOR DOGS ihn liest ──
         var bundle = args && args[0];
         if (bundle) {
-          // Direkte Appearance im Bundle (Standard-BC-Format)
           if (bundle.Appearance && Array.isArray(bundle.Appearance)) {
             bundle.Appearance.forEach(_cleanItem);
-            // Auch eigenständige DeviousPadlock-Items filtern (Sicherheit)
             bundle.Appearance = bundle.Appearance.filter(function(item){
-              if (!item) return false;
-              var n = (item.Name || item.Asset || '');
-              return !/^DeviousPadlock/i.test(n);
+              return item && !/^DeviousPadlock/i.test(item.Name || item.Asset || '');
             });
           }
-          // Nested Character-Objekt (manche BC-Versionen)
-          if (bundle.Character && bundle.Character.Appearance) {
+          if (bundle.Character && bundle.Character.Appearance)
             bundle.Character.Appearance.forEach(_cleanItem);
-          }
         }
-
-        // ── Alle Hooks + Original laufen (inkl. DOGS) ──────────────
         var result = next(args);
-
-        // ── POST: Bereinigen was DOGS gerade re-applied hat ─────────
-        var postC = null;
-        if (_tgtNum) {
-          postC = (typeof ChatRoomCharacter !== 'undefined' ? ChatRoomCharacter : [])
-                    .find(function(c){ return c.MemberNumber === _tgtNum; }) || null;
-        }
-        if (!postC && _isPlayer) postC = Player;
+        // POST: nach DOGS nochmal strippen, nur lokaler Refresh
+        var postC = (typeof ChatRoomCharacter !== 'undefined' ? ChatRoomCharacter : [])
+                      .find(function(c){ return c.MemberNumber === _tgtNum; }) || null;
         if (postC) {
           _stripChar(postC);
-          // NUR lokaler Refresh – KEIN ChatRoomCharacterUpdate!
-          // Ohne Server-Sync kein neuer ChatRoomSyncSingle → kein Loop.
           try { CharacterRefresh(postC, false, false); } catch(e){}
         }
-
         return result;
       });
-      console.log('[StripAll] bcModSdk-Hook registriert (Prio 999999) – 10s aktiv');
-    } catch(e) {
-      console.warn('[StripAll] Hook-Registrierung fehlgeschlagen:', e.message);
-    }
+    } catch(e) { console.warn('[StripAll] hookFunction:', e.message); }
   }
 
-  // ── DOGS ExtensionSettings leeren ──────────────────────
+  // DOGS ExtensionSettings leeren
   try {
-    if (Player.ExtensionSettings) {
-      ['DOGS','dogs','DeviousPadlock','deviousPadlock',
-       'DOGS_Locks','dogs_locks','DeviousLocks','dogsData'].forEach(function(k){
-        if (k in Player.ExtensionSettings) {
-          delete Player.ExtensionSettings[k];
-          try {
-            if (typeof ServerPlayerExtensionSettingsSync === 'function')
-              ServerPlayerExtensionSettingsSync(k);
-          } catch(e){}
-        }
-      });
-    }
+    ['DOGS','dogs','DeviousPadlock','deviousPadlock','DOGS_Locks','dogs_locks',
+     'DeviousLocks','dogsData'].forEach(function(k){
+      if (k in Player.ExtensionSettings) {
+        delete Player.ExtensionSettings[k];
+        try { if (typeof ServerPlayerExtensionSettingsSync === 'function')
+          ServerPlayerExtensionSettingsSync(k); } catch(e){}
+      }
+    });
   } catch(e){}
 
-  // ── Sofort strippen + einmalig Server-Sync ─────────────
   var removed = _stripChar(C);
   try { CharacterRefresh(C, false, false); } catch(e){}
   try { ChatRoomCharacterUpdate(C); } catch(e){}
-  if (_isPlayer) { try { ServerPlayerSync(); } catch(e){} }
 
-  // ── Hook nach 10s sauber entfernen ─────────────────────
   setTimeout(function(){
     _ACTIVE = false;
     if (_hookHandle && typeof _hookHandle.remove === 'function') {
       try { _hookHandle.remove(); } catch(e){}
-      console.log('[StripAll] Hook entfernt – normaler Betrieb wiederhergestellt');
+      console.log('[StripAll] Hook entfernt');
     }
   }, 10000);
 
-  console.log('[StripAll] ' + removed + ' Items entfernt · Hook 10s aktiv · '
-    + C.Name + ' #' + C.MemberNumber);
+  console.log('[StripAll] ' + removed + ' Items entfernt · Ziel: ' + C.Name + ' #' + C.MemberNumber);
 })();`;
 
   bcSend({ type: 'EXEC', code });
-  showStatus('⚡ Strip-All: ' + tgtLabel + ' – bcModSdk-Hook aktiv (10s), DOGS wird geblockt', 'success');
+  const label = tgt ? ('Spieler #' + tgt) : 'dich selbst';
+  showStatus('⚡ Strip-All: ' + label + (tgt ? ' – bcModSdk-Hook 10s' : ' – nativer Safeword'), 'success');
 }
 function wearCurse(dbKey, targetNum) {
   if (!_connected) { showStatus('❌ Nicht verbunden', 'error'); return; }
