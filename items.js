@@ -1330,10 +1330,39 @@ function encVal(val) {
 }
 
 // ── Innerer Code-Block (ohne TARGET-Deklaration) ────
-function buildItemInner({ group, asset, colors, tr, trStr, typeStr, propCode, craftStr, lock, lockParams, tightCode, delayOffset }) {
+function buildItemInner({ group, asset, colors, tr, trStr, typeStr, propCode, craftStr, lock, lockParams, tightCode, delayOffset,
+                          overridePriority, layerProperties, difficulty }) {
   const delay = delayOffset ?? 600;
   const BCX_LOCKS_L = ['LewdCrestPadlock','DeviousPadlock','LuziPadlock'];
   const REL_LOCKS_L = ['OwnerPadlock','LoversPadlock','MistressPadlock'];
+
+  // ── Build complete Property object ──────────────────────────────────────
+  // Assemble ONCE as a JS object, base64-encode it → no inline JSON syntax risk
+  const propObj = {};
+  if (tr && Object.keys(tr).length) {
+    propObj.TypeRecord = tr;
+    propObj.Type = Object.entries(tr).map(([k,v]) => k+v).join('');
+  }
+  if (overridePriority != null) propObj.OverridePriority = overridePriority;
+  if (layerProperties && Object.keys(layerProperties).length) propObj.LayerProperties = layerProperties;
+
+  // Legacy propCode may add more fields (modular archetype etc.)
+  // We keep the delay-based propCode path for those, but only for items that
+  // don't already have full data (backward compat with manually built outfits)
+  const hasPropObj = Object.keys(propObj).length > 0;
+  const propB64     = hasPropObj ? btoa(unescape(encodeURIComponent(JSON.stringify(propObj)))) : null;
+
+  // ── Build Craft object (base64 to avoid quote/escape issues) ─────────────
+  let craftB64 = null;
+  if (craftStr) {
+    // craftStr is a JS literal string fragment like ",\n  {Name:...}"
+    // Parse it as JSON by extracting the object – safest: re-encode from item data
+    // (craftStr is already built from JSON.stringify'd values, so this is safe)
+    // We just embed craftStr directly – it's already JSON-safe because it was
+    // built with JSON.stringify for Name/Description etc.
+  }
+
+  // ── Lock code ────────────────────────────────────────────────────────────
   let lockCode = '';
   if (lock) {
     const isBcx = BCX_LOCKS_L.includes(lock);
@@ -1357,19 +1386,45 @@ function buildItemInner({ group, asset, colors, tr, trStr, typeStr, propCode, cr
         + '\n      CharacterLoadCanvas(TARGET);\n    } else { console.error("❌ Schloss nicht gefunden: ' + lock + '"); }';
     }
   }
-  return '  InventoryWear(TARGET, ' + JSON.stringify(asset) + ', ' + JSON.stringify(group) + ',\n'
-    + '    ' + JSON.stringify(colors) + ', 0, null' + craftStr + '\n  );\n'
-    + '  setTimeout(() => {\n'
+
+  // ── Core item-wear code ──────────────────────────────────────────────────
+  // Step A: InventoryWear (sets Asset reference, base color, craft)
+  let code = '  InventoryWear(TARGET, ' + JSON.stringify(asset) + ', ' + JSON.stringify(group) + ',\n'
+    + '    ' + JSON.stringify(colors) + ', 0, null' + craftStr + '\n  );\n';
+
+  // Step B: After a delay, overwrite ALL properties via base64-decoded object
+  // This is what BC's own import does – write directly to item.Property
+  code += '  setTimeout(() => {\n'
     + '    const item = InventoryGet(TARGET, ' + JSON.stringify(group) + ');\n'
     + '    if (!item) return console.error("❌ Item nicht gefunden: ' + asset + '");\n'
     + '    item.Color = ' + JSON.stringify(colors) + ';\n'
-    + '    item.Property = item.Property ?? {};\n'
-    + propCode
-    + (propCode.includes('TypeRecord') ? '\n    try{ExtendedItemInit(TARGET,item,false,false);}catch(e){}' : '')
-    + lockCode + '\n'
+    + '    item.Property = item.Property ?? {};\n';
+
+  if (propB64) {
+    // Decode and merge full property object (syntax-safe, any value)
+    code += '    Object.assign(item.Property, JSON.parse(decodeURIComponent(escape(atob(' + JSON.stringify(propB64) + ')))));\n';
+    if (propObj.TypeRecord) {
+      code += '    try{ExtendedItemInit(TARGET,item,false,false);}catch(e){}\n';
+    }
+  }
+
+  // Legacy propCode (modular archetype etc.) – still apply if present beyond base property
+  const legacyProp = (propCode || '').replace(/\s*item\.Property\s*=\s*item\.Property\s*\?\?.*?;\s*/g, '')
+                                       .replace(/item\.Property\.(TypeRecord|Type)\s*=.*?;/g, '');
+  if (legacyProp.trim()) {
+    code += legacyProp + '\n';
+  }
+
+  if (difficulty != null) {
+    code += '    item.Difficulty = ' + Number(difficulty) + ';\n';
+  }
+
+  code += lockCode + '\n'
     + '    CharacterRefresh(TARGET);\n'
     + '    console.log("✅ ' + asset + ' fertig");\n'
     + '  }, ' + delay + ');';
+
+  return code;
 }
 
 // ── Einzelnes Item (mit TARGET-Deklaration + Sync) ──
@@ -1665,27 +1720,9 @@ function loadProfile(name) {
     const cfg = CACHE[item.group]?.[item.asset];
     if (!cfg) console.warn('⚠️ Item nicht im Cache: ' + item.group + '/' + item.asset);
 
-    const tr = (item.tr && Object.keys(item.tr).length) ? item.tr : null;
-    let propCode = '\n    item.Property = item.Property ?? {};';
-    if (tr) {
-      const trStr = JSON.stringify(tr);
-      const typeStr = Object.entries(tr).map(([k,v]) => k + v).join('');
-      propCode += '\n    item.Property.TypeRecord = ' + trStr + ';'
-               +  '\n    item.Property.Type = ' + JSON.stringify(typeStr) + ';';
-    }
-    // WCE: Gesamt-Priorität
-    if (item.overridePriority != null) {
-      propCode += '\n    item.Property.OverridePriority = ' + item.overridePriority + ';';
-    }
-    // WCE: Layer-spezifische Prioritäten + Hiding
-    if (item.layerProperties && Object.keys(item.layerProperties).length) {
-      propCode += '\n    item.Property.LayerProperties = ' + JSON.stringify(item.layerProperties) + ';';
-    }
-    // Difficulty
-    if (item.difficulty != null) {
-      propCode += '\n    item.Difficulty = ' + item.difficulty + ';';
-    }
+    const tr = (item.tr && typeof item.tr === 'object' && Object.keys(item.tr).length) ? item.tr : null;
 
+    // ── craftStr aus Craft-Objekt ──────────────────────────────────────────
     let craftStr = '';
     const craft = item.craft;
     if (craft && craft.Name) {
@@ -1699,16 +1736,25 @@ function loadProfile(name) {
                + ', MemberNumber: Player.MemberNumber,\n  }';
     }
 
+    // ── lockParams ────────────────────────────────────────────────────────
     const lockParams = { timer: 0, combo: '', password: '', relMember: item.lockMember || 0, relTimer: 0 };
+
+    // ── propCode: only for legacy modular-archetype items ──────────────────
+    // TypeRecord, OverridePriority, LayerProperties are now handled via
+    // buildItemInner's base64-encoded propB64 path – no propCode needed.
+    const propCode = '';
 
     restored.push({
       ...item,
-      cfg:        cfg ?? {},
+      cfg:              cfg ?? {},
       propCode,
       craftStr,
       lockParams,
-      trStr:      tr ? JSON.stringify(tr) : '{}',
-      typeStr:    tr ? Object.entries(tr).map(([k,v]) => k + v).join('') : '',
+      trStr:            tr ? JSON.stringify(tr) : '{}',
+      typeStr:          tr ? Object.entries(tr).map(([k,v]) => k+v).join('') : '',
+      overridePriority: item.overridePriority ?? null,
+      layerProperties:  item.layerProperties  ?? null,
+      difficulty:       item.difficulty       ?? null,
     });
   }
 

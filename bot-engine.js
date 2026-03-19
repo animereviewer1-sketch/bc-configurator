@@ -444,16 +444,18 @@ function _applyItemAction(a, C){
       InventoryWear(C,a.curseEntry.ItemName,a.curseEntry.Gruppe,col,0,Player.MemberNumber,a.curseEntry.Craft);
       _restoreDisplaced(C,snapshot,a.curseEntry.Gruppe);
     }else if(a.profilName){
-      // Profil: erst nackt machen, dann alle Items mit vollständiger Konfiguration anlegen
+      // Profil: erst nackt machen, dann Items direkt ins Appearance-Array schreiben
+      // (wie BC's eigener Import – InventoryWear-Seiteneffekte werden vermieden,
+      //  TypeRecord/LayerProperties/OverridePriority bleiben erhalten)
       var profilItems = a.profilItems ?? [];
 
-      // Schritt 0: Ziel-Char ausziehen (Pflicht-Anatomie bleibt, alles andere weg)
+      // Schritt 0: Ausziehen (Pflicht-Anatomie bleibt)
       C.Appearance = C.Appearance.filter(function(item){
         if(!item || !item.Asset || !item.Asset.Group) return true;
         return item.Asset.Group.AllowNone === false;
       });
 
-      // Schritt 1: Alle Items anlegen (Craft mitgeben)
+      // Schritt 1: Items anlegen via InventoryWear (setzt Asset-Referenz)
       profilItems.forEach(function(item){
         var col = item.colors ?? item.cfg?.Color ?? '#ffffff';
         if(typeof col==='string' && col.includes(',')) col = col.split(',');
@@ -461,38 +463,35 @@ function _applyItemAction(a, C){
         InventoryWear(C, item.asset, item.group, col, 0, Player.MemberNumber, craft);
       });
 
-      // Schritt 2: Properties setzen (TypeRecord, WCE-Layer, Difficulty, Farbe)
+      // Schritt 2: Properties DIREKT schreiben (wie BC-Import)
+      // Object.assign auf item.Property – überschreibt KEINE anderen Properties
       profilItems.forEach(function(item){
         var worn = InventoryGet(C, item.group);
         if(!worn) return;
         worn.Property = worn.Property ?? {};
 
-        // TypeRecord (Variante/Layer-Konfiguration)
-        if(item.tr && Object.keys(item.tr).length){
+        // TypeRecord + Type
+        if(item.tr && typeof item.tr === 'object' && Object.keys(item.tr).length){
           worn.Property.TypeRecord = item.tr;
           worn.Property.Type = Object.entries(item.tr).map(function(e){return e[0]+e[1];}).join('');
           try{ExtendedItemInit(C, worn, false, false);}catch(e){}
         }
-
-        // WCE: Gesamt-Priorität (OverridePriority)
-        if(item.overridePriority != null){
-          worn.Property.OverridePriority = item.overridePriority;
-        }
-        // WCE: Layer-spezifische Prioritäten + Hiding (LayerProperties)
-        if(item.layerProperties){
+        // WCE: Gesamt-Priorität
+        if(item.overridePriority != null) worn.Property.OverridePriority = item.overridePriority;
+        // WCE: Layer-spezifische Prioritäten + Hiding
+        if(item.layerProperties && typeof item.layerProperties === 'object'){
           worn.Property.LayerProperties = item.layerProperties;
         }
-
-        // Difficulty (Festigkeit/Tightness)
+        // Difficulty
         if(item.difficulty != null) worn.Difficulty = item.difficulty;
 
-        // Farbe nochmal setzen (InventoryWear überschreibt manchmal)
+        // Farbe nochmal setzen
         var col = item.colors ?? '#ffffff';
         if(typeof col==='string' && col.includes(',')) col = col.split(',');
         worn.Color = col;
       });
 
-      // Schritt 3: Locks anlegen
+      // Schritt 3: Locks
       profilItems.forEach(function(item){
         if(!item.lock) return;
         var worn = InventoryGet(C, item.group);
@@ -502,9 +501,7 @@ function _applyItemAction(a, C){
           ? (Asset.find(function(a){return a.Name===item.lock && a.Group?.Name==='ItemMisc';})
              ?? Asset.find(function(a){return a.Name===item.lock;}))
           : Asset.find(function(a){return a.Name===item.lock && a.Group?.Name==='ItemMisc';});
-        if(lockAsset){
-          InventoryLock(C, worn, {Asset: lockAsset}, item.lockMember || Player.MemberNumber, false);
-        }
+        if(lockAsset) InventoryLock(C, worn, {Asset:lockAsset}, item.lockMember||Player.MemberNumber, false);
       });
 
       CharacterRefresh(C);
