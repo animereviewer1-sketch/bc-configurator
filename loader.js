@@ -802,14 +802,19 @@ window.CurseScanner = (() => {
                 const tr = prop.TypeRecord && Object.keys(prop.TypeRecord).length
                   ? prop.TypeRecord : undefined;
                 return {
-                  asset:  item.Asset.Name,
-                  group:  item.Asset.Group.Name,
-                  colors: item.Color ?? '#ffffff',
-                  craft:  item.Craft ?? null,
-                  lock:   prop.LockedBy ?? null,
-                  tr:     tr,
-                  // Preserve lock member so bot can re-lock correctly
-                  lockMember: prop.LockMemberNumber ?? null,
+                  asset:          item.Asset.Name,
+                  group:          item.Asset.Group.Name,
+                  colors:         item.Color ?? '#ffffff',
+                  craft:          item.Craft ?? null,
+                  lock:           prop.LockedBy ?? null,
+                  tr:             tr,
+                  lockMember:     prop.LockMemberNumber ?? null,
+                  // WCE layer properties: total priority + per-layer priority/hiding
+                  overridePriority: prop.OverridePriority ?? null,
+                  layerProperties:  (prop.LayerProperties && Object.keys(prop.LayerProperties).length)
+                                      ? prop.LayerProperties : null,
+                  // Other common properties that affect appearance
+                  difficulty:     item.Difficulty ?? null,
                 };
               });
 

@@ -1,2951 +1,1925 @@
-// ══════════════════════════════════════════════════════
-//  IndexedDB Helper – globale Funktionen, hier definiert
-//  damit money.js / rank.js / shop.js / bot-data.js sie nutzen können
-// ══════════════════════════════════════════════════════
-const _IDB_NAME    = 'BCKonfigurator';
-const _IDB_VERSION = 1;
-const _IDB_STORE   = 'kv';
-let   _IDB_DB      = null;
+const BOT_ENGINE_VERSION = '1.1.0';
+window.BOT_ENGINE_VERSION = BOT_ENGINE_VERSION;
 
-function _idbOpen() {
-  if (_IDB_DB) return Promise.resolve(_IDB_DB);
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open(_IDB_NAME, _IDB_VERSION);
-    req.onupgradeneeded = e => {
-      const db = e.target.result;
-      if (!db.objectStoreNames.contains(_IDB_STORE)) db.createObjectStore(_IDB_STORE);
-    };
-    req.onsuccess = e => { _IDB_DB = e.target.result; resolve(_IDB_DB); };
-    req.onerror   = e => reject(e.target.error);
-  });
-}
+function _buildBotCode(bot) {
+  const s = bot.settings;
+  const triggers = (bot.triggers||[]).filter(t=>t.aktiv).map(t => ({
+    id: t.id, name: t.name, delay: t.delay??0,
+      wiederholung: t.wiederholung??'immer', maxMal: t.maxMal??2,
+      fallbackTyp: t.fallbackTyp??'nichts', fallbackText: t.fallbackText??'',
+      charSpec: !!t.charSpec, resetOnLeave: !!t.resetOnLeave,
+      von: t.von??'alle',
+      vonNummern: (t.vonNummern||[]).map(Number),
+      ifElse: !!t.ifElse,
+    bedingungen: (t.bedingungen||[]),
+    ifBedingungen: (t.ifBedingungen||[]),
+    aktionen: (t.aktionen||[]).map(a => {
+      const base = a.typ==='item' && a.curseKey && !a.curseEntry ? {...a, curseEntry: CURSE_DB[a.curseKey]??null}
+                 : a.typ==='item' && a.profilName && (!a.profilItems||!a.profilItems.length) ? {...a, profilItems: PROFILES[a.profilName]?.items??[]}
+                 : {...a};
+      base.aktZiel = a.aktZiel ?? 'ausloeser';
+      base.aktZielNummern = (a.aktZielNummern||[]).map(Number);
+      return base;
+    }),
+    aktionen_sonst: (t.aktionen_sonst||[]).map(a => {
+      const base = a.typ==='item' && a.curseKey && !a.curseEntry ? {...a, curseEntry: CURSE_DB[a.curseKey]??null}
+                 : a.typ==='item' && a.profilName && (!a.profilItems||!a.profilItems.length) ? {...a, profilItems: PROFILES[a.profilName]?.items??[]}
+                 : {...a};
+      base.aktZiel = a.aktZiel ?? 'ausloeser';
+      base.aktZielNummern = (a.aktZielNummern||[]).map(Number);
+      return base;
+    }),
+  }));
+  const safeId   = bot.id.replace(/\W/g,'_');
+  const safeName = bot.name.replace(/\\/g,'\\\\').replace(/`/g,'\\`');
 
-async function idbGet(key) {
-  try {
-    const db = await _idbOpen();
-    return await new Promise((resolve, reject) => {
-      const tx  = db.transaction(_IDB_STORE, 'readonly');
-      const req = tx.objectStore(_IDB_STORE).get(key);
-      req.onsuccess = e => resolve(e.target.result ?? null);
-      req.onerror   = e => reject(e.target.error);
+  // Alle User-Daten als Base64 kodieren → kein Zeichen kann das Template-Literal brechen
+  const _cfgRaw = JSON.stringify({hearChat:s.hearChat,hearEmote:s.hearEmote,hearWhisper:s.hearWhisper,nurEigene:s.nurEigene,logAktiv:s.logAktiv??true,modus:s.modus,moneyQueryCmd:_money?.settings?.queryCmd??'',moneyQueryTyp:_money?.settings?.queryTyp??'whisper',moneyName:_money?.settings?.name??'Gold',rankQueryCmd:_rankData?.settings?.queryCmd??'',rankQueryTyp:_rankData?.settings?.queryCmdTyp??'whisper',rankQueryText:_rankData?.settings?.queryCmdText??'{name} hat Rang: {rang_icon} {rang}',rankDefs:_rankData?.defs??[],rankPlayers:Object.fromEntries(Object.entries(_rankData?.players??{}).map(([k,v])=>[k,v.rankId??null])),shopCmd:_shop?.settings?.cmd??'!pay',shopListCmd:_shop?.settings?.listCmd??'!shop',shopAnnounceNostripMsg:_shop?.settings?.announceNostripMsg??'',shopConfirmMsg:_shop?.settings?.confirmMsg??'',shopAnnounceMsg:_shop?.settings?.announceMsg??'',shopAnnounceAllMsg:_shop?.settings?.announceAllMsg??'',shopErrorMsg:_shop?.settings?.errorMsg??'',shopPreisU:_shop?.settings?.preisU??0,shopPreisNostrip:_shop?.settings?.preisNostrip??0,shopItems:(_shop?.items??[]).filter(i=>i.aktiv!==false),moneyBalances:Object.fromEntries(Object.entries(_money?.balances??{}).map(([k,v])=>[k,{balance:v.balance??0,name:v.name??''}]))});
+  const cfgJson  = btoa(unescape(encodeURIComponent(_cfgRaw)));
+  const trigsJson = btoa(unescape(encodeURIComponent(JSON.stringify(triggers))));
+  const events = (bot.events||[]).filter(e=>e.aktiv).map(e => ({
+    id: e.id, name: e.name,
+    von: e.von??'alle', vonNummer: e.vonNummer??0,
+    ziel: e.ziel??'ausloeser', zielListe: e.zielListe??[],
+    wiederholung: e.wiederholung??'immer', maxMal: e.maxMal??2,
+    fallbackTyp: e.fallbackTyp??'nichts', fallbackText: e.fallbackText??'',
+    bedingungen: e.bedingungen??[],
+    aktionen: (e.aktionen||[]).map(a => {
+      if (a.typ==='item' && a.curseKey && !a.curseEntry) return {...a, curseEntry: CURSE_DB[a.curseKey]??null};
+      if (a.typ==='item' && a.profilName && (!a.profilItems||!a.profilItems.length)) return {...a, profilItems: PROFILES[a.profilName]?.items??[]};
+      return a;
+    }),
+  }));
+  const eventsJson = btoa(unescape(encodeURIComponent(JSON.stringify(events))));
+  // Build roomEver from logs – members who joined and haven't left yet
+  // This is the authoritative source: Log löschen = Erstes Mal joinen
+  const persistedRoomEver = (() => {
+    const logs = window._BCBotLog || [];
+    const botLogs = logs.filter(e => e.botId === bot.id && (e.status==='join'||e.status==='join_rejoin'||e.status==='leave'));
+    botLogs.sort((a,b) => a.ts - b.ts);
+    const ever = new Set();
+    botLogs.forEach(e => {
+      if (e.status === 'join' || e.status === 'join_rejoin') ever.add(e.memberNum);
+      // leave doesn't remove from roomEver – only from present
     });
-  } catch (err) { console.warn('[IDB] get:', err); return null; }
-}
+    return [...ever];
+  })();
+  const roomEverJson = JSON.stringify(persistedRoomEver);
 
-async function idbSet(key, value) {
-  try {
-    const db = await _idbOpen();
-    await new Promise((resolve, reject) => {
-      const tx  = db.transaction(_IDB_STORE, 'readwrite');
-      const req = tx.objectStore(_IDB_STORE).put(value, key);
-      req.onsuccess = () => resolve();
-      req.onerror   = e => reject(e.target.error);
-    });
-  } catch (err) { console.warn('[IDB] set:', err); }
+  return `(function(){
+const _BID='${safeId}';
+const _VER='${BOT_ENGINE_VERSION}';
+if(window['_BCBot_'+_BID]){console.warn('[Bot] Bereits aktiv – erst stoppen!');return;}
+// ── AntiStrip ────────────────────────────────────────────────
+// var statt const → Hoisting, damit _asRegister schon in
+// _execAct verfügbar ist bevor _asH unten befüllt wird.
+var _asWatchers = {}; // key: memberNum+'_'+gruppe
+var _asH        = null;
+function _asRegister(C, a) {
+  var gruppe = (a.antiStrip_itemConfig && a.antiStrip_itemConfig.group)
+    || (a.antiStrip_curseEntry && a.antiStrip_curseEntry.Gruppe)
+    || a.antiStrip_gruppe
+    || (a.itemConfig && a.itemConfig.group)
+    || (a.curseEntry && a.curseEntry.Gruppe)
+    || a.gruppe || '';
+  if (!gruppe) { _log('\u26A0 AntiStrip: Gruppe nicht erkannt'); return; }
+  var key = C.MemberNumber + '_' + gruppe;
+  _asWatchers[key] = {
+    memberNum:  C.MemberNumber,
+    gruppe:     gruppe,
+    delay:      a.antiStrip_delay != null ? a.antiStrip_delay : 500,
+    ersatz:     a.antiStrip_ersatz || (a.antiStrip_itemConfig||a.itemConfig)?.asset || null,
+    farbe:      a.antiStrip_farbe  || '#ffffff',
+    itemConfig: a.antiStrip_itemConfig || a.itemConfig || null,
+    curseEntry: a.antiStrip_curseEntry || a.curseEntry || null,
+  };
+  _log('\u{1F6E1}\uFE0F AntiStrip aktiv: ' + C.Name + ' / ' + gruppe
+    + (a.antiStrip_ersatz ? ' \u2192 ' + a.antiStrip_ersatz : ' (gleiches Item)'));
 }
-
-// Migration localStorage → IDB (einmalig)
-(async function() {
-  const keys = ['BC_Money_v1','BC_Rank_v1','BC_Shop_v1','BC_Bots_v2','BC_BotGroups_v1',
-                 'BCBot_Logs','BC_CURSE_DB_v1','BC_CURSE_COMMENTS_v1','BC_CURSE_FAV_v1'];
-  for (const key of keys) {
-    try {
-      const raw = localStorage.getItem(key);
-      if (!raw) continue;
-      if ((await idbGet(key)) === null) {
-        await idbSet(key, JSON.parse(raw));
-        console.info('[IDB] Migriert:', key);
-      }
-      localStorage.removeItem(key);
-    } catch(e) { console.warn('[IDB] Migration:', key, e); }
+function _asUnregister(C, gruppe) {
+  if (!gruppe) return;
+  var key = C.MemberNumber + '_' + gruppe;
+  if (_asWatchers[key]) {
+    delete _asWatchers[key];
+    _log('\u{1F6E1}\uFE0F AntiStrip beendet (Bot hat Item geändert/entfernt): '
+      + C.Name + ' / ' + gruppe);
   }
-})();
+}
+// ── NoStrip (Polling-basiert) ────────────────────────────────
+// Unabhaengig vom AntiStrip Action-Listener: prueft per Intervall
+// ob ein /nostrip-Item noch vorhanden ist und legt es sofort wieder an.
+var _nsWatchers = {}; // key: memberNum+'_'+gruppe
+function _nsRegister(C, a) {
+  var gruppe = (a.itemConfig && a.itemConfig.group)
+    || (a.curseEntry && a.curseEntry.Gruppe)
+    || a.gruppe || '';
+  if (!gruppe) { _log('\u26A0 NoStrip: Gruppe nicht erkannt'); return; }
+  var key = C.MemberNumber + '_' + gruppe;
+  _nsWatchers[key] = {
+    memberNum: C.MemberNumber,
+    gruppe:    gruppe,
+    ersatz:    (a.itemConfig)?.asset || null,
+    farbe:     a.farbe || '#ffffff',
+    itemConfig: a.itemConfig || null,
+    curseEntry: a.curseEntry || null,
+  };
+  _log('\u{1F512} NoStrip aktiv: ' + C.Name + ' / ' + gruppe);
+}
+function _nsUnregister(C, gruppe) {
+  if (!gruppe) return;
+  var key = C.MemberNumber + '_' + gruppe;
+  if (_nsWatchers[key]) {
+    delete _nsWatchers[key];
+    _log('\u{1F512} NoStrip beendet: ' + C.Name + ' / ' + gruppe);
+  }
+}
+// ─────────────────────────────────────────────────────────────
+const _cfg=JSON.parse(decodeURIComponent(escape(atob('${cfgJson}'))));
+const _moneyCfg={queryCmd:_cfg.moneyQueryCmd??''};
+const _trigs=JSON.parse(decodeURIComponent(escape(atob('${trigsJson}'))));
+// State-Persistenz: beim Sync (Stop+Start) bleiben Fired-States erhalten
+const _stateKey='__BCKBotState_${safeId}';
+// Priorität: window (Sync) > localStorage (Reload) > leer
+const _lsSaved=(()=>{try{return JSON.parse(localStorage.getItem('__BCKBotStates')||'{}')['${safeId}']??{};}catch(e){return {};}})();
+const _savedState=window[_stateKey]??_lsSaved;
+const _fired    =_savedState.fired    ??{}; // trigId -> last timestamp (global latch)
+const _firedCnt =_savedState.firedCnt ??{}; // trigId -> fire count
+const _firedChar=_savedState.firedChar??{}; // trigId_memberNum -> timestamp
+// FIX: also persist evFiredCnt so einmalig/n_mal events survive bot restart/sync
+const _evFiredCnt=Object.assign({},_savedState.evFiredCnt??{});
+// roomEver: merge window-state + popup-persisted (build-time injected) + log-based
+const _roomEver=new Set([...(_savedState.roomEver??[]),...(${roomEverJson})]);
+// State sofort zurückschreiben damit Referenz live ist
+window[_stateKey]={fired:_fired,firedCnt:_firedCnt,firedChar:_firedChar,roomEver:_roomEver};
+// Quick lookup: trigId -> trigger config (for charSpec)
+const _trigMap=Object.fromEntries(_trigs.map(t=>[t.id,t]));
+// Rejoin-Fenster: memberNum → true – schließt wenn Nicht-Rejoin-Trigger feuert
+const _rejoinWindow=new Map(); // memberNum → timestamp when opened
+const _REJOIN_GRACE=1000; // ms window stays open regardless of other triggers
+const _evts=JSON.parse(decodeURIComponent(escape(atob('${eventsJson}'))));
 
-// Echo's Clothing Extension – Chinesisch → Englisch Lookup
-// Quelle: Echo_Extension_CN_Items.docx
-const ECHO_CN_NAMES = {
-  '大衣': 'Overcoat',
-  '插兜雨衣': 'Pocket Raincoat',
-  '白大褂': 'White Lab Coat',
-  '白布': 'White Sheet',
-  '系腰外套小': 'Tied Waist Jacket (S)',
-  '系腰外套大': 'Tied Waist Jacket (L)',
-  '西装露肩': 'Off-Shoulder Suit',
-  '小西装T': 'Cropped Suit T',
-  '小西装S': 'Cropped Suit S',
-  '敞夹克': 'Open Jacket',
-  '假领子': 'Detachable Collar',
-  '一块布': 'Simple Cloth',
-  '圣诞25': 'Christmas Dress \'25',
-  '黑白泳装': 'B&W Swimsuit',
-  '奶牛': 'Cow Outfit',
-  '披肩': 'Shawl',
-  '斜肩上衣': 'Off-Shoulder Top',
-  '时韵S': 'Shiyun Set S',
-  '时韵B': 'Shiyun Set B',
-  '露胸短袖': 'Open Chest Tee',
-  '洋装': 'Western Dress',
-  '白色礼服': 'White Formal Dress',
-  '绛云墨韵旗袍裙': 'Crimson Cloud Ink Qipao',
-  '花园连衣裙': 'Garden Dress',
-  '花边连衣裙': 'Lace Dress',
-  '蕾丝文胸睡裙': 'Lace Bra Nightgown',
-  '运动套装top': 'Sports Outfit Top',
-  '连体衣': 'Jumpsuit/Bodysuit',
-  '连衣裙': 'Simple Dress',
-  '透明兔女郎': 'Transparent Bunny Suit',
-  '锦云绣雪旗袍': 'Brocade Snow Qipao',
-  '长旗袍': 'Long Qipao',
-  '露胸胶衣': 'Open Chest Latex',
-  '女仆围裙': 'Maid Apron',
-  '女仆围裙2': 'Maid Apron 2',
-  '女仆装': 'Maid Outfit',
-  '女仆装2': 'Maid Outfit 2',
-  '女仆装3': 'Maid Outfit 3',
-  '女仆装4': 'Maid Outfit 4',
-  '长裙': 'Long Skirt',
-  '羽毛内衣': 'Feather Lingerie',
-  '乳贴1': 'Nipple Pasties 1',
-  '乳贴2': 'Nipple Pasties 2',
-  '创口贴': 'Bandage/Plaster',
-  '皮革兔女郎镂空内衣': 'Leather Hollow Bunny Bra',
-  '绷带全身': 'Full Body Bandage',
-  '塑身衣1': 'Shapewear 1',
-  '女仆胸罩': 'Maid Bra',
-  '乳胶衣': 'Latex Bodysuit',
-  '马油袜': 'Horse Oil Stockings Top',
-  '乳胶紧身衣': 'Latex Catsuit 2',
-  '束腰': 'Waist Cincher',
-  '两侧镂空瑜伽裤': 'Side Cut-Out Yoga Pants',
-  '半开百褶裙': 'Half-Open Pleated Skirt',
-  '牛仔裤': 'Jeans',
-  '皮革中空短裙': 'Leather Hollow Miniskirt',
-  '裙': 'Skirt',
-  '裙子': 'Skirt 2',
-  '裙子2': 'Skirt 3',
-  '运动套装bottom': 'Sports Outfit Bottom',
-  '运动套装skirt': 'Sports Outfit Skirt',
-  '迷你裤': 'Mini Shorts',
-  '铅笔裙2': 'Pencil Skirt 2',
-  '黑曜蝶翼裙': 'Obsidian Butterfly Skirt',
-  '塑身衣2': 'Shapewear 2',
-  '瑜伽裤': 'Yoga Pants',
-  '蕾丝裤': 'Lace Pants',
-  '裤子1': 'Pants 1',
-  '马油袜下': 'Horse Oil Stockings Bottom',
-  '丝袜': 'Silk Stockings',
-  '猫袜': 'Cat Stockings',
-  '珍珠带': 'Pearl Strap',
-  '淫纹': 'Lewd Tattoo/Mark',
-  '丝袜2': 'Silk Stockings 2',
-  '丝袜3': 'Silk Stockings 3',
-  '条纹袜': 'Striped Socks',
-  '条纹袜2': 'Striped Socks 2',
-  '网袜': 'Fishnet Socks',
-  '荷叶边袜': 'Ruffle Socks',
-  '袜套': 'Leg Warmers',
-  '踩脚袜': 'Stirrup Socks',
-  '露趾袜': 'Open-Toe Socks',
-  '绷带': 'Bandage Wrap',
-  '脚趾甲': 'Toenails',
-  '脚趾戒指': 'Toe Ring',
-  '兽蹄鞋': 'Beast Hoof Shoes',
-  '凉鞋': 'Sandals',
-  '洞洞鞋': 'Croc-style Shoes',
-  '厚拖': 'Platform Slippers',
-  '拖鞋': 'Slippers',
-  '灰姑娘': 'Cinderella Heels',
-  '玛丽珍皮鞋': 'Mary Jane Shoes',
-  '绑带鞋': 'Lace-Up Shoes',
-  '鱼嘴高跟鞋': 'Peep-Toe Heels',
-  '拉链皮靴': 'Zipper Leather Boots',
-  'NPC气泡': 'NPC Speech Bubble',
-  '桂冠': 'Laurel Crown',
-  '羽翼头饰': 'Wing Headpiece',
-  '女巫帽子': 'Witch Hat 2',
-  '冕旒': 'Emperor Crown',
-  '狐狸面具': 'Fox Mask (Hat)',
-  '帽子2': 'Hat 2',
-  '斗笠1': 'Bamboo Hat 1',
-  '斗笠2': 'Bamboo Hat 2',
-  '医用眼罩左': 'Medical Eyepatch Left',
-  '医用眼罩右': 'Medical Eyepatch Right',
-  '单边眼镜左': 'Monocle Left',
-  '单边眼镜右': 'Monocle Right',
-  '眼镜卡': 'Glasses Clip',
-  '爱心眼镜': 'Heart Glasses',
-  '下半框眼镜': 'Half-Rim Glasses',
-  '色散墨镜': 'Chromatic Sunglasses',
-  '墨镜A': 'Sunglasses A',
-  '羽翼眼罩': 'Wing Eye Mask',
-  'X眼罩': 'X Eye Mask',
-  '乳胶眼罩': 'Latex Eye Mask',
-  '乳胶眼罩2': 'Latex Eye Mask 2',
-  '乳胶口罩': 'Latex Face Mask',
-  '时尚口罩': 'Fashion Face Mask',
-  '嘴笼': 'Muzzle',
-  '运动套装ha': 'Sports Outfit Headband',
-  '茉莉花钿1': 'Jasmine Forehead Jewel 1',
-  '茉莉花钿2': 'Jasmine Forehead Jewel 2',
-  '发卡1': 'Hair Clip 1',
-  '发卡2': 'Hair Clip 2',
-  'X发卡': 'X Hair Clip',
-  '心型发卡': 'Heart Hair Clip',
-  '星星发卡': 'Star Hair Clip',
-  '星星发卡2': 'Star Hair Clip 2',
-  '月亮发饰': 'Moon Hair Ornament',
-  '蝴蝶': 'Butterfly Hair Acc.',
-  '蝴蝶2': 'Butterfly Hair Acc. 2',
-  '蝙蝠翼发卡': 'Bat Wing Hair Clip',
-  '天线': 'Antenna',
-  '眉心坠': 'Brow Pendant',
-  '蝴蝶结头饰小': 'Small Bow Headpiece',
-  '蝴蝶结头饰大': 'Large Bow Headpiece',
-  '铜钱簪': 'Copper Coin Hairpin',
-  '树叶发饰': 'Leaf Hair Ornament',
-  '金属发卡': 'Metal Hair Clip',
-  '耳朵1': 'Ears Style 1',
-  '耳朵2': 'Ears Style 2',
-  '精灵耳2': 'Elf Ears 2',
-  '小马耳2': 'Pony Ears 2',
-  '鱼鳍耳朵': 'Fish Fin Ears',
-  '耷拉下来的耳朵': 'Droopy Ears',
-  '黑猫耳镜像': 'Black Cat Ears (Mirror)',
-  '书包': 'School Bag / Restraint',
-  '二胡': 'Erhu',
-  '把手': 'Handle',
-  '肩章': 'Epaulettes',
-  '蝴蝶结背饰': 'Bow Back Decoration',
-  '蝴蝶结装饰': 'Bow Decoration',
-  '踝链A': 'Anklet A',
-  '踝链B': 'Anklet B',
-  '踝链C': 'Anklet C',
-  '项链A': 'Necklace A',
-  '围脖': 'Neck Warmer/Snood',
-  '女巫小披肩': 'Witch Mini Cape',
-  '披肩短': 'Short Cape',
-  '披肩长': 'Long Cape',
-  '立领披肩': 'Stand-Collar Cape',
-  '白色礼服丝巾': 'White Formal Scarf',
-  '运动套装nl': 'Sports Outfit Necklace',
-  '围裙': 'Apron',
-  '拐杖': 'Walking Cane',
-  '电吉他': 'Electric Guitar',
-  '铃铛C': 'Bell C',
-  '枪套': 'Holster',
-  'X腿带': 'X Leg Strap',
-  '花边腿环': 'Lace Leg Ring',
-  '蕾丝边': 'Lace Edge',
-  '袜子蝴蝶结': 'Sock Bow',
-  '花边大腿环': 'Lace Thigh Ring',
-  '身体论文': 'Body Essay',
-  '尾巴1': 'Tail Style 1',
-  '尾巴2': 'Tail Style 2',
-  '尾巴3': 'Tail Style 3',
-  '雪豹尾巴': 'Snow Leopard Tail',
-  '雪豹尾巴镜像': 'Snow Leopard Tail (Mirror)',
-  '鱼尾1': 'Fish Tail 1',
-  '鱼尾2': 'Fish Tail 2',
-  '蝎子尾巴': 'Scorpion Tail',
-  '穿戴式狗尾镜像': 'Wearable Dog Tail (M)',
-  '白色穿戴式狼尾镜像': 'White Wolf Tail (M)',
-  '穿戴式浅色猫尾镜像': 'Light Cat Tail (M)',
-  '穿戴式软小狗尾镜像': 'Soft Puppy Tail (M)',
-  '大型穿戴式狼尾镜像': 'Large Wolf Tail (M)',
-  '小型穿戴式狼尾镜像': 'Small Wolf Tail (M)',
-  '小型穿戴式软猫尾镜像': 'Small Soft Cat Tail (M)',
-  '穿戴式浣熊尾镜像': 'Raccoon Tail (M)',
-  '穿戴式猫尾镜像': 'Cat Tail (M)',
-  '蛇身': 'Snake Body',
-  '蜘蛛': 'Spider Body',
-  '翅膀1': 'Wings Style 1',
-  '翅2': 'Wings Style 2',
-  '翅3': 'Wings Style 3',
-  '刻度尺': 'Ruler Markings',
-  '咬痕': 'Bite Marks',
-  '大纹身': 'Large Tattoo',
-  '标志纹饰': 'Logo Tattoo',
-  '番茄酱': 'Ketchup',
-  '花钿': 'Flower Jewel',
-  '面部妆容': 'Face Makeup',
-  '面部妆容1': 'Face Makeup 2',
-  '小丑面妆': 'Clown Face Paint',
-  '义肢拘束A': 'Prosthetic Arm Restraint A',
-  '全身条带拘束': 'Full Body Strap Restraint',
-  '拘束抱枕': 'Restraint Pillow',
-  '花边手环': 'Lace Wrist Cuff',
-  '举手杆': 'Arm-Raising Bar',
-  '乳胶宠物拘束服': 'Latex Pet Restraint Suit',
-  '充气式拘束袋': 'Inflatable Restraint Bag',
-  '宠物服上': 'Pet Suit Upper',
-  '简单绳': 'Simple Rope',
-  '鬼手': 'Ghost Hands',
-  '义肢拘束L': 'Prosthetic Leg Restraint',
-  '电击器': 'Electric Shocker',
-  '绳子': 'Rope',
-  '分膝杆': 'Knee Spreader Bar',
-  '宠物服下': 'Pet Suit Lower',
-  '膝上过夜束缚器': 'Above-Knee Overnight Restraint',
-  '绷带头部': 'Head Bandage',
-  '义肢拘束H': 'Prosthetic Head Restraint',
-  '毛毯头部': 'Blanket Hood',
-  '麻袋': 'Burlap Sack',
-  '乳胶头套': 'Latex Hood 2',
-  '狗机仆头套': 'Robot Maid Hood',
-  '汉堡头套': 'Hamburger Hood',
-  '便携乳泵': 'Portable Breast Pump',
-  '胶带全身': 'Full Body Tape',
-  '睡袋改': 'Sleeping Bag (Modified)',
-  '全包毛毯改': 'Full Wrap Blanket (Mod)',
-  '全包毛毯': 'Full Wrap Blanket',
-  '可移动玻璃柜': 'Portable Display Case',
-  '尿袋': 'Urine Bag',
-  '托盘': 'Serving Tray',
-  '拘束套装': 'Restraint Suit Set',
-  '触手服': 'Tentacle Suit',
-  '鞍': 'Saddle',
-  '缰绳': 'Reins',
-  '南瓜马具口塞': 'Pumpkin Harness Gag',
-  '蛋糕卷': 'Swiss Roll Gag',
-  '棒棒糖': 'Lollipop',
-  '烤鱼': 'Grilled Fish',
-  '鸡腿': 'Chicken Leg',
-  '煎包': 'Pan-Fried Bun',
-  '曲奇': 'Cookie',
-  '吐司': 'Toast',
-  '蛋挞': 'Egg Tart',
-  '月饼': 'Mooncake',
-  '大号拉珠': 'Large Anal Beads',
-  '肛鞭': 'Anal Whip',
-  '哥布哥布': 'Goblin Leash',
-  '栓柱': 'Tethering Post',
-  '监控机器人': 'Surveillance Robot',
-  '玩偶': 'Doll',
-  '南瓜盆': 'Pumpkin Bowl',
-  '斩标': 'Execution Mark',
-  '扛起来的麻袋': 'Carried Burlap Sack',
-  '抓住推车': 'Holding Cart',
-  '抓住行李箱': 'Holding Suitcase',
-  '抓住硬壳行李箱': 'Holding Hard Suitcase',
-  '抓住宠物箱': 'Holding Pet Carrier',
-  '拉紧的牵绳': 'Taut Leash',
-  '拉紧的链子': 'Taut Chain',
-  '贴贴': 'Sticker/Patch',
-  '宠物箱': 'Pet Carrier Box',
-  '猪猪': 'Piggy Device',
-  '硬壳行李箱': 'Hard Shell Suitcase',
-  '窝瓜': 'Pumpkin/Squash Device',
-  '纸箱': 'Cardboard Box',
-  '行李箱': 'Suitcase',
-  '马车固定': 'Carriage Restraint',
-  '马车': 'Carriage/Cart',
-  '乳胶带床': 'Latex Strap Bed',
-  '垃圾桶': 'Trash Can',
-  '床左边': 'Bed Left Side',
-  '床右边': 'Bed Right Side',
-  '巨型玩偶': 'Giant Doll',
-  '开腿展示架': 'Spread-Leg Display Stand',
-  '拳击袋': 'Punching Bag',
-  '木狗屋': 'Wooden Dog House',
-  '架子鼓': 'Drum Kit',
-  '树': 'Tree',
-  '正坐椅': 'Seiza Chair',
-  '正坐椅L': 'Seiza Chair L',
-  '独角兽玩偶': 'Unicorn Doll',
-  '玻璃罐子': 'Glass Jar',
-  '铁架台': 'Iron Frame Stand',
-  '单监': 'Single Monitor',
-  '奶贩': 'Milk Vendor',
-  '后背': 'Back Attachment',
-  '隐形药水': 'Invisibility Potion',
-  '裸空间': 'Naked Space',
-  '调整高度': 'Height Adjustment',
-  '被子左边': 'Duvet Left Side',
-  '被子右边': 'Duvet Right Side',
-  '香肠': 'Sausage',
-  '阿巴阿巴': 'Abba Abba (Plush)',
-  '折扇': 'Folding Fan',
-  '油纸伞': 'Oiled Paper Umbrella',
-  '刀': 'Knife/Sword',
-  '分层剑': 'Layered Sword',
-  '巧克力': 'Chocolate',
-  '电蚊拍': 'Electric Mosquito Racket',
-  '书': 'Book',
-  '奶瓶': 'Baby Bottle',
-  '红包': 'Red Envelope',
-  '伊偶': 'Yi Doll',
-  '武器组合': 'Weapon Combo',
-  '杯饮': 'Cup Drink',
-  '笔记本电脑': 'Laptop',
-  '糖果手杖': 'Candy Cane',
-  '汉堡': 'Hamburger',
-  '奶茶': 'Bubble Tea',
-  '榨汁枪': 'Juice Gun',
-  '警棍': 'Police Baton',
-  '更多有线跳蛋': 'More Wired Vibrating Eggs',
-  '内套': 'Inner Sleeve',
-  '乳夹': 'Nipple Clamps 3',
-  '铃铛P': 'Bell Piercing',
-  '穿环胸牌': 'Piercing Chest Badge',
-  '短穿环': 'Short Piercing Bar',
-  '贯穿穿刺': 'Through Piercing',
-  '人偶': 'Puppet/Mannequin',
-  '幽灵人形': 'Ghost Form',
-  '生化人体': 'Bionic Body',
-  '透明身体': 'Transparent Body',
-  '鱼鱼尾': 'Fish Tail Body',
+// Rang-State: memberNum -> aktueller rankId (laut Popup-State)
+// Beim Start mit gespeicherten Spieler-Rang-Zuweisungen initialisieren
+const _rangState=Object.assign({},_cfg.rankPlayers??{});
+
+// Shop-Konfiguration (Snapshot beim Bot-Start)
+const _shopCfg={
+  cmd:(_cfg.shopCmd||'!pay').trim(),
+  items:_cfg.shopItems??[],
+  confirmMsg:_cfg.shopConfirmMsg??'',
+  announceMsg:_cfg.shopAnnounceMsg??'',
+  announceAllMsg:_cfg.shopAnnounceAllMsg??'',
+  errorMsg:_cfg.shopErrorMsg??'',
+  moneyName:_cfg.moneyName??'Gold',
+  preisU:_cfg.shopPreisU??0,
+  preisNostrip:_cfg.shopPreisNostrip??0,
+  listCmd:(_cfg.shopListCmd||'!shop').trim(),
+  announceNostripMsg:_cfg.shopAnnounceNostripMsg??'',
 };
+// Money-Balances: lokale Kopie für Echtzeit-Prüfungen (wird bei Abbuchung synchron aktualisiert)
+const _moneyBalances=Object.assign({},_cfg.moneyBalances??{});
 
-function echoTranslate(name) {
-  return ECHO_CN_NAMES[name] || null;
-}
+function _log(...a){if(_cfg.logAktiv)console.log('[Bot:${safeName}]',...a);}
 
-// ══════════════════════════════════════════════════════
-//  STATE
-// ══════════════════════════════════════════════════════
-let CACHE   = {};
-let CURRENT = null;
-window._BCCurrent = () => CURRENT; // expose for bot tab
+// bei_fehler: 'ignorieren' | 'kette_stoppen' | 'trigger_ungueltig'
+// Executed sequentially – each action's result determines if chain continues
 
-let dimMode      = {};
-let dimSelected  = {};
-let dimSubProps  = {};
-let globalPropVals = {};
-let colorIsDefault = {};  // i → true wenn "Default" aktiv
+// Direkt C.X/C.Y verwenden – exakt wie funktionierendes ZoneMonitor-Pattern
+// Kein Lookup nötig: [Player,...ChatRoomCharacter] enthält bereits korrekte Positionen
 
-let FAVORITES = new Set();
-let OUTFIT    = [];
-
-let tightnessOn  = false;
-let tightnessVal = 0;
-
-// ── Vibrating state ──────────────────────────────────
-let vibratingMode      = 'Off';
-let vibratingIntensity = -1;
-let vibratingTR        = 0;
-let vibratingEffects   = new Set();
-
-// ── Direct options (BallGag) ─────────────────────────
-let classicOptionSel = 0;
-
-// ── Baseline / Punishment ────────────────────────────
-let baselinePropVals = {};
-
-// ── Outfit Profiles ──────────────────────────────────
-let PROFILES = {};
-try { PROFILES = JSON.parse(localStorage.getItem('BC_PROFILES_v11') || '{}'); } catch {}
-
-
-// ── Init ─────────────────────────────────────────────
-try {
-  const fav = localStorage.getItem('BC_FAVORITES_v9');
-  if (fav) FAVORITES = new Set(JSON.parse(fav));
-} catch {}
-
-// ══════════════════════════════════════════════════════
-//  CACHE
-// ══════════════════════════════════════════════════════
-function showImport() {
-  document.getElementById('importBox').classList.remove('hidden');
-}
-
-async function pasteClipboard() {
-  try { document.getElementById('importArea').value = await navigator.clipboard.readText(); }
-  catch { alert('Clipboard verweigert – manuell einfügen.'); }
-}
-
-function loadCache() {
-  const raw   = document.getElementById('importArea').value.trim();
-  const errEl = document.getElementById('importError');
-  try {
-    const data  = JSON.parse(raw);
-    const items = Object.values(data).reduce((s,g) => s + Object.keys(g).length, 0);
-    if (items === 0) throw new Error('Kein gültiger BC-Cache');
-    CACHE = data;
-    try { localStorage.setItem('BC_CACHE_v11', raw); } catch {}
-    errEl.classList.add('hidden');
-    document.getElementById('importBox').classList.add('hidden');
-    document.getElementById('importArea').value = '';
-    const modCount = Object.values(data).flatMap(g => Object.values(g)).filter(i => i.isModular).length;
-    document.getElementById('cacheInfo').textContent =
-      `${items} Items | ${Object.keys(data).length} Gruppen${modCount ? ` | 🧩 ${modCount} Modular` : ''}`;
-    document.getElementById('clearBtn').classList.remove('hidden');
-    document.getElementById('outfitBtn')?.classList.remove('hidden');
-    document.getElementById('profileBtn')?.classList.remove('hidden');
-    renderGroups();
-    showEmpty();
-  } catch(e) {
-    errEl.textContent = '❌ ' + e.message;
-    errEl.classList.remove('hidden');
-  }
-}
-
-// clearCache defined in BC comms block
-
-// [auto-load moved to BC comms block below]
-
-// ══════════════════════════════════════════════════════
-//  SIDEBAR & FAVORITES
-// ══════════════════════════════════════════════════════
-function favKey(g, n) { return `${g}::${n}`; }
-
-function toggleFav(group, name, e) {
-  e.stopPropagation();
-  const k = favKey(group, name);
-  if (FAVORITES.has(k)) FAVORITES.delete(k);
-  else FAVORITES.add(k);
-  try { localStorage.setItem('BC_FAVORITES_v9', JSON.stringify([...FAVORITES])); } catch {}
-  renderGroups(document.querySelector('.sidebar-search')?.value || '');
-}
-
-function renderGroups(filter = '') {
-  const fl = filter.toLowerCase();
-
-  // Favoriten
-  const favEl   = document.getElementById('favSection');
-  const favList = document.getElementById('favList');
-  const favItems = [...FAVORITES].filter(k => {
-    const [g,n] = k.split('::');
-    return CACHE[g]?.[n] && (!fl || n.toLowerCase().includes(fl) || g.toLowerCase().includes(fl));
-  });
-  favEl.classList.toggle('hidden', favItems.length === 0);
-  favList.innerHTML = '';
-  favItems.forEach(k => {
-    const [g,n] = k.split('::');
-    const row = document.createElement('div');
-    row.className = 'item-row';
-    row.innerHTML = `
-      <button class="item-btn${CURRENT?.asset===n&&CURRENT?.group===g?' active':''}" onclick="selectItem('${g}','${n}')">${n}${echoTranslate(n)?'<span style="display:block;font-size:.57rem;color:#a78bfa;line-height:1.1;pointer-events:none">'+echoTranslate(n)+'</span>':''}</button>
-      <button class="star-btn fav" onclick="toggleFav('${g}','${n}',event)" title="Favorit entfernen">⭐</button>`;
-    favList.appendChild(row);
-  });
-
-  // Gruppen
-  const container = document.getElementById('groupsList');
-  container.innerHTML = '';
-  for (const group in CACHE) {
-    const names = Object.keys(CACHE[group]).filter(n =>
-      !fl || n.toLowerCase().includes(fl) || group.toLowerCase().includes(fl));
-    if (!names.length) continue;
-    const wrap    = document.createElement('div');
-    const hdr     = document.createElement('div');
-    hdr.className = 'group-hdr' + (fl ? ' open' : '');
-    hdr.innerHTML = `<span>${group}</span><span style="font-size:.62rem;color:var(--text3)">${names.length}</span>`;
-    const itemsDiv = document.createElement('div');
-    itemsDiv.className = 'group-items' + (fl ? ' open' : '');
-    hdr.onclick = () => { hdr.classList.toggle('open'); itemsDiv.classList.toggle('open'); };
-    wrap.append(hdr, itemsDiv);
-    names.forEach(name => {
-      const isFav = FAVORITES.has(favKey(group, name));
-      const row   = document.createElement('div');
-      row.className = 'item-row';
-      row.innerHTML = `
-        <button class="item-btn${CURRENT?.asset===name&&CURRENT?.group===group?' active':''}" id="ib_${group}_${name}" onclick="selectItem('${group}','${name}')">${name}${echoTranslate(name)?'<span style="display:block;font-size:.57rem;color:#a78bfa;line-height:1.1;pointer-events:none">'+echoTranslate(name)+'</span>':''}</button>
-        <button class="star-btn${isFav?' fav':''}" onclick="toggleFav('${group}','${name}',event)" title="${isFav?'Favorit entfernen':'Zu Favoriten'}">${isFav?'⭐':'☆'}</button>`;
-      itemsDiv.appendChild(row);
-    });
-    container.appendChild(wrap);
-  }
-}
-
-// ══════════════════════════════════════════════════════
-//  ITEM AUSWÄHLEN
-// ══════════════════════════════════════════════════════
-function selectItem(group, asset) {
-  const cfg = CACHE[group]?.[asset];
-  if (!cfg) return;
-  CURRENT = { group, asset, cfg };
-  dimMode = {}; dimSelected = {}; dimSubProps = {}; globalPropVals = {};
-  colorIsDefault = {};
-  tightnessOn = false; tightnessVal = 0;
-  vibratingMode = 'Off'; vibratingIntensity = -1; vibratingTR = 0; vibratingEffects = new Set(['Egged']);
-  classicOptionSel = 0; baselinePropVals = {};
-
-  for (const key in (cfg.typeKeys || {})) {
-    dimMode[key]     = 'single';
-    dimSelected[key] = new Set([0]);
-    dimSubProps[key] = {};
-    (cfg.typeKeys[key] || []).forEach((_, i) => { dimSubProps[key][i] = {}; });
-  }
-
-  buildConfigurator();
-  renderGroups(document.querySelector('.sidebar-search')?.value || '');
-}
-
-function showEmpty() {
-  document.getElementById('configurator').classList.add('hidden');
-  document.getElementById('emptyState').classList.remove('hidden');
-}
-
-// ══════════════════════════════════════════════════════
-//  KONFIGURATOR AUFBAUEN
-// ══════════════════════════════════════════════════════
-function buildConfigurator() {
-  const { cfg } = CURRENT;
-  document.getElementById('emptyState').classList.add('hidden');
-  document.getElementById('configurator').classList.remove('hidden');
-  buildModules();
-  buildDirectOptions();
-  buildVibrating();
-  buildBaselinePropsUI();
-  buildColors();
-  buildTightness();
-  buildGlobalPropsUI();
-
-  const sel = document.getElementById('craftProp');
-  sel.innerHTML = '';
-  (cfg.allowedCraftProps?.length ? cfg.allowedCraftProps : ['Normal'])
-    .forEach(p => { const o=document.createElement('option'); o.value=p; o.textContent=p; sel.appendChild(o); });
-  document.getElementById('craftName').value = '';
-  document.getElementById('craftDesc').value = '';
-  document.getElementById('lockType').value  = '';
-  onLockChange();
-  generate();
-}
-
-// ── MODULE ─────────────────────────────────────────
-function buildModules() {
-  const { cfg, asset } = CURRENT;
-  const grid    = document.getElementById('moduleGrid');
-  grid.innerHTML = '';
-  const dimKeys  = Object.keys(cfg.typeKeys || {});
-  document.getElementById('moduleSection').classList.toggle('hidden', dimKeys.length === 0);
-  if (!dimKeys.length) return;
-
-  const badge = document.createElement('div');
-  badge.className = `arch-badge ${cfg.isModular ? 'modular' : 'classic'}`;
-  badge.textContent = cfg.isModular ? '🧩 Modular Archetype' : '📋 TypeRecord';
-  grid.appendChild(badge);
-
-  dimKeys.forEach(key => {
-    const opts    = cfg.typeKeys[key] || [];
-    const modName = cfg.moduleNames?.[key] || key;
-    const block   = document.createElement('div');
-    block.className = 'dim-block';
-    block.innerHTML = `<div class="dim-hdr">
-      <span class="key-badge">${key}</span>
-      <span class="dim-title">${modName} <span style="color:var(--text3);font-size:.66rem">(${opts.length} Optionen)</span></span>
-      <label class="multi-toggle">
-        <input type="checkbox" id="multi_${key}" onchange="toggleMulti('${key}')"> Multi
-      </label></div>
-    <div class="dim-opts" id="opts_${key}"></div>`;
-    grid.appendChild(block);
-    renderDimOpts(key);
-  });
-}
-
-function renderDimOpts(key) {
-  const { cfg } = CURRENT;
-  const opts = cfg.typeKeys[key] || [];
-  const container = document.getElementById(`opts_${key}`);
-  container.innerHTML = '';
-
-  opts.forEach((opt, idx) => {
-    const isSel      = dimSelected[key].has(idx);
-    const configProps = getPropsForOpt(cfg, key, idx);
-
-    const badges = [
-      ...(opt.effect||[]).map(e => `<span class="b e">⬤ ${e}</span>`),
-      ...(opt.block ||[]).map(b => `<span class="b bl">⬤ ${b}</span>`),
-      ...(opt.hide  ||[]).map(h => `<span class="b y">👁 ${h}</span>`),
-      ...(opt.intensity != null ? [`<span class="b p">I:${opt.intensity}</span>`] : []),
-      ...(opt.inflate   != null ? [`<span class="b p">↑${opt.inflate}</span>`] : []),
-      ...(opt.shock     != null ? [`<span class="b bl">⚡${opt.shock}</span>`] : []),
-    ].join('');
-
-    const infoItems = [];
-    if (opt.effect?.length)    infoItems.push(`<span class="sub-info-label">Effekte:</span>` + opt.effect.map(e=>`<span class="b e">${e}</span>`).join(''));
-    if (opt.block?.length)     infoItems.push(`<span class="sub-info-label">Blockiert:</span>` + opt.block.map(b=>`<span class="b bl">${b}</span>`).join(''));
-    if (opt.hide?.length)      infoItems.push(`<span class="sub-info-label">Versteckt:</span>` + opt.hide.map(h=>`<span class="b y">${h}</span>`).join(''));
-    if (opt.hideItem?.length)  infoItems.push(`<span class="sub-info-label">HideItem:</span>` + opt.hideItem.map(h=>`<span class="b gr">${h}</span>`).join(''));
-    if (opt.prereq?.length)    infoItems.push(`<span class="sub-info-label">Voraussetzung:</span>` + opt.prereq.map(p=>`<span class="b p">${p}</span>`).join(''));
-    if (opt.intensity  != null) infoItems.push(`<span class="b p">Intensity: ${opt.intensity}</span>`);
-    if (opt.inflate    != null) infoItems.push(`<span class="b p">InflateLevel: ${opt.inflate}</span>`);
-    if (opt.shock      != null) infoItems.push(`<span class="b bl">ShockLevel: ${opt.shock}</span>`);
-    if (opt.desc)               infoItems.push(`<span style="font-size:.66rem;color:var(--text3)">${opt.desc}</span>`);
-
-    const subInfoHtml = infoItems.length ? infoItems.map(i => `<div class="sub-info">${i}</div>`).join('') : '';
-
-    let subPropsHtml = '';
-    if (configProps.length > 0) {
-      subPropsHtml = `<div style="font-size:.65rem;color:var(--text3);margin:5px 0 3px">Konfigurierbare Properties:</div>
-        <div class="sub-props">` +
-        configProps.map(prop => {
-          const id    = `sp_${key}_${idx}_${prop}`;
-          const cur   = dimSubProps[key]?.[idx]?.[prop];
-          const isBool = /^(Show|Punish|Enable|Allow|Has|Is|Can|Auto|Block)/.test(prop);
-          const isNum  = /Level|Count|Timer|Num|Max|Min|Amount|Delay|Duration|Speed/.test(prop);
-          if (isBool) return `<div class="sub-prop"><div class="sub-prop-label">${prop}</div>
-              <select onchange="setSubProp('${key}',${idx},'${prop}',this.value)">
-                <option value="null"${cur==null?' selected':''}>– nicht setzen –</option>
-                <option value="true"${cur===true?' selected':''}>true</option>
-                <option value="false"${cur===false?' selected':''}>false</option>
-              </select></div>`;
-          if (isNum) return `<div class="sub-prop"><div class="sub-prop-label">${prop}</div>
-              <div class="sub-inline">
-                <input type="checkbox" id="${id}_en"${cur!=null?' checked':''}
-                  onchange="setSubPropN('${key}',${idx},'${prop}',this.checked,document.getElementById('${id}').value)">
-                <input type="number" id="${id}" value="${cur??0}"
-                  oninput="if(document.getElementById('${id}_en').checked)setSubPropN('${key}',${idx},'${prop}',true,this.value)">
-              </div></div>`;
-          return `<div class="sub-prop"><div class="sub-prop-label">${prop}</div>
-              <div class="sub-inline">
-                <input type="checkbox" id="${id}_en"${cur!=null?' checked':''}
-                  onchange="setSubPropS('${key}',${idx},'${prop}',this.checked,document.getElementById('${id}').value)">
-                <input type="text" id="${id}" value="${cur??''}" placeholder="Wert"
-                  oninput="if(document.getElementById('${id}_en').checked)setSubPropS('${key}',${idx},'${prop}',true,this.value)">
-              </div></div>`;
-        }).join('') + '</div>';
+function _ok(trig,rohText,typKey,C){
+  const cx=C.X??-999,cy=C.Y??-999;
+  const beds=trig.bedingungen??[];
+  if(!beds.length)return true;
+  // AND/OR Auswertung: logik-Feld pro Bedingung verbindet mit vorheriger
+  // Ablauf: Bedingungen in OR-Gruppen aufteilen (trennend bei "oder"), dann alle Gruppen mit AND prüfen
+  function checkOne(c){
+    if(c.typ==='wort'){
+      const m=c.typ_msg||'any';
+      if(m!=='any'&&m!==typKey)return false;
+      return!c.wort||(rohText||'').toLowerCase().includes((c.wort||'').toLowerCase());
     }
-
-    const hasSubContent = infoItems.length > 0 || configProps.length > 0;
-    const subHtml = hasSubContent ? `<div class="opt-sub">${subInfoHtml}${subPropsHtml}</div>` : '';
-
-    const row = document.createElement('div');
-    row.className = 'opt-row' + (isSel ? ' sel' : '');
-    row.id = `optrow_${key}_${idx}`;
-    row.innerHTML = `
-      <div class="opt-hdr">
-        <input type="checkbox" class="opt-check" ${isSel?'checked':''}>
-        <span class="opt-idx">[${idx}]</span>
-        <span class="opt-name">${opt.name}</span>
-        <div class="opt-badge-row">${badges}</div>
-      </div>
-      ${subHtml}`;
-    row.querySelector('.opt-hdr').addEventListener('click', () => toggleOpt(key, idx));
-    container.appendChild(row);
-  });
-}
-
-function toggleMulti(key) {
-  const isMulti = document.getElementById(`multi_${key}`).checked;
-  dimMode[key] = isMulti ? 'multi' : 'single';
-  if (!isMulti) {
-    const first = [...dimSelected[key]].sort((a,b)=>a-b)[0] ?? 0;
-    dimSelected[key] = new Set([first]);
-  }
-  renderDimOpts(key);
-  generate();
-}
-
-function toggleOpt(key, idx) {
-  if (dimMode[key] === 'single') {
-    dimSelected[key] = new Set([idx]);
-  } else {
-    if (dimSelected[key].has(idx)) {
-      dimSelected[key].delete(idx);
-      if (dimSelected[key].size === 0) dimSelected[key].add(0);
-    } else {
-      dimSelected[key].add(idx);
+    if(c.typ==='zone'){
+      const p=c.puffer??1;
+      const ok=cx>=c.x-p&&cx<=c.x+p&&cy>=c.y-p&&cy<=c.y+p;
+      if(!ok)_log('Zone miss: X='+cx+' Y='+cy+' erwartet X='+c.x+' Y='+c.y+'±'+p);
+      return ok;
     }
-  }
-  renderDimOpts(key);
-  generate();
-}
-
-function setSubProp(key, idx, prop, raw)        { dimSubProps[key][idx][prop] = raw==='null'?null:raw==='true'; generate(); }
-function setSubPropN(key, idx, prop, en, raw)   { dimSubProps[key][idx][prop] = en?(parseInt(raw)||0):null; generate(); }
-function setSubPropS(key, idx, prop, en, val)   { dimSubProps[key][idx][prop] = en?val:null; generate(); }
-
-// ── FARBEN ─────────────────────────────────────────
-function buildColors() {
-  const { cfg } = CURRENT;
-  const grid = document.getElementById('colorGrid');
-  grid.innerHTML = '';
-  const n    = cfg.colorCount || 1;
-  const defs = cfg.defaultColors || [];
-
-  for (let i = 0; i < n; i++) {
-    const name       = cfg.layerNames?.[i] || `Layer ${i+1}`;
-    const def        = defs[i] || 'Default';
-    const isDefault  = !def || def === 'Default' || def === 'default';
-    const hasKnown   = /^#[0-9a-fA-F]{6}$/.test(def);
-    colorIsDefault[i] = isDefault;
-
-    const div = document.createElement('div');
-    div.className = 'color-item' + (isDefault ? ' is-default' : '');
-    div.id = `ci_${i}`;
-
-    if (hasKnown) {
-      // Echte Hex-Farbe aus dem Asset → direkt anzeigen
-      div.innerHTML = `
-        <label>${name}</label>
-        <div class="color-row">
-          <input type="color" id="color_${i}" value="${def}"
-            title="Asset-Standard: ${def}" oninput="onColorChange(${i})">
-          <button class="color-default-btn" onclick="resetColor(${i})" title="Auf Standard zurücksetzen">↺</button>
-        </div>`;
-    } else {
-      // Kein Hex bekannt → neutraler Platzhalter, Custom-Color auf Wunsch
-      div.innerHTML = `
-        <label>${name} <span style="color:var(--text3);font-size:.6rem">(BC-Standard)</span></label>
-        <div class="color-row">
-          <div id="ci_placeholder_${i}" style="flex:1;height:26px;border:1px dashed var(--border2);border-radius:4px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:.65rem;color:var(--text3)" title="Klicken um eigene Farbe zu setzen" onclick="activateColorPicker(${i})">
-            + Farbe setzen
-          </div>
-          <input type="color" id="color_${i}" value="#808080" style="display:none" oninput="onColorChange(${i})">
-          <button class="color-default-btn" id="ci_reset_${i}" style="display:none" onclick="resetColor(${i})" title="Auf BC-Standard zurücksetzen">↺</button>
-        </div>`;
+    if(c.typ==='zone_rect'){
+      const ok=cx>=Math.min(c.x1,c.x2)&&cx<=Math.max(c.x1,c.x2)&&cy>=Math.min(c.y1,c.y2)&&cy<=Math.max(c.y1,c.y2);
+      return ok;
     }
-    grid.appendChild(div);
-  }
-}
-
-function activateColorPicker(i) {
-  const el   = document.getElementById(`color_${i}`);
-  const ph   = document.getElementById(`ci_placeholder_${i}`);
-  const rst  = document.getElementById(`ci_reset_${i}`);
-  if (!el) return;
-  el.style.display = '';
-  el.style.flex = '1';
-  if (ph)  ph.style.display  = 'none';
-  if (rst) rst.style.display = '';
-  el.click(); // Picker direkt öffnen
-}
-
-function onColorChange(i) {
-  colorIsDefault[i] = false;
-  const el  = document.getElementById(`color_${i}`);
-  const ci  = document.getElementById(`ci_${i}`);
-  const ph  = document.getElementById(`ci_placeholder_${i}`);
-  const rst = document.getElementById(`ci_reset_${i}`);
-  ci.classList.remove('is-default');
-  const lbl = ci.querySelector('label');
-  const name = CURRENT.cfg.layerNames?.[i] || `Layer ${i+1}`;
-  lbl.textContent = name;
-  // Platzhalter ausblenden, echten Picker + Reset zeigen
-  if (ph)  ph.style.display  = 'none';
-  el.style.display = '';
-  el.style.flex    = '1';
-  if (rst) rst.style.display = '';
-  generate();
-}
-
-function resetColor(i) {
-  const def     = CURRENT.cfg.defaultColors?.[i] || 'Default';
-  const isDefault = !def || def === 'Default';
-  const hasKnown  = /^#[0-9a-fA-F]{6}$/.test(def);
-  colorIsDefault[i] = isDefault;
-  const el = document.getElementById(`color_${i}`);
-  const ci = document.getElementById(`ci_${i}`);
-  if (hasKnown) {
-    el.value = def;
-    el.classList.remove('is-default-input');
-  } else {
-    // Platzhalter wiederherstellen
-    el.value = '#808080';
-    el.style.display = 'none';
-    const ph  = document.getElementById(`ci_placeholder_${i}`);
-    const rst = document.getElementById(`ci_reset_${i}`);
-    if (ph)  ph.style.display  = '';
-    if (rst) rst.style.display = 'none';
-  }
-  ci.classList.toggle('is-default', isDefault);
-  const name = CURRENT.cfg.layerNames?.[i] || `Layer ${i+1}`;
-  ci.querySelector('label').innerHTML = name
-    + (isDefault ? ' <span style="color:var(--text3);font-size:.6rem">' + (hasKnown ? '' : '(BC-Standard)') + '</span>' : '');
-  generate();
-}
-
-function resetAllColors() {
-  const n = CURRENT.cfg.colorCount || 1;
-  for (let i = 0; i < n; i++) resetColor(i);
-}
-
-function getColors() {
-  const n = CURRENT.cfg.colorCount || 1;
-  return Array.from({length:n}, (_,i) => {
-    if (colorIsDefault[i]) return 'Default';
-    const el = document.getElementById(`color_${i}`);
-    return el ? el.value : 'Default';
-  });
-}
-
-// ── TIGHTNESS ──────────────────────────────────────
-function buildTightness() {
-  const { cfg } = CURRENT;
-  // Anzeigen für alle Items (auch Direct-Options wie HarnessBallGag haben Tightness/Difficulty)
-  document.getElementById('tightnessSection').classList.remove('hidden');
-  const baseDiff = cfg.difficulty ?? 0;
-  document.getElementById('tightnessBase').textContent = baseDiff;
-  const minVal = baseDiff > 0 ? Math.max(-10, baseDiff - 20) : -10;
-  const maxVal = Math.max(50, baseDiff + 30);
-  const slider = document.getElementById('tightnessSlider');
-  slider.min = minVal;
-  slider.max = maxVal;
-  slider.value = baseDiff;
-  document.getElementById('tightnessMax').textContent = maxVal;
-  const minEl = document.getElementById('tightnessMin'); if(minEl) minEl.textContent = minVal;
-  document.getElementById('tightnessVal').textContent = baseDiff;
-  document.getElementById('tightnessBody').classList.add('hidden');
-  document.getElementById('tightnessEnabled').checked = false;
-  tightnessOn  = false;
-  tightnessVal = baseDiff;
-}
-
-function onTightnessToggle() {
-  tightnessOn = document.getElementById('tightnessEnabled').checked;
-  document.getElementById('tightnessBody').classList.toggle('hidden', !tightnessOn);
-  generate();
-}
-
-function onTightnessChange() {
-  tightnessVal = parseInt(document.getElementById('tightnessSlider').value) || 0;
-  document.getElementById('tightnessVal').textContent = tightnessVal;
-  generate();
-}
-
-// ── DIRECT OPTIONS (BallGag, FuturisticMittens...) ────
-function buildDirectOptions() {
-  const { cfg } = CURRENT;
-  const sec = document.getElementById('directOptsSection');
-  const opts = cfg.directOptions;
-  sec.classList.toggle('hidden', !opts?.length);
-  if (!opts?.length) return;
-  classicOptionSel = 0;
-  const container = document.getElementById('directOptsBtns');
-  container.innerHTML = '';
-  opts.forEach((name, i) => {
-    const btn = document.createElement('button');
-    btn.className = 'dir-opt-btn' + (i === 0 ? ' on' : '');
-    btn.textContent = name;
-    btn.onclick = () => {
-      classicOptionSel = i;
-      container.querySelectorAll('.dir-opt-btn').forEach((b,j) => b.classList.toggle('on', j === i));
-      generate();
-    };
-    container.appendChild(btn);
-  });
-  generate();
-}
-
-// ── VIBRATING (VibratingEgg, FuturisticTrainingBelt...) ─
-function buildVibrating() {
-  const { cfg } = CURRENT;
-  const sec  = document.getElementById('vibratingSection');
-  sec.classList.toggle('hidden', cfg.archetype !== 'vibrating');
-  if (cfg.archetype !== 'vibrating') return;
-
-  // BC kombiniert Mode+Intensität in einem einzigen TypeRecord-Wert 0–10
-  // Wir zeigen genau dasselbe Grid wie BC intern
-  const VIB_OPTIONS = [
-    { tr:0,  label:'Off',      mode:'Off',      intensity:-1, group:'intensity' },
-    { tr:1,  label:'Low',      mode:'Constant', intensity:0,  group:'intensity' },
-    { tr:2,  label:'Medium',   mode:'Constant', intensity:1,  group:'intensity' },
-    { tr:3,  label:'High',     mode:'Constant', intensity:2,  group:'intensity' },
-    { tr:4,  label:'Maximum',  mode:'Constant', intensity:3,  group:'intensity' },
-    { tr:5,  label:'Random',   mode:'Random',   intensity:3,  group:'mode' },
-    { tr:6,  label:'Escalate', mode:'Escalate', intensity:3,  group:'mode' },
-    { tr:7,  label:'Tease',    mode:'Tease',    intensity:3,  group:'mode' },
-    { tr:8,  label:'Deny',     mode:'Deny',     intensity:3,  group:'mode' },
-    { tr:9,  label:'Edge',     mode:'Edge',     intensity:3,  group:'mode' },
-  ];
-  window.__VIB_OPTIONS__ = VIB_OPTIONS;
-
-  // Startzustand: Off
-  vibratingMode      = 'Off';
-  vibratingIntensity = -1;
-  vibratingTR        = 0;
-
-  // Effekte zurücksetzen
-  vibratingEffects = new Set(['Egged']);
-
-  // Bestehende Sektionen leeren und neu aufbauen
-  const modeGrid = document.getElementById('vibModeGrid');
-  const intRow   = document.getElementById('vibIntRow');
-  const effRow   = document.getElementById('vibEffRow');
-  modeGrid.innerHTML = '';
-  intRow.innerHTML   = '';
-
-  // Zeige ALLE Optionen in einem gemeinsamen Grid (wie BC intern)
-  const allGrid = modeGrid; // modeGrid als Hauptcontainer
-  intRow.style.display = 'none'; // Intensitäts-Reihe ausblenden - nicht mehr separat
-
-  VIB_OPTIONS.forEach(opt => {
-    const btn = document.createElement('button');
-    btn.className = 'vib-mode-btn' + (opt.tr === 0 ? ' on' : '');
-    btn.textContent = opt.label;
-    // Gruppe-Indikator für Modi
-    if (opt.group === 'mode') btn.style.borderColor = '#312e81';
-    btn.onclick = () => {
-      vibratingMode      = opt.mode;
-      vibratingIntensity = opt.intensity;
-      vibratingTR        = opt.tr;
-      allGrid.querySelectorAll('.vib-mode-btn').forEach(b => b.classList.remove('on'));
-      btn.classList.add('on');
-      generate();
-    };
-    allGrid.appendChild(btn);
-  });
-
-  // Effekt-Buttons
-  effRow.innerHTML = '';
-  ['Egged','Vibrating','UseRemote','Edged'].forEach(eff => {
-    const btn = document.createElement('button');
-    btn.className = 'vib-eff-btn' + (['Egged'].includes(eff) ? ' on' : '');
-    btn.textContent = eff;
-    btn.onclick = () => {
-      if (vibratingEffects.has(eff)) vibratingEffects.delete(eff);
-      else vibratingEffects.add(eff);
-      btn.classList.toggle('on', vibratingEffects.has(eff));
-      generate();
-    };
-    effRow.appendChild(btn);
-  });
-
-  generate();
-}
-
-// ── BASELINE / PUNISHMENT PROPS ────────────────────────
-function buildBaselinePropsUI() {
-  const { cfg } = CURRENT;
-  const sec      = document.getElementById('baselineSection');
-  const baseline = cfg.vibratingInfo?.baselineProps;
-  sec.classList.toggle('hidden', !baseline || Object.keys(baseline).length === 0);
-  if (!baseline) return;
-  baselinePropVals = { ...baseline };  // mit Defaults initialisieren
-  const grid = document.getElementById('baselineGrid');
-  grid.innerHTML = '';
-
-  const BOOL_PROPS   = ['ShowText','PunishStruggle','PunishStruggleOther','PunishOrgasm','PunishStandup'];
-  const NUM_PROPS    = ['PunishSpeech','PunishRequiredSpeech','PunishProhibitedSpeech'];
-  const STR_PROPS    = ['PunishRequiredSpeechWord','PunishProhibitedSpeechWords'];
-  const PERM_PROPS   = ['PublicModePermission','PublicModeCurrent'];
-  const ACCESS_PROPS = ['AccessMode'];
-  const TRIGGER_PROPS= ['TriggerValues'];
-
-  function addCard(prop, ctrl) {
-    const card = document.createElement('div');
-    card.className = 'bl-card';
-    card.innerHTML = '<div class="bl-card-label">' + prop.replace(/([A-Z])/g,' $1').trim() + '</div>';
-    const wrapper = document.createElement('div');
-    wrapper.appendChild(ctrl);
-    card.appendChild(wrapper);
-    grid.appendChild(card);
-  }
-
-  for (const prop of Object.keys(baseline)) {
-    const val = baseline[prop];
-    if (BOOL_PROPS.includes(prop)) {
-      const sel = document.createElement('select');
-      sel.innerHTML = '<option value="false">false</option><option value="true">true</option>';
-      sel.value = String(val);
-      sel.onchange = () => { baselinePropVals[prop] = sel.value === 'true'; generate(); };
-      addCard(prop, sel);
-    } else if (NUM_PROPS.includes(prop)) {
-      // 0=None 1=Shock 2=Orgasm
-      const sel = document.createElement('select');
-      sel.innerHTML = '<option value="0">0 – None</option><option value="1">1 – Shock</option><option value="2">2 – Orgasm</option>';
-      sel.value = String(val);
-      sel.onchange = () => { baselinePropVals[prop] = parseInt(sel.value); generate(); };
-      addCard(prop, sel);
-    } else if (STR_PROPS.includes(prop)) {
-      const inp = document.createElement('input');
-      inp.type = 'text'; inp.value = val ?? '';
-      inp.oninput = () => { baselinePropVals[prop] = inp.value; generate(); };
-      addCard(prop, inp);
-    } else if (PERM_PROPS.includes(prop)) {
-      const PERM_LABELS = prop === 'PublicModePermission'
-        ? ['0-Private','1-Public','2-Friends','3-Owner','4-Mistress','5-Lover']
-        : ['0-None','1-Arousal','2-Vibrate','3-Orgasm','4-Edges','5-Deny','6-Punish'];
-      const sel = document.createElement('select');
-      sel.innerHTML = PERM_LABELS.map((l,i) => '<option value="'+i+'">'+l+'</option>').join('');
-      sel.value = String(val ?? 0);
-      sel.onchange = () => { baselinePropVals[prop] = parseInt(sel.value); generate(); };
-      addCard(prop, sel);
-    } else if (ACCESS_PROPS.includes(prop)) {
-      // AccessMode: "" = Immer | "Locked" = Nur wenn gesperrt
-      const sel = document.createElement('select');
-      sel.innerHTML = '<option value="">Immer (Standard)</option><option value="Locked">Nur wenn gesperrt</option>';
-      sel.value = String(val ?? '');
-      sel.onchange = () => { baselinePropVals[prop] = sel.value; generate(); };
-      addCard(prop, sel);
-    } else if (TRIGGER_PROPS.includes(prop)) {
-      // TriggerValues: kommagetrennte Checkbox-Liste
-      const info = CURRENT.cfg.vibratingInfo;
-      const allTriggers = info?.availTriggers ?? (val ? String(val).split(',') : ['Increase','Decrease','Disable','Edge','Random','Deny','Tease','Shock']);
-      const active = new Set(val ? String(val).split(',') : allTriggers);
-      const wrap = document.createElement('div');
-      wrap.style.cssText = 'display:flex;flex-wrap:wrap;gap:5px;';
-      allTriggers.forEach(t => {
-        const lbl = document.createElement('label');
-        lbl.style.cssText = 'display:flex;align-items:center;gap:3px;font-size:.7rem;color:var(--text2);cursor:pointer;';
-        const cb = document.createElement('input');
-        cb.type = 'checkbox'; cb.style.accentColor = 'var(--purple)';
-        cb.checked = active.has(t);
-        cb.onchange = () => {
-          if (cb.checked) active.add(t); else active.delete(t);
-          baselinePropVals[prop] = [...active].join(',');
-          generate();
-        };
-        lbl.appendChild(cb);
-        lbl.append(t);
-        wrap.appendChild(lbl);
-      });
-      baselinePropVals[prop] = [...active].join(',');
-      addCard(prop, wrap);
-    } else {
-      // fallback: text input
-      const inp = document.createElement('input');
-      inp.type = typeof val === 'number' ? 'number' : 'text';
-      inp.value = val ?? '';
-      inp.oninput = () => { baselinePropVals[prop] = typeof val === 'number' ? parseFloat(inp.value) : inp.value; generate(); };
-      addCard(prop, inp);
+    if(c.typ==='item_traegt'){
+      const Cf=ChatRoomCharacter.find(x=>x.MemberNumber===C.MemberNumber)??C;
+      return(Cf.Appearance??[]).some(a=>a.Asset?.Name===c.item);
     }
-  }
-}
-
-// ── GLOBALE PROPS ──────────────────────────────────
-const KW_GROUPS = {
-  shock:   ['shock','punish','stun','zap','electr'],
-  voice:   ['voice','trigger','speech','word'],
-  inflate: ['inflate','pump','air','pressure'],
-  orgasm:  ['orgasm','edge','ruin','denial'],
-  vibe:    ['vibrat','buzz','tease','stimul'],
-};
-
-function getPropsForOpt(cfg, dimKey, optIdx) {
-  const opt = (cfg.typeKeys[dimKey] || [])[optIdx];
-  if (!opt || !cfg.props?.length) return [];
-  const nameLow = (opt.name || '').toLowerCase();
-  const matched = new Set();
-  for (const [, kws] of Object.entries(KW_GROUPS)) {
-    if (kws.some(k => nameLow.includes(k))) {
-      for (const p of cfg.props) if (kws.some(k => p.toLowerCase().includes(k))) matched.add(p);
+    if(c.typ==='item_traegt_nicht'){
+      const Cf=ChatRoomCharacter.find(x=>x.MemberNumber===C.MemberNumber)??C;
+      return!(Cf.Appearance??[]).some(a=>a.Asset?.Name===c.item);
     }
-  }
-  const parts = nameLow.split(/\s+/).filter(w => w.length > 3);
-  for (const p of cfg.props) if (parts.some(part => p.toLowerCase().includes(part))) matched.add(p);
-  for (const eff of [...(opt.effect||[]),...(opt.block||[])]) {
-    for (const p of cfg.props) if (p.toLowerCase().includes(eff.toLowerCase())) matched.add(p);
-  }
-  return [...matched];
-}
-
-function getGlobalProps(cfg) {
-  if (!cfg.props?.length) return [];
-  const used = new Set();
-  for (const key in (cfg.typeKeys||{})) {
-    const opts = cfg.typeKeys[key]||[];
-    for (let i=0; i<opts.length; i++) for (const p of getPropsForOpt(cfg, key, i)) used.add(p);
-  }
-  return cfg.props.filter(p => !used.has(p));
-}
-
-function buildGlobalPropsUI() {
-  const { cfg } = CURRENT;
-  const grid    = document.getElementById('propsGrid');
-  grid.innerHTML = '';
-  const gp = getGlobalProps(cfg);
-  document.getElementById('propsSection').classList.toggle('hidden', gp.length === 0);
-  if (!gp.length) return;
-  document.getElementById('propsHint').textContent = `${gp.length} erkannt`;
-
-  gp.forEach(prop => {
-    globalPropVals[prop] = null;
-    const isBool = /^(Show|Punish|Enable|Allow|Has|Is|Can|Auto|Block)/.test(prop);
-    const isNum  = /Level|Count|Timer|Num|Max|Min|Amount|Delay|Duration|Speed/.test(prop);
-    const id     = `gp_${prop}`;
-    const card   = document.createElement('div');
-    card.className = 'prop-card';
-    let ctrl = '';
-    if (isBool) {
-      ctrl = `<select onchange="globalPropVals['${prop}']=this.value==='null'?null:this.value==='true';generate()">
-        <option value="null">– nicht setzen –</option>
-        <option value="true">true</option>
-        <option value="false">false</option>
-      </select>`;
-    } else if (isNum) {
-      ctrl = `<input type="checkbox" id="${id}_en" style="accent-color:var(--purple);width:13px;height:13px;flex:none"
-          onchange="globalPropVals['${prop}']=this.checked?(parseInt(document.getElementById('${id}').value)||0):null;generate()">
-        <input type="number" id="${id}" value="0"
-          oninput="if(document.getElementById('${id}_en').checked){globalPropVals['${prop}']=parseInt(this.value)||0;generate();}">`;
-    } else {
-      ctrl = `<input type="checkbox" id="${id}_en" style="accent-color:var(--purple);width:13px;height:13px;flex:none"
-          onchange="globalPropVals['${prop}']=this.checked?(document.getElementById('${id}').value||''):null;generate()">
-        <input type="text" id="${id}" value="" placeholder="Wert"
-          oninput="if(document.getElementById('${id}_en').checked){globalPropVals['${prop}']=this.value;generate();}">`;
+    if(c.typ==='trigger_war'){
+      const ref=_trigMap[c.trigId];
+      return ref?.charSpec?!!_firedChar[c.trigId+'_'+C.MemberNumber]:!!_fired[c.trigId];
     }
-    card.innerHTML = `<div class="prop-name">${prop}</div><div class="prop-ctrl">${ctrl}</div>`;
-    grid.appendChild(card);
-  });
-}
-
-// ══════════════════════════════════════════════════════
-//  LOCK
-// ══════════════════════════════════════════════════════
-const REL_LOCKS = ['OwnerPadlock','LoversPadlock','MistressPadlock'];
-const BCX_LOCKS = ['LewdCrestPadlock','DeviousPadlock','LuziPadlock'];
-const PW_LOCKS  = ['PasswordPadlock','TimerPasswordPadlock'];
-
-function onLockChange() {
-  const lock  = document.getElementById('lockType').value;
-  const isRel = REL_LOCKS.includes(lock);
-  const isBcx = BCX_LOCKS.includes(lock);
-  document.getElementById('timerGroup').classList.toggle('hidden',    !lock.includes('Timer') || isRel);
-  document.getElementById('comboGroup').classList.toggle('hidden',    lock !== 'CombinationPadlock');
-  document.getElementById('passwordGroup').classList.toggle('hidden', !PW_LOCKS.includes(lock));
-  document.getElementById('relLockGroup').classList.toggle('hidden',  !isRel);
-  document.getElementById('bcxLockHint').classList.toggle('hidden',   !isBcx);
-  generate();
-}
-
-function onTargetChange() {
-  document.getElementById('targetMemberWrap').classList.toggle('hidden',
-    document.getElementById('targetMode').value !== 'other');
-  generate();
-}
-
-function validatePwInput(el) {
-  const valid = /^[0-9]{4}$/.test(el.value);
-  document.getElementById('pwHint').style.display = (!el.value || valid) ? 'none' : 'block';
-  el.style.borderColor = valid || !el.value ? '' : 'var(--red)';
-}
-
-// ══════════════════════════════════════════════════════
-//  CODE GENERIEREN
-// ══════════════════════════════════════════════════════
-function generate() {
-  if (!CURRENT) return;
-  const { group, asset, cfg } = CURRENT;
-  const isOther   = document.getElementById('targetMode').value === 'other';
-  const memberNum = parseInt(document.getElementById('targetMember')?.value) || 0;
-
-  // TypeRecord (modular + classic TR)
-  const tr = {};
-  for (const key in (cfg.typeKeys||{})) {
-    const sel = [...dimSelected[key]].sort((a,b)=>a-b);
-    tr[key] = dimMode[key]==='multi' ? sel.reduce((acc,i)=>acc+Math.pow(2,i),0) : (sel[0]??0);
-  }
-  const hasTypeRecord = Object.keys(tr).length > 0;
-  const trStr   = JSON.stringify(tr);
-  const typeStr = Object.entries(tr).map(([k,v])=>k+v).join('');
-  const colors  = getColors();
-
-  // Sub-props + Global-props
-  let propCode = '';
-  for (const key in (cfg.typeKeys||{})) {
-    for (const idx of dimSelected[key]) {
-      const sp = dimSubProps[key]?.[idx]||{};
-      for (const [prop,val] of Object.entries(sp)) {
-        if (val!=null) propCode += '\n    item.Property.' + prop + ' = ' + encVal(val) + ';';
-      }
-    }
-  }
-  for (const [prop,val] of Object.entries(globalPropVals)) {
-    if (val!=null) propCode += '\n    item.Property.' + prop + ' = ' + encVal(val) + ';';
-  }
-
-  // Tightness → item.Difficulty
-  const tightCode = tightnessOn ? '\n    item.Difficulty = ' + tightnessVal + ';' : '';
-
-  // Craft
-  const craftName = document.getElementById('craftName').value.trim();
-  const craftDesc = document.getElementById('craftDesc').value.trim();
-  const craftProp = document.getElementById('craftProp').value;
-  const firstColor = colors.find(c => c !== 'Default') ?? '#808080';
-  const craftStr  = craftName
-    ? ',\n  {\n    Name: ' + JSON.stringify(craftName) + ',\n    Description: ' + JSON.stringify(craftDesc) + ',\n    Property: "' + craftProp + '",\n    Color: ' + JSON.stringify(firstColor) + ',\n    Lock: "", Item: ' + JSON.stringify(asset) + ', Private: false, MemberNumber: Player.MemberNumber,\n  }'
-    : '';
-
-  // Lock
-  const lock   = document.getElementById('lockType').value;
-  const isRel  = REL_LOCKS.includes(lock);
-  let lockParams = { timer:0, combo:'', password:'', relMember:0, relTimer:0 };
-  if (lock) {
-    if (lock.includes('Timer')&&!isRel) {
-      const h=parseInt(document.getElementById('timerH').value)||0;
-      const m=parseInt(document.getElementById('timerM').value)||0;
-      const s=parseInt(document.getElementById('timerS').value)||0;
-      lockParams.timer=(h*3600+m*60+s)*1000;
-    }
-    if (lock==='CombinationPadlock') lockParams.combo    = document.getElementById('comboCode').value||'1234';
-    if (PW_LOCKS.includes(lock))     lockParams.password = document.getElementById('lockPassword').value||'1234';
-    if (isRel) {
-      lockParams.relMember=parseInt(document.getElementById('relMemberNum').value)||0;
-      lockParams.relTimer=(parseInt(document.getElementById('relTimerH').value)||0)*3600*1000;
-    }
-  }
-
-  // ── Archetype-spezifischer Code ──────────────────────
-  let archetypeCode = '';
-
-  if (cfg.archetype === 'vibrating') {
-    // Vibrating: Mode + Intensity + Effects + Baseline props
-    // Auto-sync: Vibrating-Effekt nur wenn Mode nicht Off
-    const _effClone = new Set(vibratingEffects);
-    if (vibratingMode !== 'Off') _effClone.add('Vibrating'); else _effClone.delete('Vibrating');
-    const effArr = JSON.stringify([..._effClone]);
-    archetypeCode += '\n    // Vibrating-Konfiguration';
-    archetypeCode += '\n    item.Property = { ...item.Property, Mode: ' + JSON.stringify(vibratingMode) + ', Intensity: ' + vibratingIntensity + ', Effect: ' + effArr + ' };';
-    archetypeCode += '\n    if (!item.Property.TypeRecord) item.Property.TypeRecord = {};';
-    archetypeCode += '\n    item.Property.TypeRecord.vibrating = ' + vibratingTR + ';';
-    // Baseline/Punishment + AccessMode + TriggerValues
-    for (const [prop,val] of Object.entries(baselinePropVals)) {
-      if (val === null || val === undefined) continue;
-      // Strings in Anführungszeichen, Booleans/Zahlen direkt
-      archetypeCode += '\n    item.Property.' + prop + ' = ' + encVal(val) + ';';
-    }
-
-  } else if (cfg.directOptions?.length) {
-    // Classic Direct Options (BallGag, FuturisticMittens): TypedItemSetOptionByName
-    const optName = cfg.directOptions[classicOptionSel] ?? cfg.directOptions[0];
-    archetypeCode += '\n    // Option setzen via TypedItemSetOptionByName';
-    archetypeCode += '\n    TypedItemSetOptionByName(TARGET, item, ' + JSON.stringify(optName) + ');';
-    archetypeCode += '\n    item.Color = ' + JSON.stringify(colors) + '; // Farbe erneut setzen (TypedItem überschreibt sie)';
-
-  } else if (hasTypeRecord) {
-    // Classic TypeRecord / Modular
-    archetypeCode += '\n    item.Property.TypeRecord = ' + trStr + ';\n    item.Property.Type = "' + typeStr + '";';
-    archetypeCode += propCode;
-  } else {
-    archetypeCode += propCode;
-  }
-  archetypeCode += tightCode;
-
-  // ── Code-String zusammenbauen ────────────────────────
-  const code = '// ═══════════════════════════════════════════\n'
-    + '//  ' + asset + ' (' + group + ')' + (isOther&&memberNum ? ' → Spieler #'+memberNum : ' → Player') + '\n'
-    + '// ═══════════════════════════════════════════\n'
-    + buildItemCode({ group, asset, cfg, colors, tr, trStr, typeStr, propCode: archetypeCode, craftStr, lock, lockParams, tightCode:'', isOther, memberNum });
-
-  document.getElementById('codeOut').value = code;
-
-  // Preview
-  const archLabel = cfg.archetype==='modular' ? '🧩 Modular' : cfg.archetype==='vibrating' ? '⚡ Vibrating' : (hasTypeRecord?'📋 TypeRecord': cfg.directOptions?.length?'🎛️ Classic-Opts':'');
-  document.getElementById('typePreview').innerHTML =
-    '<span style="color:var(--text3)">' + group + '</span> → <strong>' + asset + '</strong>' +
-    (archLabel ? ' <span style="font-size:.62rem;color:var(--text3)">['+archLabel+']</span>' : '') +
-    (cfg.archetype==='vibrating' ? '<br>⚡ Mode: '+vibratingMode+' | Intensity: '+vibratingIntensity : '') +
-    (cfg.directOptions?.length ? '<br>🎛️ Option: '+cfg.directOptions[classicOptionSel] : '') +
-    (hasTypeRecord && cfg.archetype!=='vibrating' ? '<br>TypeRecord: { '+Object.entries(tr).map(([k,v])=>k+':'+v).join(' ')+' }' : '') +
-    (tightnessOn ? '<br>🔧 Difficulty: '+tightnessVal : '') +
-    (lock ? '<br>🔒 '+lock : '') +
-    '<br>' + (isOther&&memberNum ? '👥 Spieler #'+memberNum : '👤 Player (selbst)');
-}
-
-
-function encVal(val) {
-  return typeof val === 'boolean' ? val : typeof val === 'number' ? val : JSON.stringify(val);
-}
-
-// ── Innerer Code-Block (ohne TARGET-Deklaration) ────
-function buildItemInner({ group, asset, colors, tr, trStr, typeStr, propCode, craftStr, lock, lockParams, tightCode, delayOffset }) {
-  const delay = delayOffset ?? 600;
-  const BCX_LOCKS_L = ['LewdCrestPadlock','DeviousPadlock','LuziPadlock'];
-  const REL_LOCKS_L = ['OwnerPadlock','LoversPadlock','MistressPadlock'];
-  let lockCode = '';
-  if (lock) {
-    const isBcx = BCX_LOCKS_L.includes(lock);
-    const isRel = REL_LOCKS_L.includes(lock);
-    let extra = '';
-    if (lockParams.timer > 0)  extra += '\n      item.Property.RemoveTimer = Date.now() + ' + lockParams.timer + ';';
-    if (lockParams.combo)      extra += '\n      item.Property.CombinationNumber = ' + JSON.stringify(lockParams.combo) + ';';
-    if (lockParams.password)   extra += '\n      item.Property.Password = ' + JSON.stringify(lockParams.password) + ';';
-    if (isRel) {
-      extra += '\n      item.Property.LockMemberNumber = ' + (lockParams.relMember || 'Player.MemberNumber') + ';';
-      if (lockParams.relTimer > 0) extra += '\n      item.Property.RemoveTimer = Date.now() + ' + lockParams.relTimer + ';';
-    }
-    if (isBcx) {
-      lockCode = '\n    const lockAsset = Asset.find(a => a.Name === ' + JSON.stringify(lock) + ' && a.Group?.Name === "ItemMisc")'
-        + '\n      ?? Asset.find(a => a.Name === ' + JSON.stringify(lock) + ');'
-        + '\n    if (lockAsset) {\n      InventoryLock(TARGET, item, { Asset: lockAsset }, Player.MemberNumber, true);' + extra
-        + '\n      CharacterLoadCanvas(TARGET);\n    } else { console.warn("⚠️ ' + lock + ' nicht gefunden – Addon geladen?"); }';
-    } else {
-      lockCode = '\n    const lockAsset = Asset.find(a => a.Name === ' + JSON.stringify(lock) + ' && a.Group?.Name === "ItemMisc");'
-        + '\n    if (lockAsset) {\n      InventoryLock(TARGET, item, { Asset: lockAsset }, Player.MemberNumber, true);' + extra
-        + '\n      CharacterLoadCanvas(TARGET);\n    } else { console.error("❌ Schloss nicht gefunden: ' + lock + '"); }';
-    }
-  }
-  return '  InventoryWear(TARGET, ' + JSON.stringify(asset) + ', ' + JSON.stringify(group) + ',\n'
-    + '    ' + JSON.stringify(colors) + ', 0, null' + craftStr + '\n  );\n'
-    + '  setTimeout(() => {\n'
-    + '    const item = InventoryGet(TARGET, ' + JSON.stringify(group) + ');\n'
-    + '    if (!item) return console.error("❌ Item nicht gefunden: ' + asset + '");\n'
-    + '    item.Color = ' + JSON.stringify(colors) + ';\n'
-    + '    item.Property = item.Property ?? {};\n'
-    + propCode
-    + (propCode.includes('TypeRecord') ? '\n    try{ExtendedItemInit(TARGET,item,false,false);}catch(e){}' : '')
-    + lockCode + '\n'
-    + '    CharacterRefresh(TARGET);\n'
-    + '    console.log("✅ ' + asset + ' fertig");\n'
-    + '  }, ' + delay + ');';
-}
-
-// ── Einzelnes Item (mit TARGET-Deklaration + Sync) ──
-function buildItemCode({ group, asset, cfg, colors, tr, trStr, typeStr, propCode, craftStr, lock, lockParams, tightCode, isOther, memberNum }) {
-  const inner = buildItemInner({ group, asset, colors, tr, trStr, typeStr, propCode, craftStr, lock, lockParams, tightCode });
-  const syncLine = (isOther && memberNum)
-    ? 'ChatRoomCharacterUpdate(TARGET);'
-    : 'ServerPlayerAppearanceSync(); ChatRoomCharacterUpdate(TARGET);';
-  const wrapped = inner + '\n  setTimeout(() => { ' + syncLine + ' }, 700);';
-  if (isOther && memberNum) {
-    return 'const TARGET = ChatRoomCharacter.find(c => c.MemberNumber === ' + memberNum + ');\n'
-      + 'if (!TARGET) { console.error("❌ Spieler #' + memberNum + ' nicht im Raum!"); } else {\n' + wrapped + '\n}';
-  }
-  return 'const TARGET = Player;\n' + wrapped;
-}
-
-// ══════════════════════════════════════════════════════
-//  COPY
-// ══════════════════════════════════════════════════════
-function copyCode() {
-  const ta = document.getElementById('codeOut');
-  const text = ta.value;
-  const btn = document.getElementById('copyBtn');
-  navigator.clipboard.writeText(text).then(() => {
-    btn.textContent = '✅ Kopiert!'; btn.classList.add('copied');
-    setTimeout(()=>{ btn.textContent='📋 Code kopieren'; btn.classList.remove('copied'); }, 2000);
-  }).catch(() => {
-    // Fallback für ältere Browser
-    ta.select(); document.execCommand('copy');
-    btn.textContent = '✅ Kopiert!'; btn.classList.add('copied');
-    setTimeout(()=>{ btn.textContent='📋 Code kopieren'; btn.classList.remove('copied'); }, 2000);
-  });
-}
-
-// ══════════════════════════════════════════════════════
-//  OUTFIT BUILDER
-// ══════════════════════════════════════════════════════
-function openOutfit()  { switchTab('outfit'); }
-function closeOutfit() { switchTab('items'); }
-function clearOutfit() { OUTFIT = []; renderOutfitList(); _autoOutfitCode(); }
-
-function addToOutfit() {
-  if (!CURRENT) return;
-  const { group, asset, cfg } = CURRENT;
-
-  const tr = {};
-  for (const key in (cfg.typeKeys||{})) {
-    const sel = [...dimSelected[key]].sort((a,b)=>a-b);
-    tr[key] = dimMode[key]==='multi' ? sel.reduce((acc,i)=>acc+Math.pow(2,i),0) : (sel[0]??0);
-  }
-  const trStr   = JSON.stringify(tr);
-  const typeStr = Object.entries(tr).map(([k,v])=>`${k}${v}`).join('');
-  const colors  = getColors();
-
-  let propCode = '';
-  for (const key in (cfg.typeKeys||{})) {
-    for (const idx of dimSelected[key]) {
-      const sp = dimSubProps[key]?.[idx]||{};
-      for (const [prop,val] of Object.entries(sp)) {
-        if (val!=null) propCode += `\n    item.Property.${prop} = ${encVal(val)};`;
-      }
-    }
-  }
-  for (const [prop,val] of Object.entries(globalPropVals)) {
-    if (val!=null) propCode += `\n    item.Property.${prop} = ${encVal(val)};`;
-  }
-
-  const lock = document.getElementById('lockType').value;
-  const isRel = REL_LOCKS.includes(lock);
-  let lockParams = { timer:0, combo:'', password:'', relMember:0, relTimer:0 };
-  if (lock) {
-    if (lock.includes('Timer')&&!isRel) {
-      const h=parseInt(document.getElementById('timerH').value)||0;
-      const m=parseInt(document.getElementById('timerM').value)||0;
-      const s=parseInt(document.getElementById('timerS').value)||0;
-      lockParams.timer=(h*3600+m*60+s)*1000;
-    }
-    if (lock==='CombinationPadlock') lockParams.combo=document.getElementById('comboCode').value||'1234';
-    if (PW_LOCKS.includes(lock))     lockParams.password=document.getElementById('lockPassword').value||'1234';
-    if (isRel) {
-      lockParams.relMember=parseInt(document.getElementById('relMemberNum').value)||0;
-      lockParams.relTimer=(parseInt(document.getElementById('relTimerH').value)||0)*3600*1000;
-    }
-  }
-
-  const craftName = document.getElementById('craftName').value.trim();
-  const craftDesc = document.getElementById('craftDesc').value.trim();
-  const craftProp = document.getElementById('craftProp').value;
-  const craftStr = craftName ? `,\n  {\n    Name: ${JSON.stringify(craftName)},\n    Description: ${JSON.stringify(craftDesc)},\n    Property: "${craftProp}",\n    Color: ${JSON.stringify(colors[0]==='Default'?'#808080':colors[0])},\n    Lock: "", Item: ${JSON.stringify(asset)}, Private: false, MemberNumber: Player.MemberNumber,\n  }` : '';
-
-  const isOther   = document.getElementById('targetMode').value === 'other';
-  const memberNum = parseInt(document.getElementById('targetMember')?.value)||0;
-
-
-  // ── Konflikt-Check: Neues Item blockt existierende Outfit-Slots ──────────
-  if (cfg) {
-    const blockedByAsset = new Set(cfg.block || []);
-
-    // Optionen-Block: aktiv für gerade gewählte Optionen
-    const blockedByOptions = new Set();
-    for (const key in (cfg.typeKeys || {})) {
-      for (const idx of (dimSelected[key] || new Set())) {
-        const opt = cfg.typeKeys[key][idx];
-        for (const b of (opt?.block || [])) blockedByOptions.add(b);
-      }
-    }
-    const allBlocked = new Set([...blockedByAsset, ...blockedByOptions]);
-
-    // Vorhandene Items die durch das neue blockiert würden
-    const conflicts = OUTFIT.filter(item => allBlocked.has(item.group));
-    if (conflicts.length > 0) {
-      const src = blockedByAsset.size ? 'Asset-Block' : 'Options-Block';
-      const msg =
-        `⚠️ Slot-Konflikt!\n\n` +
-        `„${asset}" (${group}) hat Block-Gruppen [${src}]:\n` +
-        `${[...allBlocked].map(b => '  • ' + b).join('\n')}\n\n` +
-        `Folgende Items würden dadurch entfernt:\n` +
-        `${conflicts.map(i => `  • ${i.group}  →  „${i.asset}"`).join('\n')}\n\n` +
-        `→ OK = Trotzdem hinzufügen   → Abbrechen = Nichts ändern`;
-      if (!confirm(msg)) return;
-    }
-
-    // Umgekehrter Check: existierende Items blocken das neue
-    const blockedByExisting = [];
-    for (const existing of OUTFIT) {
-      const eb = new Set(existing.cfg?.block || []);
-      for (const key in (existing.cfg?.typeKeys || {})) {
-        const selVal = (existing.tr || {})[key];
-        if (selVal != null) {
-          const opts = existing.cfg.typeKeys[key] || [];
-          for (let idx = 0; idx < opts.length; idx++) {
-            const isSel = (selVal & Math.pow(2, idx)) > 0 || selVal === idx;
-            if (isSel) for (const b of (opts[idx]?.block || [])) eb.add(b);
-          }
-        }
-      }
-      if (eb.has(group)) blockedByExisting.push(existing);
-    }
-    if (blockedByExisting.length > 0) {
-      const msg =
-        `⚠️ Umgekehrter Konflikt!\n\n` +
-        `Folgende Outfit-Items blockieren „${asset}" (${group}):\n` +
-        `${blockedByExisting.map(i => `  • „${i.asset}" (${i.group})`).join('\n')}\n\n` +
-        `Das bedeutet: „${asset}" würde von BC wieder entfernt.\n\n` +
-        `→ OK = Trotzdem hinzufügen   → Abbrechen = Nichts ändern`;
-      if (!confirm(msg)) return;
-    }
-  }
-
-  OUTFIT.push({
-    group, asset, cfg, colors, tr, trStr, typeStr, propCode, craftStr,
-    lock, lockParams,
-    tightCode: tightnessOn ? `\n    item.Difficulty=${tightnessVal};` : '',
-    isOther, memberNum,
-    label: `${asset} (${group})`,
-  });
-
-  _autoOutfitCode();
-}
-
-
-function renderOutfitList() {
-  const list = document.getElementById('outfitList');
-  const q = (document.getElementById('outfitItemSearch')?.value || '').toLowerCase();
-  const visItems = OUTFIT.map((item, i) => ({...item, _origIdx: i}))
-                         .filter(item => !q || item.asset?.toLowerCase().includes(q) || item.group?.toLowerCase().includes(q));
-  if (!visItems.length) {
-    list.innerHTML = OUTFIT.length
-      ? '<div class="outfit-empty-hint">🔍 Keine Treffer.</div>'
-      : '<div class="outfit-empty-hint">Noch keine Items.<br>Konfiguriere ein Item im <strong>Item Manager</strong> und klicke <strong>„👗 Outfit"</strong>.</div>';
-    return;
-  }
-  list.innerHTML = '';
-  visItems.forEach(item => {
-    const i = item._origIdx;
-    const row = document.createElement('div');
-    row.className = 'outfit-item-row';
-    row.innerHTML = `
-      <div style="flex:1">
-        <div class="outfit-item-name">${item.asset}</div>
-        <div class="outfit-item-group">${item.group}${item.lock ? ' | 🔒 '+item.lock : ''}${Object.keys(item.tr||{}).length ? ' | '+item.typeStr : ''}</div>
-      </div>
-      <div style="display:flex;gap:5px;align-items:center">
-        <button class="btn btn-primary" style="padding:3px 8px;font-size:.68rem" onclick="moveOutfitItem(${i},-1)">↑</button>
-        <button class="btn btn-primary" style="padding:3px 8px;font-size:.68rem" onclick="moveOutfitItem(${i},1)">↓</button>
-        <button class="btn btn-red" style="padding:3px 7px;font-size:.68rem" onclick="removeOutfitItem(${i})">✕</button>
-      </div>`;
-    list.appendChild(row);
-  });
-}
-
-function removeOutfitItem(i) { OUTFIT.splice(i,1); renderOutfitList(); _autoOutfitCode(); }
-function moveOutfitItem(i, d) {
-  const j = i + d;
-  if (j < 0 || j >= OUTFIT.length) return;
-  [OUTFIT[i], OUTFIT[j]] = [OUTFIT[j], OUTFIT[i]];
-  renderOutfitList();
-  _autoOutfitCode();
-}
-
-function generateOutfitCode() {
-  if (!OUTFIT.length) return;
-  // Outfit-Ziel hat Vorrang; Fallback auf altes OUTFIT[0]-Ziel für Rückwärtskompatibilität
-  const isOther   = _outfitTargetNum !== null;
-  const memberNum = _outfitTargetNum ?? 0;
-
-  let count = OUTFIT.length;
-  let code = '// ═══════════════════════════════════════════\n//  OUTFIT – ' + count + ' Items';
-  if (isOther) code += ' → Spieler #' + memberNum;
-  code += '\n// ═══════════════════════════════════════════\n';
-
-  if (isOther && memberNum) {
-    code += 'const TARGET = ChatRoomCharacter.find(c => c.MemberNumber === ' + memberNum + ');\n'
-          + 'if (!TARGET) { console.error("❌ Spieler #' + memberNum + ' nicht im Raum!"); } else {\n\n';
-  } else {
-    code += 'const TARGET = Player;\n\n';
-  }
-
-  OUTFIT.forEach((item, i) => {
-    code += '// ── ' + (i+1) + '. ' + item.asset + ' (' + item.group + ') ──\n';
-    code += buildItemInner({ ...item, isOther, memberNum, delayOffset: 600 + i * 700 });
-    code += '\n\n';
-  });
-
-  const syncLine = (isOther && memberNum)
-    ? 'ChatRoomCharacterUpdate(TARGET);'
-    : 'ServerPlayerAppearanceSync(); ChatRoomCharacterUpdate(TARGET);';
-  const finalDelay = 600 + OUTFIT.length * 700 + 200;
-  code += 'setTimeout(function() { ' + syncLine + ' console.log("✅ Outfit fertig!"); }, ' + finalDelay + ');\n';
-
-  if (isOther && memberNum) code += '}\n';
-
-  document.getElementById('outfitCode').value = code;
-}
-
-function copyOutfitCode() {
-  const ta = document.getElementById('outfitCode');
-  navigator.clipboard.writeText(ta.value).then(() => {
-    showStatus('✅ Outfit-Code kopiert!', 'success');
-  }).catch(() => {
-    ta.select(); document.execCommand('copy');
-    showStatus('✅ Outfit-Code kopiert!', 'success');
-  });
-}
-
-// ══════════════════════════════════════════════════════
-//  OUTFIT-PROFILE
-// ══════════════════════════════════════════════════════
-function openProfiles()  { switchTab('outfit'); renderProfileList(); }
-function closeProfiles() { switchTab('outfit'); }
-
-function saveProfile() {
-  if (!OUTFIT.length) { showStatus('❌ Erst Outfit-Items hinzufügen!', 'error'); return; }
-  const name = document.getElementById('profileNameInput').value.trim();
-  if (!name) { showStatus('❌ Profilname eingeben!', 'error'); return; }
-
-  // Nur die nötigen Felder speichern – cfg/propCode/craftStr sind zu groß (localStorage-Limit)
-  const SAVE_KEYS = ['group','asset','colors','tr','trStr','typeStr','tightCode','lock','lockParams','isOther','memberNum','label'];
-  const stripped = OUTFIT.map(item => {
-    const out = {};
-    SAVE_KEYS.forEach(k => { if (item[k] !== undefined) out[k] = item[k]; });
-    return out;
-  });
-
-  PROFILES[name] = { name, date: new Date().toLocaleDateString('de-DE'), items: stripped };
-
-  try {
-    const json = JSON.stringify(PROFILES);
-    localStorage.setItem('BC_PROFILES_v11', json);
-    renderProfileList();
-    document.getElementById('profileNameInput').value = '';
-    showStatus('✅ Profil "' + name + '" gespeichert (' + stripped.length + ' Items)', 'success');
-  } catch(e) {
-    showStatus('❌ Speichern fehlgeschlagen: ' + e.message, 'error');
-  }
-}
-
-function loadProfile(name) {
-  const profile = PROFILES[name];
-  if (!profile) return;
-
-  if (!Object.keys(CACHE).length) {
-    showStatus('❌ Cache nicht geladen! Erst Dump-Script ausführen und Cache importieren.', 'error');
-    return;
-  }
-
-  const restored = [];
-  for (const item of profile.items) {
-    const cfg = CACHE[item.group]?.[item.asset];
-    if (!cfg) console.warn('⚠️ Item nicht im Cache: ' + item.group + '/' + item.asset);
-
-    // ── propCode aus gespeichertem TypeRecord rekonstruieren ──
-    // TypeRecord bestimmt Variante/Layer des Items (z.B. Seil-Konfiguration).
-    // Ohne das sieht das Item anders aus als beim Original.
-    const tr = (item.tr && Object.keys(item.tr).length) ? item.tr : null;
-    let propCode = '';
-    if (tr) {
-      const trStr = JSON.stringify(tr);
-      // Type-String aus TypeRecord berechnen (gleiche Logik wie BC intern)
-      const typeStr = Object.entries(tr).map(([k,v]) => k + v).join('');
-      propCode = '\n    item.Property = item.Property ?? {};'
-               + '\n    item.Property.TypeRecord = ' + trStr + ';'
-               + '\n    item.Property.Type = ' + JSON.stringify(typeStr) + ';';
-    }
-
-    // ── craftStr aus gespeichertem Craft-Objekt rekonstruieren ──
-    // Craft enthält CraftName/Description/Property die das Aussehen beeinflussen.
-    let craftStr = '';
-    const craft = item.craft;
-    if (craft && craft.Name) {
-      const craftCol = Array.isArray(item.colors) ? item.colors[0] : (item.colors ?? '#808080');
-      craftStr = ',\n  {\n    Name: ' + JSON.stringify(craft.Name)
-               + ',\n    Description: ' + JSON.stringify(craft.Description ?? '')
-               + ',\n    Property: ' + JSON.stringify(craft.Property ?? 'Normal')
-               + ',\n    Color: ' + JSON.stringify(craftCol === 'Default' ? '#808080' : craftCol)
-               + ',\n    Lock: "", Item: ' + JSON.stringify(item.asset)
-               + ', Private: ' + (craft.Private ? 'true' : 'false')
-               + ', MemberNumber: Player.MemberNumber,\n  }';
-    }
-
-    // ── lockParams aus gespeichertem lock rekonstruieren ──
-    const lockParams = { timer: 0, combo: '', password: '', relMember: item.lockMember || 0, relTimer: 0 };
-
-    restored.push({
-      ...item,
-      cfg:        cfg ?? {},
-      propCode,
-      craftStr,
-      lockParams,
-      trStr:      tr ? JSON.stringify(tr) : '{}',
-      typeStr:    tr ? Object.entries(tr).map(([k,v]) => k + v).join('') : '',
-    });
-  }
-
-  OUTFIT = restored;
-  switchTab('outfit');
-  renderOutfitList();
-  _autoOutfitCode();
-}
-
-function deleteProfile(name) {
-  if (!confirm('Profil "' + name + '" löschen?')) return;
-  delete PROFILES[name];
-  try { localStorage.setItem('BC_PROFILES_v11', JSON.stringify(PROFILES)); } catch {}
-  renderProfileList();
-}
-
-function renderProfileList() {
-  const el = document.getElementById('profileListEl');
-  const q = (document.getElementById('profileSearch')?.value || '').toLowerCase();
-  const keys = Object.keys(PROFILES).filter(k => !q || k.toLowerCase().includes(q));
-  if (!keys.length) {
-    el.innerHTML = '<p style="color:var(--text3);font-size:.8rem">Noch keine Profile gespeichert.</p>';
-    return;
-  }
-  el.innerHTML = '<div class="profile-list">' + keys.map((k, idx) => {
-    const p = PROFILES[k];
-    // Use data-idx on buttons to avoid quote-in-onclick issues
-    return '<div class="profile-card">'
-      + '<div class="profile-card-name">📁 ' + p.name + '</div>'
-      + '<div class="profile-card-info">' + (p.items?.length ?? 0) + ' Items · ' + (p.date || '') + '</div>'
-      + '<div class="btn-row" style="margin-top:6px">'
-      + '<button class="btn btn-green" style="flex:1;font-size:.68rem" data-pkey="' + idx + '" onclick="loadProfileByIdx(this.dataset.pkey)">📥 Laden</button>'
-      + '<button class="btn btn-red" style="font-size:.68rem" data-pkey="' + idx + '" onclick="deleteProfileByIdx(this.dataset.pkey)">🗑️</button>'
-      + '</div></div>';
-  }).join('') + '</div>';
-  // Store key mapping for index-based access
-  el._profileKeys = keys;
-}
-
-function loadProfileByIdx(idx) {
-  const el = document.getElementById('profileListEl');
-  const keys = el._profileKeys;
-  if (!keys || !keys[idx]) return;
-  loadProfile(keys[idx]);
-}
-
-function deleteProfileByIdx(idx) {
-  const el = document.getElementById('profileListEl');
-  const keys = el._profileKeys;
-  if (!keys || !keys[idx]) return;
-  deleteProfile(keys[idx]);
-}
-
-// Init profile button visibility
-(function() {
-  // FIX: was 'BC_CACHE_v11' (wrong version) and also duplicated the same key in fallback
-  const s = localStorage.getItem('BC_CACHE_v12');
-  if (s) {
-    try {
-      const data = JSON.parse(s);
-      const items = Object.values(data).reduce((n,g)=>n+Object.keys(g).length,0);
-      if (items > 0) {
-        document.getElementById('profileBtn')?.classList.remove('hidden');
-      }
-    } catch {}
-  }
-})();
-
-
-// ══════════════════════════════════════════════════════
-//  TABS
-// ══════════════════════════════════════════════════════
-let _activeTab = 'items';
-function switchTab(tab) {
-  _activeTab = tab;
-  ['items','outfit','curse','bot','log','money','events','rank','shop'].forEach(t => {
-    document.getElementById('tab-'+t)?.classList.toggle('active', t===tab);
-    document.getElementById('tab-'+t+'-btn')?.classList.toggle('active', t===tab);
-  });
-  if (tab === 'outfit') { renderOutfitList(); renderOutfitMemberChips(); renderProfileList(); _autoOutfitCode(); }
-  if (tab === 'curse')  { renderCurseTab(); }
-  if (tab === 'bot')    { renderBotTab(); }
-  if (tab === 'log')    { renderLogTab(); }
-  if (tab === 'money')  { renderMoneyTab(); }
-  if (tab === 'rank')   { renderRankTab(); }
-  if (tab === 'shop')   { renderShopTab(); }
-
-}
-
-// ── addToOutfit: auto-switch tab + auto-generate code after adding ──
-
-// ══════════════════════════════════════════════════════
-//  OUTFIT AUTO-CODE
-// ══════════════════════════════════════════════════════
-function _autoOutfitCode() {
-  if (!OUTFIT.length) {
-    document.getElementById('outfitCode').value = '';
-    document.getElementById('outfitAutoStatus').textContent = '– kein Outfit –';
-    return;
-  }
-  generateOutfitCode();
-  document.getElementById('outfitAutoStatus').textContent =
-    OUTFIT.length + ' Items · ' + (_outfitTargetNum ? 'Spieler #'+_outfitTargetNum : 'Player');
-}
-
-// ══════════════════════════════════════════════════════
-//  CURSE STATE
-// ══════════════════════════════════════════════════════
-
-// ── Intervall-Event Laufzeit-Status (Countdown im UI) ────────────────────
-let _evIntervalStatus = {};
-function _evIntervalStatusUpdate(evId, nextMs, lo, hi, cnt) {
-  _evIntervalStatus[evId] = { nextFireAt: Date.now() + nextMs, lo, hi, cnt };
-  if (_activeTab === 'bot') _renderIntervalCountdowns();
-}
-function _renderIntervalCountdowns() {
-  Object.entries(_evIntervalStatus).forEach(([evId, s]) => {
-    const el = document.getElementById('trig-countdown-' + evId);
-    if (!el) return;
-    const rem = Math.max(0, Math.ceil((s.nextFireAt - Date.now()) / 1000));
-    el.textContent = '⏱ ' + rem + 's | 🔥 ' + s.cnt + '×';
-  });
-}
-setInterval(() => {
-  if (_activeTab === 'bot' && Object.keys(_evIntervalStatus).length) _renderIntervalCountdowns();
-}, 1000);
-
-// ── Auto-Curse-Scan ───────────────────────────────────────────
-let _autoCurseScanTimer = null;
-function toggleAutoCurseScan() {
-  const btn = document.getElementById('csAutoScanBtn');
-  if (_autoCurseScanTimer) {
-    clearInterval(_autoCurseScanTimer);
-    _autoCurseScanTimer = null;
-    if (btn) { btn.textContent = '⏰ Auto-Scan'; btn.classList.remove('on'); }
-    showStatus('⏰ Auto-Scan deaktiviert', 'info');
-  } else {
-    _autoCurseScanTimer = setInterval(() => {
-      if (_connected) {
-        const prevDb = JSON.stringify(CURSE_DB);
-        bcSend({ type: 'SCAN_CURSES', _auto: true });
-        bcSend({ type: 'GET_CACHE' });
-      }
-    }, 30000);
-    if (btn) { btn.textContent = '⏰ Auto (30s)'; btn.classList.add('on'); }
-    showStatus('⏰ Auto-Scan aktiv – alle 30s', 'success');
-  }
-}
-
-// ── Change-Detection für Curse-Scan ──────────────────────────
-function _showChangeBadge(added, updated) {
-  const el = document.getElementById('csChangeBadge');
-  if (!el) return;
-  if (!added.length && !updated.length) { el.style.display = 'none'; return; }
-  const parts = [];
-  if (added.length)   parts.push(`<span class="change-added">+${added.length} neu</span>`);
-  if (updated.length) parts.push(`<span class="change-updated">~${updated.length} geändert</span>`);
-  el.innerHTML = '🔔 Änderungen: ' + parts.join(' · ');
-  el.style.display = '';
-  setTimeout(() => { el.style.display = 'none'; }, 15000);
-}
-
-let CURSE_DB    = {};   // key → entry (from CurseScanner.database)
-let CURSE_LSCG  = {};   // key → entry (from CurseScanner.lscgTable)
-let CURSE_CACHE_LSCG = {}; // from lscgCache
-
-// Comments: persisted in IndexedDB
-let CURSE_COMMENTS = {};
-function _saveCurseComments() { idbSet('BC_CURSE_COMMENTS_v1', CURSE_COMMENTS); }
-// ── Favoriten ────────────────────────────────────────────────
-let CURSE_FAVOURITES = new Set();
-function _saveCurseFavourites() { idbSet('BC_CURSE_FAV_v1', [...CURSE_FAVOURITES]); }
-function toggleCurseFavourite(dbKey, cellEl) {
-  const wasFav = CURSE_FAVOURITES.has(dbKey);
-  if (wasFav) CURSE_FAVOURITES.delete(dbKey); else CURSE_FAVOURITES.add(dbKey);
-  _saveCurseFavourites();
-  if (cellEl) {
-    const isFav = !wasFav;
-    cellEl.innerHTML = isFav ? '⭐' : '<span style="opacity:.25;font-size:.85em">☆</span>';
-    const row = cellEl.closest('tr');
-    if (row) row.classList.toggle('fav', isFav);
-    // Fav-Zähler im Owner-Block aktualisieren
-    const block = cellEl.closest('.curse-owner-block');
-    if (block) {
-      const badge = block.querySelector('.curse-owner-fav-badge');
-      const cnt = block.querySelectorAll('.curse-row.fav').length;
-      if (badge) {
-        badge.textContent = '⭐ ' + cnt;
-        badge.style.display = cnt > 0 ? '' : 'none';
-      }
-    }
-  } else {
-    renderCurseTab();
-  }
-}
-
-
-
-// ── Scan ─────────────────────────────────────────────
-function curseScan() {
-  const statusEl = document.getElementById('csScanStatus');
-  statusEl.textContent = '⏳ Scanne...';
-  // Gleichzeitig Cache-Scan auslösen
-  bcSend({ type: 'SCAN_CURSES' });
-  bcSend({ type: 'GET_CACHE' });
-}
-
-// ── Handle SCAN_RESULT ────────────────────────────────
-// called from postMessage handler
-
-function _saveCurseDB() {
-  idbSet('BC_CURSE_DB_v1', {database:CURSE_DB,lscgTable:CURSE_LSCG,lscgCache:CURSE_CACHE_LSCG,favourites:[...CURSE_FAVOURITES]});
-}
-
-function _handleCurseData(data) {
-  if (data.err) { showStatus('❌ Curse-Scan: ' + data.err, 'error'); return; }
-  const prevDB = {...CURSE_DB};
-  CURSE_DB         = data.database    ?? {};
-  CURSE_LSCG       = data.lscgTable   ?? {};
-  CURSE_CACHE_LSCG = data.lscgCache   ?? {};
-  _updateCurseStats();
-  _populateSlotFilter();
-  if (_activeTab === 'curse') renderCurseTab();
-  const total = Object.keys(CURSE_DB).length;
-  const isAuto = data._auto === true;
-  // Change-Detection
-  const added   = Object.keys(CURSE_DB).filter(k => !prevDB[k]);
-  const updated = Object.keys(CURSE_DB).filter(k => prevDB[k] && JSON.stringify(prevDB[k]) !== JSON.stringify(CURSE_DB[k]));
-  let statusText = '✅ ' + total + ' Crafts';
-  if (added.length || updated.length) {
-    statusText += ' | +' + added.length + ' neu, ' + updated.length + ' geändert';
-    _showChangeBadge(added, updated);
-  } else if (!isAuto) {
-    statusText += ' | keine Änderungen';
-  }
-  document.getElementById('csScanStatus').textContent = isAuto
-    ? '🔄 ' + new Date().toLocaleTimeString() + ' — ' + total + ' Crafts'
-    : statusText;
-  if (!isAuto || added.length || updated.length) {
-    showStatus(statusText, added.length + updated.length > 0 ? 'success' : 'info');
-  }
-  // persist
-  _saveCurseDB();
-}
-
-
-// ── CURSE FILTER STATE ───────────────────────────────
-let _curseFilter  = 'all';  // 'all' | 'cursed' | 'lscg'
-let _pendingExport = false;
-let _curseEntryMap = {};    // rowId → dbKey, for safe onclick
-
-function toggleCacheFilter() {
-  const el = document.getElementById('fc-cache');
-  if (el) el.classList.toggle('on');
-  renderCurseTab();
-}
-
-function setCurseFilter(f) {
-  _curseFilter = f;
-  ['all','cursed','lscg','fav'].forEach(k => {
-    const el = document.getElementById('fc-' + k);
-    if (el) el.classList.toggle('on', k === f);
-  });
-  renderCurseTab();
-}
-
-function _populateSlotFilter() {
-  const sel = document.getElementById('slotFilter');
-  if (!sel) return;
-  const current = sel.value;
-  const slots = [...new Set(Object.values(CURSE_DB).map(e => e.Gruppe).filter(Boolean))].sort();
-  sel.innerHTML = '<option value="">Alle Slots</option>' +
-    slots.map(s => '<option value="' + s + '"' + (s === current ? ' selected' : '') + '>' + s + '</option>').join('');
-}
-
-function _updateCurseStats() {
-  const entries = Object.values(CURSE_DB);
-  document.getElementById('csStat-total').textContent  = entries.length;
-  document.getElementById('csStat-cursed').textContent = entries.filter(e=>e.IstCursed).length;
-  document.getElementById('csStat-lscg').textContent   = Object.keys(CURSE_LSCG).length;
-  document.getElementById('csStat-cache').textContent  = Object.keys(CURSE_CACHE_LSCG).length;
-}
-
-// ── Render Curse Tab ──────────────────────────────────
-function renderCurseTab() {
-  const body   = document.getElementById('curseBody');
-  const empty  = document.getElementById('curseEmpty');
-  if (!body) return;
-
-  // ── Apply filters ──
-  const searchTerm = (document.getElementById('curseSearch')?.value || '').toLowerCase();
-  const slotFilter = document.getElementById('slotFilter')?.value || '';
-  const cacheOnly  = document.getElementById('fc-cache')?.classList.contains('on') ?? false;
-
-  let entries = Object.values(CURSE_DB);
-  if (_curseFilter === 'cursed') entries = entries.filter(e => !!e.IstCursed);
-  if (_curseFilter === 'lscg')   entries = entries.filter(e => !!e.IstLSCGCurse);
-  if (_curseFilter === 'fav') {
-    entries = entries.filter(e => {
-      const k = (e.Besitzer?.Nummer ?? '') + ':' + e.ItemName + ':' + e.CraftName;
-      return CURSE_FAVOURITES.has(k);
-    });
-  }
-  if (cacheOnly)   entries = entries.filter(e => !!e.IstLSCGCurse);
-  if (slotFilter)  entries = entries.filter(e => e.Gruppe === slotFilter);
-  if (searchTerm)  entries = entries.filter(e =>
-    e.CraftName?.toLowerCase().includes(searchTerm) ||
-    e.ItemName?.toLowerCase().includes(searchTerm)  ||
-    e.Gruppe?.toLowerCase().includes(searchTerm)    ||
-    e.Besitzer?.Name?.toLowerCase().includes(searchTerm)
-  );
-
-  if (!entries.length) {
-    empty.style.display = '';
-    empty.querySelector ? (empty.innerHTML = Object.keys(CURSE_DB).length
-      ? '<div style="font-size:1.5rem;margin-bottom:8px">🔍</div>Keine Treffer für die gewählten Filter.'
-      : '<div style="font-size:2rem;margin-bottom:8px">🔮</div>Noch kein Scan. Klicke <strong>Scannen</strong>.') : null;
-    body.querySelectorAll('.curse-owner-block').forEach(b => b.remove());
-    return;
-  }
-  empty.style.display = 'none';
-
-  // Group by owner (skip entries without Besitzer)
-  const byOwner = {};
-  entries.forEach((e, idx) => {
-    if (!e?.Besitzer?.Nummer) return;
-    const key = e.Besitzer.Nummer + ':' + e.Besitzer.Name;
-    if (!byOwner[key]) byOwner[key] = { name: e.Besitzer.Name, num: e.Besitzer.Nummer, items: [] };
-    byOwner[key].items.push({ ...e, _idx: idx });
-  });
-
-  // Remove existing owner blocks and rebuild
-  body.querySelectorAll('.curse-owner-block').forEach(b => b.remove());
-
-  Object.entries(byOwner).forEach(([ownerKey, owner]) => {
-    const blockId = 'co_' + owner.num;
-    const wasOpen = document.getElementById(blockId)?.classList.contains('open');
-
-    const block = document.createElement('div');
-    block.className = 'curse-owner-block' + (wasOpen ? ' open' : '');
-    block.id = blockId;
-
-    const lscgCount = owner.items.filter(i => i.IstLSCGCurse).length;
-    const cursedCount = owner.items.filter(i => i.IstCursed).length;
-    const ownerFavCount = owner.items.filter(i => {
-      const k2 = (i.Besitzer?.Nummer ?? '') + ':' + i.ItemName + ':' + i.CraftName;
-      return CURSE_FAVOURITES.has(k2);
-    }).length;
-
-    block.innerHTML =
-      '<div class="curse-owner-hdr" onclick="toggleCurseOwner(\'' + blockId + '\')">'+
-        '<span class="curse-owner-name">'+escHtml(owner.name)+'</span>'+
-        '<span class="curse-owner-num">#'+owner.num+'</span>'+
-        (lscgCount ? '<span class="curse-owner-count" style="background:var(--gd);color:var(--green)">🧿 '+lscgCount+'</span>' : '')+
-        (cursedCount ? '<span class="curse-owner-count">🔮 '+cursedCount+'</span>' : '')+
-        '<span class="curse-owner-count" style="background:var(--bg3);color:var(--text2)">'+owner.items.length+'</span>'+
-        (ownerFavCount ? '<span class="curse-owner-count curse-owner-fav-badge" style="background:rgba(251,191,36,.12);color:#fbbf24;border-color:rgba(251,191,36,.3)">⭐ '+ownerFavCount+'</span>' : '<span class="curse-owner-fav-badge" style="display:none"></span>')+
-        '<button onclick="event.stopPropagation();curseSaveAllAsProfile(\'' + owner.num + '\')"'
-          + ' style="margin-left:auto;background:rgba(139,92,246,0.12);border:1px solid rgba(139,92,246,0.3);color:#a78bfa;cursor:pointer;font-size:.68rem;padding:2px 8px;border-radius:4px;white-space:nowrap"'
-          + ' title="Alle Curses als Outfit-Profil speichern">💾 Alle speichern</button>'+
-        '<span class="curse-owner-chevron">▶</span>'+
-      '</div>'+
-      '<table class="curse-rows"><thead><tr style="background:var(--bg3)">'+
-        '<th style="padding:4px 4px;font-size:.63rem;color:var(--text3);text-align:center;font-weight:500" title="Favorit">⭐</th>'+
-        '<th style="padding:4px 10px;font-size:.63rem;color:var(--text3);text-align:left;font-weight:500">Name</th>'+
-        '<th style="padding:4px 10px;font-size:.63rem;color:var(--text3);text-align:left;font-weight:500">Item</th>'+
-        '<th style="padding:4px 10px;font-size:.63rem;color:var(--text3);text-align:left;font-weight:500">Gruppe</th>'+
-        '<th style="padding:4px 10px;font-size:.63rem;color:var(--text3);text-align:left;font-weight:500">Flags</th>'+
-        '<th style="padding:4px 10px;font-size:.63rem;color:var(--text3);text-align:left;font-weight:500">LSCG</th>'+
-        '<th style="padding:4px 10px;font-size:.63rem;color:var(--text3);text-align:center;font-weight:500;white-space:nowrap">Cache</th>'+
-        '<th style="padding:4px 10px;font-size:.63rem;color:var(--text3);text-align:left;font-weight:500;min-width:160px">Kommentar</th>'+
-        '<th style="padding:4px 10px;font-size:.63rem;color:var(--text3);text-align:left;font-weight:500">Aktionen</th>'+
-      '</tr></thead><tbody id="cb_'+owner.num+'"></tbody></table>';
-
-    body.appendChild(block);
-
-    const tbody = document.getElementById('cb_' + owner.num);
-    owner.items.forEach((entry, rowIdx) => {
-      if (!entry?.Besitzer?.Nummer) return;
-      const dbKey = entry.Besitzer.Nummer + ':' + entry.ItemName + ':' + entry.CraftName;
-      const rowId = 'cr_' + owner.num + '_' + rowIdx;
-      const detId = 'cd_' + owner.num + '_' + rowIdx;
-      const comment = CURSE_COMMENTS[dbKey] || '';
-      const isLSCG  = entry.IstLSCGCurse;
-      const isCursed = entry.IstCursed;
-
-      const tr = document.createElement('tr');
-      const isFav = CURSE_FAVOURITES.has(dbKey);
-    tr.className = 'curse-row' + (isLSCG ? ' lscg' : '') + (isFav ? ' fav' : '');
-      tr.id = rowId;
-
-      const lscgText = isLSCG
-        ? '<span class="curse-detail-badge lscg" title="' + (entry.LSCGAusCache ? 'Aus Cache' : 'Live') + '">'
-          + (entry.LSCGAusCache ? '💾' : '✅') + '</span> ' + escHtml(entry.LSCG?.Name || '?')
-        : '<span style="color:var(--text3)">–</span>';
-
-      tr.innerHTML =
-        '<td class="fav-cell" onclick="toggleCurseFavourite(\'' + dbKey.replace(/'/g,"&apos;") + '\',this)" title="Favorit">'+
-          (isFav ? '⭐' : '<span style="opacity:.25;font-size:.85em">☆</span>')+
-        '</td>'+
-        '<td class="cn"><span class="cursor-detail-toggle" onclick="toggleCurseDetail(\'' + detId + '\',\'' + rowId + '\')">▶</span>'+escHtml(entry.CraftName)+(echoTranslate(entry.CraftName)?'<span style="font-size:.58rem;color:#a78bfa;margin-left:4px">('+echoTranslate(entry.CraftName)+')</span>':'')+'</td>'+
-        '<td class="item">'+escHtml(entry.ItemName)+(echoTranslate(entry.ItemName)?'<span style="font-size:.58rem;color:var(--text3);margin-left:4px">('+echoTranslate(entry.ItemName)+')</span>':'')+'</td>'+
-        '<td class="grp">'+escHtml(entry.Gruppe)+'</td>'+
-        '<td class="badges">'+
-          (isCursed ? '<span class="curse-detail-badge cursed">🔮</span>' : '')+
-          (entry.Private ? '<span class="curse-detail-badge">🔒</span>' : '')+
-          (entry.Property ? '<span class="curse-detail-badge">'+escHtml(entry.Property)+'</span>' : '')+
-        '</td>'+
-        '<td class="lscg-col">'+lscgText+'</td>'+
-        '<td style="text-align:center;vertical-align:middle">'+
-          (isLSCG ? '<span title="'+(entry.LSCGAusCache ? 'Aus LSCG-Cache' : 'Live-Daten')+'" style="font-size:1rem;cursor:default">'+(entry.LSCGAusCache ? '✅' : '🟢')+'</span>' : '<span style="color:var(--text3)">–</span>')+
-        '</td>'+
-        '<td class="comment-col"><textarea class="curse-comment-input" placeholder="Notiz..." '+
-          'data-rowid="' + rowId + '" onchange="saveCurseCommentById(this.dataset.rowid,this.value)">'+escHtml(comment)+'</textarea></td>'+
-        '<td class="actions">'+
-          (function(){ _curseEntryMap[rowId] = dbKey; return ''; })()+
-          '<button class="curse-apply-btn" data-rid="' + rowId + '" data-tgt="" onclick="wearCurseByData(this)" title="Auf mich anwenden">👤</button>'+
-          (_selectedMemberNum ? '<button class="curse-apply-btn other" data-rid="' + rowId + '" data-tgt="' + _selectedMemberNum + '" onclick="wearCurseByData(this)" title="Auf #'+_selectedMemberNum+'">👥 #'+_selectedMemberNum+'</button>' : '')+
-          '<button onclick="curseSaveAsProfile(\'' + dbKey.replace(/\x27/g,"&apos;") + '\')" style="background:rgba(139,92,246,0.12);border:1px solid rgba(139,92,246,0.3);color:#a78bfa;cursor:pointer;font-size:.72rem;padding:2px 6px;border-radius:4px;margin-left:2px" title="Als Outfit-Profil speichern">💾 Profil</button>'+
-          '<button onclick="deleteCurseEntry(\'' + dbKey.replace(/\x27/g,"&apos;") + '\')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.8rem;padding:2px 5px;margin-left:2px" title="Eintrag l\xc3�schen (kommt beim n\xc3�chsten Scan wieder)">✕</button>'+
-        '</td>';
-
-      tbody.appendChild(tr);
-
-      // Detail row
-      const lscgEntry = entry.LSCG;
-      const detailFields = [
-        ['Beschreibung', entry.Description || '–'],
-        ['Farbe', entry.Farbe || '–'],
-        ['Property', entry.Property || '–'],
-        ['Private', entry.Private ? 'Ja' : 'Nein'],
-        ['Zuletzt', entry.ZuletztGesehen],
-        ...(isLSCG ? [
-          ['LSCG Name', lscgEntry?.Name || '–'],
-          ['Outfit Key', lscgEntry?.OutfitKey || '–'],
-          ['Speed', lscgEntry?.Speed ?? '–'],
-          ['Enabled', lscgEntry?.Enabled ? 'Ja' : 'Nein'],
-          ['Inexhaustable', lscgEntry?.Inexhaustable ? 'Ja' : 'Nein'],
-          ['Aus Cache', entry.LSCGAusCache ? 'Ja 💾' : 'Nein ✅'],
-        ] : []),
-      ];
-
-      const detTr = document.createElement('tr');
-      detTr.className = 'curse-detail-row';
-      detTr.id = detId;
-      detTr.innerHTML =
-        '<td class="curse-detail-cell" colspan="7">'+
-        '<div style="font-size:.63rem;color:var(--text3);margin-bottom:4px">Details für '+escHtml(entry.CraftName)+'</div>'+
-        '<div class="curse-detail-grid">'+
-        detailFields.map(([label, val]) =>
-          '<div class="curse-detail-field">'+
-          '<div class="curse-detail-label">'+label+'</div>'+
-          '<div class="curse-detail-val">'+escHtml(String(val))+'</div>'+
-          '</div>'
-        ).join('')+
-        '</div></td>';
-      tbody.appendChild(detTr);
-    });
-  });
-}
-
-function toggleCurseOwner(id) {
-  document.getElementById(id)?.classList.toggle('open');
-}
-
-function toggleCurseDetail(detId, rowId) {
-  const det = document.getElementById(detId);
-  const row = document.getElementById(rowId);
-  if (!det || !row) return;
-  const open = det.classList.toggle('open');
-  row.classList.toggle('expanded', open);
-  // Make sure owner block stays open
-  const block = det.closest('.curse-owner-block');
-  if (open && block) block.classList.add('open');
-}
-
-function saveCurseCommentById(rowId, val) {
-  const key = _curseEntryMap[rowId];
-  if (key) saveCurseComment(key, val);
-}
-
-function saveCurseComment(key, val) {
-  if (val.trim()) CURSE_COMMENTS[key] = val.trim();
-  else delete CURSE_COMMENTS[key];
-  _saveCurseComments();
-}
-
-function deleteCurseEntry(dbKey) {
-  if (!CURSE_DB[dbKey]) return;
-  delete CURSE_DB[dbKey];
-  _saveCurseDB();
-  _updateCurseStats();
-  renderCurseTab();
-  showStatus('🗑️ Eintrag gelöscht – kommt beim nächsten Scan wieder', 'info');
-}
-
-function wearCurseByData(btn) {
-  const rowId = btn.dataset.rid;
-  const tgt   = btn.dataset.tgt;
-  const targetNum = tgt ? parseInt(tgt) : null;
-  const key = _curseEntryMap[rowId];
-  if (!key) { showStatus('❌ Eintrag nicht gefunden', 'error'); return; }
-  wearCurse(key, targetNum);
-}
-
-
-function wearCurse(dbKey, targetNum) {
-  if (!_connected) { showStatus('❌ Nicht verbunden', 'error'); return; }
-  const entry = CURSE_DB[dbKey] ?? null;
-  if (!entry) { showStatus('❌ Eintrag nicht in DB: ' + dbKey, 'error'); return; }
-  bcSend({ type: 'WEAR_CURSE', dbKey, targetNum, entry });
-  showStatus('⏳ Curse wird angelegt...', 'info');
-}
-
-// ── Curse → Outfit-Profil speichern ─────────────────────────────────────
-// Pending GET_CHAR_APPEARANCE callbacks: reqId → callback(items, name)
-const _pendingOutfitSave = {};
-
-// Convert a single BC Appearance item (from GET_CHAR_APPEARANCE response) to profile format
-function _appearanceItemToProfile(item) {
-  return {
-    asset:   item.asset,
-    group:   item.group,
-    colors:  item.colors ?? '#ffffff',
-    craft:   item.craft   ?? null,
-    lock:    item.lock    ?? null,
-    tr:      item.tr      ?? {},
-  };
-}
-
-// Fallback: build a single-item profile from a CURSE_DB entry (when offline)
-function _curseEntryToProfileItem(entry) {
-  let col = entry.Farbe;
-  if (typeof col === 'string' && col.includes(',')) col = col.split(',');
-  if (!Array.isArray(col)) col = col ? [col] : ['#ffffff'];
-  return {
-    asset: entry.ItemName, group: entry.Gruppe,
-    colors: col, craft: entry.Craft || null,
-    lock: null, tr: {},
-    _fromCurse: true, _craftName: entry.CraftName || entry.ItemName
-  };
-}
-
-// Core save helper – called after we have the item list (online or fallback)
-function _doSaveProfile(items, defaultName) {
-  const name = prompt('Profil-Name:', defaultName);
-  if (!name?.trim()) return;
-  const trimmed = name.trim();
-  if (PROFILES[trimmed] && !confirm('Profil "' + trimmed + '" existiert bereits. Überschreiben?')) return;
-  PROFILES[trimmed] = {
-    name: trimmed,
-    date: new Date().toLocaleDateString('de-DE'),
-    items
-  };
-  try {
-    localStorage.setItem('BC_PROFILES_v11', JSON.stringify(PROFILES));
-    showStatus('✅ Profil "' + trimmed + '" gespeichert (' + items.length + ' Items) – nutzbar in Bot-Triggern!', 'success');
-  } catch(e) { showStatus('❌ Speichern fehlgeschlagen: ' + e.message, 'error'); }
-}
-
-// Request full Appearance for ownerNum, then call cb(items, charName)
-// Falls back to CURSE_DB-only if not connected
-function _fetchOutfitAndSave(ownerNum, defaultName, fallbackItems) {
-  if (!_connected) {
-    if (!fallbackItems?.length) { showStatus('❌ Nicht verbunden und keine lokalen Daten', 'error'); return; }
-    showStatus('⚠️ Nicht verbunden – nur Curse-Items aus DB gespeichert', 'info');
-    _doSaveProfile(fallbackItems, defaultName);
-    return;
-  }
-
-  const reqId  = 'os_' + Date.now();
-  const tgtNum = ownerNum ? Number(ownerNum) : null;
-
-  _pendingOutfitSave[reqId] = function(items, charName) {
-    if (!items?.length) {
-      if (fallbackItems?.length) {
-        showStatus('⚠️ Outfit leer – Fallback auf Curse-Einträge', 'info');
-        _doSaveProfile(fallbackItems, defaultName);
-      } else {
-        showStatus('❌ Keine Items erhalten', 'error');
-      }
-      return;
-    }
-    _doSaveProfile(items.map(_appearanceItemToProfile),
-                   charName ? charName + ' – Outfit' : defaultName);
-  };
-
-  // loader.js handles GET_CHAR_APPEARANCE and responds with CHAR_APPEARANCE_DATA.
-  // src.postMessage() in loader correctly sends back to this popup window.
-  bcSend({ type: 'GET_CHAR_APPEARANCE', memberNum: tgtNum, reqId });
-  showStatus('⏳ Lese Outfit aus BC…', 'info');
-}
-// Button: 💾 Profil (pro Curse-Zeile) → speichert das KOMPLETTE Outfit des Owners
-// Button: 💾 Profil (pro Curse-Zeile) → speichert das KOMPLETTE Outfit des eigenen Spielers (Player)
-function curseSaveAsProfile(dbKey) {
-  const entry = CURSE_DB[dbKey];
-  if (!entry) { showStatus('❌ Eintrag nicht gefunden', 'error'); return; }
-  // Defaultname aus CraftName des Curses – Outfit kommt aber vom eigenen Player
-  const defaultName = (entry.CraftName || entry.ItemName || 'Curse') + ' – Outfit';
-  _fetchOutfitAndSave(null, defaultName, [_curseEntryToProfileItem(entry)]);
-}
-
-// Button: 💾 Alle speichern (Owner-Header) → speichert das KOMPLETTE Outfit des eigenen Spielers (Player)
-function curseSaveAllAsProfile(ownerNum) {
-  const entries = Object.entries(CURSE_DB)
-    .filter(([, e]) => String(e.Besitzer?.Nummer ?? '') === String(ownerNum))
-    .map(([, e]) => e);
-  const ownerName = entries[0]?.Besitzer?.Name || ('#' + ownerNum);
-  // Outfit kommt vom eigenen Player, nicht vom Curse-Owner
-  const defaultName = ownerName + ' – Outfit (Player)';
-  _fetchOutfitAndSave(null, defaultName, entries.map(_curseEntryToProfileItem));
-}
-
-// ── Export / Import ───────────────────────────────────
-// Gesammelte Caches für Export
-let _exportLscgCache  = null;
-let _exportCraftCache = null;
-
-function _tryFinishExport() {
-  if (_exportLscgCache === null || _exportCraftCache === null) return; // warten bis beide da
-  const mergedLscg  = Object.assign({}, CURSE_CACHE_LSCG, _exportLscgCache);
-  const mergedCraft = Object.assign({}, CURSE_DB, _exportCraftCache);
-  Object.assign(CURSE_CACHE_LSCG, _exportLscgCache);
-  Object.assign(CURSE_DB, _exportCraftCache);
-  _saveCurseDB();
-  const payload = {
-    _meta: { exportedAt: new Date().toISOString(), version: 3 },
-    database: mergedCraft,
-    lscgTable: CURSE_LSCG,
-    lscgCache: mergedLscg,
-    comments: CURSE_COMMENTS,
-  };
-  _exportLscgCache = null; _exportCraftCache = null;
-  const blob = new Blob([JSON.stringify(payload, null, 2)], {type:'application/json'});
-  const url  = URL.createObjectURL(blob);
-  const a    = document.createElement('a');
-  a.href = url; a.download = 'CurseScanner_' + new Date().toISOString().slice(0,10) + '.json';
-  a.click(); URL.revokeObjectURL(url);
-  showStatus('✅ Export: ' + Object.keys(mergedCraft).length + ' Crafts, ' + Object.keys(mergedLscg).length + ' LSCG-Cache-Einträge', 'success');
-}
-
-function curseExport() {
-  if (!Object.keys(CURSE_DB).length) { showStatus('❌ Nichts zum Exportieren', 'error'); return; }
-  if (_connected) {
-    showStatus('⏳ Lade Cache aus BC...', 'info');
-    _pendingExport = true;
-    _exportLscgCache  = null;
-    _exportCraftCache = null;
-    bcSend({ type: 'GET_LSCG_CACHE' });
-    bcSend({ type: 'GET_CRAFT_CACHE' });
-  } else {
-    _exportLscgCache  = {};
-    _exportCraftCache = {};
-    _tryFinishExport();
-  }
-}
-
-function curseImport() {
-  const inp = document.createElement('input');
-  inp.type = 'file'; inp.accept = '.json';
-  inp.onchange = e => {
-    const r = new FileReader();
-    r.onload = ev => {
-      try {
-        const d = JSON.parse(ev.target.result);
-        CURSE_DB   = d.database  ?? d;
-        CURSE_LSCG = d.lscgTable ?? {};
-        CURSE_CACHE_LSCG = d.lscgCache ?? {};
-        if (d.comments) Object.assign(CURSE_COMMENTS, d.comments);
-        _saveCurseComments();
-        _saveCurseDB();
-        if (d.favourites) { d.favourites.forEach(k => CURSE_FAVOURITES.add(k)); _saveCurseFavourites(); }
-        // Daten gespeichert -> Erfolg melden BEVOR Render (Render-Fehler sollen Import nicht blockieren)
-        showStatus('✅ Import: ' + Object.keys(CURSE_DB).length + ' Crafts', 'success');
-        // BC updaten
-        if (_connected && Object.keys(CURSE_DB).length > 0) {
-          bcSend({ type: 'LOAD_CURSE_DB', database: CURSE_DB }, true);
-          if (Object.keys(CURSE_CACHE_LSCG).length > 0) bcSend({ type: 'LOAD_LSCG_CACHE', cache: CURSE_CACHE_LSCG }, true);
-          bcSend({ type: 'LOAD_CRAFT_CACHE', cache: CURSE_DB }, true);
-        }
-        // Render separat (Fehler hier sollen Erfolg nicht rueckgaengig machen)
-        try { _updateCurseStats(); } catch(e) { console.warn('[Curse Import] stats render error:', e); }
-        try { if (_activeTab === 'curse') renderCurseTab(); } catch(e) { console.warn('[Curse Import] tab render error:', e); }
-      } catch (err) { showStatus('❌ Import fehlgeschlagen: ' + err.message, 'error'); }
-    };
-    r.readAsText(e.target.files[0]);
-  };
-  inp.click();
-}
-
-function curseClear() {
-  const total = Object.keys(CURSE_DB).length;
-  if (!total) { showStatus('ℹ️ Datenbank ist bereits leer', 'info'); return; }
-  if (!confirm('Alle ' + total + ' Einträge löschen?\nDanach kannst du neu scannen oder importieren.')) return;
-  CURSE_DB         = {};
-  CURSE_LSCG       = {};
-  CURSE_CACHE_LSCG = {};
-  _saveCurseDB();
-  _updateCurseStats();
-  renderCurseTab();
-  showStatus('🗑️ Datenbank geleert', 'success');
-}
-
-function curseClearAndScan() {
-  const total = Object.keys(CURSE_DB).length;
-  const msg = total
-    ? 'Alle ' + total + ' Einträge löschen und dann neu scannen?'
-    : 'Neu scannen?';
-  if (!confirm(msg)) return;
-  CURSE_DB         = {};
-  CURSE_LSCG       = {};
-  CURSE_CACHE_LSCG = {};
-  _saveCurseDB();
-  _updateCurseStats();
-  renderCurseTab();
-  curseScan();
-  showStatus('🔄 Datenbank geleert – Scan läuft...', 'info');
-}
-
-// ── Load curse DB + comments + favourites from IndexedDB on startup ────
-(async function() {
-  try {
-    for (const key of ['BC_CURSE_DB_v1', 'BC_CURSE_COMMENTS_v1', 'BC_CURSE_FAV_v1']) {
-      const lsRaw = localStorage.getItem(key);
-      if (lsRaw) {
-        const existing = await idbGet(key);
-        if (!existing) await idbSet(key, JSON.parse(lsRaw));
-        localStorage.removeItem(key);
-      }
-    }
-    const d = await idbGet('BC_CURSE_DB_v1');
-    if (d) {
-      CURSE_DB         = d.database  ?? {};
-      CURSE_LSCG       = d.lscgTable ?? {};
-      CURSE_CACHE_LSCG = d.lscgCache ?? {};
-      if (d.favourites) d.favourites.forEach(k => CURSE_FAVOURITES.add(k));
-      _updateCurseStats();
-      console.log('[BCK-Popup] Curse DB geladen: ' + Object.keys(CURSE_DB).length + ' Crafts');
-      if (document.getElementById('curseBody')) renderCurseTab();
-    }
-    const comments = await idbGet('BC_CURSE_COMMENTS_v1');
-    if (comments) Object.assign(CURSE_COMMENTS, comments);
-    const favs = await idbGet('BC_CURSE_FAV_v1');
-    if (Array.isArray(favs)) favs.forEach(k => CURSE_FAVOURITES.add(k));
-  } catch(e) { console.warn('[BCK-Popup] Curse IDB load error:', e); }
-})();
-
-// ══════════════════════════════════════════════════════
-//  POSTMESSAGE KOMMUNIKATION MIT BC
-// ══════════════════════════════════════════════════════
-const APP = 'BCKonfigurator';
-
-// ── Ping-Retry ────────────────────────────────────────
-let _pingInterval = null;
-let _connected    = false;
-
-function startPingRetry() {
-  if (_pingInterval) clearInterval(_pingInterval);
-  let n = 0;
-  _pingInterval = setInterval(function() {
-    if (_connected) { clearInterval(_pingInterval); _pingInterval = null; return; }
-    n++;
-    const ok = !!window.opener && !window.opener.closed;
-    console.log('[BCK-Popup] Ping-Retry #' + n + ' | opener=' + ok);
-    if (ok) window.opener.postMessage({ app: APP, type: 'PING' }, '*');
-  }, 3000);
-}
-
-function manualReconnect() {
-  _connected = false;
-  stopRoomScan();
-  document.getElementById('connStatus').textContent = '\U0001f534 Nicht verbunden';
-  document.getElementById('connStatus').style.color = 'var(--red)';
-  console.log('[BCK-Popup] manualReconnect()');
-  bcSend({ type: 'PING' });
-  startPingRetry();
-}
-
-function bcSend(msg, silent) {
-  try {
-    const ok = !!window.opener && !window.opener.closed;
-    if (!ok) {
-      console.warn('[BCK-Popup] bcSend FAIL – kein opener', msg.type);
-      if (!silent) showStatus('\u274c BC-Fenster nicht verf\u00fcgbar \u2013 Bookmarklet nochmal klicken', 'error');
+    if(c.typ==='rang'){
+      const op=c.rang_op??'=';
+      const currentId=_rangState[C.MemberNumber]??null;
+      if(op==='kein') return !currentId;
+      if(!c.rang_id) return false;
+      const defs=(_cfg.rankDefs??[]).sort((a,b)=>a.level-b.level);
+      const targetDef=defs.find(r=>r.id===c.rang_id);
+      const currentDef=defs.find(r=>r.id===currentId);
+      if(!targetDef) return false;
+      if(!currentDef) return false; // kein Rang → nicht erfüllt wenn level gebraucht
+      const tl=targetDef.level, cl=currentDef.level;
+      if(op==='=')   return cl===tl;
+      if(op==='min') return cl>=tl;
+      if(op==='max') return cl<=tl;
       return false;
     }
-    if (!silent || msg.type !== 'PING') console.log('[BCK-Popup] bcSend \u2192', msg.type);
-    window.opener.postMessage({ app: APP, ...msg }, '*');
+    if(c.typ==='shop_kauf') return false; // Nur via _handleShopCmd auslösbar
+    if(c.typ==='player_betritt')return true; // handled by poll
     return true;
-  } catch(e) {
-    console.error('[BCK-Popup] bcSend Exception:', e.message);
-    if (!silent) showStatus('\u274c postMessage Fehler: ' + e.message, 'error');
+  }
+  // Split into OR-groups (oder + und_oder both split groups)
+  const groups=[[]];
+  for(const c of beds){
+    if(c.logik==='oder'||c.logik==='und_oder')groups.push([]);
+    groups[groups.length-1].push(c);
+  }
+  // At least one group (OR) must be fully satisfied (AND within group)
+  // und_nicht: Bedingung muss FALSCH sein
+  return groups.some(g=>g.every(c=>c.logik==='und_nicht'?!checkOne(c):checkOne(c)));
+}
+
+// ── IF-Bedingungen Check (entscheidet DANN vs. SONST wenn ifElse aktiv) ──
+function _okIf(trig,rohText,typKey,C){
+  const cx=C.X??-999,cy=C.Y??-999;
+  const beds=trig.ifBedingungen??[];
+  if(!beds.length)return true; // keine IF-Beds → immer DANN
+  function checkOne(c){
+    if(c.typ==='wort'){
+      const m=c.typ_msg||'any';
+      if(m!=='any'&&m!==typKey)return false;
+      return!c.wort||(rohText||'').toLowerCase().includes((c.wort||'').toLowerCase());
+    }
+    if(c.typ==='zone'){
+      const p=c.puffer??1;
+      return cx>=c.x-p&&cx<=c.x+p&&cy>=c.y-p&&cy<=c.y+p;
+    }
+    if(c.typ==='zone_rect'){
+      return cx>=Math.min(c.x1,c.x2)&&cx<=Math.max(c.x1,c.x2)&&cy>=Math.min(c.y1,c.y2)&&cy<=Math.max(c.y1,c.y2);
+    }
+    if(c.typ==='item_traegt'){
+      const Cf=ChatRoomCharacter.find(x=>x.MemberNumber===C.MemberNumber)??C;
+      return(Cf.Appearance??[]).some(a=>a.Asset?.Name===c.item);
+    }
+    if(c.typ==='item_traegt_nicht'){
+      const Cf=ChatRoomCharacter.find(x=>x.MemberNumber===C.MemberNumber)??C;
+      return!(Cf.Appearance??[]).some(a=>a.Asset?.Name===c.item);
+    }
+    if(c.typ==='trigger_war'){
+      const ref=_trigMap[c.trigId];
+      return ref?.charSpec?!!_firedChar[c.trigId+'_'+C.MemberNumber]:!!_fired[c.trigId];
+    }
+    if(c.typ==='rang'){
+      const op=c.rang_op??'=';
+      const currentId=_rangState[C.MemberNumber]??null;
+      if(op==='kein') return !currentId;
+      if(!c.rang_id) return false;
+      const defs=(_cfg.rankDefs??[]).sort((a,b)=>a.level-b.level);
+      const targetDef=defs.find(r=>r.id===c.rang_id);
+      const currentDef=defs.find(r=>r.id===currentId);
+      if(!targetDef) return false;
+      if(!currentDef) return false;
+      const tl=targetDef.level, cl=currentDef.level;
+      if(op==='=')   return cl===tl;
+      if(op==='min') return cl>=tl;
+      if(op==='max') return cl<=tl;
+      return false;
+    }
+    return true;
+  }
+  const groups=[[]];
+  for(const c of beds){
+    if(c.logik==='oder'||c.logik==='und_oder')groups.push([]);
+    groups[groups.length-1].push(c);
+  }
+  return groups.some(g=>g.every(c=>c.logik==='und_nicht'?!checkOne(c):checkOne(c)));
+}
+function _istBesetzt(x,y,ausschliessen){
+  // Ignore target positions at 0,0 — BC hasn't synced position yet
+  if(x===0&&y===0)return false;
+  return[Player,...(ChatRoomCharacter||[])].some(C=>{
+    if(ausschliessen.includes(C.MemberNumber))return false;
+    if(C.X===0&&C.Y===0)return false; // character position not yet loaded
+    return C.X===x&&C.Y===y;
+  });
+}
+
+function _teleport(a,C){
+  const allSlots=a.tpSlots??[];
+  if(!allSlots.length){_log('⚠️ Keine TP-Slots');return false;}
+  // Find first free slot (respecting gueltig flag for return value)
+  const ziel=allSlots.find(s=>!_istBesetzt(s.x,s.y,[C.MemberNumber]));
+  if(!ziel){
+    _log('⚠️ Alle TP-Slots belegt für '+C.Name);
     return false;
   }
+  const si=allSlots.indexOf(ziel);
+  ServerSend('ChatRoomChat',{
+    Content:'ChatRoomMapViewTeleport',Type:'Hidden',
+    Dictionary:[{Tag:'MapViewTeleport',Position:{X:ziel.x,Y:ziel.y}}],
+    Target:C.MemberNumber,
+  });
+  _log('🌀 TP '+C.Name+' → X='+ziel.x+' Y='+ziel.y+(si>0?' [Fallback '+si+']':''));
+  // Gültig-Flag: wenn Slot auf ❌ Fehler gesetzt → Aktion gilt als fehlgeschlagen
+  const gueltig=ziel.gueltig??true;
+  if(!gueltig)_log('⚠️ Slot '+si+' hat gueltig=false → gilt als Fehler');
+  return gueltig;
 }
 
-window.addEventListener('message', function(ev) {
-  if (!ev.data || ev.data.app !== APP) return;
-  console.log('[BCK-Popup] \u2190 message:', ev.data.type);
+// Tiefkopie eines Appearance-Items für Snapshot
+function _snapItem(i){return{Asset:i.Asset,Group:i.Asset?.Group?.Name??'',Color:JSON.parse(JSON.stringify(i.Color??'#ffffff')),Craft:i.Craft??null,Property:JSON.parse(JSON.stringify(i.Property??{}))};}
 
-  switch (ev.data.type) {
+// Nach InventoryWear: alle Items wiederherstellen die durch Block/Conflict entfernt wurden
+// Ausnahme: der absichtlich geänderte Slot (targetGroup) wird nicht berührt
+function _restoreDisplaced(C, snapshot, targetGroup){
+  setTimeout(()=>{
+    snapshot.forEach(snap=>{
+      if(snap.Group===targetGroup)return; // dieser Slot wurde absichtlich geändert
+      const stillThere=InventoryGet(C,snap.Group);
+      if(!stillThere&&snap.Asset){
+        // Item wurde durch InventoryWear verdrängt → wiederherstellen
+        _log('♻️ Wiederherstellen: '+snap.Group+'/'+snap.Asset.Name+' (verdrängt durch '+targetGroup+')');
+        try{
+          InventoryWear(C,snap.Asset.Name,snap.Group,snap.Color,0,Player.MemberNumber,snap.Craft);
+          const restored=InventoryGet(C,snap.Group);
+          if(restored&&snap.Property&&Object.keys(snap.Property).length){
+            restored.Property=snap.Property;
+          }
+        }catch(e){_log('⚠️ Wiederherstellen fehlgeschlagen für '+snap.Group+': '+e.message);}
+      }
+    });
+    CharacterRefresh(C);ChatRoomCharacterUpdate(C);
+  },150);
+}
 
-    case 'PONG':
-      console.log('[BCK-Popup] PONG \u2705 Verbunden!');
-      if (!_connected) {
-        _connected = true;
-        if (_pingInterval) { clearInterval(_pingInterval); _pingInterval = null; }
-        document.getElementById('connStatus').textContent = '\U0001f7e2 Verbunden';
-        document.getElementById('connStatus').style.color = 'var(--green)';
-        document.getElementById('connectHint')?.classList.add('hidden');
-        // Curse-DB an Loader pushen → Wear nach Browserwechsel/Neustart möglich
-        if (Object.keys(CURSE_DB).length > 0) {
-          bcSend({ type: 'LOAD_CURSE_DB', database: CURSE_DB }, true);
-          // FIX: was incorrectly sending CURSE_DB as craft cache - craft entries are already in CURSE_DB
-          // Only send LSCG cache separately as it uses a different table
-          if (Object.keys(CURSE_CACHE_LSCG).length > 0) {
-            bcSend({ type: 'LOAD_LSCG_CACHE', cache: CURSE_CACHE_LSCG }, true);
+function _applyItemAction(a, C){
+  try{
+    // Snapshot ALLER aktuellen Items vor dem Anlegen
+    const snapshot=(C.Appearance??[]).filter(i=>i.Asset?.Group?.Name).map(_snapItem);
+
+    if(a.itemConfig){
+      // Full Item Manager config: colors, TypeRecord, props, lock
+      const ic=a.itemConfig;
+      let col=ic.colors??['#ffffff'];
+      if(typeof col==='string'&&col.includes(','))col=col.split(',');
+      InventoryWear(C,ic.asset,ic.group,col,0,Player.MemberNumber,ic.craft??null);
+      // Sofort TypeRecord setzen (vor CharacterRefresh) damit BC es direkt übernimmt
+      const itemNow=InventoryGet(C,ic.group);
+      if(itemNow){
+        itemNow.Color=col;
+        itemNow.Property=itemNow.Property??{};
+        if(ic.tr&&Object.keys(ic.tr).length){
+          itemNow.Property.TypeRecord=ic.tr;
+          itemNow.Property.Type=ic.typeStr??'';
+        }
+        if(ic.props)Object.assign(itemNow.Property,ic.props);
+      }
+      CharacterRefresh(C);
+      ChatRoomCharacterUpdate(C);
+      _restoreDisplaced(C,snapshot,ic.group);
+      // Zweiter Sync nach _restoreDisplaced (stellt sicher dass TypeRecord + Lock erhalten bleibt)
+      setTimeout(()=>{
+        const item=InventoryGet(C,ic.group);
+        if(!item){
+          // Item wurde durch _restoreDisplaced verdrängt → nochmal anlegen
+          InventoryWear(C,ic.asset,ic.group,col,0,Player.MemberNumber,ic.craft??null);
+          const reItem=InventoryGet(C,ic.group);
+          if(reItem){
+            reItem.Property=reItem.Property??{};
+            if(ic.tr&&Object.keys(ic.tr).length){reItem.Property.TypeRecord=ic.tr;reItem.Property.Type=ic.typeStr??'';}
+            if(ic.props)Object.assign(reItem.Property,ic.props);
+          }
+        } else {
+          // TypeRecord nochmal sicherstellen (könnte durch _restoreDisplaced verloren gegangen sein)
+          item.Property=item.Property??{};
+          if(ic.tr&&Object.keys(ic.tr).length){item.Property.TypeRecord=ic.tr;item.Property.Type=ic.typeStr??'';}
+          if(ic.props)Object.assign(item.Property,ic.props);
+        }
+        // Schloss anlegen (nach TypeRecord-Sync)
+        if(ic.lock){
+          const BCX_L=['LewdCrestPadlock','DeviousPadlock','LuziPadlock'];
+          const REL_L=['OwnerPadlock','LoversPadlock','MistressPadlock'];
+          const isBcx=BCX_L.includes(ic.lock);
+          const isRel=REL_L.includes(ic.lock);
+          const lp=ic.lockParams??{};
+          const lockAsset=isBcx
+            ?(Asset.find(a=>a.Name===ic.lock&&a.Group?.Name==='ItemMisc')??Asset.find(a=>a.Name===ic.lock))
+            :Asset.find(a=>a.Name===ic.lock&&a.Group?.Name==='ItemMisc');
+          if(lockAsset){
+            const itemForLock=InventoryGet(C,ic.group);
+            if(itemForLock){
+              InventoryLock(C,itemForLock,{Asset:lockAsset},Player.MemberNumber,true);
+              itemForLock.Property=itemForLock.Property??{};
+              if(lp.timer>0)   itemForLock.Property.RemoveTimer=Date.now()+lp.timer;
+              if(lp.combo)     itemForLock.Property.CombinationNumber=lp.combo;
+              if(lp.password)  itemForLock.Property.Password=lp.password;
+              if(isRel){
+                itemForLock.Property.LockMemberNumber=lp.relMember||Player.MemberNumber;
+                if(lp.relTimer>0)itemForLock.Property.RemoveTimer=Date.now()+lp.relTimer;
+              }
+              CharacterRefresh(C);
+              _log('🔒 Schloss angelegt: '+ic.lock+' auf '+ic.asset+' ('+C.Name+')');
+            }
+          } else {
+            _log('⚠️ Schloss nicht gefunden: '+ic.lock);
           }
         }
-        // Sofort Raum scannen + Interval starten
-        bcSend({ type: 'GET_PLAYER' }, true);
-        startRoomScan();
-      }
-      break;
+        CharacterRefresh(C);ChatRoomCharacterUpdate(C);
+      },500);
+    }else if(a.curseEntry){
+      let col=a.curseEntry.Farbe;if(typeof col==='string'&&col.includes(','))col=col.split(',');
+      InventoryWear(C,a.curseEntry.ItemName,a.curseEntry.Gruppe,col,0,Player.MemberNumber,a.curseEntry.Craft);
+      _restoreDisplaced(C,snapshot,a.curseEntry.Gruppe);
+    }else if(a.profilName){
+      // Profil: erst nackt machen, dann alle Items mit vollständiger Konfiguration anlegen
+      var profilItems = a.profilItems ?? [];
 
-    case 'CACHE_DATA': {
-      console.log('[BCK-Popup] CACHE_DATA err=' + ev.data.err, 'groups=' + Object.keys(ev.data.cache ?? {}).length);
-      document.getElementById('loadingSpinner').classList.add('hidden');
-      document.getElementById('loadCacheBtn').disabled = false;
-      if (ev.data.err) { showStatus('\u274c ' + ev.data.err, 'error'); return; }
-      const _data  = ev.data.cache ?? {};
-      const _items = Object.values(_data).reduce((s,g) => s + Object.keys(g).length, 0);
-      if (_items === 0) { showStatus('\u274c Kein Cache erhalten \u2013 Bist du im Spiel?', 'error'); return; }
-      CACHE = _data;
-      try { localStorage.setItem('BC_CACHE_v12', JSON.stringify(_data)); } catch {}
-      const _mc = Object.values(_data).flatMap(g => Object.values(g)).filter(i => i.archetype === 'modular').length;
-      document.getElementById('cacheInfo').textContent = '\u2705 ' + _items + ' Items \u00b7 ' + Object.keys(_data).length + ' Gruppen \u00b7 \U0001f9e9 ' + _mc + ' modular';
-      document.getElementById('clearBtn').classList.remove('hidden');
-      document.getElementById('outfitBtn')?.classList.remove('hidden');
-      document.getElementById('profileBtn')?.classList.remove('hidden');
-      document.getElementById('connectHint')?.classList.add('hidden');
-      renderGroups();
-      showEmpty();
-      showStatus('\u2705 ' + _items + ' Items geladen!', 'success');
-      bcSend({ type: 'GET_PLAYER' });
-      break;
+      // Schritt 0: Ziel-Char ausziehen (Pflicht-Anatomie bleibt, alles andere weg)
+      C.Appearance = C.Appearance.filter(function(item){
+        if(!item || !item.Asset || !item.Asset.Group) return true;
+        return item.Asset.Group.AllowNone === false;
+      });
+
+      // Schritt 1: Alle Items anlegen (Craft mitgeben)
+      profilItems.forEach(function(item){
+        var col = item.colors ?? item.cfg?.Color ?? '#ffffff';
+        if(typeof col==='string' && col.includes(',')) col = col.split(',');
+        var craft = (item.craft && item.craft.Name) ? item.craft : null;
+        InventoryWear(C, item.asset, item.group, col, 0, Player.MemberNumber, craft);
+      });
+
+      // Schritt 2: Properties setzen (TypeRecord, WCE-Layer, Difficulty, Farbe)
+      profilItems.forEach(function(item){
+        var worn = InventoryGet(C, item.group);
+        if(!worn) return;
+        worn.Property = worn.Property ?? {};
+
+        // TypeRecord (Variante/Layer-Konfiguration)
+        if(item.tr && Object.keys(item.tr).length){
+          worn.Property.TypeRecord = item.tr;
+          worn.Property.Type = Object.entries(item.tr).map(function(e){return e[0]+e[1];}).join('');
+          try{ExtendedItemInit(C, worn, false, false);}catch(e){}
+        }
+
+        // WCE: Gesamt-Priorität (OverridePriority)
+        if(item.overridePriority != null){
+          worn.Property.OverridePriority = item.overridePriority;
+        }
+        // WCE: Layer-spezifische Prioritäten + Hiding (LayerProperties)
+        if(item.layerProperties){
+          worn.Property.LayerProperties = item.layerProperties;
+        }
+
+        // Difficulty (Festigkeit/Tightness)
+        if(item.difficulty != null) worn.Difficulty = item.difficulty;
+
+        // Farbe nochmal setzen (InventoryWear überschreibt manchmal)
+        var col = item.colors ?? '#ffffff';
+        if(typeof col==='string' && col.includes(',')) col = col.split(',');
+        worn.Color = col;
+      });
+
+      // Schritt 3: Locks anlegen
+      profilItems.forEach(function(item){
+        if(!item.lock) return;
+        var worn = InventoryGet(C, item.group);
+        if(!worn) return;
+        var BCX_LOCKS = ['LewdCrestPadlock','DeviousPadlock','LuziPadlock'];
+        var lockAsset = BCX_LOCKS.includes(item.lock)
+          ? (Asset.find(function(a){return a.Name===item.lock && a.Group?.Name==='ItemMisc';})
+             ?? Asset.find(function(a){return a.Name===item.lock;}))
+          : Asset.find(function(a){return a.Name===item.lock && a.Group?.Name==='ItemMisc';});
+        if(lockAsset){
+          InventoryLock(C, worn, {Asset: lockAsset}, item.lockMember || Player.MemberNumber, false);
+        }
+      });
+
+      CharacterRefresh(C);
+      ChatRoomCharacterUpdate(C);
+    }else if(a.item){
+      InventoryWear(C,a.item,a.gruppe,a.farbe??'#ffffff',0,Player.MemberNumber);
+      _restoreDisplaced(C,snapshot,a.gruppe);
     }
+  }catch(ex){_log('item Fehler:',ex.message);}
+}
 
-    case 'PLAYER_DATA':
-      if (!ev.data.err) {
-        const _pi = document.getElementById('playerInfo');
-        if (_pi) { _pi.textContent = '\U0001f464 ' + ev.data.name + ' #' + ev.data.memberNumber; _pi.style.display = ''; }
-        renderRoomMembers(ev.data);
-      } else {
-        console.warn('[BCK-Popup] PLAYER_DATA Fehler:', ev.data.err);
-      }
-      break;
-
-    case 'BOT_EV_STATUS':
-      _evIntervalStatusUpdate(ev.data.evId, ev.data.nextMs, ev.data.lo, ev.data.hi, ev.data.cnt);
-      break;
-    case 'BOT_LOG':
-      logPush(ev.data.entry);
-      break;
-
-    case 'BOT_MONEY':
-      _moneyApply(ev.data.memberNum, ev.data.name, ev.data.delta, ev.data.setVal);
-      break;
-
-    case 'BOT_SHOP': {
-      _shopLogPurchase(ev.data);
-      break;
+// Führt eine einzelne Aktion aus; gibt true/false zurück (Erfolg)
+function _execAct(a,C,vars){
+  let ok=false;
+  try{
+    if(a.typ==='chat'){ServerSend('ChatRoomChat',{Content:_tpl(a.text,vars),Type:'Chat'});ok=true;}
+    else if(a.typ==='emote'){ServerSend('ChatRoomChat',{Content:_tpl(a.text,vars),Type:'Emote'});ok=true;}
+    else if(a.typ==='whisper'){ServerSend('ChatRoomChat',{Content:_tpl(a.text,vars),Type:'Whisper',Target:C.MemberNumber});ok=true;}
+    else if(a.typ==='item_entf'){const _entfGruppe=a.gruppe;InventoryRemove(C,_entfGruppe);CharacterRefresh(C);ChatRoomCharacterUpdate(C);_asUnregister(C,_entfGruppe);ok=true;}
+    else if(a.typ==='item'){
+      _applyItemAction(a,C);
+      if(a.antiStrip)_asRegister(C,a);
+      if(vars?.shopNostrip)_nsRegister(C,a);
+      ok=true;
     }
-
-    case 'BOT_RANG':
-      _rankApply(ev.data.memberNum, ev.data.name, ev.data.rankId, 'bot');
-      break;
-
-    case 'RANG_INIT': {
-      // Spieler registrieren ohne Rang – nur wenn noch nicht bekannt
-      const rid = String(ev.data.memberNum);
-      if (rid && !_rankData.players[rid]) {
-        _rankData.players[rid] = { name: ev.data.name || ('#'+rid), rankId: null, assignedAt: Date.now(), history: [] };
-        _saveRank();
-        if (document.getElementById('tab-rank')?.classList.contains('active')) renderRankPlayers();
-        const btn = document.getElementById('tab-rank-btn');
-        if (btn) { const total = Object.values(_rankData.players).filter(x=>x.rankId).length; btn.textContent = '🏆 Rang ('+total+')'; }
-        if (document.getElementById('tab-rank')?.classList.contains('active')) renderRankPlayers();
-      } else if (rid && _rankData.players[rid]) {
-        // Name aktuell halten bei Rejoin
-        _rankData.players[rid].name = ev.data.name || _rankData.players[rid].name;
-        _saveRank();
-      }
-      break;
+    else if(a.typ==='teleport'){ok=_teleport(a,C);}
+    else if(a.typ==='money'){
+      const op=a.money_op??'add';
+      const val=a.money_val??0;
+      const delta=op==='add'?val:op==='sub'?-val:0;
+      const setVal=op==='set'?val:op==='reset'?0:undefined;
+      window.__BCK_popupRef?.postMessage({app:'BCKonfigurator',type:'BOT_MONEY',
+        memberNum:C.MemberNumber,name:C.Name,delta,setVal},'*');
+      ok=true;
     }
-
-    case 'MONEY_INIT_NEW': {
-      // Neuer Spieler - nur eintragen wenn noch nicht vorhanden (0 Gold)
-      const mn = ev.data.memberNum;
-      if (mn && !_money.balances[mn]) {
-        _money.balances[mn] = { name: ev.data.name || ('#'+mn), balance: 0 };
-        _saveMoney();
-        // Tab-Badge immer aktualisieren (nicht nur wenn Tab aktiv)
-        const _moneyBtn = document.getElementById('tab-money-btn');
-        if (_moneyBtn) _moneyBtn.textContent = '💰 Money (' + Object.keys(_money.balances).length + ')';
-        if (document.getElementById('tab-money')?.classList.contains('active')) renderMoneyTab();
-      } else if (mn && _money.balances[mn] && ev.data.name) {
-        // Name aktuell halten bei Rejoin
-        _money.balances[mn].name = ev.data.name;
-      }
-      break;
+    else if(a.typ==='rang'){
+      const op=a.rang_op??'setzen';
+      const defs=_cfg.rankDefs??[];
+      const sorted=[...defs].sort((x,y)=>x.level-y.level);
+      const currentRankId=_rangState[C.MemberNumber]??null;
+      const curIdx=sorted.findIndex(r=>r.id===currentRankId);
+      let newRankId=currentRankId;
+      if(op==='setzen') newRankId=a.rang_id||null;
+      else if(op==='entfernen') newRankId=null;
+      else if(op==='naechster'){ if(curIdx<sorted.length-1) newRankId=sorted[curIdx+1].id; }
+      else if(op==='vorheriger'){ if(curIdx>0) newRankId=sorted[curIdx-1].id; }
+      _rangState[C.MemberNumber]=newRankId;
+      window.__BCK_popupRef?.postMessage({app:'BCKonfigurator',type:'BOT_RANG',
+        memberNum:C.MemberNumber,name:C.Name,rankId:newRankId},'*');
+      ok=true;
     }
-    case 'MONEY_QUERY': {
-      const id = ev.data.memberNum; // raw MemberNumber key
-      const p = _money.balances[id];
-      const bal = p?.balance ?? 0;
-      const cur = _money.settings.name || 'Gold';
-      const name = ev.data.name || ('#'+ev.data.memberNum);
-      // Find any active bot to send the response
-      const actBot = _bots.find(b=>b.laufend);
-      if (actBot) {
-        const queryTyp = _money.settings.queryTyp ?? 'whisper';
-        const msgType = queryTyp === 'whisper' ? 'Whisper' : 'Chat';
-        const memberNum = ev.data.memberNum;
-        const msg = `Du hast ${bal} ${cur}`;
-        const code = msgType === 'Whisper'
-          ? `ServerSend('ChatRoomChat',{Content:${JSON.stringify(msg)},Type:'Whisper',Target:${memberNum}});`
-          : `ServerSend('ChatRoomChat',{Content:${JSON.stringify(name+': '+msg)},Type:'Chat'});`;
-        bcSend({type:'EXEC', code});
-      }
-      break;
+    else ok=true;
+  }catch(ex){_log('\u26A0 Aktion '+a.typ+' Fehler:',ex.message);ok=false;}
+  // Dann / Sonst Nachrichten senden
+  const msgField=ok?'dann_msg':'sonst_msg';
+  const msgTypField=msgField+'_typ';
+  const msgTyp=a[msgTypField]??'chat';
+  const msgText=a[msgField];
+  if(msgText&&msgTyp!=='nichts'){
+    setTimeout(()=>{
+      const txt=_tpl(msgText,vars);
+      if(msgTyp==='whisper')ServerSend('ChatRoomChat',{Content:txt,Type:'Whisper',Target:C.MemberNumber});
+      else if(msgTyp==='emote')ServerSend('ChatRoomChat',{Content:txt,Type:'Emote'});
+      else ServerSend('ChatRoomChat',{Content:txt,Type:'Chat'});
+    },200);
+  }
+  return ok;
+}
+
+// Aktionen sequenziell ausführen (Reihenfolge + bei_fehler)
+function _runSeq(aktionen,C,vars,trigBase,onDone,onUngueltig){
+  if(!aktionen.length){onDone();return;}
+  const [a,...rest]=aktionen;
+  setTimeout(()=>{
+    // Ziel-Filter: welche Characters werden durch diese Aktion beeinflusst?
+    const allChars=[Player,...(ChatRoomCharacter||[])];
+    let targets;
+    if(a.aktZiel==='alle'){
+      targets=allChars;
+    } else if(a.aktZiel==='whitelist'){
+      const nrs=(a.aktZielNummern||[]).map(Number);
+      targets=allChars.filter(ch=>nrs.includes(Number(ch.MemberNumber)));
+    } else if(a.aktZiel==='shop_kaeufer'){
+      // Zielt auf den Käufer (vars.shopBuyer), nicht das Kaufziel
+      const buyerNum=vars.shopBuyer?.MemberNumber;
+      const buyerChar=buyerNum?allChars.find(ch=>ch.MemberNumber===buyerNum):null;
+      targets=buyerChar?[buyerChar]:[C];
+    } else {
+      targets=[C]; // 'ausloeser' / default
     }
-
-    case 'BOT_ROOM_EVER': {
-      // Spieler die je da waren persistieren – überlebt Konfigurator-Neustart
-      const reKey = 'BC_RoomEver_v1';
-      try {
-        const reData = JSON.parse(localStorage.getItem(reKey)||'{}');
-        reData[ev.data.botId] = ev.data.members;
-        localStorage.setItem(reKey, JSON.stringify(reData));
-      } catch {}
-      break;
+    // Chat/Emote sind Broadcast-Nachrichten → nur 1x senden egal wieviele Ziele
+    // Whisper, Item, Teleport, Money → pro Ziel ausführen
+    let overallOk=true;
+    if(['chat','emote'].includes(a.typ)&&targets.length>0){
+      // Sende einmal mit Variablen des Auslösers
+      const ok=_execAct(a,C,vars);
+      if(!ok)overallOk=false;
+    } else {
+      targets.forEach(ch=>{
+        const chVars=ch===C?vars:{...vars,name:ch.Name,x:ch.X??0,y:ch.Y??0,C:ch};
+        const ok=_execAct(a,ch,chVars);
+        if(!ok)overallOk=false;
+      });
     }
+    if(!overallOk){
+      const bf=a.bei_fehler??'ignorieren';
+      _log('\u26A0 Aktion '+a.typ+' fehlgeschlagen → '+bf);
+      if(bf==='kette_stoppen'){onDone();return;}
+      if(bf==='trigger_ungueltig'){onUngueltig();return;}
+    }
+    _runSeq(rest,C,vars,trigBase,onDone,onUngueltig);
+  },a.delay??0);
+}
 
-    case 'EXEC_OK':
-      console.log('[BCK-Popup] EXEC_OK \u2705');
-      showStatus('\u2705 Ausgef\u00fchrt!', 'success');
-      break;
 
-    case 'EXEC_ERR':
-      console.error('[BCK-Popup] EXEC_ERR:', ev.data.msg);
-      showStatus('\u274c Fehler: ' + ev.data.msg, 'error');
-      break;
+// Sendet einen Log-Eintrag an den Tab im Index
+// Sendet Log-Eintrag via PostMessage-Brücke zurück an das Popup
+// ── Events Runtime ────────────────────────────────────────
+const _evTimers={};
+// NOTE: _evFiredCnt is declared above with persisted state
+const _evState={}; // for interval state
 
-    case 'CURSE_DATA':
-      _handleCurseData(ev.data);
-      break;
+function _okEv(ev,C,rohText,typKey){
+  const beds=ev.bedingungen??[];
+  if(!beds.length)return true;
+  const cx=C.X??-999,cy=C.Y??-999;
+  function checkOne(c){
+    if(c.typ==='wort'){
+      if(!rohText)return true; // no chat context → skip wort check (timer/interval)
+      const m=c.typ_msg||'any';
+      if(m!=='any'&&m!==typKey)return false;
+      return!c.wort||(rohText||'').toLowerCase().includes((c.wort||'').toLowerCase());
+    }
+    if(c.typ==='zone'){const p=c.puffer??1;return cx>=c.x-p&&cx<=c.x+p&&cy>=c.y-p&&cy<=c.y+p;}
+    if(c.typ==='zone_rect'){return cx>=Math.min(c.x1,c.x2)&&cx<=Math.max(c.x1,c.x2)&&cy>=Math.min(c.y1,c.y2)&&cy<=Math.max(c.y1,c.y2);}
+    if(c.typ==='item_traegt'){return(C.Appearance??[]).some(a=>a.Asset?.Name===c.item);}
+    if(c.typ==='item_traegt_nicht'){return!(C.Appearance??[]).some(a=>a.Asset?.Name===c.item);}
+    if(c.typ==='trigger_war'){const ref=_trigMap[c.trigId];return ref?.charSpec?!!_firedChar[c.trigId+'_'+C.MemberNumber]:!!_fired[c.trigId];}
+    if(c.typ==='rang'){
+      const op=c.rang_op??'=';
+      const currentId=_rangState[C.MemberNumber]??null;
+      if(op==='kein') return !currentId;
+      if(!c.rang_id) return false;
+      const defs=(_cfg.rankDefs??[]).sort((a,b)=>a.level-b.level);
+      const targetDef=defs.find(r=>r.id===c.rang_id);
+      const currentDef=defs.find(r=>r.id===currentId);
+      if(!targetDef) return false;
+      if(!currentDef) return false;
+      const tl=targetDef.level, cl=currentDef.level;
+      if(op==='=')   return cl===tl;
+      if(op==='min') return cl>=tl;
+      if(op==='max') return cl<=tl;
+      return false;
+    }
+    return true;
+  }
+  const groups=[[]];
+  for(const c of beds){
+    if(c.logik==='oder'||c.logik==='und_oder')groups.push([]);
+    groups[groups.length-1].push(c);
+  }
+  return groups.some(g=>g.every(c=>c.logik==='und_nicht'?!checkOne(c):checkOne(c)));
+}
 
-    case 'LSCG_CACHE_DATA':
-      Object.assign(CURSE_CACHE_LSCG, ev.data.cache ?? {});
-      if (_pendingExport) {
-        _exportLscgCache = ev.data.cache ?? {};
-        _tryFinishExport();
-      }
-      break;
+function _fireEv(ev){
+  // Wiederholung check
+  const cnt=_evFiredCnt[ev.id]??0;
+  if(ev.wiederholung==='einmalig'&&cnt>=1){_log('⏭ Event "'+ev.name+'" bereits (1×)');return;}
+  if(ev.wiederholung==='n_mal'&&cnt>=(ev.maxMal??2)){_log('⏭ Event "'+ev.name+'" max erreicht');return;}
 
-    case 'CRAFT_CACHE_DATA':
-      // FIX: was incorrectly merging into CURSE_DB, corrupting it with craft-cache entries
-      // Craft-cache is already part of CURSE_DB structure; just merge missing keys safely
-      if (ev.data.cache) {
-        for (const [k, v] of Object.entries(ev.data.cache)) {
-          if (!CURSE_DB[k]) CURSE_DB[k] = v; // only add truly new entries, don't overwrite
+  // Targets
+  const allChars=[Player,...(ChatRoomCharacter||[])];
+  let targets=[];
+  if(ev.ziel==='alle'){targets=allChars;}
+  else if(ev.ziel==='liste'){targets=allChars.filter(C=>(ev.zielListe||[]).includes(C.MemberNumber));}
+  else{// ausloeser / random
+    const eligible=allChars.filter(C=>_okEv(ev,C,ev._rohText,ev._typKey));
+    if(eligible.length)targets=[eligible[Math.floor(Math.random()*eligible.length)]];
+  }
+  if(!targets.length){_log('⚠️ Event "'+ev.name+'" – kein gültiges Ziel');return;}
+
+  _log('⚡ Event "'+ev.name+'" → '+targets.length+' Ziel(e)');
+  targets.forEach(C=>{
+    if(!_okEv(ev,C,ev._rohText,ev._typKey)){_log('⏭ Event "'+ev.name+'" Bed. nicht erfüllt für '+C.Name);return;}
+    const vars={name:C.Name,wort:ev._rohText||'',typ:'Event',x:C.X??0,y:C.Y??0,zone:'',C};
+    _runSeq(ev.aktionen??[],C,vars,ev,
+      ()=>{
+        _evFiredCnt[ev.id]=(cnt+1);
+        _log('✅ Event "'+ev.name+'" abgeschlossen für '+C.Name+' #'+_evFiredCnt[ev.id]);
+        _pushLog({status:'ok'},vars,{name:ev.name,id:ev.id});
+      },
+      ()=>{
+        _log('❌ Event "'+ev.name+'" ungültig für '+C.Name);
+        _pushLog({status:'ungueltig'},vars,{name:ev.name,id:ev.id});
+        if(ev.fallbackTyp&&ev.fallbackTyp!=='nichts'&&ev.fallbackText){
+          const typ={chat:'Chat',emote:'Emote'}[ev.fallbackTyp]??'Chat';
+          ServerSend('ChatRoomChat',{Content:_tpl(ev.fallbackText,vars),Type:typ});
         }
       }
-      if (_pendingExport) {
-        _exportCraftCache = ev.data.cache ?? {};
-        _tryFinishExport();
-      }
-      break;
+    );
+  });
+}
 
-    case 'WEAR_CURSE_OK':
-      showStatus('\u2705 ' + (ev.data.msg || 'Curse angelegt!'), 'success');
-      break;
+// Scheduling via condition types ev_timer / ev_interval
+function _scheduleEv(ev){
+  if(!ev.aktiv)return;
+  const beds=ev.bedingungen??[];
+  const timerC=beds.find(c=>c.typ==='ev_timer');
+  const intC=beds.find(c=>c.typ==='ev_interval');
+  if(timerC){
+    const ms=(timerC.sek??10)*1000;
+    _evTimers[ev.id+'_t']=setTimeout(()=>{
+      _fireEv(ev);
+    },ms);
+  }
+  if(intC){
+    const lo=(intC.sek_min??20)*1000, hi=(intC.sek_max??60)*1000;
+    const go=()=>{
+      const cnt=_evFiredCnt[ev.id]??0;
+      if(ev.wiederholung==='einmalig'&&cnt>=1)return;
+      if(ev.wiederholung==='n_mal'&&cnt>=(ev.maxMal??2))return;
+      _fireEv(ev);
+      _evTimers[ev.id+'_i']=setTimeout(go,lo+Math.random()*(hi-lo));
+    };
+    _evTimers[ev.id+'_i']=setTimeout(go,lo+Math.random()*(hi-lo));
+  }
+}
 
-    case 'WEAR_CURSE_ERR':
-      showStatus('\u274c Curse-Fehler: ' + ev.data.msg, 'error');
-      break;
+// Start alle aktiven Events die Timer/Interval haben
+_evts.forEach(ev=>{if(ev.aktiv)_scheduleEv(ev);});
+// ──────────────────────────────────────────────────────
 
-    case 'CHAR_APPEARANCE_DATA': {
-      const _cb = _pendingOutfitSave[ev.data.reqId];
-      if (!_cb) break;
-      delete _pendingOutfitSave[ev.data.reqId];
-      if (ev.data.err) { showStatus('\u274c Outfit-Laden fehlgeschlagen: ' + ev.data.err, 'error'); break; }
-      _cb(ev.data.items ?? [], ev.data.name ?? '');
-      break;
+function _pushLog(extra,vars,trig){
+  const entry={
+    ts:Date.now(),
+    botId:'${safeId}',
+    botName:'${safeName}',
+    trigName:trig?.name??'?',
+    trigId:trig?.id??'',
+    player:(vars?.name??'?')+' #'+(vars?.C?.MemberNumber??'?'),
+    memberNum:vars?.C?.MemberNumber,
+    x:vars?.x??0,
+    y:vars?.y??0,
+    ...extra,
+  };
+  // Brücke: postMessage zurück an Popup (window.__BCK_popupRef = gespeichert in loader.js)
+  try{
+    window.__BCK_popupRef?.postMessage({app:'BCKonfigurator',type:'BOT_LOG',entry},'*');
+  }catch(e){}
+}
+
+// Sendet roomEver ans Popup zur Persistenz
+function _syncRoomEver(){
+  try{
+    window.__BCK_popupRef?.postMessage({app:'BCKonfigurator',type:'BOT_ROOM_EVER',botId:'${safeId}',members:[..._roomEver]},'*');
+  }catch(e){}
+}
+
+function _run(trig,vars){
+  const C=vars.C??Player;
+
+  // ── Rejoin-Fenster: schließen wenn Nicht-Rejoin-Trigger feuert ──
+  const _isRejoinTrig=(trig.bedingungen??[]).some(c=>c.typ==='player_betritt'&&c.betritt_typ==='rejoin');
+  if(!_isRejoinTrig && _rejoinWindow.has(C.MemberNumber)){
+    const openedAt=_rejoinWindow.get(C.MemberNumber);
+    if(Date.now()-openedAt >= _REJOIN_GRACE){
+      _rejoinWindow.delete(C.MemberNumber);
+      _log('\u{1F6AA} Rejoin-Fenster für #'+C.MemberNumber+' geschlossen (Nicht-Rejoin Trigger "'+trig.name+'")');
+    } else {
+      _log('\u{1F6AA} Rejoin-Gnadenfrist aktiv für #'+C.MemberNumber+' – Fenster noch '+((_REJOIN_GRACE-(Date.now()-openedAt))|0)+'ms offen');
     }
   }
-});
-
-function loadCacheFromBC() {
-  console.log('[BCK-Popup] loadCacheFromBC() | opener=' + !!window.opener + ' closed=' + window.opener?.closed);
-  const btn = document.getElementById('loadCacheBtn');
-  btn.disabled = true;
-  document.getElementById('loadingSpinner').classList.remove('hidden');
-  showStatus('\u23f3 Verbinde mit Spiel\u2026', 'info');
-  if (!bcSend({ type: 'GET_CACHE' })) {
-    document.getElementById('loadingSpinner').classList.add('hidden');
-    btn.disabled = false;
-  }
-}
-
-function clearCache() {
-  if (!confirm('Cache l\u00f6schen?')) return;
-  CACHE = {};
-  try { localStorage.removeItem('BC_CACHE_v12'); } catch {}
-  document.getElementById('cacheInfo').textContent = 'Kein Cache';
-  document.getElementById('clearBtn').classList.add('hidden');
-  document.getElementById('outfitBtn')?.classList.add('hidden');
-  document.getElementById('profileBtn')?.classList.add('hidden');
-  document.getElementById('connectHint')?.classList.remove('hidden');
-  document.getElementById('groupsList').innerHTML = '';
-  showEmpty();
-}
-
-function showStatus(msg, type) {
-  type = type || 'info';
-  const el = document.getElementById('statusMsg');
-  if (!el) return;
-  el.textContent = msg;
-  el.className = 'status-msg status-' + type;
-  el.classList.remove('hidden');
-  clearTimeout(el._t);
-  el._t = setTimeout(function() { el.classList.add('hidden'); }, 4000);
-}
-
-function executeCode() {
-  const code = document.getElementById('codeOut').value.trim();
-  if (!code) return;
-  showStatus('\u23f3 Wird ausgef\u00fchrt\u2026', 'info');
-  bcSend({ type: 'EXEC', code: '(function(){\n' + code + '\n})();' });
-}
-
-// copyCode: see above
-
-function executeOutfitCode() {
-  const code = document.getElementById('outfitCode').value.trim();
-  if (!code) return;
-  showStatus('\u23f3 Outfit wird ausgef\u00fchrt\u2026', 'info');
-  bcSend({ type: 'EXEC', code: '(function(){\n' + code + '\n})();' });
-}
-
-// copyOutfitCode: see above
-
-
-// ══════════════════════════════════════════════════════
-//  RAUM-SCANNER
-// ══════════════════════════════════════════════════════
-let _roomScanInterval = null;
-let _myMemberNumber    = null;
-let _selectedMemberNum = null;  // Konfigurator-Ziel
-let _outfitTargetNum   = null;  // Outfit-Ziel (null = selbst)
-let _lastRoomMembers   = [];    // letzter bekannter Raum-Snapshot
-
-// Grace-Period: Spieler muss GRACE_NEEDED aufeinanderfolgende Scans fehlen
-// bevor er als "verlassen" gilt. BC leert ChatRoomCharacter kurz beim Sync.
-const GRACE_NEEDED = 2;  // 2 × 5s = 10s grace for sync drops
-const _missCount   = {};  // memberNum → aufeinanderfolgende Fehlscans
-
-function scanRoom() {
-  if (!_connected) return;
-  const btn = document.getElementById('roomRefreshBtn');
-  if (btn) { btn.textContent = '⏳'; btn.classList.add('room-scanning'); }
-  bcSend({ type: 'GET_PLAYER' }, true);
-}
-
-function startRoomScan() {
-  if (_roomScanInterval) clearInterval(_roomScanInterval);
-  _roomScanInterval = setInterval(function() {
-    if (_connected) scanRoom();
-  }, 5000);
-  console.log('[BCK-Popup] Raum-Scanner gestartet (alle 5s)');
-}
-
-function stopRoomScan() {
-  if (_roomScanInterval) { clearInterval(_roomScanInterval); _roomScanInterval = null; }
-}
-
-function renderRoomMembers(data) {
-  const container = document.getElementById('roomMembers');
-  const btn       = document.getElementById('roomRefreshBtn');
-  if (!container) return;
-  if (btn) { btn.textContent = '🔄'; btn.classList.remove('room-scanning'); }
-
-  _myMemberNumber = data.memberNumber;
-  const freshMembers = data.members ?? [];
-  const freshNums    = new Set(freshMembers.map(m => m.num));
-
-  // ── Grace-Period-Logik ────────────────────────────────────────────────────
-  // Frische Spieler: Miss-Zähler auf 0 zurücksetzen
-  for (const m of freshMembers) _missCount[m.num] = 0;
-
-  // Vermisste Spieler: Zähler hochzählen, erst nach GRACE_NEEDED resetten
-  const tracked = new Set([
-    ...(_selectedMemberNum ? [_selectedMemberNum] : []),
-    ...(_outfitTargetNum   ? [_outfitTargetNum]   : []),
-  ]);
-  for (const num of tracked) {
-    if (!freshNums.has(num)) {
-      _missCount[num] = (_missCount[num] || 0) + 1;
-      console.log('[BCK-Popup] Spieler #' + num + ' fehlt im Scan (' + _missCount[num] + '/' + GRACE_NEEDED + ')');
-    }
-  }
-
-  // Konfigurator-Ziel zurücksetzen wenn GRACE_NEEDED überschritten
-  if (_selectedMemberNum && (_missCount[_selectedMemberNum] || 0) >= GRACE_NEEDED) {
-    console.log('[BCK-Popup] Spieler #' + _selectedMemberNum + ' hat Raum verlassen → reset Konfig-Ziel');
-    delete _missCount[_selectedMemberNum];
-    _selectedMemberNum = null;
-    const modeEl = document.getElementById('targetMode');
-    if (modeEl) { modeEl.value = 'self'; onTargetChange(); }
-  }
-
-  // Outfit-Ziel zurücksetzen wenn GRACE_NEEDED überschritten
-  if (_outfitTargetNum && (_missCount[_outfitTargetNum] || 0) >= GRACE_NEEDED) {
-    console.log('[BCK-Popup] Outfit-Ziel #' + _outfitTargetNum + ' hat Raum verlassen → reset');
-    delete _missCount[_outfitTargetNum];
-    _outfitTargetNum = null;
-  }
-
-  // ── Snapshot: frische Daten PLUS bekannte aber kurz fehlende speichern ────
-  // Spieler die noch innerhalb der Grace-Period sind trotzdem in der Liste lassen
-  const graceMembers = _lastRoomMembers.filter(m =>
-    !freshNums.has(m.num) &&
-    m.num !== _myMemberNumber &&
-    (_missCount[m.num] || 0) < GRACE_NEEDED
-  );
-  _lastRoomMembers = [...freshMembers, ...graceMembers];
-
-  // ── Raum-Panel rendern ────────────────────────────────────────────────────
-  const displayList = _lastRoomMembers;
-  if (!displayList.length) {
-    container.innerHTML = '<span class="room-empty">– Niemand im Raum –</span>';
-  } else {
-    container.innerHTML = displayList.map(m => {
-      const isSelf  = m.num === _myMemberNumber;
-      const isSel   = m.num === _selectedMemberNum;
-      const inGrace = !freshNums.has(m.num) && !isSelf;
-      const cls = 'room-chip' + (isSelf ? ' self' : '') + (isSel ? ' selected' : '') + (inGrace ? ' grace' : '');
-      const click = isSelf ? '' : 'onclick="selectRoomMember(' + m.num + ')"';
-      const title = isSelf ? 'Du selbst' : (inGrace ? 'Sync... (kurz nicht sichtbar)' : 'Als Ziel setzen');
-      return '<span class="' + cls + '" ' + click + ' title="' + title + '">'
-        + (isSelf ? '👤' : (inGrace ? '⏳' : '👥')) + ' ' + escHtml(m.name)
-        + ' <span class="room-num">#' + m.num + '</span></span>';
-    }).join('');
-  }
-
-  // ── Konfigurator-Dropdown aktualisieren ───────────────────────────────────
-  const sel = document.getElementById('targetMember');
-  if (sel) {
-    const others = _lastRoomMembers.filter(m => m.num !== _myMemberNumber);
-    sel.innerHTML = '<option value="">– Auswählen –</option>' +
-      others.map(m => '<option value="' + m.num + '"' + (m.num === _selectedMemberNum ? ' selected' : '') + '>' + escHtml(m.name) + ' #' + m.num + '</option>').join('');
-    if (_selectedMemberNum) sel.value = _selectedMemberNum;
-  }
-
-  // ── Outfit-Chips aktualisieren ────────────────────────────────────────────
-  renderOutfitMemberChips();
-}
-
-function renderOutfitMemberChips() {
-  const el = document.getElementById('outfitMemberChips');
-  if (!el) return;
-  const members = _lastRoomMembers;
-  if (!members.length) {
-    el.innerHTML = '<span style="color:var(--text3);font-size:.72rem">– Niemand im Raum –</span>';
+  // Rejoin-Trigger: nur überspringen wenn Fenster geschlossen (nach Gnadenfrist)
+  if(_isRejoinTrig && !_rejoinWindow.has(C.MemberNumber)){
+    _log('\u23ED [Rejoin] "'+trig.name+'" – Fenster geschlossen (Gnadenfrist abgelaufen), übersprungen');
     return;
   }
-  el.innerHTML = members.map(m => {
-    const isSelf = m.num === _myMemberNumber;
-    const isSel  = isSelf ? _outfitTargetNum === null : m.num === _outfitTargetNum;
-    const cls    = 'outfit-chip' + (isSelf ? ' self' : '') + (isSel ? ' sel-out' : '');
-    return '<span class="' + cls + '" onclick="setOutfitTarget(' + (isSelf ? 'null' : m.num) + ')">'
-      + (isSelf ? '👤' : '👥') + ' ' + escHtml(m.name)
-      + ' <span class="onum">#' + m.num + '</span></span>';
-  }).join('');
+
+  // ── Wiederholung prüfen ──────────────────────────────────
+  const wdh=trig.wiederholung??'immer';
+  const cnt=_firedCnt[trig.id]??0;
+  if(wdh==='einmalig'&&cnt>=1){
+    _log('⏭ "'+trig.name+'" bereits ausgelöst (1×)');
+    _pushLog({status:'skip_wdh',msg:'1× bereits ausgelöst'},vars,trig);
+    return;
+  }
+  if(wdh==='n_mal'&&cnt>=(trig.maxMal??2)){
+    _log('⏭ "'+trig.name+'" max '+trig.maxMal+'× erreicht');
+    _pushLog({status:'skip_max',msg:'Max '+trig.maxMal+'× erreicht'},vars,trig);
+    return;
+  }
+
+  _log('\u{1F3AF} "'+trig.name+'" von '+vars.name+' | X='+vars.x+' Y='+vars.y+' | #'+(cnt+1)+(wdh==='n_mal'?' von '+trig.maxMal:''));
+
+  // ── Aktionen sequenziell mit Basis-Delay starten ─────────
+  setTimeout(()=>{
+    // If/Else: Wenn ifElse aktiviert, wähle DANN oder SONST-Aktionen
+    // Bedingungscheck wurde bereits durch _ok() bestätigt → Bedingungen = true → DANN
+    // SONST wird nur ausgelöst wenn Bedingungen NICHT zutreffen – das passiert im Join/Item-Poll
+    const aktionenToRun = trig.aktionen??[];
+    _runSeq(
+      aktionenToRun,C,vars,trig,
+      // onDone – Trigger erfolgreich gezählt
+      ()=>{
+        const now=Date.now();
+        _fired[trig.id]=now;
+        _firedChar[trig.id+'_'+C.MemberNumber]=now;
+        _firedCnt[trig.id]=(cnt+1);
+        _log('\u2705 Trigger "'+trig.name+'" abgeschlossen #'+_firedCnt[trig.id]+(trig.charSpec?' [pro Spieler]':' [global]'));
+        _pushLog({status:'ok'},vars,trig);
+        _syncRoomEver();
+      },
+      // onUngueltig – eine Aktion hat ❌ Trigger ungültig ausgelöst
+      ()=>{
+        _log('\u274C Trigger "'+trig.name+'" ungültig – nicht gezählt');
+        _pushLog({status:'ungueltig'},vars,trig);
+        if(trig.fallbackTyp&&trig.fallbackTyp!=='nichts'&&trig.fallbackText){
+          const typ={chat:'Chat',emote:'Emote'}[trig.fallbackTyp]??'Chat';
+          ServerSend('ChatRoomChat',{Content:_tpl(trig.fallbackText,vars),Type:typ});
+        }
+      }
+    );
+  },trig.delay??0);
 }
 
-function setOutfitTarget(num) {
-  _outfitTargetNum = num;
-  renderOutfitMemberChips();
-  // Code neu generieren falls bereits vorhanden
-  _autoOutfitCode();
-  console.log('[BCK-Popup] Outfit-Ziel:', num === null ? 'selbst (Player)' : '#' + num);
-  // FIX: removed duplicate _autoOutfitCode() call that was here
+// ── If/Else SONST-Branch: läuft wenn Bedingungen NICHT zutreffen ──
+function _runSonst(trig,vars){
+  const C=vars.C??Player;
+  _log('\u{1F504} [Else] "'+trig.name+'" → SONST-Aktionen f\u00fcr '+vars.name);
+  setTimeout(()=>{
+    _runSeq(
+      trig.aktionen_sonst??[],C,vars,trig,
+      ()=>{ _log('\u2705 [Else] "'+trig.name+'" SONST-Zweig abgeschlossen'); },
+      ()=>{ _log('\u274C [Else] "'+trig.name+'" SONST-Zweig ungültig'); }
+    );
+  },trig.delay??0);
 }
 
-function escHtml(s) {
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+function _tpl(s,v){
+  const cur=_shopCfg.moneyName||'Gold';
+  return(s??'')
+    .replace(/{name}/gi,v.name??'')
+    .replace(/{wort}/gi,v.wort??'')
+    .replace(/{typ}/gi,v.typ??'')
+    .replace(/{x}/gi,v.x??'')
+    .replace(/{y}/gi,v.y??'')
+    .replace(/{zone}/gi,v.zone??'')
+    .replace(/{käufer}/gi,v.shopBuyer?.Name??v.name??'')
+    .replace(/{kaeufer}/gi,v.shopBuyer?.Name??v.name??'')
+    .replace(/{ziel}/gi,v.C?.Name??v.name??'')
+    .replace(/{item}/gi,v.shopItem?.name??'')
+    .replace(/{preis}/gi,String(v.shopItem?.preis??''))
+    .replace(/{waehrung}/gi,cur)
+    .replace(/{kontostand}/gi,String((_moneyBalances[v.shopBuyer?.MemberNumber??v.C?.MemberNumber]?.balance)??0))
+    .replace(/{anzahl}/gi,String(v.shopAnzahl??''))
+    .replace(/{gesamt}/gi,String(v.shopGesamt??''));
 }
 
-function selectRoomMember(num) {
-  _selectedMemberNum = num;
-  // Ziel-Dropdown auf "Anderer Spieler" setzen
-  const modeEl = document.getElementById('targetMode');
-  if (modeEl) { modeEl.value = 'other'; onTargetChange(); }
-  const sel = document.getElementById('targetMember');
-  if (sel) { sel.value = num; }
-  const direct = document.getElementById('targetMemberDirect');
-  if (direct) { direct.value = num; }
-  // Chips neu rendern (selected-Klasse)
-  document.querySelectorAll('.room-chip').forEach(chip => {
-    chip.classList.toggle('selected', parseInt(chip.querySelector('.room-num')?.textContent?.replace('#','')) === num);
-  });
-  if (typeof generate === 'function') generate();
-  console.log('[BCK-Popup] Ziel gesetzt: #' + num);
+// ── Shop-Befehl Parsing ───────────────────────────────
+function _parseShopArgs(rest){
+  // Parst gequotete und ungequotete Argumente + Flags (/w /u /nostrip)
+  const args=[];
+  const flags=new Set();
+  // Normalisiere: alle Unicode-Slashes und Fancy-Quotes zu ASCII
+  rest=rest.trim()
+    .replace(/[\u2044\uFF0F\u2215]/g,'/')
+    .replace(/[\u201C\u201D\u201E\u201F]/g,'"')
+    .replace(/[\u2018\u2019\u201A\u201B]/g,"'");
+  // Regex-basierte Flag-Extraktion VOR dem Argument-Parsen
+  // Matcht /nostrip, /w, /u als eigenstaendige Tokens (case-insensitive)
+  rest=rest.replace(/(?:^|\s)\/nostrip\b/gi,(_)=>{flags.add('nostrip');return '';});
+  rest=rest.replace(/(?:^|\s)\/w\b/gi,(_)=>{flags.add('w');return '';});
+  rest=rest.replace(/(?:^|\s)\/u\b/gi,(_)=>{flags.add('u');return '';});
+  rest=rest.trim();
+  // Jetzt nur noch Argumente parsen (Flags sind schon extrahiert)
+  let pos=0;
+  while(pos<rest.length){
+    while(pos<rest.length&&rest[pos]===' ')pos++;
+    if(pos>=rest.length)break;
+    if(rest[pos]==='"'||rest[pos]==="'"){
+      const q=rest[pos]; pos++;
+      const end=rest.indexOf(q,pos);
+      if(end===-1){args.push(rest.slice(pos));break;}
+      args.push(rest.slice(pos,end)); pos=end+1;
+    } else {
+      const sp=rest.indexOf(' ',pos);
+      if(sp===-1){args.push(rest.slice(pos));break;}
+      args.push(rest.slice(pos,sp)); pos=sp+1;
+    }
+  }
+  return {args:args.filter(a=>a.length>0),flags};
 }
 
-// ── Auto-load + initial PING ──────────────────────────
-(function() {
-  console.log('[BCK-Popup] Auto-Init | opener=' + !!window.opener);
-  try {
-    const s = localStorage.getItem('BC_CACHE_v12');
-    if (s) {
-      CACHE = JSON.parse(s);
-      const items = Object.values(CACHE).reduce((n,g) => n + Object.keys(g).length, 0);
-      if (items > 0) {
-        const mc = Object.values(CACHE).flatMap(g => Object.values(g)).filter(i => i.archetype === 'modular').length;
-        document.getElementById('cacheInfo').textContent = '\u2705 ' + items + ' Items (lokal gecacht) \u00b7 \U0001f9e9 ' + mc + ' modular';
-        document.getElementById('clearBtn').classList.remove('hidden');
-        document.getElementById('outfitBtn')?.classList.remove('hidden');
-        document.getElementById('profileBtn')?.classList.remove('hidden');
-        document.getElementById('connectHint')?.classList.add('hidden');
-        renderGroups(); showEmpty(); renderProfileList();
-        console.log('[BCK-Popup] Cache aus localStorage: ' + items + ' Items');
+// ── Shop-Kauf Handler ────────────────────────────────────
+// Hilfsfunktion: Template mit Shop-Variablen ersetzen (inline, ohne _tpl damit keine C-Abhängigkeit)
+function _shopTpl(raw, buyerC, targetC, shopItem, preis, newBal, anzahl, gesamt){
+  const cur=_shopCfg.moneyName||'Gold';
+  return(raw||'')
+    .replace(/{name}/gi,buyerC.Name)
+    .replace(/{käufer}/gi,buyerC.Name)
+    .replace(/{kaeufer}/gi,buyerC.Name)
+    .replace(/{ziel}/gi,targetC?targetC.Name:'')
+    .replace(/{item}/gi,shopItem.name)
+    .replace(/{preis}/gi,String(preis))
+    .replace(/{waehrung}/gi,cur)
+    .replace(/{kontostand}/gi,String(newBal??0))
+    .replace(/{anzahl}/gi,String(anzahl??''))
+    .replace(/{gesamt}/gi,String(gesamt??''));
+}
+
+function _handleShopCmd(rohText,buyerC){
+  const cmd=_shopCfg.cmd.trim();
+  const rest=rohText.trim().slice(cmd.length);
+  const {args,flags}=_parseShopArgs(rest);
+  if(!args.length)return;
+
+  const flagWhisper=flags.has('w');
+  const flagUnknown=flags.has('u');
+  const flagNostrip=flags.has('nostrip');
+
+  // shopItem ZUERST – muss vor flagAufpreis stehen (sonst TDZ-ReferenceError!)
+  const itemName=args[0].toLowerCase();
+  const shopItem=_shopCfg.items.find(i=>i.name.toLowerCase()===itemName);
+  if(!shopItem){ _log('🛒 Kein Artikel "'+args[0]+'"'); return; }
+
+  const preisU      = flagUnknown ? (shopItem.preisU      ?? _shopCfg.preisU      ?? 0) : 0;
+  const preisNostrip= flagNostrip ? (shopItem.preisNostrip ?? _shopCfg.preisNostrip ?? 0) : 0;
+  const flagAufpreis= preisU + preisNostrip;
+  const preis=Number(shopItem.preis)||0; // '' oder null → 0
+  const cur=_shopCfg.moneyName||'Gold';
+  const allChars=[Player,...(ChatRoomCharacter||[])];
+  // Angezeigter Käufername (für öffentliche Nachrichten)
+  const displayBuyer=flagUnknown?{Name:'Unbekannt',MemberNumber:buyerC.MemberNumber}:buyerC;
+
+  // ── ALL-Kauf ──────────────────────────────────────────
+  if(args[1]&&args[1].toLowerCase()==='all'){
+    const targets=allChars.filter(c=>c.MemberNumber!==Player.MemberNumber);
+    const anzahl=targets.length;
+    if(anzahl===0){
+      ServerSend('ChatRoomChat',{Content:'Niemand im Raum.',Type:'Whisper',Target:buyerC.MemberNumber});
+      return;
+    }
+    const gesamt=(preis+flagAufpreis)*anzahl;
+    const buyerBalance=(_moneyBalances[buyerC.MemberNumber]?.balance)??0;
+
+    if(buyerBalance<gesamt){
+      let aufpreisInfo='';
+      if(flagAufpreis>0){
+        const parts=[];
+        if(preisU>0)      parts.push('/u: '+preisU+' '+cur);
+        if(preisNostrip>0)parts.push('/nostrip: '+preisNostrip+' '+cur);
+        aufpreisInfo=' (inkl. Flag-Aufpreis: '+parts.join(', ')+')';
+      }
+      const rawMsg=shopItem.errorMsg||_shopCfg.errorMsg||('Nicht genug '+cur+'! Du hast {kontostand} '+cur+', benötigt: {gesamt} '+cur+' ('+anzahl+'×'+(preis+flagAufpreis)+')'+aufpreisInfo+'.');
+      const msg=_shopTpl(rawMsg,buyerC,null,shopItem,preis+flagAufpreis,buyerBalance,anzahl,gesamt);
+      ServerSend('ChatRoomChat',{Content:msg,Type:'Whisper',Target:buyerC.MemberNumber});
+      _log('🛒 All-Kauf abgelehnt: '+buyerC.Name+' hat '+buyerBalance+', braucht '+gesamt+' ('+anzahl+'×'+(preis+flagAufpreis)+')');
+      return;
+    }
+
+    // Coins abziehen
+    if(!_moneyBalances[buyerC.MemberNumber])
+      _moneyBalances[buyerC.MemberNumber]={balance:0,name:buyerC.Name};
+    _moneyBalances[buyerC.MemberNumber].balance-=gesamt;
+    window.__BCK_popupRef?.postMessage({app:'BCKonfigurator',type:'BOT_MONEY',
+      memberNum:buyerC.MemberNumber,name:buyerC.Name,delta:-gesamt},'*');
+
+    const newBal=_moneyBalances[buyerC.MemberNumber].balance;
+    _log('🛒 All-Kauf: '+buyerC.Name+' kauft "'+shopItem.name+'" für alle ('+anzahl+'×'+(preis+flagAufpreis)+'='+gesamt+' '+cur+'). Kontostand: '+newBal+(flagUnknown?' [/u]':'')+(flagWhisper?' [/w]':'')+(flagNostrip?' [/nostrip]':''));
+
+    window.__BCK_popupRef?.postMessage({app:'BCKonfigurator',type:'BOT_SHOP',
+      buyerNum:buyerC.MemberNumber,buyerName:buyerC.Name,
+      targetNum:null,targetName:'Alle ('+anzahl+')',
+      itemName:shopItem.name,preis:gesamt,isAll:true,anzahl},'*');
+
+    // All-Ankündigung
+    const rawAnnAll=shopItem.announceAllMsg||_shopCfg.announceAllMsg||
+      (displayBuyer.Name+' kauft '+shopItem.icon+' '+shopItem.name+' für alle ('+anzahl+' Spieler, '+gesamt+' '+cur+').');
+    // Bei All-Kauf: {preis} = Gesamtpreis (was bezahlt wurde), {gesamt} ebenfalls Gesamtpreis
+    const annAllTxt=_shopTpl(rawAnnAll,displayBuyer,null,shopItem,gesamt,newBal,anzahl,gesamt);
+    if(flagWhisper){
+      // Als Whisper an alle Zielspieler
+      targets.forEach(tc=>ServerSend('ChatRoomChat',{Content:annAllTxt,Type:'Whisper',Target:tc.MemberNumber}));
+    } else {
+      ServerSend('ChatRoomChat',{Content:annAllTxt,Type:'Chat'});
+    }
+
+    // Bestätigung an Käufer – {preis} = Gesamtpreis
+    const rawConf=shopItem.confirmMsg||_shopCfg.confirmMsg||
+      ('✅ Gekauft für alle '+anzahl+' Spieler. Bezahlt: '+gesamt+' '+cur+'. Kontostand: '+newBal+' '+cur+'.');
+    ServerSend('ChatRoomChat',{Content:_shopTpl(rawConf,buyerC,null,shopItem,gesamt,newBal,anzahl,gesamt),Type:'Whisper',Target:buyerC.MemberNumber});
+
+    // FIX: nostrip – Zähler ob mindestens ein Trigger mit Item-Aktion gefeuert hat (einmalig für alle Targets)
+    let _nsAllItemTrigFired=false;
+    // Trigger für jeden Ziel-Spieler
+    targets.forEach(targetC=>{
+      const shopVars={name:buyerC.Name,wort:rohText,typ:'🛒 Shop All',x:buyerC.X??0,y:buyerC.Y??0,
+        C:targetC,shopBuyer:buyerC,shopItem,shopAnzahl:anzahl,shopGesamt:gesamt,shopNostrip:flagNostrip};
+      _trigs.forEach(trig=>{
+        const shopConds=(trig.bedingungen??[]).filter(c=>c.typ==='shop_kauf');
+        if(!shopConds.length)return;
+        const itemMatch=shopConds.every(c=>!c.shop_id||c.shop_id===shopItem.id);
+        if(!itemMatch)return;
+        const vonOk=(()=>{
+          if(trig.von==='bot')return buyerC.MemberNumber===Player.MemberNumber;
+          if(trig.von==='whitelist')return(trig.vonNummern||[]).map(Number).includes(Number(buyerC.MemberNumber));
+          return true;
+        })();
+        if(!vonOk)return;
+        const otherConds=(trig.bedingungen??[]).filter(c=>c.typ!=='shop_kauf');
+        const otherOk=otherConds.every(c=>{
+          if(c.typ==='rang'){
+            const op=c.rang_op??'=';
+            const cid=_rangState[buyerC.MemberNumber]??null;
+            if(op==='kein') return !cid;
+            if(!c.rang_id) return false;
+            const defs=(_cfg.rankDefs??[]).sort((a,b)=>a.level-b.level);
+            const td=defs.find(r=>r.id===c.rang_id),cd=defs.find(r=>r.id===cid);
+            if(!td||!cd) return false;
+            if(op==='=') return cd.level===td.level;
+            if(op==='min') return cd.level>=td.level;
+            if(op==='max') return cd.level<=td.level;
+          }
+          return true;
+        });
+        if(!otherOk)return;
+        // FIX: nostrip – prüfen ob dieser Trigger eine Item-Aktion hat
+        if(flagNostrip&&(trig.aktionen??[]).some(a=>a.typ==='item'))_nsAllItemTrigFired=true;
+        _run(trig,shopVars);
+      });
+    });
+    // FIX: nostrip – einmalige Warnung wenn /nostrip aktiv aber kein Trigger mit Item-Aktion
+    if(flagNostrip&&!_nsAllItemTrigFired){
+      _log('\u26A0 /nostrip hat keinen Effekt (All-Kauf): Kein shop_kauf-Trigger mit Item-Aktion für "'+shopItem.name+'" gefunden.');
+      ServerSend('ChatRoomChat',{Content:'\u26A0\uFE0F /nostrip hat keinen Effekt \u2013 es fehlt ein shop_kauf-Trigger mit Item-Aktion f\u00fcr diesen Artikel.',Type:'Whisper',Target:buyerC.MemberNumber});
+    }
+    return;
+  }
+
+  // ── Einzel-Kauf ───────────────────────────────────────
+  let targetC=buyerC;
+
+  if(args[1]){
+    const arg2=args[1].trim();
+    if(/^\d+$/.test(arg2)){
+      const num=parseInt(arg2);
+      targetC=allChars.find(c=>c.MemberNumber===num)||buyerC;
+    } else {
+      const nameMatches=allChars.filter(c=>c.Name.toLowerCase()===arg2.toLowerCase());
+      if(nameMatches.length===1){
+        targetC=nameMatches[0];
+      } else if(nameMatches.length>1){
+        const ids=nameMatches.map(c=>c.Name+' (#'+c.MemberNumber+')').join(', ');
+        ServerSend('ChatRoomChat',{Content:'⚠️ Mehrere Spieler mit dem Namen "'+arg2+'". Bitte MemberNummer verwenden: '+ids,Type:'Whisper',Target:buyerC.MemberNumber});
+        return;
       }
     }
-  } catch(e) { console.warn('[BCK-Popup] localStorage Fehler:', e.message); }
-
-  // Sofortiger PING + Retry-Schleife
-  if (window.opener && !window.opener.closed) {
-    console.log('[BCK-Popup] Sende ersten PING...');
-    window.opener.postMessage({ app: APP, type: 'PING' }, '*');
   }
-  // Always render sidebar on startup
-  renderGroups();
-  renderProfileList();
-  startPingRetry();
-})();
+
+  const preisEffektiv = preis + flagAufpreis;
+  const buyerBalance=(_moneyBalances[buyerC.MemberNumber]?.balance)??0;
+
+  if(buyerBalance<preisEffektiv){
+    let aufpreisInfo='';
+    if(flagAufpreis>0){
+      const parts=[];
+      if(preisU>0)      parts.push('/u: '+preisU+' '+cur);
+      if(preisNostrip>0)parts.push('/nostrip: '+preisNostrip+' '+cur);
+      aufpreisInfo=' (inkl. '+parts.join(' + ')+')';
+    }
+    const rawMsg=shopItem.errorMsg||_shopCfg.errorMsg||('Nicht genug '+cur+'! Du hast {kontostand} '+cur+', benötigt: {gesamt} '+cur+aufpreisInfo+'.');
+    ServerSend('ChatRoomChat',{Content:_shopTpl(rawMsg,buyerC,targetC,shopItem,preis,buyerBalance,1,preisEffektiv),Type:'Whisper',Target:buyerC.MemberNumber});
+    _log('🛒 Kauf abgelehnt: '+buyerC.Name+' hat '+buyerBalance+' '+cur+', braucht '+preisEffektiv);
+    return;
+  }
+
+  // Coins abziehen
+  if(!_moneyBalances[buyerC.MemberNumber])
+    _moneyBalances[buyerC.MemberNumber]={balance:0,name:buyerC.Name};
+  _moneyBalances[buyerC.MemberNumber].balance-=preisEffektiv;
+  window.__BCK_popupRef?.postMessage({app:'BCKonfigurator',type:'BOT_MONEY',
+    memberNum:buyerC.MemberNumber,name:buyerC.Name,delta:-preisEffektiv},'*');
+
+  const newBal=_moneyBalances[buyerC.MemberNumber].balance;
+  const isFremdkauf=targetC.MemberNumber!==buyerC.MemberNumber;
+  _log('🛒 Kauf: '+buyerC.Name+' kauft "'+shopItem.name+'" für '+preisEffektiv+' '+cur+(isFremdkauf?' → Ziel: '+targetC.Name:'')+' | Kontostand: '+newBal+(flagUnknown?' [/u]':'')+(flagWhisper?' [/w]':'')+(flagNostrip?' [/nostrip]':''));
+
+  window.__BCK_popupRef?.postMessage({app:'BCKonfigurator',type:'BOT_SHOP',
+    buyerNum:buyerC.MemberNumber,buyerName:buyerC.Name,
+    targetNum:targetC.MemberNumber,targetName:targetC.Name,
+    itemName:shopItem.name,preis},'*');
+
+  // Bestätigungs-Whisper an Käufer
+  const rawConf=shopItem.confirmMsg||_shopCfg.confirmMsg||
+    ('✅ '+(isFremdkauf?'Du kaufst '+shopItem.name+' für '+targetC.Name:shopItem.name+' gekauft')+'. Bezahlt: '+preisEffektiv+' '+cur+(flagNostrip?' 🔒 NoStrip':'')+'. Kontostand: '+newBal+' '+cur+'.');
+  // {preis}=Basispreis, {gesamt}=Endpreis inkl. Flags
+  ServerSend('ChatRoomChat',{Content:_shopTpl(rawConf,buyerC,targetC,shopItem,preis,newBal,1,preisEffektiv),Type:'Whisper',Target:buyerC.MemberNumber});
+
+  // Fremdkauf-Ankündigung (nur wenn für anderen Spieler)
+  if(isFremdkauf){
+    const rawAnn=shopItem.announceMsg||_shopCfg.announceMsg||
+      (displayBuyer.Name+' hat für '+targetC.Name+' das Item '+shopItem.icon+' '+shopItem.name+' gekauft'+(flagNostrip?' 🔒':'')+'.') ;
+    const annTxt=_shopTpl(rawAnn,displayBuyer,targetC,shopItem,preis,newBal,1,preisEffektiv);
+    if(flagWhisper){
+      ServerSend('ChatRoomChat',{Content:annTxt,Type:'Whisper',Target:targetC.MemberNumber});
+    } else {
+      ServerSend('ChatRoomChat',{Content:annTxt,Type:'Chat'});
+    }
+  }
+
+  // NoStrip-Ankündigung
+  if(flagNostrip){
+    const rawNs=shopItem.announceNostripMsg||_shopCfg.announceNostripMsg||
+      ('🔒 '+targetC.Name+' trägt '+shopItem.icon+' '+shopItem.name+' und kann es nicht ablegen.');
+    const nsTxt=_shopTpl(rawNs,displayBuyer,targetC,shopItem,preis,newBal,1,preisEffektiv);
+    if(flagWhisper)ServerSend('ChatRoomChat',{Content:nsTxt,Type:'Whisper',Target:targetC.MemberNumber});
+    else ServerSend('ChatRoomChat',{Content:nsTxt,Type:'Chat'});
+  }
+  // FIX C: nostrip – Zaehler ob ein Trigger mit Item-Aktion gefeuert hat
+  let _nsItemTrigFired=false;
+  // Shop-Trigger auslösen
+  const shopVars={name:buyerC.Name,wort:rohText,typ:'🛒 Shop',x:buyerC.X??0,y:buyerC.Y??0,C:targetC,shopBuyer:buyerC,shopItem,shopNostrip:flagNostrip};
+  _trigs.forEach(trig=>{
+    const shopConds=(trig.bedingungen??[]).filter(c=>c.typ==='shop_kauf');
+    if(!shopConds.length)return;
+    const itemMatch=shopConds.every(c=>!c.shop_id||c.shop_id===shopItem.id);
+    if(!itemMatch)return;
+    const vonOk=(()=>{
+      if(trig.von==='bot')return buyerC.MemberNumber===Player.MemberNumber;
+      if(trig.von==='whitelist')return(trig.vonNummern||[]).map(Number).includes(Number(buyerC.MemberNumber));
+      return true;
+    })();
+    if(!vonOk)return;
+    const otherConds=(trig.bedingungen??[]).filter(c=>c.typ!=='shop_kauf');
+    const otherOk=otherConds.every(c=>{
+      if(c.typ==='rang'){
+        const op=c.rang_op??'=';
+        const currentId=_rangState[buyerC.MemberNumber]??null;
+        if(op==='kein') return !currentId;
+        if(!c.rang_id) return false;
+        const defs=(_cfg.rankDefs??[]).sort((a,b)=>a.level-b.level);
+        const td=defs.find(r=>r.id===c.rang_id);
+        const cd=defs.find(r=>r.id===currentId);
+        if(!td||!cd) return false;
+        if(op==='=') return cd.level===td.level;
+        if(op==='min') return cd.level>=td.level;
+        if(op==='max') return cd.level<=td.level;
+        return false;
+      }
+      return true;
+    });
+    if(!otherOk)return;
+    // FIX C: pruefen ob dieser Trigger eine Item-Aktion hat
+    if(flagNostrip&&(trig.aktionen??[]).some(a=>a.typ==='item'))_nsItemTrigFired=true;
+    _run(trig,shopVars);
+  });
+  // FIX C: Warnung wenn /nostrip aktiv aber kein Trigger mit Item-Aktion
+  if(flagNostrip&&!_nsItemTrigFired){
+    _log('\u26A0 /nostrip hat keinen Effekt – es fehlt ein shop_kauf-Trigger mit Item-Aktion für diesen Artikel.');
+    ServerSend('ChatRoomChat',{Content:'\u26A0 /nostrip hat keinen Effekt \u2013 es fehlt ein shop_kauf-Trigger mit Item-Aktion f\u00fcr diesen Artikel.',Type:'Whisper',Target:buyerC.MemberNumber});
+  }
+}
+
+function _proc(rohText,typKey,C){
+  if(!rohText)return;
+  // Money query command
+  const qCmd=(_moneyCfg?.queryCmd||'').trim().toLowerCase();
+  if(qCmd&&rohText.trim().toLowerCase()===qCmd.toLowerCase()){
+    window.__BCK_popupRef?.postMessage({app:'BCKonfigurator',type:'MONEY_QUERY',memberNum:C.MemberNumber,name:C.Name},'*');
+    return;
+  }
+  // Rang query command
+  const rqCmd=(_cfg.rankQueryCmd||'').trim().toLowerCase();
+  if(rqCmd&&rohText.trim().toLowerCase()===rqCmd.toLowerCase()){
+    const defs=_cfg.rankDefs??[];
+    const rankId=_rangState[C.MemberNumber]??null;
+    const rank=defs.find(r=>r.id===rankId);
+    const tpl=s=>s.replace(/{name}/gi,C.Name).replace(/{rang}/gi,rank?.name||'Kein Rang').replace(/{rang_icon}/gi,rank?.icon||'–').replace(/{rang_level}/gi,String(rank?.level||0));
+    const txt=tpl(_cfg.rankQueryText||'{name} hat Rang: {rang_icon} {rang}');
+    const typ=_cfg.rankQueryTyp||'whisper';
+    if(typ==='whisper')ServerSend('ChatRoomChat',{Content:txt,Type:'Whisper',Target:C.MemberNumber});
+    else ServerSend('ChatRoomChat',{Content:txt,Type:'Chat'});
+    return;
+  }
+  // !shop Listen-Befehl
+  const shopListCmd=(_shopCfg.listCmd||'').trim().toLowerCase();
+  if(shopListCmd&&rohText.trim().toLowerCase()===shopListCmd){
+    const cur=_shopCfg.moneyName||'Gold';
+    const aktive=_shopCfg.items.filter(i=>i.aktiv!==false);
+    if(!aktive.length){ServerSend('ChatRoomChat',{Content:'🛒 Noch keine Artikel.',Type:'Whisper',Target:C.MemberNumber});return;}
+    const hdr='🛒 Shop ('+aktive.length+' Artikel):';
+    const chunks=[];let buf=hdr;
+    aktive.forEach(item=>{
+      const ns=item.preisNostrip??_shopCfg.preisNostrip??0;
+      const nsHint=ns>0?' (/nostrip +'+ns+')':(ns===0?'':'' );
+      const line='\\n• '+(item.icon||'🛒')+' '+item.name+' – '+(Number(item.preis)||0)+' '+cur+nsHint;
+      if((buf+line).length>480){chunks.push(buf);buf=line.slice(1);}else buf+=line;
+    });
+    chunks.push(buf);
+    chunks.forEach((ch,i)=>setTimeout(()=>ServerSend('ChatRoomChat',{Content:ch,Type:'Whisper',Target:C.MemberNumber}),i*130));
+    return;
+  }
+  // Shop Pay-Befehl
+  const shopCmd=(_shopCfg.cmd||'').trim().toLowerCase();
+  if(shopCmd&&rohText.trim().toLowerCase().startsWith(shopCmd+' ')||rohText.trim().toLowerCase()===shopCmd){
+    _handleShopCmd(rohText,C);
+    return;
+  }
+  const pos={X:C.X??0,Y:C.Y??0}; // direkt vom Character
+  const typLabel={chat:'\u{1F4AC} Chat',emote:'\u{2728} Emote',whisper:'\u{1F917} Whisper'}[typKey]??typKey;
+  _trigs.forEach(trig=>{
+    // Trigger mit player_betritt -> nur Join-Poll, nie Nachrichten
+    if((trig.bedingungen??[]).some(c=>c.typ==='player_betritt'))return;
+    // Trigger mit item_traegt aber ohne wort -> nur Polling
+    const hasItem=(trig.bedingungen??[]).some(c=>c.typ==='item_traegt');
+    const hasWort=(trig.bedingungen??[]).some(c=>c.typ==='wort');
+    if(hasItem&&!hasWort)return;
+    // Von-Filter: wer darf diesen Trigger auslösen?
+    const vonOk=(()=>{
+      if(trig.von==='bot')return C.MemberNumber===Player.MemberNumber;
+      if(trig.von==='whitelist')return(trig.vonNummern||[]).map(Number).includes(Number(C.MemberNumber));
+      return true; // 'alle'
+    })();
+    if(!vonOk)return;
+    // Alle anderen: _ok prueft Auslöser-Bedingungen (wort, zone, vortrigger)
+    const condOk=_ok(trig,rohText,typKey,C);
+    if(condOk){
+      // Auslöser passt → jetzt IF-Bedingungen prüfen (nur wenn ifElse aktiv und ifBedingungen vorhanden)
+      const ifBeds=trig.ifBedingungen??[];
+      const ifOk=!trig.ifElse||!ifBeds.length||_okIf(trig,rohText,typKey,C);
+      if(ifOk){
+        _run(trig,{name:C.Name,wort:rohText,typ:typLabel,x:pos.X,y:pos.Y,zone:'',C});
+      } else if((trig.aktionen_sonst??[]).length){
+        _runSonst(trig,{name:C.Name,wort:rohText,typ:typLabel,x:pos.X,y:pos.Y,zone:'',C});
+      }
+    }
+  });
+
+  // ── Chat-Events prüfen ──
+  _procEvents(rohText,typKey,C);
+}
+
+function _procEvents(rohText,typKey,C){
+  // FIX: Define typLabel here so it's available whether called from _proc or directly from _msgH
+  const typLabel={chat:'\u{1F4AC} Chat',emote:'\u{2728} Emote',whisper:'\u{1F917} Whisper'}[typKey]??typKey;
+  _evts.forEach(ev=>{
+    if(!ev.aktiv)return;
+    // Chat-Events: brauchen wort-Bedingung und KEIN ev_timer/ev_interval
+    // Von-Filter: wer darf das Event auslösen?
+    const vonOk=(()=>{
+      if(ev.von==='bot')return C.MemberNumber===Player.MemberNumber;
+      if(ev.von==='nummer')return ev.vonNummer&&C.MemberNumber===ev.vonNummer;
+      return true; // 'alle'
+    })();
+    if(!vonOk)return;
+    // Wort-Bedingungen prüfen
+    const hasTimerBed=(ev.bedingungen??[]).some(c=>c.typ==='ev_timer'||c.typ==='ev_interval'||c.typ==='player_betritt');
+    if(hasTimerBed)return; // Timer/Betritt-Events werden anders ausgelöst
+    const wortConds=(ev.bedingungen??[]).filter(c=>c.typ==='wort');
+    if(!wortConds.length)return;
+    ev._rohText=rohText; ev._typKey=typKey; // temp context für _okEv
+    if(_okEv(ev,C,rohText,typKey)){
+      // Ziel bestimmen
+      const allChars=[Player,...(ChatRoomCharacter||[])];
+      let targets=[];
+      if(ev.ziel==='alle')targets=allChars;
+      else if(ev.ziel==='liste')targets=allChars.filter(ch=>(ev.zielListe||[]).includes(ch.MemberNumber));
+      else targets=[C]; // ausloeser = der der schrieb
+      _log('💬 Chat-Event "'+ev.name+'" von '+C.Name+' → '+targets.length+' Ziel(e)');
+      targets.forEach(ch=>{
+        const vars={name:ch.Name,wort:rohText,typ:typLabel,x:ch.X??0,y:ch.Y??0,zone:'',C:ch};
+        // FIX: Read cnt inside callback to avoid all targets writing the same stale value
+        const cntNow=_evFiredCnt[ev.id]??0;
+        if(ev.wiederholung==='einmalig'&&cntNow>=1)return;
+        if(ev.wiederholung==='n_mal'&&cntNow>=(ev.maxMal??2))return;
+        _runSeq(ev.aktionen??[],ch,vars,ev,
+          ()=>{_evFiredCnt[ev.id]=(_evFiredCnt[ev.id]??0)+1;_pushLog({status:'ok'},vars,{name:ev.name,id:ev.id});},
+          ()=>{_pushLog({status:'ungueltig'},vars,{name:ev.name,id:ev.id});}
+        );
+      });
+    }
+    delete ev._rohText; delete ev._typKey;
+  });
+}
+
+// ── Item-Trägt Polling (edge-triggered: feuert 1x wenn Item erscheint) ──
+const _itState={}; // 'memberNum_trigId_typ' -> bool
+// FIX: 500ms is sufficient for item-state changes, 100ms caused unnecessary CPU load
+const _itPoll=setInterval(()=>{
+  const chars=[Player,...(ChatRoomCharacter||[])];
+  _trigs.forEach(trig=>{
+    const itemConds=(trig.bedingungen??[]).filter(c=>c.typ==='item_traegt'||c.typ==='item_traegt_nicht');
+    if(!itemConds.length)return;
+    const hasWort=(trig.bedingungen??[]).some(c=>c.typ==='wort');
+    if(hasWort)return;
+    chars.forEach(C=>{
+      // Check positive (traegt) and negative (traegt_nicht) conditions
+      const condMet=itemConds.every(c=>{
+        const worn=(C.Appearance??[]).some(a=>a.Asset?.Name===c.item);
+        return c.typ==='item_traegt_nicht'?!worn:worn;
+      });
+      const key=C.MemberNumber+'_'+trig.id;
+      const was=_itState[key]??false;
+      if(condMet&&!was){
+        const pos={X:C.X??0,Y:C.Y??0};
+        // Von-Filter
+        const vonOk=(()=>{
+          if(trig.von==='bot')return C.MemberNumber===Player.MemberNumber;
+          if(trig.von==='whitelist')return(trig.vonNummern||[]).map(Number).includes(Number(C.MemberNumber));
+          return true;
+        })();
+        const otherOk=vonOk&&(trig.bedingungen??[]).every(c=>{
+          if(c.typ==='item_traegt'||c.typ==='item_traegt_nicht')return true;
+          if(c.typ==='zone'){const p=c.puffer??1;return pos.X>=c.x-p&&pos.X<=c.x+p&&pos.Y>=c.y-p&&pos.Y<=c.y+p;}
+          if(c.typ==='zone_rect'){return pos.X>=Math.min(c.x1,c.x2)&&pos.X<=Math.max(c.x1,c.x2)&&pos.Y>=Math.min(c.y1,c.y2)&&pos.Y<=Math.max(c.y1,c.y2);}
+          if(c.typ==='trigger_war'){const ref=_trigMap[c.trigId];return ref?.charSpec?!!_firedChar[c.trigId+'_'+C.MemberNumber]:!!_fired[c.trigId];}
+          if(c.typ==='rang'){
+            const op=c.rang_op??'=';
+            const currentId=_rangState[C.MemberNumber]??null;
+            if(op==='kein') return !currentId;
+            if(!c.rang_id) return false;
+            const defs=(_cfg.rankDefs??[]).sort((a,b)=>a.level-b.level);
+            const targetDef=defs.find(r=>r.id===c.rang_id);
+            const currentDef=defs.find(r=>r.id===currentId);
+            if(!targetDef) return false;
+            if(!currentDef) return false;
+            const tl=targetDef.level, cl=currentDef.level;
+            if(op==='=')   return cl===tl;
+            if(op==='min') return cl>=tl;
+            if(op==='max') return cl<=tl;
+            return false;
+          }
+          return true;
+        });
+        if(otherOk){
+          const ifBeds=trig.ifBedingungen??[];
+          const ifOk=!trig.ifElse||!ifBeds.length||_okIf(trig,'','item',C);
+          if(ifOk) _run(trig,{name:C.Name,wort:'',typ:'Item',x:pos.X,y:pos.Y,zone:'',C});
+          else if((trig.aktionen_sonst??[]).length) _runSonst(trig,{name:C.Name,wort:'',typ:'Item',x:pos.X,y:pos.Y,zone:'',C});
+        }
+      }
+      _itState[key]=condMet;
+    });
+  });
+},500);
+
+// ── Spieler-Betritt Polling (feuert 1x beim Betreten) ──
+const _roomPrev=new Set((ChatRoomCharacter||[]).map(c=>c.MemberNumber));
+// _roomEver is now part of persisted state (declared above)
+const _joinPoll=setInterval(()=>{
+  const chars=ChatRoomCharacter||[];
+  const cur=new Set(chars.map(c=>c.MemberNumber));
+
+  // Spieler verlassen → nur loggen; _firedChar bleibt erhalten damit Rejoin-Vortrigger noch greifen
+  for(const prevNum of _roomPrev){
+    if(!cur.has(prevNum)){
+      _log('\u{1F6AA} #'+prevNum+' verlassen');
+      _rejoinWindow.delete(prevNum); // Fenster beim Verlassen schließen (Map)
+      _pushLog({status:'leave', trigName:'Verlassen', trigId:'__system__',
+        player:'#'+prevNum, memberNum:prevNum, x:0, y:0, msg:'Raum verlassen'}, {name:'#'+prevNum,x:0,y:0,C:{MemberNumber:prevNum}}, {name:'System',id:'__system__'});
+      // _zoneState zurücksetzen (Spieler nicht mehr im Raum)
+      for(const k of Object.keys(_zoneState)){
+        if(k.startsWith(prevNum+'_'))delete _zoneState[k];
+      }
+      // _firedChar nur bei Triggern mit resetOnLeave=true zurücksetzen
+      _trigs.forEach(trig=>{
+        if(trig.charSpec&&trig.resetOnLeave){
+          delete _firedChar[trig.id+'_'+prevNum];
+          _log('\u{1F504} State von "'+trig.name+'" für #'+prevNum+' zurückgesetzt');
+        }
+      });
+    }
+  }
+
+  for(const C of chars){
+    if(!_roomPrev.has(C.MemberNumber)){
+      const istNeu=!_roomEver.has(C.MemberNumber);
+      const label=istNeu?'\u{1F195} Neu':'\u{1F504} Rejoin';
+      _log(label+': '+C.Name+' #'+C.MemberNumber);
+      _pushLog({status:istNeu?'join':'join_rejoin',trigName:'',msg:istNeu?'Erstes Mal':'Rejoin'},
+        {name:C.Name+' #'+C.MemberNumber,x:C.X??0,y:C.Y??0,C},{id:'__system__',name:'System'});
+      // Neuer Spieler → Money-Init (nur Erstes Mal, nicht bei Rejoin)
+      if(istNeu){
+        window.__BCK_popupRef?.postMessage({app:'BCKonfigurator',type:'MONEY_INIT_NEW',memberNum:C.MemberNumber,name:C.Name},'*');
+      }
+      // Rang-Init: Spieler registrieren (kein Rang) – bei Rejoin nur Name aktualisieren
+      window.__BCK_popupRef?.postMessage({app:'BCKonfigurator',type:'RANG_INIT',memberNum:C.MemberNumber,name:C.Name},'*');
+      _roomEver.add(C.MemberNumber);
+      _syncRoomEver();
+      // ── Rejoin-Fenster öffnen (nur bei echtem Rejoin) ──
+      if(!istNeu) _rejoinWindow.set(C.MemberNumber, Date.now());
+      // Auto-close window after grace period
+      if(!istNeu) setTimeout(()=>{ _rejoinWindow.delete(C.MemberNumber); _log('\u{1F6AA} Rejoin-Fenster für #'+C.MemberNumber+' automatisch geschlossen (1s)'); },_REJOIN_GRACE);
+
+      // ── Alle passenden Trigger sammeln (Rejoin separat) ──
+      const pos={X:C.X??0,Y:C.Y??0};
+      const rejoinBatch=[]; // Rejoin-Trigger: alle sammeln, dann zusammen feuern
+      _trigs.forEach(trig=>{
+        const bConds=(trig.bedingungen??[]).filter(c=>c.typ==='player_betritt');
+        if(!bConds.length)return;
+        const isRejoinTrig=bConds.some(c=>c.betritt_typ==='rejoin');
+        const bOk=bConds.every(c=>{
+          const bt=c.betritt_typ??'alle';
+          if(bt==='neu')return istNeu;
+          if(bt==='rejoin')return!istNeu;
+          return true;
+        });
+        if(!bOk)return;
+        const vonOk=(()=>{
+          if(trig.von==='bot')return C.MemberNumber===Player.MemberNumber;
+          if(trig.von==='whitelist')return(trig.vonNummern||[]).map(Number).includes(Number(C.MemberNumber));
+          return true;
+        })();
+        const otherOk=vonOk&&(trig.bedingungen??[]).every(c=>{
+          if(c.typ==='player_betritt')return true;
+          if(c.typ==='zone'){const p=c.puffer??1;return pos.X>=c.x-p&&pos.X<=c.x+p&&pos.Y>=c.y-p&&pos.Y<=c.y+p;}
+          if(c.typ==='zone_rect'){return pos.X>=Math.min(c.x1,c.x2)&&pos.X<=Math.max(c.x1,c.x2)&&pos.Y>=Math.min(c.y1,c.y2)&&pos.Y<=Math.max(c.y1,c.y2);}
+          if(c.typ==='trigger_war'){
+            // Rejoin-Trigger blockieren sich NICHT gegenseitig:
+            // trigger_war auf anderen Rejoin-Trigger → immer true (feuern zusammen)
+            if(isRejoinTrig){
+              const refTrig=_trigMap[c.trigId];
+              const refIsRejoin=(refTrig?.bedingungen??[]).some(bc=>bc.typ==='player_betritt'&&bc.betritt_typ==='rejoin');
+              if(refIsRejoin)return true;
+            }
+            const ref=_trigMap[c.trigId];
+            return ref?.charSpec?!!_firedChar[c.trigId+'_'+C.MemberNumber]:!!_fired[c.trigId];
+          }
+          if(c.typ==='rang'){
+            const op=c.rang_op??'=';
+            const currentId=_rangState[C.MemberNumber]??null;
+            if(op==='kein') return !currentId;
+            if(!c.rang_id) return false;
+            const defs=(_cfg.rankDefs??[]).sort((a,b)=>a.level-b.level);
+            const targetDef=defs.find(r=>r.id===c.rang_id);
+            const currentDef=defs.find(r=>r.id===currentId);
+            if(!targetDef) return false;
+            if(!currentDef) return false;
+            const tl=targetDef.level, cl=currentDef.level;
+            if(op==='=')   return cl===tl;
+            if(op==='min') return cl>=tl;
+            if(op==='max') return cl<=tl;
+            return false;
+          }
+          return true;
+        });
+        if(!otherOk)return;
+        if(isRejoinTrig){
+          rejoinBatch.push(trig); // Rejoin: gesammelt feuern
+        } else {
+          const ifBeds=trig.ifBedingungen??[];
+          const ifOk=!trig.ifElse||!ifBeds.length||_okIf(trig,'',null,C);
+          if(ifOk) _run(trig,{name:C.Name,wort:'',typ:label,x:pos.X,y:pos.Y,zone:'',C});
+          else if((trig.aktionen_sonst??[]).length) _runSonst(trig,{name:C.Name,wort:'',typ:label,x:pos.X,y:pos.Y,zone:'',C});
+        }
+      });
+      // ── Betritt-Events feuern (Events mit player_betritt Bedingung) ──
+      _evts.forEach(ev=>{
+        if(!ev.aktiv)return;
+        const betrittConds=(ev.bedingungen??[]).filter(c=>c.typ==='player_betritt');
+        if(!betrittConds.length)return;
+        // betritt_typ Filter
+        const bOk=betrittConds.every(c=>{
+          const bt=c.betritt_typ??'alle';
+          if(bt==='neu')return istNeu;
+          if(bt==='rejoin')return!istNeu;
+          return true;
+        });
+        if(!bOk)return;
+        // Von-Filter: wer darf das Event auslösen (= wer muss der Beitretende sein)?
+        const vonOk=(()=>{
+          if(ev.von==='bot')return C.MemberNumber===Player.MemberNumber;
+          if(ev.von==='nummer')return ev.vonNummer&&C.MemberNumber===+ev.vonNummer;
+          return true; // 'alle' → jeder
+        })();
+        if(!vonOk)return;
+        // Weitere Bedingungen prüfen (z.B. Rang) – player_betritt wurde bereits oben geprüft
+        const evOtherOk=(ev.bedingungen??[]).every(c=>{
+          if(c.typ==='player_betritt')return true;
+          if(c.typ==='rang'){
+            const op=c.rang_op??'=';
+            const currentId=_rangState[C.MemberNumber]??null;
+            if(op==='kein') return !currentId;
+            if(!c.rang_id) return false;
+            const defs=(_cfg.rankDefs??[]).sort((a,b)=>a.level-b.level);
+            const targetDef=defs.find(r=>r.id===c.rang_id);
+            const currentDef=defs.find(r=>r.id===currentId);
+            if(!targetDef) return false;
+            if(!currentDef) return false;
+            const tl=targetDef.level, cl=currentDef.level;
+            if(op==='=')   return cl===tl;
+            if(op==='min') return cl>=tl;
+            if(op==='max') return cl<=tl;
+            return false;
+          }
+          return true;
+        });
+        if(!evOtherOk)return;
+        const evVars={name:C.Name,wort:'',typ:label,x:C.X??0,y:C.Y??0,zone:'',C};
+        const allChars=[Player,...(ChatRoomCharacter||[])];
+        let targets=[];
+        if(ev.ziel==='alle')targets=allChars;
+        else if(ev.ziel==='liste')targets=allChars.filter(ch=>(ev.zielListe||[]).includes(ch.MemberNumber));
+        else targets=[C]; // ausloeser = der beitretende Spieler
+        const cnt=_evFiredCnt[ev.id]??0;
+        if(ev.wiederholung==='einmalig'&&cnt>=1)return;
+        if(ev.wiederholung==='n_mal'&&cnt>=(ev.maxMal??2))return;
+        targets.forEach(ch=>{
+          const vars={name:ch.Name,wort:'',typ:label,x:ch.X??0,y:ch.Y??0,zone:'',C:ch};
+          // FIX: Read cnt inside callback so each target increments independently
+          _runSeq(ev.aktionen??[],ch,vars,ev,
+            ()=>{_evFiredCnt[ev.id]=(_evFiredCnt[ev.id]??0)+1;_pushLog({status:'ok'},vars,{name:ev.name,id:ev.id});},
+            ()=>{_pushLog({status:'ungueltig'},vars,{name:ev.name,id:ev.id});}
+          );
+        });
+      });
+
+      // Alle Rejoin-Trigger feuern (keine gegenseitige Blockade)
+      // Trigger MIT Item-Bedingungen: verzögert – BC-Appearance ist beim Join noch nicht geladen
+      // Trigger OHNE Item-Bedingungen: sofort
+      const ITEM_SYNC_DELAY = 800; // ms warten bis BC Appearance synchronisiert hat
+      rejoinBatch.forEach(trig=>{
+        const hasItemCond=(trig.bedingungen??[]).some(c=>c.typ==='item_traegt'||c.typ==='item_traegt_nicht');
+        if(hasItemCond){
+          // Verzögert feuern + Bedingung nochmal prüfen mit frischen Daten
+          setTimeout(()=>{
+            if(!_rejoinWindow.has(C.MemberNumber)){
+              _log('⏭ [Rejoin] "'+trig.name+'" – Fenster geschlossen vor Appearance-Sync');
+              return;
+            }
+            // Frische Appearance-Daten aus ChatRoomCharacter holen
+            const Cfresh=ChatRoomCharacter.find(x=>x.MemberNumber===C.MemberNumber)??C;
+            // Item-Bedingungen nochmal prüfen
+            const itemOk=(trig.bedingungen??[]).every(c=>{
+              if(c.typ==='item_traegt')return(Cfresh.Appearance??[]).some(a=>a.Asset?.Name===c.item);
+              if(c.typ==='item_traegt_nicht')return!(Cfresh.Appearance??[]).some(a=>a.Asset?.Name===c.item);
+              return true;
+            });
+            if(!itemOk){
+              _log('⏭ [Rejoin] "'+trig.name+'" – Item-Bedingung nach Sync nicht erfüllt (Appearance jetzt geladen)');
+              return;
+            }
+            const ifBedsR=trig.ifBedingungen??[];
+            const ifOkR=!trig.ifElse||!ifBedsR.length||_okIf(trig,'',null,Cfresh);
+            if(ifOkR) _run(trig,{name:Cfresh.Name,wort:'',typ:label,x:Cfresh.X??pos.X,y:Cfresh.Y??pos.Y,zone:'',C:Cfresh});
+            else if((trig.aktionen_sonst??[]).length) _runSonst(trig,{name:Cfresh.Name,wort:'',typ:label,x:Cfresh.X??pos.X,y:Cfresh.Y??pos.Y,zone:'',C:Cfresh});
+          }, ITEM_SYNC_DELAY);
+        } else {
+          const ifBeds=trig.ifBedingungen??[];
+          const ifOk=!trig.ifElse||!ifBeds.length||_okIf(trig,'',null,C);
+          if(ifOk) _run(trig,{name:C.Name,wort:'',typ:label,x:pos.X,y:pos.Y,zone:'',C});
+          else if((trig.aktionen_sonst??[]).length) _runSonst(trig,{name:C.Name,wort:'',typ:label,x:pos.X,y:pos.Y,zone:'',C});
+        }
+      });
+    }
+  }
+  _roomPrev.clear();
+  for(const n of cur)_roomPrev.add(n);
+},100);
+
+// ── Zonen-Betreten Polling – direkt C.X/C.Y (wie ZoneMonitor-Pattern) ──
+const _zoneState={}; // 'memberNum_trigId' -> bool (war zuletzt drin)
+// FIX: 500ms is sufficient for zone detection, 100ms caused unnecessary CPU load
+const _zonePoll=setInterval(()=>{
+  const chars=[Player,...(ChatRoomCharacter||[])];
+  _trigs.forEach(trig=>{
+    const zoneConds=(trig.bedingungen??[]).filter(c=>c.typ==='zone'||c.typ==='zone_rect');
+    if(!zoneConds.length)return;
+    const hasWort=(trig.bedingungen??[]).some(c=>c.typ==='wort');
+    const hasBetritt=(trig.bedingungen??[]).some(c=>c.typ==='player_betritt');
+    if(hasWort||hasBetritt)return;
+    chars.forEach(C=>{
+      if(!C)return;
+      // Direkt C.X / C.Y – kein _getPos Umweg nötig
+      const cx=C.X??-999, cy=C.Y??-999;
+      const inZone=zoneConds.every(c=>{
+        if(c.typ==='zone_rect')return cx>=Math.min(c.x1,c.x2)&&cx<=Math.max(c.x1,c.x2)&&cy>=Math.min(c.y1,c.y2)&&cy<=Math.max(c.y1,c.y2);
+        const p=c.puffer??1;
+        return cx>=c.x-p&&cx<=c.x+p&&cy>=c.y-p&&cy<=c.y+p;
+      });
+      const key=C.MemberNumber+'_'+trig.id;
+      const war=_zoneState[key]??false;
+      if(inZone&&!war){
+        // Prüfe andere Bedingungen (vortrigger, item_traegt)
+        const vonOk=(()=>{
+          if(trig.von==='bot')return C.MemberNumber===Player.MemberNumber;
+          if(trig.von==='whitelist')return(trig.vonNummern||[]).map(Number).includes(Number(C.MemberNumber));
+          return true;
+        })();
+        const otherOk=vonOk&&(trig.bedingungen??[]).every(c=>{
+          if(c.typ==='zone'||c.typ==='zone_rect')return true;
+          if(c.typ==='trigger_war'){const ref=_trigMap[c.trigId];return ref?.charSpec?!!_firedChar[c.trigId+'_'+C.MemberNumber]:!!_fired[c.trigId];}
+          if(c.typ==='item_traegt')return(C.Appearance??[]).some(a=>a.Asset?.Name===c.item);
+          if(c.typ==='item_traegt_nicht')return!(C.Appearance??[]).some(a=>a.Asset?.Name===c.item);
+          if(c.typ==='rang'){
+            const op=c.rang_op??'=';
+            const currentId=_rangState[C.MemberNumber]??null;
+            if(op==='kein') return !currentId;
+            if(!c.rang_id) return false;
+            const defs=(_cfg.rankDefs??[]).sort((a,b)=>a.level-b.level);
+            const targetDef=defs.find(r=>r.id===c.rang_id);
+            const currentDef=defs.find(r=>r.id===currentId);
+            if(!targetDef) return false;
+            if(!currentDef) return false;
+            const tl=targetDef.level, cl=currentDef.level;
+            if(op==='=')   return cl===tl;
+            if(op==='min') return cl>=tl;
+            if(op==='max') return cl<=tl;
+            return false;
+          }
+          return true;
+        });
+        if(otherOk){
+          _log('\u{1F4CD} Zone: '+C.Name+' X='+cx+' Y='+cy+' \u2192 "'+trig.name+'"');
+          _run(trig,{name:C.Name,wort:'',typ:'\u{1F4CD} Zone',x:cx,y:cy,zone:'',C});
+        }
+      }
+      _zoneState[key]=inZone;
+    });
+  });
+},500);
+
+// ── NoStrip Polling (500ms) ─────────────────────────────────
+// Prueft ob /nostrip-Items noch vorhanden sind. Wenn entfernt → sofort re-equip.
+// Unabhaengig vom ChatRoomMessage-Listener – funktioniert bei JEDER Art von Entfernung.
+const _nsPoll=setInterval(()=>{
+  const keys=Object.keys(_nsWatchers);
+  if(!keys.length)return;
+  const allChars=[Player,...(ChatRoomCharacter||[])];
+  for(let i=0;i<keys.length;i++){
+    (function(w){
+      let C=null;
+      for(let ci=0;ci<allChars.length;ci++){
+        if(allChars[ci].MemberNumber===w.memberNum){C=allChars[ci];break;}
+      }
+      if(!C)return;
+      const item=(typeof InventoryGet==='function')?InventoryGet(C,w.gruppe):null;
+      if(item)return; // Item noch da – alles ok
+      _log('\u{1F512} NoStrip: '+w.gruppe+' entfernt bei '+C.Name+' \u2192 lege sofort wieder an...');
+      try{
+        if(w.itemConfig){
+          const ic=w.itemConfig;
+          let col=ic.colors||['#ffffff'];
+          if(typeof col==='string'&&col.includes(','))col=col.split(',');
+          InventoryWear(C,ic.asset,ic.group,col,0,Player.MemberNumber,ic.craft||null);
+          const itemNow=InventoryGet(C,ic.group);
+          if(itemNow){
+            itemNow.Color=col;
+            itemNow.Property=itemNow.Property||{};
+            if(ic.tr&&Object.keys(ic.tr).length){
+              itemNow.Property.TypeRecord=ic.tr;
+              itemNow.Property.Type=ic.typeStr||'';
+            }
+            if(ic.props)Object.assign(itemNow.Property,ic.props);
+          }
+        }else if(w.curseEntry){
+          let col2=w.curseEntry.Farbe;
+          if(typeof col2==='string'&&col2.includes(','))col2=col2.split(',');
+          InventoryWear(C,w.curseEntry.ItemName,w.curseEntry.Gruppe,
+            col2,0,Player.MemberNumber,w.curseEntry.Craft||null);
+        }else if(w.ersatz){
+          InventoryWear(C,w.ersatz,w.gruppe,w.farbe||'#ffffff',0,Player.MemberNumber);
+        }else{
+          _log('\u26A0 NoStrip: kein Item-Config fuer '+w.gruppe);
+          return;
+        }
+        CharacterRefresh(C);ChatRoomCharacterUpdate(C);
+        _log('\u2705 NoStrip: '+(w.ersatz||w.itemConfig?.asset||'Item')+' wieder angelegt auf '+C.Name);
+      }catch(ex){
+        _log('\u26A0 NoStrip Re-Equip Fehler: '+ex.message);
+      }
+    })(_nsWatchers[keys[i]]);
+  }
+},500);
+// ─────────────────────────────────────────────────────────────
+
+// Eigene Nachrichten via hookFunction – Mod bekommt unique Namen (Timestamp) um Kollisionen beim Live-Sync zu vermeiden
+let _mod = null;
+try {
+  const _modName = 'BCBot_${safeId}_' + Date.now();
+  _mod = bcModSdk.registerMod({name: _modName, fullName:'${safeName}', version:'1.0'});
+  _mod.hookFunction('ChatRoomSendChat', 0, (args, next) => {
+    // BC löscht InputChat.value vor dem Hook → args[0].Content ist zuverlässiger
+    const msgData = args[0];
+    const raw = (typeof msgData === 'object' ? msgData?.Content : null)
+             ?? document.getElementById('InputChat')?.value?.trim()
+             ?? '';
+    if (raw) {
+      const msgType = (typeof msgData === 'object' ? msgData?.Type : null) ?? '';
+      const isE = msgType === 'Emote' || (!msgType && raw.startsWith('*') && raw.endsWith('*'));
+      const isW = msgType === 'Whisper' || (!msgType && (raw.startsWith('/w ') || raw.startsWith('/whisper ')));
+      const tk = isE ? 'emote' : isW ? 'whisper' : 'chat';
+      const hearOk=(_cfg.hearChat && tk==='chat')||(_cfg.hearEmote && tk==='emote')||(_cfg.hearWhisper && tk==='whisper');
+      if(hearOk)_proc(raw,tk,Player);
+      else _procEvents(raw,tk,Player); // Events immer prüfen
+    }
+    return next(args);
+  });
+  _log('✅ hookFunction aktiv');
+} catch(hookErr) {
+  _log('⚠️ hookFunction nicht verfügbar (eigene Nachrichten via Socket):', hookErr.message);
+  // Fallback: eigene Nachrichten via ServerSocket mitschneiden
+  // BC sendet keine eigenen Nachrichten zurück, daher InputChat-Observer als Alternative
+  const _origSend = window.ServerSend;
+  if (typeof _origSend === 'function') {
+    window.__BCBot_origSend_${safeId} = _origSend;
+    window.ServerSend = function(channel, data, ...rest) {
+      if (channel === 'ChatRoomChat' && data?.Content && ['Chat','Emote','Whisper'].includes(data?.Type ?? 'Chat')) {
+        const tk = (data.Type||'Chat').toLowerCase();
+        const ssHearOk=(_cfg.hearChat&&tk==='chat')||(_cfg.hearEmote&&tk==='emote')||(_cfg.hearWhisper&&tk==='whisper');
+        // FIX: removed redundant double-check of ssHearOk inside the already-matching if-block
+        setTimeout(() => { if(ssHearOk)_proc(data.Content,tk,Player); else _procEvents(data.Content,tk,Player); }, 0);
+      }
+      return _origSend.call(this, channel, data, ...rest);
+    };
+  }
+}
+
+// ── ServerSocket: alle Spieler im Raum (IMMER aktiv, unabhaengig von nurEigene) ──
+// Eigene Nachrichten kommen NICHT via Socket zurueck – die kommen via hookFunction
+// ── AntiStrip Listener ──────────────────────────────────────
+_asH = function(data) {
+  if (!data || data.Type !== 'Action') return;
+  var txt = JSON.stringify(data);
+  if (txt.indexOf('ItemRemove') === -1 && txt.indexOf('ActionRemove') === -1) return;
+  // Sender ermitteln – Bot selbst? → kein AntiStrip
+  var sender = null;
+  if (Array.isArray(data.Dictionary)) {
+    for (var _di = 0; _di < data.Dictionary.length; _di++) {
+      if (data.Dictionary[_di].SourceCharacter != null) {
+        sender = data.Dictionary[_di].SourceCharacter; break;
+      }
+    }
+  }
+  if (sender === null) sender = data.Sender;
+  if (sender === Player.MemberNumber) return;
+  // Alle aktiven Watcher durchgehen
+  var _keys = Object.keys(_asWatchers);
+  for (var _wi = 0; _wi < _keys.length; _wi++) {
+    (function(w) {
+      var allChars = [Player].concat(ChatRoomCharacter || []);
+      var C = null;
+      for (var _ci = 0; _ci < allChars.length; _ci++) {
+        if (allChars[_ci].MemberNumber === w.memberNum) { C = allChars[_ci]; break; }
+      }
+      if (!C) return;
+      var item = (typeof InventoryGet === 'function') ? InventoryGet(C, w.gruppe) : null;
+      if (item) return; // Slot noch besetzt
+      _log('\u{1F6E1}\uFE0F AntiStrip: ' + w.gruppe + ' leer bei ' + C.Name + ' \u2192 lege wieder an...');
+      setTimeout(function() {
+        try {
+          if (w.itemConfig) {
+            var ic = w.itemConfig;
+            var col = ic.colors || ['#ffffff'];
+            if (typeof col === 'string' && col.indexOf(',') !== -1) col = col.split(',');
+            InventoryWear(C, ic.asset, ic.group, col, 0, Player.MemberNumber, ic.craft || null);
+            var itemNow = InventoryGet(C, ic.group);
+            if (itemNow) {
+              itemNow.Color = col;
+              itemNow.Property = itemNow.Property || {};
+              if (ic.tr && Object.keys(ic.tr).length) {
+                itemNow.Property.TypeRecord = ic.tr;
+                itemNow.Property.Type = ic.typeStr || '';
+              }
+              if (ic.props) Object.assign(itemNow.Property, ic.props);
+            }
+          } else if (w.curseEntry) {
+            var col2 = w.curseEntry.Farbe;
+            if (typeof col2 === 'string' && col2.indexOf(',') !== -1) col2 = col2.split(',');
+            InventoryWear(C, w.curseEntry.ItemName, w.curseEntry.Gruppe,
+              col2, 0, Player.MemberNumber, w.curseEntry.Craft || null);
+          } else if (w.ersatz) {
+            InventoryWear(C, w.ersatz, w.gruppe, w.farbe || '#ffffff', 0, Player.MemberNumber);
+          } else {
+            _log('\u26A0 AntiStrip: kein Ersatz konfiguriert f\u00fcr ' + w.gruppe);
+            return;
+          }
+          CharacterRefresh(C);
+          ChatRoomCharacterUpdate(C);
+          _log('\u2705 AntiStrip: ' + (w.ersatz || 'Item') + ' wieder angelegt auf ' + C.Name);
+        } catch(ex) {
+          _log('\u26A0 AntiStrip Fehler: ' + ex.message);
+        }
+      }, w.delay != null ? w.delay : 500);
+    })(_asWatchers[_keys[_wi]]);
+  }
+};
+ServerSocket.on('ChatRoomMessage', _asH);
+// ─────────────────────────────────────────────────────────────
+
+const _msgH=function(data){
+  if(!['Chat','Emote','Whisper'].includes(data.Type))return;
+  if(data.Sender===Player.MemberNumber)return; // eigene via hookFunction abgefangen
+  const tk=data.Type.toLowerCase();
+  const C=ChatRoomCharacter.find(c=>c.MemberNumber===data.Sender)
+        ??(Player.MemberNumber===data.Sender?Player:null);
+  if(!C)return;
+  // Trigger: nur wenn hear* aktiv; Events: immer (eigene Einstellung via Von-Filter)
+  const hearOk=(tk==='chat'&&_cfg.hearChat)||(tk==='emote'&&_cfg.hearEmote)||(tk==='whisper'&&_cfg.hearWhisper);
+  if(hearOk)_proc(data.Content,tk,C);
+  else _procEvents(data.Content,tk,C); // Events trotzdem prüfen
+};
+ServerSocket.on('ChatRoomMessage',_msgH);
+
+window['_BCBot_'+_BID]={
+  stop(){
+    clearInterval(_itPoll);
+    clearInterval(_joinPoll);
+    clearInterval(_zonePoll);
+    clearInterval(_nsPoll);
+    try{ if(_mod) _mod.removePatches(); } catch(e){}
+    // Restore ServerSend if we patched it as fallback
+    if(window.__BCBot_origSend_${safeId}) {
+      window.ServerSend = window.__BCBot_origSend_${safeId};
+      delete window.__BCBot_origSend_${safeId};
+    }
+    if(_asH)  ServerSocket.off('ChatRoomMessage',_asH);
+    if(_msgH) ServerSocket.off('ChatRoomMessage',_msgH);
+    // Events timer stoppen
+    Object.values(_evTimers).forEach(h=>clearTimeout(h)); // clears both _t and _i timers
+    delete window['_BCBot_'+_BID];
+    // State im window-Objekt + localStorage sichern (überlebt Page-Reload)
+    window[_stateKey].roomEver=[..._roomEver];
+    try{
+      const ls=JSON.parse(localStorage.getItem('__BCKBotStates')||'{}');
+      ls['${safeId}']={
+        fired:_fired, firedCnt:_firedCnt,
+        firedChar:_firedChar, roomEver:[..._roomEver],
+        evFiredCnt:_evFiredCnt,
+        ts:Date.now()
+      };
+      localStorage.setItem('__BCKBotStates',JSON.stringify(ls));
+    }catch(e){}
+    console.log('\u23F9\uFE0F [Bot:${safeName}] v'+_VER+' gestoppt | States gesichert (Mem+LS)');
+  },
+  // Sofortiges Event feuern (ignoriert Timer/Wiederholung-Check)
+  fireEventNow(eid){
+    const ev=_evts.find(e=>e.id===eid);
+    if(!ev){console.warn('[Bot] Event nicht gefunden:',eid);return;}
+    _log('▶️ Sofort feuern: "'+ev.name+'"');
+    // Temporär Wiederholung ignorieren
+    const savedWdh=ev.wiederholung;
+    ev.wiederholung='immer';
+    _fireEv(ev);
+    ev.wiederholung=savedWdh;
+  },
+  // Kompatibilität
+  fireEvent(eid){this.fireEventNow(eid);},
+  // Manuelles State-Reset (z.B. aus der Konsole: window['_BCBot_...'].clearState())
+  clearState(){
+    window[_stateKey]={fired:{},firedCnt:{},firedChar:{},roomEver:[],evFiredCnt:{}};
+    try{const ls=JSON.parse(localStorage.getItem('__BCKBotStates')||'{}');delete ls['${safeId}'];localStorage.setItem('__BCKBotStates',JSON.stringify(ls));}catch(e){}
+    Object.keys(_fired).forEach(k=>delete _fired[k]);
+    Object.keys(_firedCnt).forEach(k=>delete _firedCnt[k]);
+    Object.keys(_firedChar).forEach(k=>delete _firedChar[k]);
+    Object.keys(_evFiredCnt).forEach(k=>delete _evFiredCnt[k]);
+    _roomEver.clear();
+    console.log('\u{1F9F9} [Bot:${safeName}] States zurückgesetzt (Mem+LS)');
+  }
+};
+console.log('\u25B6\uFE0F [Bot:${safeName}] v'+_VER+' | Trigger:',_trigs.length,'| Modus:',_cfg.nurEigene?'Nur eigene':'Alle Spieler');
+})();`;
+}
+
+function botDeployById(id) {
+  const b = _bots.find(x=>x.id===id); if (!b) return;
+  if (!_connected) { showStatus('❌ Nicht mit BC verbunden','error'); return; }
+  const _code = _buildBotCode(b);
+  // Base64-kodiert senden → kein Sonderzeichen kann den Übertragungsweg brechen
+  // BC-Seite: new Function(decodeURIComponent(escape(atob(encoded))))()
+  const _encoded = btoa(unescape(encodeURIComponent(_code)));
+  const _wrapper = `(new Function(decodeURIComponent(escape(atob('${_encoded}'))))())`;
+  bcSend({ type:'EXEC', code: _wrapper });
+  b.laufend = true; _saveBots(); renderBotList();
+  if (_selBotId === id) {
+    const bar = document.getElementById('bot-status-bar');
+    if (bar) { bar.className='bot-status running'; bar.textContent='▶️ Bot "'+b.name+'" läuft'; }
+    // Re-render topbar button
+    renderBotEditor();
+  }
+  showStatus('▶️ Bot "'+b.name+'" gestartet!','success');
+}
+
+function botStopById(id) {
+  const b = _bots.find(x=>x.id===id); if (!b) return;
+  if (!_connected) { showStatus('❌ Nicht mit BC verbunden','error'); return; }
+  const safeId = b.id.replace(/\W/g,'_');
+  bcSend({ type:'EXEC', code:`if(window['_BCBot_${safeId}'])window['_BCBot_${safeId}'].stop();` });
+  b.laufend = false; _saveBots(); renderBotList();
+  if (_selBotId === id) renderBotEditor();
+  showStatus('⏹ Bot "'+b.name+'" gestoppt','success');
+}
+
+function botDeploy() { const b=_selBot(); if(b) botDeployById(b.id); }
+function botStop()   { const b=_selBot(); if(b) botStopById(b.id);   }
+
+function botSync() {
+  const b = _selBot();
+  if (!b) return;
+  if (!_connected) { showStatus('❌ Nicht mit BC verbunden', 'error'); return; }
+  if (!b.laufend)  { showStatus('ℹ️ Bot läuft nicht – einfach Starten klicken', 'info'); return; }
+
+  const btn = document.getElementById('syncBtn');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Sync…'; }
+
+  // Step 1: Stop
+  const safeId = b.id.replace(/\W/g,'_');
+  bcSend({ type:'EXEC', code:`if(window['_BCBot_${safeId}'])window['_BCBot_${safeId}'].stop();` });
+
+  // Step 2: After stop delay, redeploy with latest saved config
+  setTimeout(() => {
+    const latest = _selBot();
+    if (!latest) return;
+    bcSend({ type:'EXEC', code: _buildBotCode(latest) });
+    latest.laufend = true; _saveBots(); renderBotList(); renderBotEditor();
+    showStatus('✅ Bot synchronisiert und neu gestartet', 'success');
+  }, 700);
+}

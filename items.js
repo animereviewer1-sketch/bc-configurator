@@ -1588,6 +1588,10 @@ function generateOutfitCode() {
     code += 'const TARGET = Player;\n\n';
   }
 
+  // Erst ausziehen damit keine alten Items unter dem neuen Outfit bleiben
+  code += '// ── Strip: alte Items entfernen ──\n'
+        + 'TARGET.Appearance = TARGET.Appearance.filter(i => i?.Asset?.Group?.AllowNone === false);\n\n';
+
   OUTFIT.forEach((item, i) => {
     code += '// ── ' + (i+1) + '. ' + item.asset + ' (' + item.group + ') ──\n';
     code += buildItemInner({ ...item, isOther, memberNum, delayOffset: 600 + i * 700 });
@@ -1661,22 +1665,27 @@ function loadProfile(name) {
     const cfg = CACHE[item.group]?.[item.asset];
     if (!cfg) console.warn('⚠️ Item nicht im Cache: ' + item.group + '/' + item.asset);
 
-    // ── propCode aus gespeichertem TypeRecord rekonstruieren ──
-    // TypeRecord bestimmt Variante/Layer des Items (z.B. Seil-Konfiguration).
-    // Ohne das sieht das Item anders aus als beim Original.
     const tr = (item.tr && Object.keys(item.tr).length) ? item.tr : null;
-    let propCode = '';
+    let propCode = '\n    item.Property = item.Property ?? {};';
     if (tr) {
       const trStr = JSON.stringify(tr);
-      // Type-String aus TypeRecord berechnen (gleiche Logik wie BC intern)
       const typeStr = Object.entries(tr).map(([k,v]) => k + v).join('');
-      propCode = '\n    item.Property = item.Property ?? {};'
-               + '\n    item.Property.TypeRecord = ' + trStr + ';'
-               + '\n    item.Property.Type = ' + JSON.stringify(typeStr) + ';';
+      propCode += '\n    item.Property.TypeRecord = ' + trStr + ';'
+               +  '\n    item.Property.Type = ' + JSON.stringify(typeStr) + ';';
+    }
+    // WCE: Gesamt-Priorität
+    if (item.overridePriority != null) {
+      propCode += '\n    item.Property.OverridePriority = ' + item.overridePriority + ';';
+    }
+    // WCE: Layer-spezifische Prioritäten + Hiding
+    if (item.layerProperties && Object.keys(item.layerProperties).length) {
+      propCode += '\n    item.Property.LayerProperties = ' + JSON.stringify(item.layerProperties) + ';';
+    }
+    // Difficulty
+    if (item.difficulty != null) {
+      propCode += '\n    item.Difficulty = ' + item.difficulty + ';';
     }
 
-    // ── craftStr aus gespeichertem Craft-Objekt rekonstruieren ──
-    // Craft enthält CraftName/Description/Property die das Aussehen beeinflussen.
     let craftStr = '';
     const craft = item.craft;
     if (craft && craft.Name) {
@@ -1690,7 +1699,6 @@ function loadProfile(name) {
                + ', MemberNumber: Player.MemberNumber,\n  }';
     }
 
-    // ── lockParams aus gespeichertem lock rekonstruieren ──
     const lockParams = { timer: 0, combo: '', password: '', relMember: item.lockMember || 0, relTimer: 0 };
 
     restored.push({
@@ -2222,12 +2230,16 @@ const _pendingOutfitSave = {};
 // Convert a single BC Appearance item (from GET_CHAR_APPEARANCE response) to profile format
 function _appearanceItemToProfile(item) {
   return {
-    asset:   item.asset,
-    group:   item.group,
-    colors:  item.colors ?? '#ffffff',
-    craft:   item.craft   ?? null,
-    lock:    item.lock    ?? null,
-    tr:      item.tr      ?? {},
+    asset:            item.asset,
+    group:            item.group,
+    colors:           item.colors ?? '#ffffff',
+    craft:            item.craft   ?? null,
+    lock:             item.lock    ?? null,
+    tr:               item.tr      ?? {},
+    lockMember:       item.lockMember ?? null,
+    overridePriority: item.overridePriority ?? null,
+    layerProperties:  item.layerProperties  ?? null,
+    difficulty:       item.difficulty       ?? null,
   };
 }
 
