@@ -2189,18 +2189,24 @@ function stripAllItems() {
 
   const code = `(function(){
   // ══════════════════════════════════════════════════════════════
-  //  STRIP ALL v4
-  //  Reihenfolge ist entscheidend:
-  //    1. bcModSdk-Hook registrieren (Prio 999999, outermost)
-  //    2. ERST DANN Safeword / Strip auslösen
-  //  → Wenn der Server-Sync nach dem Safeword zurückkommt,
-  //    ist unser Hook bereits aktiv und DOGS sieht saubere Daten.
+  //  STRIP ALL v5 – InventoryWear / InventoryLock Intercept
+  //
+  //  Neue Strategie: Statt den Sync-Hook zu patchen, patchen wir
+  //  direkt die Funktionen die DOGS zum Re-Applyen aufruft:
+  //    - InventoryWear()  → DOGS trägt Items auf
+  //    - InventoryLock()  → DOGS legt Schlösser an
+  //    - InventoryAdd()   → Fallback-Pfad
+  //
+  //  Wenn diese Funktionen für den Ziel-Char temporär blockiert
+  //  sind, kann DOGS physisch nichts re-applyen – egal ob via
+  //  Interval, ChatRoomSyncSingle, oder sonst einem Pfad.
+  //
+  //  Danach: Safeword auslösen.
+  //  Reihenfolge: Patch → Safeword → 10s warten → Patch entfernen
   // ══════════════════════════════════════════════════════════════
 
-  var _ACTIVE     = true;
-  var _hookHandle = null;
-  var _tgtNum     = ${tgtCode};
-  var _isPlayer   = !_tgtNum || _tgtNum === Player.MemberNumber;
+  var _tgtNum   = ${tgtCode};
+  var _isPlayer = !_tgtNum || _tgtNum === Player.MemberNumber;
 
   // ── Hilfsfunktionen ──────────────────────────────────────────
   function _cleanItem(item) {
@@ -2211,9 +2217,7 @@ function stripAllItems() {
     if (Array.isArray(item.Property.Effect)) {
       item.Property.Effect = item.Property.Effect.filter(function(e){ return e !== 'Lock'; });
       if (!item.Property.Effect.length) delete item.Property.Effect;
-    } else {
-      delete item.Property.Effect;
-    }
+    } else { delete item.Property.Effect; }
   }
 
   function _stripChar(C) {
@@ -2233,40 +2237,67 @@ function stripAllItems() {
       .find(function(c){ return c.MemberNumber === _tgtNum; }) || null;
   }
 
-  // ── SCHRITT 1: Hook registrieren BEVOR Safeword/Strip ────────
-  // Damit ist der Interceptor aktiv wenn der Server-Bundle zurückkommt.
-  if (window.bcModSdk && typeof bcModSdk.hookFunction === 'function') {
-    try {
-      _hookHandle = bcModSdk.hookFunction('ChatRoomSyncSingle', 999999, function(args, next) {
-        if (!_ACTIVE) return next(args);
+  var _targetMemberNum = _isPlayer ? Player.MemberNumber : _tgtNum;
 
-        // PRE: Bundle bereinigen bevor DOGS ihn sieht
-        var bundle = args && args[0];
-        if (bundle) {
-          if (Array.isArray(bundle.Appearance)) {
-            bundle.Appearance.forEach(_cleanItem);
-            bundle.Appearance = bundle.Appearance.filter(function(item){
-              return item && !/^DeviousPadlock/i.test(item.Name || item.Asset || '');
-            });
-          }
-          if (bundle.Character && Array.isArray(bundle.Character.Appearance))
-            bundle.Character.Appearance.forEach(_cleanItem);
-        }
+  // ── SCHRITT 1: InventoryWear + InventoryLock patchen ─────────
+  // Wir wrappen die Original-Funktionen.
+  // Wenn der Ziel-Char betroffen ist UND das Item eine
+  // DeviousPadlock-Property hat → Aufruf wird blockiert.
+  // Alle anderen Aufrufe (andere Chars, normale Items) → normal.
+  var _origWear = window.InventoryWear;
+  var _origLock = window.InventoryLock;
+  var _origAdd  = window.InventoryAdd;
 
-        // Alle anderen Hooks laufen (inkl. DOGS)
-        var result = next(args);
-
-        // POST: Was DOGS re-applied hat wegmachen – nur lokaler Refresh, kein Server-Sync
-        var postC = _findChar();
-        if (postC) {
-          _stripChar(postC);
-          try { CharacterRefresh(postC, false, false); } catch(e){}
-        }
-        return result;
-      });
-      console.log('[StripAll] Hook registriert (Prio 999999)');
-    } catch(e) { console.warn('[StripAll] hookFunction:', e.message); }
+  function _isDogsLockItem(property) {
+    if (!property) return false;
+    return !!(property.LockedBy === 'DeviousPadlock'
+           || property.DogsLock
+           || property.DOGS
+           || property.deviousLock
+           || property.DeviousPadlock
+           || property.dogsLocked);
   }
+
+  window.InventoryWear = function(C, AssetName, AssetGroup, Color, Difficulty, MemberNumber, Craft, Refresh) {
+    // Blockiere wenn: Ziel-Char betroffen UND es sich um einen DeviousPadlock handelt
+    if (C && C.MemberNumber === _targetMemberNum) {
+      if (/DeviousPadlock/i.test(AssetName || '')) {
+        console.log('[StripAll] InventoryWear blockiert (DeviousPadlock):', AssetName, AssetGroup);
+        return;
+      }
+      // Prüfe ob das Item nach dem Tragen sofort gesperrt würde (über Craft/Property)
+      // Zur Sicherheit: falls Craft ein Lock-Property enthält, auch blockieren
+      if (Craft && _isDogsLockItem(Craft.Property)) {
+        console.log('[StripAll] InventoryWear blockiert (Craft mit Lock):', AssetName);
+        return;
+      }
+    }
+    return _origWear.apply(this, arguments);
+  };
+
+  window.InventoryLock = function(C, Item, Lock, MemberNumber, Update) {
+    if (C && C.MemberNumber === _targetMemberNum) {
+      var lockName = (typeof Lock === 'string') ? Lock : (Lock && (Lock.Name || (Lock.Asset && Lock.Asset.Name)));
+      if (/DeviousPadlock/i.test(lockName || '')) {
+        console.log('[StripAll] InventoryLock blockiert:', lockName);
+        return;
+      }
+    }
+    return _origLock.apply(this, arguments);
+  };
+
+  // InventoryAdd ebenfalls abfangen (manche Mods nutzen das statt InventoryWear)
+  window.InventoryAdd = function(C, AssetName, AssetGroup, Refresh) {
+    if (C && C.MemberNumber === _targetMemberNum) {
+      if (/DeviousPadlock/i.test(AssetName || '')) {
+        console.log('[StripAll] InventoryAdd blockiert:', AssetName);
+        return;
+      }
+    }
+    return _origAdd.apply(this, arguments);
+  };
+
+  console.log('[StripAll] InventoryWear/Lock/Add gepatcht – DeviousPadlock blockiert');
 
   // ── SCHRITT 2: DOGS ExtensionSettings leeren ─────────────────
   try {
@@ -2280,48 +2311,42 @@ function stripAllItems() {
     });
   } catch(e){}
 
-  // ── SCHRITT 3: Safeword / Strip auslösen ─────────────────────
-  // Hook ist jetzt aktiv → Server-Bundle wird abgefangen
+  // ── SCHRITT 3: Strippen (Safeword oder direkt) ───────────────
   if (_isPlayer) {
     try {
       if (typeof ChatRoomSafewordChatCommand === 'function') {
         ChatRoomSafewordChatCommand();
-        console.log('[StripAll] ChatRoomSafewordChatCommand() ausgeführt');
+        console.log('[StripAll] Safeword ausgelöst');
       } else if (typeof ActionSafeword === 'function') {
         ActionSafeword(Player);
       } else {
-        // Absoluter Fallback: direkt strippen + syncen
         _stripChar(Player);
         try { CharacterRefresh(Player, false, false); } catch(e){}
         try { ChatRoomCharacterUpdate(Player); } catch(e){}
         try { ServerPlayerSync(); } catch(e){}
       }
-    } catch(e) {
-      console.warn('[StripAll] Safeword-Aufruf fehlgeschlagen:', e.message);
-    }
+    } catch(e) { console.warn('[StripAll] Safeword-Fehler:', e.message); }
   } else {
-    // Anderer Spieler: direkter Strip
     var C = _findChar();
-    if (!C) { console.error('[StripAll] Ziel nicht im Raum: #' + _tgtNum); return; }
-    var removed = _stripChar(C);
+    if (!C) { console.error('[StripAll] Ziel nicht im Raum'); return; }
+    _stripChar(C);
     try { CharacterRefresh(C, false, false); } catch(e){}
     try { ChatRoomCharacterUpdate(C); } catch(e){}
-    console.log('[StripAll] ' + removed + ' Items entfernt · ' + C.Name + ' #' + C.MemberNumber);
+    console.log('[StripAll] Direkt gestripped: ' + C.Name + ' #' + C.MemberNumber);
   }
 
-  // ── SCHRITT 4: Hook nach 10s entfernen ───────────────────────
+  // ── SCHRITT 4: Nach 10s Patches entfernen ────────────────────
   setTimeout(function(){
-    _ACTIVE = false;
-    if (_hookHandle && typeof _hookHandle.remove === 'function') {
-      try { _hookHandle.remove(); } catch(e){}
-      console.log('[StripAll] Hook entfernt – normaler Betrieb');
-    }
+    if (_origWear) window.InventoryWear = _origWear;
+    if (_origLock) window.InventoryLock = _origLock;
+    if (_origAdd)  window.InventoryAdd  = _origAdd;
+    console.log('[StripAll] InventoryWear/Lock/Add wiederhergestellt');
   }, 10000);
 })();`;
 
   bcSend({ type: 'EXEC', code });
   const label = tgt ? ('Spieler #' + tgt) : 'dich selbst';
-  showStatus('⚡ Strip-All: ' + label + ' – Hook aktiv, dann Safeword', 'success');
+  showStatus('⚡ Strip-All: ' + label + ' – InventoryWear/Lock gepatcht (10s)', 'success');
 }
 function wearCurse(dbKey, targetNum) {
   if (!_connected) { showStatus('❌ Nicht verbunden', 'error'); return; }
