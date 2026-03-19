@@ -444,18 +444,15 @@ function _applyItemAction(a, C){
       InventoryWear(C,a.curseEntry.ItemName,a.curseEntry.Gruppe,col,0,Player.MemberNumber,a.curseEntry.Craft);
       _restoreDisplaced(C,snapshot,a.curseEntry.Gruppe);
     }else if(a.profilName){
-      // Profil: erst nackt machen, dann Items direkt ins Appearance-Array schreiben
-      // (wie BC's eigener Import – InventoryWear-Seiteneffekte werden vermieden,
-      //  TypeRecord/LayerProperties/OverridePriority bleiben erhalten)
       var profilItems = a.profilItems ?? [];
 
       // Schritt 0: Ausziehen (Pflicht-Anatomie bleibt)
       C.Appearance = C.Appearance.filter(function(item){
-        if(!item || !item.Asset || !item.Asset.Group) return true;
+        if(!item||!item.Asset||!item.Asset.Group) return true;
         return item.Asset.Group.AllowNone === false;
       });
 
-      // Schritt 1: Items anlegen via InventoryWear (setzt Asset-Referenz)
+      // Schritt 1: Items anlegen
       profilItems.forEach(function(item){
         var col = item.colors ?? item.cfg?.Color ?? '#ffffff';
         if(typeof col==='string' && col.includes(',')) col = col.split(',');
@@ -463,29 +460,36 @@ function _applyItemAction(a, C){
         InventoryWear(C, item.asset, item.group, col, 0, Player.MemberNumber, craft);
       });
 
-      // Schritt 2: Properties DIREKT schreiben (wie BC-Import)
-      // Object.assign auf item.Property – überschreibt KEINE anderen Properties
+      // Schritt 2a: Farbe + TypeRecord setzen, dann ExtendedItemInit
       profilItems.forEach(function(item){
         var worn = InventoryGet(C, item.group);
         if(!worn) return;
         worn.Property = worn.Property ?? {};
 
-        // TypeRecord + Type
-        if(item.tr && typeof item.tr === 'object' && Object.keys(item.tr).length){
+        // Erst alle Properties außer LayerProperties/OverridePriority setzen
+        if(item.property && typeof item.property === 'object'){
+          Object.keys(item.property).forEach(function(k){
+            if(k !== 'LayerProperties' && k !== 'OverridePriority') worn.Property[k] = item.property[k];
+          });
+        } else if(item.tr && typeof item.tr === 'object' && Object.keys(item.tr).length){
           worn.Property.TypeRecord = item.tr;
           worn.Property.Type = Object.entries(item.tr).map(function(e){return e[0]+e[1];}).join('');
-          try{ExtendedItemInit(C, worn, false, false);}catch(e){}
         }
-        // WCE: Gesamt-Priorität
-        if(item.overridePriority != null) worn.Property.OverridePriority = item.overridePriority;
-        // WCE: Layer-spezifische Prioritäten + Hiding
-        if(item.layerProperties && typeof item.layerProperties === 'object'){
-          worn.Property.LayerProperties = item.layerProperties;
-        }
-        // Difficulty
+
+        // ExtendedItemInit setzt Variante anhand von TypeRecord
+        try{ExtendedItemInit(C, worn, false, false);}catch(e){}
+
+        // Schritt 2b: LayerProperties + OverridePriority NACH ExtendedItemInit setzen
+        // (ExtendedItemInit würde diese sonst zurücksetzen)
+        var lp = (item.property && item.property.LayerProperties) || item.layerProperties;
+        var op = (item.property && item.property.OverridePriority != null)
+                   ? item.property.OverridePriority
+                   : item.overridePriority;
+        if(lp) worn.Property.LayerProperties  = lp;
+        if(op != null) worn.Property.OverridePriority = op;
+
         if(item.difficulty != null) worn.Difficulty = item.difficulty;
 
-        // Farbe nochmal setzen
         var col = item.colors ?? '#ffffff';
         if(typeof col==='string' && col.includes(',')) col = col.split(',');
         worn.Color = col;
