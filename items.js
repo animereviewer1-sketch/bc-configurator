@@ -1789,17 +1789,106 @@ function renderProfileList() {
   }
   el.innerHTML = '<div class="profile-list">' + keys.map((k, idx) => {
     const p = PROFILES[k];
-    // Use data-idx on buttons to avoid quote-in-onclick issues
     return '<div class="profile-card">'
       + '<div class="profile-card-name">📁 ' + p.name + '</div>'
       + '<div class="profile-card-info">' + (p.items?.length ?? 0) + ' Items · ' + (p.date || '') + '</div>'
       + '<div class="btn-row" style="margin-top:6px">'
       + '<button class="btn btn-green" style="flex:1;font-size:.68rem" data-pkey="' + idx + '" onclick="loadProfileByIdx(this.dataset.pkey)">📥 Laden</button>'
+      + '<button class="btn btn-primary" style="font-size:.68rem;padding:4px 7px" data-pkey="' + idx + '" onclick="profileExportSingle(this.dataset.pkey)" title="Dieses Profil exportieren">⬇️</button>'
       + '<button class="btn btn-red" style="font-size:.68rem" data-pkey="' + idx + '" onclick="deleteProfileByIdx(this.dataset.pkey)">🗑️</button>'
       + '</div></div>';
   }).join('') + '</div>';
-  // Store key mapping for index-based access
   el._profileKeys = keys;
+}
+
+// ── Export / Import ──────────────────────────────────────────────────────
+
+// Alle Profile exportieren
+function profilesExportAll() {
+  const count = Object.keys(PROFILES).length;
+  if (!count) { showStatus('❌ Keine Profile zum Exportieren', 'error'); return; }
+  const payload = {
+    _meta: { exportedAt: new Date().toISOString(), version: 1, count },
+    profiles: PROFILES,
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'BC_Profile_' + new Date().toISOString().slice(0, 10) + '.json';
+  a.click();
+  URL.revokeObjectURL(a.href);
+  showStatus('✅ ' + count + ' Profile exportiert', 'success');
+}
+
+// Einzelnes Profil exportieren (per Index aus _profileKeys)
+function profileExportSingle(idx) {
+  const el = document.getElementById('profileListEl');
+  const keys = el._profileKeys;
+  if (!keys || !keys[idx]) return;
+  const name = keys[idx];
+  const profile = PROFILES[name];
+  if (!profile) return;
+  const payload = {
+    _meta: { exportedAt: new Date().toISOString(), version: 1, count: 1 },
+    profiles: { [name]: profile },
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  // Sanitize filename
+  const safeName = name.replace(/[^a-zA-Z0-9_\- ]/g, '_').trim().slice(0, 60);
+  a.download = 'Profil_' + safeName + '.json';
+  a.click();
+  URL.revokeObjectURL(a.href);
+  showStatus('✅ Profil "' + name + '" exportiert', 'success');
+}
+
+// Profile importieren (mit Duplikat-Behandlung)
+function profilesImport() {
+  const inp = document.createElement('input');
+  inp.type = 'file';
+  inp.accept = '.json';
+  inp.onchange = e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      try {
+        const data = JSON.parse(ev.target.result);
+        // Support both {profiles:{...}} format and raw {name:{items:[...]}} format
+        const incoming = data.profiles ?? data;
+        if (typeof incoming !== 'object' || !Object.keys(incoming).length) {
+          showStatus('❌ Keine Profile in der Datei gefunden', 'error');
+          return;
+        }
+        let added = 0, skipped = 0, overwritten = 0;
+        for (const [name, profile] of Object.entries(incoming)) {
+          if (!profile?.items) continue;
+          if (PROFILES[name]) {
+            // Eindeutigen Namen vergeben statt leise überschreiben
+            const unique = _uniqueProfileName(name);
+            PROFILES[unique] = { ...profile, name: unique };
+            overwritten++;
+          } else {
+            PROFILES[name] = profile;
+            added++;
+          }
+        }
+        localStorage.setItem('BC_PROFILES_v11', JSON.stringify(PROFILES));
+        renderProfileList();
+        const msg = [
+          added    ? added + ' neu'           : '',
+          overwritten ? overwritten + ' umbenannt' : '',
+          skipped  ? skipped + ' übersprungen'  : '',
+        ].filter(Boolean).join(', ');
+        showStatus('✅ Import: ' + msg, 'success');
+      } catch(err) {
+        showStatus('❌ Import fehlgeschlagen: ' + err.message, 'error');
+      }
+    };
+    reader.readAsText(file);
+  };
+  inp.click();
 }
 
 function loadProfileByIdx(idx) {
