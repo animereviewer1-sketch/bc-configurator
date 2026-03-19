@@ -2172,23 +2172,26 @@ function wearCurseByData(btn) {
 function stripAllItems() {
   if (!_connected) { showStatus('❌ Nicht mit BC verbunden', 'error'); return; }
 
-  // Determine target: selected member in curse/outfit tab, or Player
   const tgt = _selectedMemberNum || _outfitTargetNum || null;
   const tgtLabel = tgt ? ('Spieler #' + tgt) : 'dich selbst';
 
   if (!confirm(
     '⚡ ALLE Items entfernen von ' + tgtLabel + '?\n\n' +
     '• Entfernt alle Kleidung & Restraints\n' +
-    '• Umgeht Devious Lock (DOGS), normale Schlösser, LSCG-Curses\n' +
+    '• Umgeht Devious Lock (DOGS), alle Schlösser, LSCG-Curses\n' +
+    '• Deaktiviert DOGS-Watcher für 3 Sekunden damit nichts zurückkommt\n' +
     '• Kann nicht rückgängig gemacht werden\n\n' +
     'Fortfahren?'
   )) return;
 
-  // Build the EXEC code string with the target number baked in
   const tgtCode = tgt ? String(Number(tgt)) : 'null';
 
   const code = `(function(){
-  // ── Ziel-Charakter ermitteln ─────────────────────────────
+  // ══════════════════════════════════════════════════
+  //  STRIP ALL – DOGS / DeviousPadlock full bypass
+  // ══════════════════════════════════════════════════
+
+  // ── 1. Ziel-Charakter ermitteln ──────────────────
   var tgtNum = ${tgtCode};
   var C = null;
   if (tgtNum) {
@@ -2197,50 +2200,120 @@ function stripAllItems() {
   }
   if (!C) C = Player;
   if (!C) { console.error('[StripAll] Kein Charakter gefunden'); return; }
+  var isPlayer = (C === Player || C.MemberNumber === Player.MemberNumber);
 
-  // ── Schritt 1: Alle Lock-Properties zerstören ────────────
-  // Entfernt DeviousPadlock (DOGS), ExclusivePadlock, MistressPadlock etc.
-  // – DOGS-Hook auf InventoryGroupIsBlocked prüft Property.LockedBy;
-  //   nach dem Löschen greift der Hook nicht mehr.
+  // ── 2. DOGS-Modul via bcModSdk deaktivieren ──────
+  // DOGS registriert sich als "DOGS" oder "Devious Obligate Great Stuff"
+  // und legt Hooks an. Wir versuchen es zu entladen.
+  var _dogsHookChain = null;
+  try {
+    if (window.bcModSdk) {
+      var mods = (bcModSdk.getModules ? bcModSdk.getModules() : []);
+      var dogsMod = mods.find(function(m){
+        var n = (m.info && m.info.name) || m.name || '';
+        return /dogs|devious.obligate/i.test(n);
+      });
+      if (dogsMod && typeof dogsMod.unload === 'function') {
+        dogsMod.unload();
+        console.log('[StripAll] DOGS via bcModSdk entladen');
+      }
+    }
+  } catch(e){ console.log('[StripAll] bcModSdk-Entladung fehlgeschlagen:', e.message); }
+
+  // ── 3. InventoryGroupIsBlocked temporär patchen ──
+  // DOGS hängt einen Hook in diese Funktion der Gruppen mit
+  // DeviousPadlock als "blocked" markiert → Items können nicht entfernt werden.
+  // Wir ersetzen die gesamte Hook-Chain kurzzeitig mit () => false.
+  var _origIsBlocked = window.InventoryGroupIsBlocked;
+  var _origGroupIsBlocked = window.InventoryGroupIsBlockedForCharacter;
+  window.InventoryGroupIsBlocked = function(){ return false; };
+  if (window.InventoryGroupIsBlockedForCharacter)
+    window.InventoryGroupIsBlockedForCharacter = function(){ return false; };
+
+  // ── 4. DOGS-ExtensionSettings leeren ─────────────
+  // DOGS speichert welche Items es gesperrt hat in Player.ExtensionSettings.
+  // Wenn wir das löschen, kann der Watcher-Intervall nicht mehr re-applyen.
+  try {
+    if (Player.ExtensionSettings) {
+      ['DOGS','dogs','DeviousPadlock','deviousPadlock',
+       'DOGS_Locks','dogs_locks','DeviousLocks'].forEach(function(k){
+        delete Player.ExtensionSettings[k];
+      });
+      // Zum Server syncen damit auch nach Reconnect nichts zurückkommt
+      if (typeof ServerPlayerExtensionSettingsSync === 'function')
+        ['DOGS','DeviousPadlock'].forEach(function(k){
+          try { ServerPlayerExtensionSettingsSync(k); } catch(e){}
+        });
+    }
+  } catch(e){}
+
+  // ── 5. Alle Lock-Properties aus Items zerstören ──
   C.Appearance.forEach(function(item) {
     if (!item || !item.Property) return;
-    // Locks komplett leeren – statt nur LockedBy, da manche Mods
-    // mehrere Felder auswerten
     delete item.Property.LockedBy;
     delete item.Property.LockMemberNumber;
     delete item.Property.MemberNumberListKeys;
     delete item.Property.RemoveOnlyMemberNumber;
     delete item.Property.AllowRemove;
-    delete item.Property.Effect;   // 'Lock' Effect entfernen
-    // DOGS-spezifische Felder (bekannte Varianten)
+    // 'Lock' aus Effect-Array entfernen ohne das Array komplett zu leeren
+    if (Array.isArray(item.Property.Effect)) {
+      item.Property.Effect = item.Property.Effect.filter(function(e){ return e !== 'Lock'; });
+      if (!item.Property.Effect.length) delete item.Property.Effect;
+    } else {
+      delete item.Property.Effect;
+    }
+    // DOGS-spezifische Felder (alle bekannten Varianten)
     delete item.Property.DogsLock;
     delete item.Property.deviousLock;
     delete item.Property.DeviousPadlock;
-    // LSCG: Curse-Aktivierung deaktivieren
+    delete item.Property.dogsLocked;
+    delete item.Property.DOGS;
+    // LSCG
     delete item.Property.LSCGCursed;
     delete item.Property.cursed;
+    // Owner/Lover locks
+    delete item.Property.OwnerIsPlayer;
+    delete item.Property.LoverIsPlayer;
   });
 
-  // ── Schritt 2: Appearance direkt filtern ────────────────
-  // AllowNone === false → Pflicht-Körpergruppe (Body, Eyes, Hair …)
-  // AllowNone === true  → optionales Item → entfernen
-  var kept = C.Appearance.filter(function(item) {
-    if (!item || !item.Asset || !item.Asset.Group) return true; // sicher behalten
-    return item.Asset.Group.AllowNone === false;
+  // ── 6. Appearance direkt filtern (bypass InventoryRemove) ──
+  var before = C.Appearance.length;
+  C.Appearance = C.Appearance.filter(function(item) {
+    if (!item || !item.Asset || !item.Asset.Group) return true;
+    return item.Asset.Group.AllowNone === false; // Pflichtgruppe (Body, Augen, Haare)
   });
+  var removed = before - C.Appearance.length;
 
-  var removedCount = C.Appearance.length - kept.length;
-  C.Appearance = kept;
-
-  // ── Schritt 3: BC synchronisieren ───────────────────────
+  // ── 7. BC synchronisieren ────────────────────────
   try { CharacterRefresh(C, false, false); } catch(e){}
   try { ChatRoomCharacterUpdate(C); } catch(e){}
+  // Für Player: auch ServerPlayerSync damit die Änderung den BC-Server erreicht
+  if (isPlayer) { try { ServerPlayerSync(); } catch(e){} }
 
-  console.log('[StripAll] ' + removedCount + ' Items entfernt von ' + C.Name + ' (#' + C.MemberNumber + ')');
+  // ── 8. Verzögerte Re-Syncs (gewinnt Rennen gegen DOGS-Watcher) ──
+  // DOGS' Intervall läuft i.d.R. jede 1-2s. Wir senden 3 weitere Syncs
+  // damit unser Strip-Zustand gewinnt bevor DOGS re-applyen kann.
+  [400, 900, 1800].forEach(function(ms){
+    setTimeout(function(){
+      try { CharacterRefresh(C, false, false); } catch(e){}
+      try { ChatRoomCharacterUpdate(C); } catch(e){}
+      if (isPlayer) { try { ServerPlayerSync(); } catch(e){} }
+    }, ms);
+  });
+
+  // ── 9. Original-Funktionen nach 3s wiederherstellen ──
+  setTimeout(function(){
+    if (_origIsBlocked) window.InventoryGroupIsBlocked = _origIsBlocked;
+    if (_origGroupIsBlocked) window.InventoryGroupIsBlockedForCharacter = _origGroupIsBlocked;
+    console.log('[StripAll] Hook-Patch aufgehoben – normale Lock-Funktionen wiederhergestellt');
+  }, 3000);
+
+  console.log('[StripAll] ' + removed + ' Items entfernt von ' + C.Name
+    + ' (#' + C.MemberNumber + ') – DOGS-Bypass aktiv für 3s');
 })();`;
 
   bcSend({ type: 'EXEC', code });
-  showStatus('⚡ Strip-All gesendet für ' + tgtLabel + ' – alle Locks umgangen', 'success');
+  showStatus('⚡ Strip-All: ' + tgtLabel + ' – DOGS-Bypass aktiv, 3× Re-Sync läuft...', 'success');
 }
 
 function wearCurse(dbKey, targetNum) {
