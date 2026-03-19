@@ -2253,23 +2253,24 @@ function _fetchOutfitAndSave(ownerNum, defaultName, fallbackItems) {
 }
 
 // Button: 💾 Profil (pro Curse-Zeile) → speichert das KOMPLETTE Outfit des Owners
+// Button: 💾 Profil (pro Curse-Zeile) → speichert das KOMPLETTE Outfit des eigenen Spielers (Player)
 function curseSaveAsProfile(dbKey) {
   const entry = CURSE_DB[dbKey];
   if (!entry) { showStatus('❌ Eintrag nicht gefunden', 'error'); return; }
-  const ownerNum  = entry.Besitzer?.Nummer ?? null;
-  const ownerName = entry.Besitzer?.Name   ?? (ownerNum ? '#' + ownerNum : 'Spieler');
-  const defaultName = ownerName + ' – Outfit';
-  _fetchOutfitAndSave(ownerNum, defaultName, [_curseEntryToProfileItem(entry)]);
+  // Defaultname aus CraftName des Curses – Outfit kommt aber vom eigenen Player
+  const defaultName = (entry.CraftName || entry.ItemName || 'Curse') + ' – Outfit';
+  _fetchOutfitAndSave(null, defaultName, [_curseEntryToProfileItem(entry)]);
 }
 
-// Button: 💾 Alle speichern (Owner-Header) → speichert das KOMPLETTE Outfit des Owners
+// Button: 💾 Alle speichern (Owner-Header) → speichert das KOMPLETTE Outfit des eigenen Spielers (Player)
 function curseSaveAllAsProfile(ownerNum) {
   const entries = Object.entries(CURSE_DB)
     .filter(([, e]) => String(e.Besitzer?.Nummer ?? '') === String(ownerNum))
     .map(([, e]) => e);
   const ownerName = entries[0]?.Besitzer?.Name || ('#' + ownerNum);
-  const defaultName = ownerName + ' – Outfit';
-  _fetchOutfitAndSave(ownerNum, defaultName, entries.map(_curseEntryToProfileItem));
+  // Outfit kommt vom eigenen Player, nicht vom Curse-Owner
+  const defaultName = ownerName + ' – Outfit (Player)';
+  _fetchOutfitAndSave(null, defaultName, entries.map(_curseEntryToProfileItem));
 }
 
 // ── Export / Import ───────────────────────────────────
