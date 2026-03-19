@@ -1657,13 +1657,50 @@ function loadProfile(name) {
 
   const restored = [];
   for (const item of profile.items) {
-    // cfg aus CACHE rekonstruieren
     const cfg = CACHE[item.group]?.[item.asset];
-    if (!cfg) {
-      console.warn('⚠️ Item nicht im Cache: ' + item.group + '/' + item.asset);
+    if (!cfg) console.warn('⚠️ Item nicht im Cache: ' + item.group + '/' + item.asset);
+
+    // ── propCode aus gespeichertem TypeRecord rekonstruieren ──
+    // TypeRecord bestimmt Variante/Layer des Items (z.B. Seil-Konfiguration).
+    // Ohne das sieht das Item anders aus als beim Original.
+    const tr = (item.tr && Object.keys(item.tr).length) ? item.tr : null;
+    let propCode = '';
+    if (tr) {
+      const trStr = JSON.stringify(tr);
+      // Type-String aus TypeRecord berechnen (gleiche Logik wie BC intern)
+      const typeStr = Object.entries(tr).map(([k,v]) => k + v).join('');
+      propCode = '\n    item.Property = item.Property ?? {};'
+               + '\n    item.Property.TypeRecord = ' + trStr + ';'
+               + '\n    item.Property.Type = ' + JSON.stringify(typeStr) + ';';
     }
-    // propCode + craftStr neu generieren (leer – werden beim Benutzen via generate() neu gesetzt)
-    restored.push({ ...item, cfg: cfg ?? {}, propCode: '', craftStr: '' });
+
+    // ── craftStr aus gespeichertem Craft-Objekt rekonstruieren ──
+    // Craft enthält CraftName/Description/Property die das Aussehen beeinflussen.
+    let craftStr = '';
+    const craft = item.craft;
+    if (craft && craft.Name) {
+      const craftCol = Array.isArray(item.colors) ? item.colors[0] : (item.colors ?? '#808080');
+      craftStr = ',\n  {\n    Name: ' + JSON.stringify(craft.Name)
+               + ',\n    Description: ' + JSON.stringify(craft.Description ?? '')
+               + ',\n    Property: ' + JSON.stringify(craft.Property ?? 'Normal')
+               + ',\n    Color: ' + JSON.stringify(craftCol === 'Default' ? '#808080' : craftCol)
+               + ',\n    Lock: "", Item: ' + JSON.stringify(item.asset)
+               + ', Private: ' + (craft.Private ? 'true' : 'false')
+               + ', MemberNumber: Player.MemberNumber,\n  }';
+    }
+
+    // ── lockParams aus gespeichertem lock rekonstruieren ──
+    const lockParams = { timer: 0, combo: '', password: '', relMember: item.lockMember || 0, relTimer: 0 };
+
+    restored.push({
+      ...item,
+      cfg:        cfg ?? {},
+      propCode,
+      craftStr,
+      lockParams,
+      trStr:      tr ? JSON.stringify(tr) : '{}',
+      typeStr:    tr ? Object.entries(tr).map(([k,v]) => k + v).join('') : '',
+    });
   }
 
   OUTFIT = restored;
