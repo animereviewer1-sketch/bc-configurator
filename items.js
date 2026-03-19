@@ -2187,49 +2187,22 @@ function stripAllItems() {
 
   const tgtCode = tgt ? String(Number(tgt)) : 'null';
 
-  // ── Safeword-Strategie ────────────────────────────────────────────────
-  // BC's ChatRoomSafewordChatCommand() entfernt alle Restraints auf dem
-  // eigenen Charakter und überträgt das zum Server. DOGS *darf* den Safeword
-  // per Design nicht blockieren und tut es auch nicht.
-  //
-  // Für andere Spieler gibt es keinen direkten „Remote-Safeword"-Call, daher:
-  //  • Eigener Charakter (Player)  → ChatRoomSafewordChatCommand()
-  //  • Anderer Spieler             → bcModSdk-Hook + direkter Appearance-Strip
-  //    (DOGS' ChatRoomSyncSingle-Hook wird als outermost wrapper abgefangen)
-  // ─────────────────────────────────────────────────────────────────────
-
   const code = `(function(){
-  var _tgtNum = ${tgtCode};
-  var _isPlayer = !_tgtNum || _tgtNum === Player.MemberNumber;
+  // ══════════════════════════════════════════════════════════════
+  //  STRIP ALL v4
+  //  Reihenfolge ist entscheidend:
+  //    1. bcModSdk-Hook registrieren (Prio 999999, outermost)
+  //    2. ERST DANN Safeword / Strip auslösen
+  //  → Wenn der Server-Sync nach dem Safeword zurückkommt,
+  //    ist unser Hook bereits aktiv und DOGS sieht saubere Daten.
+  // ══════════════════════════════════════════════════════════════
 
-  // ════════════════════════════════════════════════
-  //  FALL A: Eigener Charakter → nativer Safeword
-  // ════════════════════════════════════════════════
-  if (_isPlayer) {
-    try {
-      // ChatRoomSafewordChatCommand() ist der offizielle BC-Safeword-Befehl.
-      // Entfernt alle Restraints und synct zum Server.
-      // DOGS blockiert diesen Pfad nicht (wäre gegen BC-Policy).
-      if (typeof ChatRoomSafewordChatCommand === 'function') {
-        ChatRoomSafewordChatCommand();
-        console.log('[StripAll] Safeword ausgelöst via ChatRoomSafewordChatCommand()');
-        return;
-      }
-    } catch(e) {
-      console.warn('[StripAll] ChatRoomSafewordChatCommand fehlgeschlagen:', e.message);
-    }
-    // Fallback falls die Funktion nicht existiert (ältere BC-Version)
-    try {
-      if (typeof ActionSafeword === 'function') { ActionSafeword(Player); return; }
-    } catch(e){}
-  }
-
-  // ════════════════════════════════════════════════
-  //  FALL B: Anderer Spieler → bcModSdk-Hook bypass
-  // ════════════════════════════════════════════════
   var _ACTIVE     = true;
   var _hookHandle = null;
+  var _tgtNum     = ${tgtCode};
+  var _isPlayer   = !_tgtNum || _tgtNum === Player.MemberNumber;
 
+  // ── Hilfsfunktionen ──────────────────────────────────────────
   function _cleanItem(item) {
     if (!item || !item.Property) return;
     ['LockedBy','LockMemberNumber','MemberNumberListKeys','RemoveOnlyMemberNumber',
@@ -2254,46 +2227,52 @@ function stripAllItems() {
     return before - C.Appearance.length;
   }
 
-  var C = (typeof ChatRoomCharacter !== 'undefined' ? ChatRoomCharacter : [])
-            .find(function(c){ return c.MemberNumber === _tgtNum; }) || null;
-  if (!C) { console.error('[StripAll] Ziel nicht im Raum: #' + _tgtNum); return; }
+  function _findChar() {
+    if (_isPlayer) return Player;
+    return (typeof ChatRoomCharacter !== 'undefined' ? ChatRoomCharacter : [])
+      .find(function(c){ return c.MemberNumber === _tgtNum; }) || null;
+  }
 
-  // bcModSdk-Hook: höchste Priorität = outermost wrapper
-  // PRE:  Bundle bereinigen bevor DOGS ihn liest
-  // POST: DOGS' Re-Apply rückgängig machen (kein ChatRoomCharacterUpdate → kein Loop)
+  // ── SCHRITT 1: Hook registrieren BEVOR Safeword/Strip ────────
+  // Damit ist der Interceptor aktiv wenn der Server-Bundle zurückkommt.
   if (window.bcModSdk && typeof bcModSdk.hookFunction === 'function') {
     try {
       _hookHandle = bcModSdk.hookFunction('ChatRoomSyncSingle', 999999, function(args, next) {
         if (!_ACTIVE) return next(args);
+
+        // PRE: Bundle bereinigen bevor DOGS ihn sieht
         var bundle = args && args[0];
         if (bundle) {
-          if (bundle.Appearance && Array.isArray(bundle.Appearance)) {
+          if (Array.isArray(bundle.Appearance)) {
             bundle.Appearance.forEach(_cleanItem);
             bundle.Appearance = bundle.Appearance.filter(function(item){
               return item && !/^DeviousPadlock/i.test(item.Name || item.Asset || '');
             });
           }
-          if (bundle.Character && bundle.Character.Appearance)
+          if (bundle.Character && Array.isArray(bundle.Character.Appearance))
             bundle.Character.Appearance.forEach(_cleanItem);
         }
+
+        // Alle anderen Hooks laufen (inkl. DOGS)
         var result = next(args);
-        // POST: nach DOGS nochmal strippen, nur lokaler Refresh
-        var postC = (typeof ChatRoomCharacter !== 'undefined' ? ChatRoomCharacter : [])
-                      .find(function(c){ return c.MemberNumber === _tgtNum; }) || null;
+
+        // POST: Was DOGS re-applied hat wegmachen – nur lokaler Refresh, kein Server-Sync
+        var postC = _findChar();
         if (postC) {
           _stripChar(postC);
           try { CharacterRefresh(postC, false, false); } catch(e){}
         }
         return result;
       });
+      console.log('[StripAll] Hook registriert (Prio 999999)');
     } catch(e) { console.warn('[StripAll] hookFunction:', e.message); }
   }
 
-  // DOGS ExtensionSettings leeren
+  // ── SCHRITT 2: DOGS ExtensionSettings leeren ─────────────────
   try {
-    ['DOGS','dogs','DeviousPadlock','deviousPadlock','DOGS_Locks','dogs_locks',
-     'DeviousLocks','dogsData'].forEach(function(k){
-      if (k in Player.ExtensionSettings) {
+    ['DOGS','dogs','DeviousPadlock','deviousPadlock','DOGS_Locks',
+     'dogs_locks','DeviousLocks','dogsData'].forEach(function(k){
+      if (Player.ExtensionSettings && k in Player.ExtensionSettings) {
         delete Player.ExtensionSettings[k];
         try { if (typeof ServerPlayerExtensionSettingsSync === 'function')
           ServerPlayerExtensionSettingsSync(k); } catch(e){}
@@ -2301,24 +2280,48 @@ function stripAllItems() {
     });
   } catch(e){}
 
-  var removed = _stripChar(C);
-  try { CharacterRefresh(C, false, false); } catch(e){}
-  try { ChatRoomCharacterUpdate(C); } catch(e){}
+  // ── SCHRITT 3: Safeword / Strip auslösen ─────────────────────
+  // Hook ist jetzt aktiv → Server-Bundle wird abgefangen
+  if (_isPlayer) {
+    try {
+      if (typeof ChatRoomSafewordChatCommand === 'function') {
+        ChatRoomSafewordChatCommand();
+        console.log('[StripAll] ChatRoomSafewordChatCommand() ausgeführt');
+      } else if (typeof ActionSafeword === 'function') {
+        ActionSafeword(Player);
+      } else {
+        // Absoluter Fallback: direkt strippen + syncen
+        _stripChar(Player);
+        try { CharacterRefresh(Player, false, false); } catch(e){}
+        try { ChatRoomCharacterUpdate(Player); } catch(e){}
+        try { ServerPlayerSync(); } catch(e){}
+      }
+    } catch(e) {
+      console.warn('[StripAll] Safeword-Aufruf fehlgeschlagen:', e.message);
+    }
+  } else {
+    // Anderer Spieler: direkter Strip
+    var C = _findChar();
+    if (!C) { console.error('[StripAll] Ziel nicht im Raum: #' + _tgtNum); return; }
+    var removed = _stripChar(C);
+    try { CharacterRefresh(C, false, false); } catch(e){}
+    try { ChatRoomCharacterUpdate(C); } catch(e){}
+    console.log('[StripAll] ' + removed + ' Items entfernt · ' + C.Name + ' #' + C.MemberNumber);
+  }
 
+  // ── SCHRITT 4: Hook nach 10s entfernen ───────────────────────
   setTimeout(function(){
     _ACTIVE = false;
     if (_hookHandle && typeof _hookHandle.remove === 'function') {
       try { _hookHandle.remove(); } catch(e){}
-      console.log('[StripAll] Hook entfernt');
+      console.log('[StripAll] Hook entfernt – normaler Betrieb');
     }
   }, 10000);
-
-  console.log('[StripAll] ' + removed + ' Items entfernt · Ziel: ' + C.Name + ' #' + C.MemberNumber);
 })();`;
 
   bcSend({ type: 'EXEC', code });
   const label = tgt ? ('Spieler #' + tgt) : 'dich selbst';
-  showStatus('⚡ Strip-All: ' + label + (tgt ? ' – bcModSdk-Hook 10s' : ' – nativer Safeword'), 'success');
+  showStatus('⚡ Strip-All: ' + label + ' – Hook aktiv, dann Safeword', 'success');
 }
 function wearCurse(dbKey, targetNum) {
   if (!_connected) { showStatus('❌ Nicht verbunden', 'error'); return; }
