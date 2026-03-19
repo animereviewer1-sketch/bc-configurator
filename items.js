@@ -1331,36 +1331,49 @@ function encVal(val) {
 
 // ── Innerer Code-Block (ohne TARGET-Deklaration) ────
 function buildItemInner({ group, asset, colors, tr, trStr, typeStr, propCode, craftStr, lock, lockParams, tightCode, delayOffset,
-                          overridePriority, layerProperties, difficulty }) {
+                          overridePriority, layerProperties, difficulty, property }) {
   const delay = delayOffset ?? 600;
   const BCX_LOCKS_L = ['LewdCrestPadlock','DeviousPadlock','LuziPadlock'];
   const REL_LOCKS_L = ['OwnerPadlock','LoversPadlock','MistressPadlock'];
 
-  // ── Build complete Property object ──────────────────────────────────────
-  // Assemble ONCE as a JS object, base64-encode it → no inline JSON syntax risk
-  const propObj = {};
-  if (tr && Object.keys(tr).length) {
-    propObj.TypeRecord = tr;
-    propObj.Type = Object.entries(tr).map(([k,v]) => k+v).join('');
+  // ── Build the full property snapshot ────────────────────────────────────
+  // Prefer 'property' (full snapshot from loader). Fall back to legacy fields.
+  // We exclude layer-visual props from propB64 so we can set them AFTER ExtendedItemInit.
+  // ExtendedItemInit resets LayerProperties → must be set after.
+  const fullProp = property ? Object.assign({}, property) : null;
+  // Merge legacy fields into fullProp if not already there
+  if (!fullProp?.TypeRecord && tr && Object.keys(tr).length) {
+    (fullProp ?? {})[0]; // just a guard
   }
-  if (overridePriority != null) propObj.OverridePriority = overridePriority;
-  if (layerProperties && Object.keys(layerProperties).length) propObj.LayerProperties = layerProperties;
 
-  // Legacy propCode may add more fields (modular archetype etc.)
-  // We keep the delay-based propCode path for those, but only for items that
-  // don't already have full data (backward compat with manually built outfits)
-  const hasPropObj = Object.keys(propObj).length > 0;
-  const propB64     = hasPropObj ? btoa(unescape(encodeURIComponent(JSON.stringify(propObj)))) : null;
-
-  // ── Build Craft object (base64 to avoid quote/escape issues) ─────────────
-  let craftB64 = null;
-  if (craftStr) {
-    // craftStr is a JS literal string fragment like ",\n  {Name:...}"
-    // Parse it as JSON by extracting the object – safest: re-encode from item data
-    // (craftStr is already built from JSON.stringify'd values, so this is safe)
-    // We just embed craftStr directly – it's already JSON-safe because it was
-    // built with JSON.stringify for Name/Description etc.
+  // Properties to apply BEFORE ExtendedItemInit (TypeRecord sets the variant)
+  const preProp = {};
+  const hasTr = tr && Object.keys(tr).length;
+  if (hasTr) {
+    preProp.TypeRecord = tr;
+    preProp.Type = Object.entries(tr).map(([k,v]) => k+v).join('');
   }
+  // Also include non-visual props from fullProp
+  if (fullProp) {
+    for (const [k,v] of Object.entries(fullProp)) {
+      if (k !== 'TypeRecord' && k !== 'Type' && k !== 'OverridePriority' && k !== 'LayerProperties') {
+        preProp[k] = v;
+      }
+    }
+  }
+
+  // Properties to apply AFTER ExtendedItemInit (visual layer overrides)
+  const postProp = {};
+  if (fullProp?.OverridePriority != null) postProp.OverridePriority = fullProp.OverridePriority;
+  else if (overridePriority != null)      postProp.OverridePriority = overridePriority;
+  if (fullProp?.LayerProperties)          postProp.LayerProperties  = fullProp.LayerProperties;
+  else if (layerProperties)               postProp.LayerProperties  = layerProperties;
+
+  const hasPreProp  = Object.keys(preProp).length > 0;
+  const hasPostProp = Object.keys(postProp).length > 0;
+
+  const preB64  = hasPreProp  ? btoa(unescape(encodeURIComponent(JSON.stringify(preProp))))  : null;
+  const postB64 = hasPostProp ? btoa(unescape(encodeURIComponent(JSON.stringify(postProp)))) : null;
 
   // ── Lock code ────────────────────────────────────────────────────────────
   let lockCode = '';
@@ -1368,56 +1381,54 @@ function buildItemInner({ group, asset, colors, tr, trStr, typeStr, propCode, cr
     const isBcx = BCX_LOCKS_L.includes(lock);
     const isRel = REL_LOCKS_L.includes(lock);
     let extra = '';
-    if (lockParams.timer > 0)  extra += '\n      item.Property.RemoveTimer = Date.now() + ' + lockParams.timer + ';';
-    if (lockParams.combo)      extra += '\n      item.Property.CombinationNumber = ' + JSON.stringify(lockParams.combo) + ';';
-    if (lockParams.password)   extra += '\n      item.Property.Password = ' + JSON.stringify(lockParams.password) + ';';
+    if (lockParams?.timer > 0)    extra += '\n      item.Property.RemoveTimer = Date.now() + ' + lockParams.timer + ';';
+    if (lockParams?.combo)         extra += '\n      item.Property.CombinationNumber = ' + JSON.stringify(lockParams.combo) + ';';
+    if (lockParams?.password)      extra += '\n      item.Property.Password = ' + JSON.stringify(lockParams.password) + ';';
     if (isRel) {
-      extra += '\n      item.Property.LockMemberNumber = ' + (lockParams.relMember || 'Player.MemberNumber') + ';';
-      if (lockParams.relTimer > 0) extra += '\n      item.Property.RemoveTimer = Date.now() + ' + lockParams.relTimer + ';';
+      extra += '\n      item.Property.LockMemberNumber = ' + (lockParams?.relMember || 'Player.MemberNumber') + ';';
+      if (lockParams?.relTimer > 0) extra += '\n      item.Property.RemoveTimer = Date.now() + ' + lockParams.relTimer + ';';
     }
-    if (isBcx) {
-      lockCode = '\n    const lockAsset = Asset.find(a => a.Name === ' + JSON.stringify(lock) + ' && a.Group?.Name === "ItemMisc")'
-        + '\n      ?? Asset.find(a => a.Name === ' + JSON.stringify(lock) + ');'
-        + '\n    if (lockAsset) {\n      InventoryLock(TARGET, item, { Asset: lockAsset }, Player.MemberNumber, true);' + extra
-        + '\n      CharacterLoadCanvas(TARGET);\n    } else { console.warn("⚠️ ' + lock + ' nicht gefunden – Addon geladen?"); }';
-    } else {
-      lockCode = '\n    const lockAsset = Asset.find(a => a.Name === ' + JSON.stringify(lock) + ' && a.Group?.Name === "ItemMisc");'
-        + '\n    if (lockAsset) {\n      InventoryLock(TARGET, item, { Asset: lockAsset }, Player.MemberNumber, true);' + extra
-        + '\n      CharacterLoadCanvas(TARGET);\n    } else { console.error("❌ Schloss nicht gefunden: ' + lock + '"); }';
-    }
+    const findLock = isBcx
+      ? 'Asset.find(a => a.Name === ' + JSON.stringify(lock) + ' && a.Group?.Name === "ItemMisc") ?? Asset.find(a => a.Name === ' + JSON.stringify(lock) + ')'
+      : 'Asset.find(a => a.Name === ' + JSON.stringify(lock) + ' && a.Group?.Name === "ItemMisc")';
+    lockCode = '\n    const lockAsset = ' + findLock + ';\n'
+      + '    if (lockAsset) {\n      InventoryLock(TARGET, item, { Asset: lockAsset }, Player.MemberNumber, true);'
+      + extra + '\n      CharacterLoadCanvas(TARGET);\n    }';
   }
 
-  // ── Core item-wear code ──────────────────────────────────────────────────
-  // Step A: InventoryWear (sets Asset reference, base color, craft)
+  // ── Generated code ───────────────────────────────────────────────────────
   let code = '  InventoryWear(TARGET, ' + JSON.stringify(asset) + ', ' + JSON.stringify(group) + ',\n'
-    + '    ' + JSON.stringify(colors) + ', 0, null' + craftStr + '\n  );\n';
-
-  // Step B: After a delay, overwrite ALL properties via base64-decoded object
-  // This is what BC's own import does – write directly to item.Property
-  code += '  setTimeout(() => {\n'
+    + '    ' + JSON.stringify(colors) + ', 0, null' + (craftStr || '') + '\n  );\n'
+    + '  setTimeout(() => {\n'
     + '    const item = InventoryGet(TARGET, ' + JSON.stringify(group) + ');\n'
     + '    if (!item) return console.error("❌ Item nicht gefunden: ' + asset + '");\n'
     + '    item.Color = ' + JSON.stringify(colors) + ';\n'
     + '    item.Property = item.Property ?? {};\n';
 
-  if (propB64) {
-    // Decode and merge full property object (syntax-safe, any value)
-    code += '    Object.assign(item.Property, JSON.parse(decodeURIComponent(escape(atob(' + JSON.stringify(propB64) + ')))));\n';
-    if (propObj.TypeRecord) {
-      code += '    try{ExtendedItemInit(TARGET,item,false,false);}catch(e){}\n';
-    }
+  // STEP A: Apply pre-props (TypeRecord etc.) then ExtendedItemInit
+  if (preB64) {
+    code += '    Object.assign(item.Property, JSON.parse(decodeURIComponent(escape(atob(' + JSON.stringify(preB64) + ')))));\n';
+  }
+  if (hasTr) {
+    code += '    try{ExtendedItemInit(TARGET,item,false,false);}catch(e){}\n';
   }
 
-  // Legacy propCode (modular archetype etc.) – still apply if present beyond base property
-  const legacyProp = (propCode || '').replace(/\s*item\.Property\s*=\s*item\.Property\s*\?\?.*?;\s*/g, '')
-                                       .replace(/item\.Property\.(TypeRecord|Type)\s*=.*?;/g, '');
-  if (legacyProp.trim()) {
-    code += legacyProp + '\n';
+  // STEP B: Apply post-props (LayerProperties, OverridePriority) AFTER ExtendedItemInit
+  // ExtendedItemInit resets these – must be set last
+  if (postB64) {
+    code += '    Object.assign(item.Property, JSON.parse(decodeURIComponent(escape(atob(' + JSON.stringify(postB64) + ')))));\n';
   }
 
+  // Difficulty
   if (difficulty != null) {
     code += '    item.Difficulty = ' + Number(difficulty) + ';\n';
   }
+
+  // Legacy propCode extra fields (modular archetype etc.)
+  const legacyExtra = (propCode || '')
+    .replace(/\s*item\.Property\s*=\s*item\.Property\s*\?\?\s*\{\};\s*/g, '')
+    .replace(/\s*item\.Property\.(TypeRecord|Type)\s*=.*?;\s*/g, '');
+  if (legacyExtra.trim()) code += legacyExtra + '\n';
 
   code += lockCode + '\n'
     + '    CharacterRefresh(TARGET);\n'
@@ -1722,7 +1733,7 @@ function loadProfile(name) {
 
     const tr = (item.tr && typeof item.tr === 'object' && Object.keys(item.tr).length) ? item.tr : null;
 
-    // ── craftStr aus Craft-Objekt ──────────────────────────────────────────
+    // craftStr aus Craft-Objekt
     let craftStr = '';
     const craft = item.craft;
     if (craft && craft.Name) {
@@ -1736,22 +1747,19 @@ function loadProfile(name) {
                + ', MemberNumber: Player.MemberNumber,\n  }';
     }
 
-    // ── lockParams ────────────────────────────────────────────────────────
     const lockParams = { timer: 0, combo: '', password: '', relMember: item.lockMember || 0, relTimer: 0 };
-
-    // ── propCode: only for legacy modular-archetype items ──────────────────
-    // TypeRecord, OverridePriority, LayerProperties are now handled via
-    // buildItemInner's base64-encoded propB64 path – no propCode needed.
-    const propCode = '';
 
     restored.push({
       ...item,
       cfg:              cfg ?? {},
-      propCode,
+      propCode:         '',    // handled via property/preB64/postB64 in buildItemInner
       craftStr,
       lockParams,
       trStr:            tr ? JSON.stringify(tr) : '{}',
       typeStr:          tr ? Object.entries(tr).map(([k,v]) => k+v).join('') : '',
+      // Full property snapshot forwarded to buildItemInner
+      property:         item.property ?? null,
+      // Legacy separate fields kept for backward compat
       overridePriority: item.overridePriority ?? null,
       layerProperties:  item.layerProperties  ?? null,
       difficulty:       item.difficulty       ?? null,
@@ -2276,16 +2284,18 @@ const _pendingOutfitSave = {};
 // Convert a single BC Appearance item (from GET_CHAR_APPEARANCE response) to profile format
 function _appearanceItemToProfile(item) {
   return {
-    asset:            item.asset,
-    group:            item.group,
-    colors:           item.colors ?? '#ffffff',
-    craft:            item.craft   ?? null,
-    lock:             item.lock    ?? null,
-    tr:               item.tr      ?? {},
-    lockMember:       item.lockMember ?? null,
+    asset:      item.asset,
+    group:      item.group,
+    colors:     item.colors     ?? '#ffffff',
+    craft:      item.craft      ?? null,
+    lock:       item.lock       ?? null,
+    tr:         item.tr         ?? {},
+    lockMember: item.lockMember ?? null,
+    property:   item.property   ?? null,   // full WCE/mod property snapshot
+    difficulty: item.difficulty ?? null,
+    // legacy separate fields kept for backward compat
     overridePriority: item.overridePriority ?? null,
     layerProperties:  item.layerProperties  ?? null,
-    difficulty:       item.difficulty       ?? null,
   };
 }
 

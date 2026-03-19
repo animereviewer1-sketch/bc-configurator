@@ -787,34 +787,40 @@ window.CurseScanner = (() => {
               'ExpressionFull',
             ]);
 
+            const _PROP_SKIP = new Set([
+              'LockedBy','LockMemberNumber','RemoveTimer','Password','CombinationNumber',
+              'MemberNumberListKeys','LockPickSeed','ShowTimer',
+            ]);
+
             const _items = (_C.Appearance ?? [])
               .filter(item => {
                 if (!item?.Asset?.Group) return false;
                 const gn = item.Asset.Group.Name ?? '';
                 if (_SKIP_GROUPS.has(gn)) return false;
-                // AllowNone===false → mandatory anatomy slot → skip
                 if (item.Asset.Group.AllowNone === false) return false;
                 return true;
               })
               .map(item => {
                 const prop = item.Property ?? {};
-                // TypeRecord: only keep if non-empty
                 const tr = prop.TypeRecord && Object.keys(prop.TypeRecord).length
                   ? prop.TypeRecord : undefined;
+                // Save full Property object minus lock-specific fields.
+                // Captures TypeRecord, Type, OverridePriority, LayerProperties (WCE hidden layers)
+                // and ALL other mod properties in one shot – nothing gets missed.
+                const savedProp = {};
+                for (const [k, v] of Object.entries(prop)) {
+                  if (!_PROP_SKIP.has(k)) savedProp[k] = v;
+                }
                 return {
-                  asset:          item.Asset.Name,
-                  group:          item.Asset.Group.Name,
-                  colors:         item.Color ?? '#ffffff',
-                  craft:          item.Craft ?? null,
-                  lock:           prop.LockedBy ?? null,
-                  tr:             tr,
-                  lockMember:     prop.LockMemberNumber ?? null,
-                  // WCE layer properties: total priority + per-layer priority/hiding
-                  overridePriority: prop.OverridePriority ?? null,
-                  layerProperties:  (prop.LayerProperties && Object.keys(prop.LayerProperties).length)
-                                      ? prop.LayerProperties : null,
-                  // Other common properties that affect appearance
-                  difficulty:     item.Difficulty ?? null,
+                  asset:      item.Asset.Name,
+                  group:      item.Asset.Group.Name,
+                  colors:     item.Color ?? '#ffffff',
+                  craft:      item.Craft ?? null,
+                  lock:       prop.LockedBy ?? null,
+                  lockMember: prop.LockMemberNumber ?? null,
+                  tr,
+                  property:   Object.keys(savedProp).length ? savedProp : null,
+                  difficulty: item.Difficulty ?? null,
                 };
               });
 
