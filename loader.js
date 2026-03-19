@@ -763,6 +763,71 @@ window.CurseScanner = (() => {
           break;
         }
 
+        case 'GET_CHAR_APPEARANCE': {
+          // Returns the full Appearance of a character as a saveable profile item list.
+          // memberNum: number – target character. null/undefined → Player.
+          // reqId: string – echoed back so the popup can match the response to a callback.
+          try {
+            const _targetNum = ev.data.memberNum;
+            let _C = null;
+            if (_targetNum) {
+              _C = (window.ChatRoomCharacter ?? []).find(c => c.MemberNumber === _targetNum) ?? null;
+            }
+            if (!_C) _C = window.Player;
+            if (!_C) throw new Error('Charakter nicht gefunden');
+
+            // Convert BC Appearance items → profile item format
+            // Skip groups where AllowNone===false AND the group name suggests base anatomy
+            // (Body, BodyUpper, BodyLower, Mouth, Eyes*, Head base) – these are not clothes.
+            // Everything else (hair, clothes, restraints, accessories, piercings, locks) → include.
+            const _SKIP_GROUPS = new Set([
+              'BodyUpper','BodyLower','BodyMarkings',
+              'Eyes','Eyes2','EyesColor','EyesColor2',
+              'Mouth','Head','Blush','Emoticon','Fluids',
+              'ExpressionFull',
+            ]);
+
+            const _items = (_C.Appearance ?? [])
+              .filter(item => {
+                if (!item?.Asset?.Group) return false;
+                const gn = item.Asset.Group.Name ?? '';
+                if (_SKIP_GROUPS.has(gn)) return false;
+                // AllowNone===false → mandatory anatomy slot → skip
+                if (item.Asset.Group.AllowNone === false) return false;
+                return true;
+              })
+              .map(item => {
+                const prop = item.Property ?? {};
+                // TypeRecord: only keep if non-empty
+                const tr = prop.TypeRecord && Object.keys(prop.TypeRecord).length
+                  ? prop.TypeRecord : undefined;
+                return {
+                  asset:  item.Asset.Name,
+                  group:  item.Asset.Group.Name,
+                  colors: item.Color ?? '#ffffff',
+                  craft:  item.Craft ?? null,
+                  lock:   prop.LockedBy ?? null,
+                  tr:     tr,
+                  // Preserve lock member so bot can re-lock correctly
+                  lockMember: prop.LockMemberNumber ?? null,
+                };
+              });
+
+            src.postMessage({
+              app: APP, type: 'CHAR_APPEARANCE_DATA',
+              reqId: ev.data.reqId,
+              memberNum: _C.MemberNumber,
+              name: _C.Name,
+              items: _items,
+            }, ALLOWED_ORIGIN);
+            BCK.ok('CHAR_APPEARANCE_DATA: ' + _items.length + ' Items für ' + _C.Name);
+          } catch (ex) {
+            src.postMessage({ app: APP, type: 'CHAR_APPEARANCE_DATA',
+              reqId: ev.data.reqId, err: ex.message }, ALLOWED_ORIGIN);
+          }
+          break;
+        }
+
         case 'EXEC': {
           const _execCode = ev.data.code;
           const _execLen  = _execCode?.length ?? 0;

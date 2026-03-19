@@ -2168,186 +2168,7 @@ function wearCurseByData(btn) {
   wearCurse(key, targetNum);
 }
 
-// ── Strip All Items (incl. Devious Lock / DOGS bypass) ──────────────────
-function stripAllItems() {
-  if (!_connected) { showStatus('❌ Nicht mit BC verbunden', 'error'); return; }
 
-  const tgt = _selectedMemberNum || _outfitTargetNum || null;
-  const tgtLabel = tgt ? ('Spieler #' + tgt) : 'dich selbst';
-
-  if (!confirm(
-    '⚡ ALLE Items entfernen von ' + tgtLabel + '?\n\n' +
-    '• Entfernt alle Kleidung & Restraints\n' +
-    '• Umgeht Devious Lock (DOGS) via bcModSdk-Hook\n' +
-    '• Intercepts ChatRoomSyncSingle – DOGS kann nicht re-applyen\n' +
-    '• Hook bleibt 10s aktiv, danach automatisch entfernt\n' +
-    '• Kann nicht rückgängig gemacht werden\n\n' +
-    'Fortfahren?'
-  )) return;
-
-  const tgtCode = tgt ? String(Number(tgt)) : 'null';
-
-  const code = `(function(){
-  // ══════════════════════════════════════════════════════════════
-  //  STRIP ALL v5 – InventoryWear / InventoryLock Intercept
-  //
-  //  Neue Strategie: Statt den Sync-Hook zu patchen, patchen wir
-  //  direkt die Funktionen die DOGS zum Re-Applyen aufruft:
-  //    - InventoryWear()  → DOGS trägt Items auf
-  //    - InventoryLock()  → DOGS legt Schlösser an
-  //    - InventoryAdd()   → Fallback-Pfad
-  //
-  //  Wenn diese Funktionen für den Ziel-Char temporär blockiert
-  //  sind, kann DOGS physisch nichts re-applyen – egal ob via
-  //  Interval, ChatRoomSyncSingle, oder sonst einem Pfad.
-  //
-  //  Danach: Safeword auslösen.
-  //  Reihenfolge: Patch → Safeword → 10s warten → Patch entfernen
-  // ══════════════════════════════════════════════════════════════
-
-  var _tgtNum   = ${tgtCode};
-  var _isPlayer = !_tgtNum || _tgtNum === Player.MemberNumber;
-
-  // ── Hilfsfunktionen ──────────────────────────────────────────
-  function _cleanItem(item) {
-    if (!item || !item.Property) return;
-    ['LockedBy','LockMemberNumber','MemberNumberListKeys','RemoveOnlyMemberNumber',
-     'AllowRemove','DogsLock','DOGS','deviousLock','DeviousPadlock',
-     'dogsLocked','LSCGCursed','cursed'].forEach(function(k){ delete item.Property[k]; });
-    if (Array.isArray(item.Property.Effect)) {
-      item.Property.Effect = item.Property.Effect.filter(function(e){ return e !== 'Lock'; });
-      if (!item.Property.Effect.length) delete item.Property.Effect;
-    } else { delete item.Property.Effect; }
-  }
-
-  function _stripChar(C) {
-    if (!C || !C.Appearance) return 0;
-    C.Appearance.forEach(_cleanItem);
-    var before = C.Appearance.length;
-    C.Appearance = C.Appearance.filter(function(item){
-      if (!item || !item.Asset || !item.Asset.Group) return true;
-      return item.Asset.Group.AllowNone === false;
-    });
-    return before - C.Appearance.length;
-  }
-
-  function _findChar() {
-    if (_isPlayer) return Player;
-    return (typeof ChatRoomCharacter !== 'undefined' ? ChatRoomCharacter : [])
-      .find(function(c){ return c.MemberNumber === _tgtNum; }) || null;
-  }
-
-  var _targetMemberNum = _isPlayer ? Player.MemberNumber : _tgtNum;
-
-  // ── SCHRITT 1: InventoryWear + InventoryLock patchen ─────────
-  // Wir wrappen die Original-Funktionen.
-  // Wenn der Ziel-Char betroffen ist UND das Item eine
-  // DeviousPadlock-Property hat → Aufruf wird blockiert.
-  // Alle anderen Aufrufe (andere Chars, normale Items) → normal.
-  var _origWear = window.InventoryWear;
-  var _origLock = window.InventoryLock;
-  var _origAdd  = window.InventoryAdd;
-
-  function _isDogsLockItem(property) {
-    if (!property) return false;
-    return !!(property.LockedBy === 'DeviousPadlock'
-           || property.DogsLock
-           || property.DOGS
-           || property.deviousLock
-           || property.DeviousPadlock
-           || property.dogsLocked);
-  }
-
-  window.InventoryWear = function(C, AssetName, AssetGroup, Color, Difficulty, MemberNumber, Craft, Refresh) {
-    // Blockiere wenn: Ziel-Char betroffen UND es sich um einen DeviousPadlock handelt
-    if (C && C.MemberNumber === _targetMemberNum) {
-      if (/DeviousPadlock/i.test(AssetName || '')) {
-        console.log('[StripAll] InventoryWear blockiert (DeviousPadlock):', AssetName, AssetGroup);
-        return;
-      }
-      // Prüfe ob das Item nach dem Tragen sofort gesperrt würde (über Craft/Property)
-      // Zur Sicherheit: falls Craft ein Lock-Property enthält, auch blockieren
-      if (Craft && _isDogsLockItem(Craft.Property)) {
-        console.log('[StripAll] InventoryWear blockiert (Craft mit Lock):', AssetName);
-        return;
-      }
-    }
-    return _origWear.apply(this, arguments);
-  };
-
-  window.InventoryLock = function(C, Item, Lock, MemberNumber, Update) {
-    if (C && C.MemberNumber === _targetMemberNum) {
-      var lockName = (typeof Lock === 'string') ? Lock : (Lock && (Lock.Name || (Lock.Asset && Lock.Asset.Name)));
-      if (/DeviousPadlock/i.test(lockName || '')) {
-        console.log('[StripAll] InventoryLock blockiert:', lockName);
-        return;
-      }
-    }
-    return _origLock.apply(this, arguments);
-  };
-
-  // InventoryAdd ebenfalls abfangen (manche Mods nutzen das statt InventoryWear)
-  window.InventoryAdd = function(C, AssetName, AssetGroup, Refresh) {
-    if (C && C.MemberNumber === _targetMemberNum) {
-      if (/DeviousPadlock/i.test(AssetName || '')) {
-        console.log('[StripAll] InventoryAdd blockiert:', AssetName);
-        return;
-      }
-    }
-    return _origAdd.apply(this, arguments);
-  };
-
-  console.log('[StripAll] InventoryWear/Lock/Add gepatcht – DeviousPadlock blockiert');
-
-  // ── SCHRITT 2: DOGS ExtensionSettings leeren ─────────────────
-  try {
-    ['DOGS','dogs','DeviousPadlock','deviousPadlock','DOGS_Locks',
-     'dogs_locks','DeviousLocks','dogsData'].forEach(function(k){
-      if (Player.ExtensionSettings && k in Player.ExtensionSettings) {
-        delete Player.ExtensionSettings[k];
-        try { if (typeof ServerPlayerExtensionSettingsSync === 'function')
-          ServerPlayerExtensionSettingsSync(k); } catch(e){}
-      }
-    });
-  } catch(e){}
-
-  // ── SCHRITT 3: Strippen (Safeword oder direkt) ───────────────
-  if (_isPlayer) {
-    try {
-      if (typeof ChatRoomSafewordChatCommand === 'function') {
-        ChatRoomSafewordChatCommand();
-        console.log('[StripAll] Safeword ausgelöst');
-      } else if (typeof ActionSafeword === 'function') {
-        ActionSafeword(Player);
-      } else {
-        _stripChar(Player);
-        try { CharacterRefresh(Player, false, false); } catch(e){}
-        try { ChatRoomCharacterUpdate(Player); } catch(e){}
-        try { ServerPlayerSync(); } catch(e){}
-      }
-    } catch(e) { console.warn('[StripAll] Safeword-Fehler:', e.message); }
-  } else {
-    var C = _findChar();
-    if (!C) { console.error('[StripAll] Ziel nicht im Raum'); return; }
-    _stripChar(C);
-    try { CharacterRefresh(C, false, false); } catch(e){}
-    try { ChatRoomCharacterUpdate(C); } catch(e){}
-    console.log('[StripAll] Direkt gestripped: ' + C.Name + ' #' + C.MemberNumber);
-  }
-
-  // ── SCHRITT 4: Nach 10s Patches entfernen ────────────────────
-  setTimeout(function(){
-    if (_origWear) window.InventoryWear = _origWear;
-    if (_origLock) window.InventoryLock = _origLock;
-    if (_origAdd)  window.InventoryAdd  = _origAdd;
-    console.log('[StripAll] InventoryWear/Lock/Add wiederhergestellt');
-  }, 10000);
-})();`;
-
-  bcSend({ type: 'EXEC', code });
-  const label = tgt ? ('Spieler #' + tgt) : 'dich selbst';
-  showStatus('⚡ Strip-All: ' + label + ' – InventoryWear/Lock gepatcht (10s)', 'success');
-}
 function wearCurse(dbKey, targetNum) {
   if (!_connected) { showStatus('❌ Nicht verbunden', 'error'); return; }
   const entry = CURSE_DB[dbKey] ?? null;
@@ -2357,60 +2178,98 @@ function wearCurse(dbKey, targetNum) {
 }
 
 // ── Curse → Outfit-Profil speichern ─────────────────────────────────────
+// Pending GET_CHAR_APPEARANCE callbacks: reqId → callback(items, name)
+const _pendingOutfitSave = {};
+
+// Convert a single BC Appearance item (from GET_CHAR_APPEARANCE response) to profile format
+function _appearanceItemToProfile(item) {
+  return {
+    asset:   item.asset,
+    group:   item.group,
+    colors:  item.colors ?? '#ffffff',
+    craft:   item.craft   ?? null,
+    lock:    item.lock    ?? null,
+    tr:      item.tr      ?? {},
+  };
+}
+
+// Fallback: build a single-item profile from a CURSE_DB entry (when offline)
 function _curseEntryToProfileItem(entry) {
   let col = entry.Farbe;
   if (typeof col === 'string' && col.includes(',')) col = col.split(',');
   if (!Array.isArray(col)) col = col ? [col] : ['#ffffff'];
   return {
-    asset: entry.ItemName,
-    group: entry.Gruppe,
-    color: col,
-    craft: entry.Craft || null,
-    lock: null, tr: {}, typeStr: '',
+    asset: entry.ItemName, group: entry.Gruppe,
+    colors: col, craft: entry.Craft || null,
+    lock: null, tr: {},
     _fromCurse: true, _craftName: entry.CraftName || entry.ItemName
   };
 }
 
-function curseSaveAsProfile(dbKey) {
-  const entry = CURSE_DB[dbKey];
-  if (!entry) { showStatus('❌ Eintrag nicht gefunden', 'error'); return; }
-  const defaultName = (entry.CraftName || entry.ItemName || 'Curse') + ' (Outfit)';
-  const name = prompt('Profil-Name für diesen Curse:', defaultName);
+// Core save helper – called after we have the item list (online or fallback)
+function _doSaveProfile(items, defaultName) {
+  const name = prompt('Profil-Name:', defaultName);
   if (!name?.trim()) return;
   const trimmed = name.trim();
   if (PROFILES[trimmed] && !confirm('Profil "' + trimmed + '" existiert bereits. Überschreiben?')) return;
   PROFILES[trimmed] = {
     name: trimmed,
     date: new Date().toLocaleDateString('de-DE'),
-    items: [_curseEntryToProfileItem(entry)]
+    items
   };
   try {
     localStorage.setItem('BC_PROFILES_v11', JSON.stringify(PROFILES));
-    showStatus('✅ Als Outfit-Profil "' + trimmed + '" gespeichert – nutzbar in Bot-Triggern!', 'success');
+    showStatus('✅ Profil "' + trimmed + '" gespeichert (' + items.length + ' Items) – nutzbar in Bot-Triggern!', 'success');
   } catch(e) { showStatus('❌ Speichern fehlgeschlagen: ' + e.message, 'error'); }
 }
 
-function curseSaveAllAsProfile(ownerNum) {
-  // Sammle alle Curse-Einträge dieses Owners
-  const entries = Object.entries(CURSE_DB)
-    .filter(([k, e]) => String(e.Besitzer?.Nummer ?? '') === String(ownerNum))
-    .map(([, e]) => e);
-  if (!entries.length) { showStatus('❌ Keine Einträge für diesen Spieler', 'error'); return; }
-  const ownerName = entries[0].Besitzer?.Name || ('#' + ownerNum);
-  const defaultName = ownerName + ' – Alle Curses';
-  const name = prompt('Profil-Name für alle ' + entries.length + ' Curse(s) von ' + ownerName + ':', defaultName);
-  if (!name?.trim()) return;
-  const trimmed = name.trim();
-  if (PROFILES[trimmed] && !confirm('Profil "' + trimmed + '" existiert bereits. Überschreiben?')) return;
-  PROFILES[trimmed] = {
-    name: trimmed,
-    date: new Date().toLocaleDateString('de-DE'),
-    items: entries.map(e => _curseEntryToProfileItem(e))
+// Request full Appearance for ownerNum, then call cb(items, charName)
+// Falls back to CURSE_DB-only if not connected
+function _fetchOutfitAndSave(ownerNum, defaultName, fallbackItems) {
+  if (!_connected) {
+    // Offline fallback: use what CURSE_DB has
+    if (!fallbackItems?.length) { showStatus('❌ Nicht verbunden und keine lokalen Daten', 'error'); return; }
+    showStatus('⚠️ Nicht verbunden – nur Curse-Items aus DB gespeichert', 'info');
+    _doSaveProfile(fallbackItems, defaultName);
+    return;
+  }
+  const reqId = 'os_' + Date.now();
+  _pendingOutfitSave[reqId] = function(items, charName) {
+    if (!items?.length) {
+      // Empty appearance → fall back to CURSE_DB items
+      if (fallbackItems?.length) {
+        showStatus('⚠️ Outfit leer – nur Curse-Items gespeichert', 'info');
+        _doSaveProfile(fallbackItems, defaultName);
+      } else {
+        showStatus('❌ Spieler hat keine Items / nicht im Raum', 'error');
+      }
+      return;
+    }
+    _doSaveProfile(items.map(_appearanceItemToProfile),
+                   charName ? charName + ' – Outfit' : defaultName);
   };
-  try {
-    localStorage.setItem('BC_PROFILES_v11', JSON.stringify(PROFILES));
-    showStatus('✅ ' + entries.length + ' Curses als Profil "' + trimmed + '" gespeichert!', 'success');
-  } catch(e) { showStatus('❌ Speichern fehlgeschlagen: ' + e.message, 'error'); }
+  bcSend({ type: 'GET_CHAR_APPEARANCE', memberNum: ownerNum ? Number(ownerNum) : null, reqId });
+  showStatus('⏳ Lade Outfit von Spieler #' + (ownerNum || 'Player') + '…', 'info');
+}
+
+// Button: 💾 Profil (pro Curse-Zeile) → speichert das KOMPLETTE Outfit des Owners
+function curseSaveAsProfile(dbKey) {
+  const entry = CURSE_DB[dbKey];
+  if (!entry) { showStatus('❌ Eintrag nicht gefunden', 'error'); return; }
+  const ownerNum  = entry.Besitzer?.Nummer ?? null;
+  const ownerName = entry.Besitzer?.Name   ?? (ownerNum ? '#' + ownerNum : 'Spieler');
+  const defaultName = ownerName + ' – Outfit';
+  _fetchOutfitAndSave(ownerNum, defaultName, [_curseEntryToProfileItem(entry)]);
+}
+
+// Button: 💾 Alle speichern (Owner-Header) → speichert das KOMPLETTE Outfit des Owners
+function curseSaveAllAsProfile(ownerNum) {
+  const entries = Object.entries(CURSE_DB)
+    .filter(([, e]) => String(e.Besitzer?.Nummer ?? '') === String(ownerNum))
+    .map(([, e]) => e);
+  const ownerName = entries[0]?.Besitzer?.Name || ('#' + ownerNum);
+  const defaultName = ownerName + ' – Outfit';
+  _fetchOutfitAndSave(ownerNum, defaultName, entries.map(_curseEntryToProfileItem));
 }
 
 // ── Export / Import ───────────────────────────────────
@@ -2787,6 +2646,15 @@ window.addEventListener('message', function(ev) {
     case 'WEAR_CURSE_ERR':
       showStatus('\u274c Curse-Fehler: ' + ev.data.msg, 'error');
       break;
+
+    case 'CHAR_APPEARANCE_DATA': {
+      const _cb = _pendingOutfitSave[ev.data.reqId];
+      if (!_cb) break;
+      delete _pendingOutfitSave[ev.data.reqId];
+      if (ev.data.err) { showStatus('\u274c Outfit-Laden fehlgeschlagen: ' + ev.data.err, 'error'); break; }
+      _cb(ev.data.items ?? [], ev.data.name ?? '');
+      break;
+    }
   }
 });
 
