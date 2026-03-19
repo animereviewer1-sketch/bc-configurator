@@ -1365,6 +1365,7 @@ function buildItemInner({ group, asset, colors, tr, trStr, typeStr, propCode, cr
     + '    item.Color = ' + JSON.stringify(colors) + ';\n'
     + '    item.Property = item.Property ?? {};\n'
     + propCode
+    + (propCode.includes('TypeRecord') ? '\n    try{ExtendedItemInit(TARGET,item,false,false);}catch(e){}' : '')
     + lockCode + '\n'
     + '    CharacterRefresh(TARGET);\n'
     + '    console.log("✅ ' + asset + ' fertig");\n'
