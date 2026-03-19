@@ -2312,9 +2312,19 @@ function _curseEntryToProfileItem(entry) {
   };
 }
 
+// Hilfsfunktion: einzigartigen Profilnamen generieren
+// Basis: "{craftName} - {ownerName}", bei Duplikat: "...v2", "...v3", ...
+function _uniqueProfileName(base) {
+  if (!PROFILES[base]) return base;
+  let i = 2;
+  while (PROFILES[base + 'v' + i]) i++;
+  return base + 'v' + i;
+}
+
 // Core save helper – called after we have the item list (online or fallback)
 function _doSaveProfile(items, defaultName) {
-  const name = prompt('Profil-Name:', defaultName);
+  const suggested = _uniqueProfileName(defaultName);
+  const name = prompt('Profil-Name:', suggested);
   if (!name?.trim()) return;
   const trimmed = name.trim();
   if (PROFILES[trimmed] && !confirm('Profil "' + trimmed + '" existiert bereits. Überschreiben?')) return;
@@ -2352,33 +2362,31 @@ function _fetchOutfitAndSave(ownerNum, defaultName, fallbackItems) {
       }
       return;
     }
-    _doSaveProfile(items.map(_appearanceItemToProfile),
-                   charName ? charName + ' – Outfit' : defaultName);
+    // defaultName already contains "{CraftName} - {OwnerName}" – use it directly
+    _doSaveProfile(items.map(_appearanceItemToProfile), defaultName);
   };
 
-  // loader.js handles GET_CHAR_APPEARANCE and responds with CHAR_APPEARANCE_DATA.
-  // src.postMessage() in loader correctly sends back to this popup window.
   bcSend({ type: 'GET_CHAR_APPEARANCE', memberNum: tgtNum, reqId });
   showStatus('⏳ Lese Outfit aus BC…', 'info');
 }
-// Button: 💾 Profil (pro Curse-Zeile) → speichert das KOMPLETTE Outfit des Owners
-// Button: 💾 Profil (pro Curse-Zeile) → speichert das KOMPLETTE Outfit des eigenen Spielers (Player)
+// Button: 💾 Profil (pro Curse-Zeile) → "{CraftName} - {OwnerName}"
 function curseSaveAsProfile(dbKey) {
   const entry = CURSE_DB[dbKey];
   if (!entry) { showStatus('❌ Eintrag nicht gefunden', 'error'); return; }
-  // Defaultname aus CraftName des Curses – Outfit kommt aber vom eigenen Player
-  const defaultName = (entry.CraftName || entry.ItemName || 'Curse') + ' – Outfit';
+  const craftName = entry.CraftName || entry.ItemName || 'Curse';
+  const ownerName = entry.Besitzer?.Name || (entry.Besitzer?.Nummer ? '#' + entry.Besitzer.Nummer : 'Player');
+  const defaultName = craftName + ' - ' + ownerName;
   _fetchOutfitAndSave(null, defaultName, [_curseEntryToProfileItem(entry)]);
 }
 
-// Button: 💾 Alle speichern (Owner-Header) → speichert das KOMPLETTE Outfit des eigenen Spielers (Player)
+// Button: 💾 Alle speichern (Owner-Header) → "{OwnerName} Outfit" (Sammlung mehrerer Items)
 function curseSaveAllAsProfile(ownerNum) {
   const entries = Object.entries(CURSE_DB)
     .filter(([, e]) => String(e.Besitzer?.Nummer ?? '') === String(ownerNum))
     .map(([, e]) => e);
   const ownerName = entries[0]?.Besitzer?.Name || ('#' + ownerNum);
-  // Outfit kommt vom eigenen Player, nicht vom Curse-Owner
-  const defaultName = ownerName + ' – Outfit (Player)';
+  // Mehrere Items: kein einzelner CraftName sinnvoll → nur OwnerName
+  const defaultName = ownerName + ' Outfit';
   _fetchOutfitAndSave(null, defaultName, entries.map(_curseEntryToProfileItem));
 }
 
