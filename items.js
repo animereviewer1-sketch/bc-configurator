@@ -2181,7 +2181,9 @@ function renderCurseTab() {
           (function(){ _curseEntryMap[rowId] = dbKey; return ''; })()+
           '<button class="curse-apply-btn" data-rid="' + rowId + '" data-tgt="" onclick="wearCurseByData(this)" title="Auf mich anwenden">👤</button>'+
           (_selectedMemberNum ? '<button class="curse-apply-btn other" data-rid="' + rowId + '" data-tgt="' + _selectedMemberNum + '" onclick="wearCurseByData(this)" title="Auf #'+_selectedMemberNum+'">👥 #'+_selectedMemberNum+'</button>' : '')+
-          '<button onclick="curseSaveAsProfile(\'' + dbKey.replace(/\x27/g,"&apos;") + '\')" style="background:rgba(139,92,246,0.12);border:1px solid rgba(139,92,246,0.3);color:#a78bfa;cursor:pointer;font-size:.72rem;padding:2px 6px;border-radius:4px;margin-left:2px" title="Als Outfit-Profil speichern">💾 Profil</button>'+
+          '<button data-rid="' + rowId + '" onclick="curseSaveAsProfile(this.dataset.rid)"'
+          + ' style="background:rgba(139,92,246,0.12);border:1px solid rgba(139,92,246,0.3);color:#a78bfa;cursor:pointer;font-size:.72rem;padding:2px 6px;border-radius:4px;margin-left:2px"'
+          + ' title="Als Outfit-Profil speichern">💾 Profil</button>'+
           '<button onclick="deleteCurseEntry(\'' + dbKey.replace(/\x27/g,"&apos;") + '\')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.8rem;padding:2px 5px;margin-left:2px" title="Eintrag l\xc3�schen (kommt beim n\xc3�chsten Scan wieder)">✕</button>'+
         '</td>';
 
@@ -2370,7 +2372,8 @@ function _fetchOutfitAndSave(ownerNum, defaultName, fallbackItems) {
   showStatus('⏳ Lese Outfit aus BC…', 'info');
 }
 // Button: 💾 Profil (pro Curse-Zeile) → "{CraftName} - {OwnerName}"
-function curseSaveAsProfile(dbKey) {
+function curseSaveAsProfile(rowIdOrDbKey) {
+  const dbKey = _curseEntryMap[rowIdOrDbKey] ?? rowIdOrDbKey;
   const entry = CURSE_DB[dbKey];
   if (!entry) { showStatus('❌ Eintrag nicht gefunden', 'error'); return; }
   const craftName = entry.CraftName || entry.ItemName || 'Curse';
