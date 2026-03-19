@@ -2227,31 +2227,34 @@ function _doSaveProfile(items, defaultName) {
 // Falls back to CURSE_DB-only if not connected
 function _fetchOutfitAndSave(ownerNum, defaultName, fallbackItems) {
   if (!_connected) {
-    // Offline fallback: use what CURSE_DB has
     if (!fallbackItems?.length) { showStatus('❌ Nicht verbunden und keine lokalen Daten', 'error'); return; }
     showStatus('⚠️ Nicht verbunden – nur Curse-Items aus DB gespeichert', 'info');
     _doSaveProfile(fallbackItems, defaultName);
     return;
   }
-  const reqId = 'os_' + Date.now();
+
+  const reqId  = 'os_' + Date.now();
+  const tgtNum = ownerNum ? Number(ownerNum) : null;
+
   _pendingOutfitSave[reqId] = function(items, charName) {
     if (!items?.length) {
-      // Empty appearance → fall back to CURSE_DB items
       if (fallbackItems?.length) {
-        showStatus('⚠️ Outfit leer – nur Curse-Items gespeichert', 'info');
+        showStatus('⚠️ Outfit leer – Fallback auf Curse-Einträge', 'info');
         _doSaveProfile(fallbackItems, defaultName);
       } else {
-        showStatus('❌ Spieler hat keine Items / nicht im Raum', 'error');
+        showStatus('❌ Keine Items erhalten', 'error');
       }
       return;
     }
     _doSaveProfile(items.map(_appearanceItemToProfile),
                    charName ? charName + ' – Outfit' : defaultName);
   };
-  bcSend({ type: 'GET_CHAR_APPEARANCE', memberNum: ownerNum ? Number(ownerNum) : null, reqId });
-  showStatus('⏳ Lade Outfit von Spieler #' + (ownerNum || 'Player') + '…', 'info');
-}
 
+  // loader.js handles GET_CHAR_APPEARANCE and responds with CHAR_APPEARANCE_DATA.
+  // src.postMessage() in loader correctly sends back to this popup window.
+  bcSend({ type: 'GET_CHAR_APPEARANCE', memberNum: tgtNum, reqId });
+  showStatus('⏳ Lese Outfit aus BC…', 'info');
+}
 // Button: 💾 Profil (pro Curse-Zeile) → speichert das KOMPLETTE Outfit des Owners
 // Button: 💾 Profil (pro Curse-Zeile) → speichert das KOMPLETTE Outfit des eigenen Spielers (Player)
 function curseSaveAsProfile(dbKey) {
