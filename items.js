@@ -2168,6 +2168,81 @@ function wearCurseByData(btn) {
   wearCurse(key, targetNum);
 }
 
+// ── Strip All Items (incl. Devious Lock / DOGS bypass) ──────────────────
+function stripAllItems() {
+  if (!_connected) { showStatus('❌ Nicht mit BC verbunden', 'error'); return; }
+
+  // Determine target: selected member in curse/outfit tab, or Player
+  const tgt = _selectedMemberNum || _outfitTargetNum || null;
+  const tgtLabel = tgt ? ('Spieler #' + tgt) : 'dich selbst';
+
+  if (!confirm(
+    '⚡ ALLE Items entfernen von ' + tgtLabel + '?\n\n' +
+    '• Entfernt alle Kleidung & Restraints\n' +
+    '• Umgeht Devious Lock (DOGS), normale Schlösser, LSCG-Curses\n' +
+    '• Kann nicht rückgängig gemacht werden\n\n' +
+    'Fortfahren?'
+  )) return;
+
+  // Build the EXEC code string with the target number baked in
+  const tgtCode = tgt ? String(Number(tgt)) : 'null';
+
+  const code = `(function(){
+  // ── Ziel-Charakter ermitteln ─────────────────────────────
+  var tgtNum = ${tgtCode};
+  var C = null;
+  if (tgtNum) {
+    C = (typeof ChatRoomCharacter !== 'undefined' ? ChatRoomCharacter : [])
+          .find(function(c){ return c.MemberNumber === tgtNum; }) || null;
+  }
+  if (!C) C = Player;
+  if (!C) { console.error('[StripAll] Kein Charakter gefunden'); return; }
+
+  // ── Schritt 1: Alle Lock-Properties zerstören ────────────
+  // Entfernt DeviousPadlock (DOGS), ExclusivePadlock, MistressPadlock etc.
+  // – DOGS-Hook auf InventoryGroupIsBlocked prüft Property.LockedBy;
+  //   nach dem Löschen greift der Hook nicht mehr.
+  C.Appearance.forEach(function(item) {
+    if (!item || !item.Property) return;
+    // Locks komplett leeren – statt nur LockedBy, da manche Mods
+    // mehrere Felder auswerten
+    delete item.Property.LockedBy;
+    delete item.Property.LockMemberNumber;
+    delete item.Property.MemberNumberListKeys;
+    delete item.Property.RemoveOnlyMemberNumber;
+    delete item.Property.AllowRemove;
+    delete item.Property.Effect;   // 'Lock' Effect entfernen
+    // DOGS-spezifische Felder (bekannte Varianten)
+    delete item.Property.DogsLock;
+    delete item.Property.deviousLock;
+    delete item.Property.DeviousPadlock;
+    // LSCG: Curse-Aktivierung deaktivieren
+    delete item.Property.LSCGCursed;
+    delete item.Property.cursed;
+  });
+
+  // ── Schritt 2: Appearance direkt filtern ────────────────
+  // AllowNone === false → Pflicht-Körpergruppe (Body, Eyes, Hair …)
+  // AllowNone === true  → optionales Item → entfernen
+  var kept = C.Appearance.filter(function(item) {
+    if (!item || !item.Asset || !item.Asset.Group) return true; // sicher behalten
+    return item.Asset.Group.AllowNone === false;
+  });
+
+  var removedCount = C.Appearance.length - kept.length;
+  C.Appearance = kept;
+
+  // ── Schritt 3: BC synchronisieren ───────────────────────
+  try { CharacterRefresh(C, false, false); } catch(e){}
+  try { ChatRoomCharacterUpdate(C); } catch(e){}
+
+  console.log('[StripAll] ' + removedCount + ' Items entfernt von ' + C.Name + ' (#' + C.MemberNumber + ')');
+})();`;
+
+  bcSend({ type: 'EXEC', code });
+  showStatus('⚡ Strip-All gesendet für ' + tgtLabel + ' – alle Locks umgangen', 'success');
+}
+
 function wearCurse(dbKey, targetNum) {
   if (!_connected) { showStatus('❌ Nicht verbunden', 'error'); return; }
   const entry = CURSE_DB[dbKey] ?? null;
