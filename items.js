@@ -2020,6 +2020,9 @@ function renderCurseTab() {
         (cursedCount ? '<span class="curse-owner-count">🔮 '+cursedCount+'</span>' : '')+
         '<span class="curse-owner-count" style="background:var(--bg3);color:var(--text2)">'+owner.items.length+'</span>'+
         (ownerFavCount ? '<span class="curse-owner-count curse-owner-fav-badge" style="background:rgba(251,191,36,.12);color:#fbbf24;border-color:rgba(251,191,36,.3)">⭐ '+ownerFavCount+'</span>' : '<span class="curse-owner-fav-badge" style="display:none"></span>')+
+        '<button onclick="event.stopPropagation();curseSaveAllAsProfile(\'' + owner.num + '\')"'
+          + ' style="margin-left:auto;background:rgba(139,92,246,0.12);border:1px solid rgba(139,92,246,0.3);color:#a78bfa;cursor:pointer;font-size:.68rem;padding:2px 8px;border-radius:4px;white-space:nowrap"'
+          + ' title="Alle Curses als Outfit-Profil speichern">💾 Alle speichern</button>'+
         '<span class="curse-owner-chevron">▶</span>'+
       '</div>'+
       '<table class="curse-rows"><thead><tr style="background:var(--bg3)">'+
@@ -2078,6 +2081,7 @@ function renderCurseTab() {
           (function(){ _curseEntryMap[rowId] = dbKey; return ''; })()+
           '<button class="curse-apply-btn" data-rid="' + rowId + '" data-tgt="" onclick="wearCurseByData(this)" title="Auf mich anwenden">👤</button>'+
           (_selectedMemberNum ? '<button class="curse-apply-btn other" data-rid="' + rowId + '" data-tgt="' + _selectedMemberNum + '" onclick="wearCurseByData(this)" title="Auf #'+_selectedMemberNum+'">👥 #'+_selectedMemberNum+'</button>' : '')+
+          '<button onclick="curseSaveAsProfile(\'' + dbKey.replace(/\x27/g,"&apos;") + '\')" style="background:rgba(139,92,246,0.12);border:1px solid rgba(139,92,246,0.3);color:#a78bfa;cursor:pointer;font-size:.72rem;padding:2px 6px;border-radius:4px;margin-left:2px" title="Als Outfit-Profil speichern">💾 Profil</button>'+
           '<button onclick="deleteCurseEntry(\'' + dbKey.replace(/\x27/g,"&apos;") + '\')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.8rem;padding:2px 5px;margin-left:2px" title="Eintrag l\xc3�schen (kommt beim n\xc3�chsten Scan wieder)">✕</button>'+
         '</td>';
 
@@ -2170,6 +2174,63 @@ function wearCurse(dbKey, targetNum) {
   if (!entry) { showStatus('❌ Eintrag nicht in DB: ' + dbKey, 'error'); return; }
   bcSend({ type: 'WEAR_CURSE', dbKey, targetNum, entry });
   showStatus('⏳ Curse wird angelegt...', 'info');
+}
+
+// ── Curse → Outfit-Profil speichern ─────────────────────────────────────
+function _curseEntryToProfileItem(entry) {
+  let col = entry.Farbe;
+  if (typeof col === 'string' && col.includes(',')) col = col.split(',');
+  if (!Array.isArray(col)) col = col ? [col] : ['#ffffff'];
+  return {
+    asset: entry.ItemName,
+    group: entry.Gruppe,
+    color: col,
+    craft: entry.Craft || null,
+    lock: null, tr: {}, typeStr: '',
+    _fromCurse: true, _craftName: entry.CraftName || entry.ItemName
+  };
+}
+
+function curseSaveAsProfile(dbKey) {
+  const entry = CURSE_DB[dbKey];
+  if (!entry) { showStatus('❌ Eintrag nicht gefunden', 'error'); return; }
+  const defaultName = (entry.CraftName || entry.ItemName || 'Curse') + ' (Outfit)';
+  const name = prompt('Profil-Name für diesen Curse:', defaultName);
+  if (!name?.trim()) return;
+  const trimmed = name.trim();
+  if (PROFILES[trimmed] && !confirm('Profil "' + trimmed + '" existiert bereits. Überschreiben?')) return;
+  PROFILES[trimmed] = {
+    name: trimmed,
+    date: new Date().toLocaleDateString('de-DE'),
+    items: [_curseEntryToProfileItem(entry)]
+  };
+  try {
+    localStorage.setItem('BC_PROFILES_v11', JSON.stringify(PROFILES));
+    showStatus('✅ Als Outfit-Profil "' + trimmed + '" gespeichert – nutzbar in Bot-Triggern!', 'success');
+  } catch(e) { showStatus('❌ Speichern fehlgeschlagen: ' + e.message, 'error'); }
+}
+
+function curseSaveAllAsProfile(ownerNum) {
+  // Sammle alle Curse-Einträge dieses Owners
+  const entries = Object.entries(CURSE_DB)
+    .filter(([k, e]) => String(e.Besitzer?.Nummer ?? '') === String(ownerNum))
+    .map(([, e]) => e);
+  if (!entries.length) { showStatus('❌ Keine Einträge für diesen Spieler', 'error'); return; }
+  const ownerName = entries[0].Besitzer?.Name || ('#' + ownerNum);
+  const defaultName = ownerName + ' – Alle Curses';
+  const name = prompt('Profil-Name für alle ' + entries.length + ' Curse(s) von ' + ownerName + ':', defaultName);
+  if (!name?.trim()) return;
+  const trimmed = name.trim();
+  if (PROFILES[trimmed] && !confirm('Profil "' + trimmed + '" existiert bereits. Überschreiben?')) return;
+  PROFILES[trimmed] = {
+    name: trimmed,
+    date: new Date().toLocaleDateString('de-DE'),
+    items: entries.map(e => _curseEntryToProfileItem(e))
+  };
+  try {
+    localStorage.setItem('BC_PROFILES_v11', JSON.stringify(PROFILES));
+    showStatus('✅ ' + entries.length + ' Curses als Profil "' + trimmed + '" gespeichert!', 'success');
+  } catch(e) { showStatus('❌ Speichern fehlgeschlagen: ' + e.message, 'error'); }
 }
 
 // ── Export / Import ───────────────────────────────────
