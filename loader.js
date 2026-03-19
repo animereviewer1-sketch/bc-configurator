@@ -1,1830 +1,1022 @@
-<!DOCTYPE html>
-<html lang="de">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>BC Konfigurator</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-  <style>
-
-:root {
-  /* Backgrounds */
-  --bg: #06060f;
-  --bg2: #0a0a18;
-  --bg3: #0e0e1f;
-  --bg4: #08081a;
-  --bg-glass: rgba(255,255,255,0.03);
-  --bg-hover: rgba(255,255,255,0.05);
-
-  /* Borders */
-  --border: rgba(255,255,255,0.07);
-  --border2: rgba(255,255,255,0.12);
-  --border-accent: rgba(139,92,246,0.4);
-
-  /* Accent - Electric Violet */
-  --purple: #8b5cf6;
-  --purple-bright: #a78bfa;
-  --purple-dim: #4c1d95;
-  --purple-glow: rgba(139,92,246,0.25);
-  --purple-glow-strong: rgba(139,92,246,0.5);
-  /* compat */
-  --pl: #c4b5fd;
-  --pd: #2d1b69;
-
-  /* Status colors */
-  --green: #34d399;
-  --green-bright: #6ee7b7;
-  --gd: rgba(6,78,59,0.6);
-  --red: #fb7185;
-  --rd: rgba(69,10,10,0.7);
-  --yellow: #fbbf24;
-  --yd: rgba(120,53,15,0.6);
-  --blue: #60a5fa;
-  --bd: rgba(30,58,95,0.6);
-  --orange: #fb923c;
-  --od: rgba(124,45,18,0.6);
-  --pink: #f472b6;
-  --pkd: rgba(131,24,67,0.6);
-  --teal: #2dd4bf;
-
-  /* Text */
-  --text: #f1f5f9;
-  --text2: #94a3b8;
-  --text3: #4b5563;
-  --text4: #374151;
-
-  /* Radius */
-  --r-xs: 4px;
-  --r-sm: 8px;
-  --r-md: 12px;
-  --r-lg: 16px;
-  --r-xl: 22px;
-  --r-full: 9999px;
-
-  /* Spacing */
-  --sp-1: 4px; --sp-2: 8px; --sp-3: 12px; --sp-4: 16px; --sp-5: 20px; --sp-6: 24px;
-
-  /* Transitions */
-  --t-fast: 0.1s ease;
-  --t-mid: 0.2s ease;
-  --t-slow: 0.35s cubic-bezier(0.4,0,0.2,1);
-
-  /* Shadows */
-  --shadow-sm: 0 1px 3px rgba(0,0,0,0.5), 0 1px 2px rgba(0,0,0,0.4);
-  --shadow-md: 0 4px 16px rgba(0,0,0,0.6), 0 2px 6px rgba(0,0,0,0.4);
-  --shadow-lg: 0 8px 32px rgba(0,0,0,0.7), 0 4px 12px rgba(0,0,0,0.5);
-  --shadow-purple: 0 0 20px rgba(139,92,246,0.3), 0 4px 16px rgba(0,0,0,0.5);
-  --shadow-glow: 0 0 0 1px rgba(139,92,246,0.5), 0 0 20px rgba(139,92,246,0.2);
-
-  /* Gradients */
-  --grad-purple: linear-gradient(135deg, #6d28d9, #8b5cf6);
-  --grad-green: linear-gradient(135deg, #065f46, #059669);
-  --grad-red: linear-gradient(135deg, #7f1d1d, #dc2626);
-  --grad-blue: linear-gradient(135deg, #1e3a8a, #3b82f6);
-  --grad-orange: linear-gradient(135deg, #7c2d12, #ea580c);
-  --grad-surface: linear-gradient(135deg, rgba(255,255,255,0.05), rgba(255,255,255,0.01));
-
-  /* Fonts */
-  --font-ui: 'Outfit', system-ui, sans-serif;
-  --font-mono: 'JetBrains Mono', 'Consolas', monospace;
-
-  /* Focus ring */
-  --focus-ring: 0 0 0 2px var(--bg), 0 0 0 4px var(--purple);
-
-  /* compat aliases */
-  --radius-sm: var(--r-sm);
-  --radius-md: var(--r-md);
-  --radius-lg: var(--r-lg);
-  --transition: var(--t-mid);
-  --shadow-sm-compat: var(--shadow-sm);
-}
-
-/* ═══════════════════════════════════════════════
-   BASE
-═══════════════════════════════════════════════ */
-html { scroll-behavior: smooth; }
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-body {
-  background: var(--bg);
-  color: var(--text);
-  font-family: var(--font-ui);
-  min-height: 100vh;
-  font-size: 13.5px;
-  line-height: 1.55;
-  background-image:
-    radial-gradient(ellipse 80% 60% at 20% -5%, rgba(109,40,217,0.12) 0%, transparent 60%),
-    radial-gradient(ellipse 50% 40% at 80% 110%, rgba(45,212,191,0.05) 0%, transparent 50%);
-  background-attachment: fixed;
-}
-
-::-webkit-scrollbar { width: 5px; height: 5px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: rgba(139,92,246,0.3); border-radius: 99px; }
-::-webkit-scrollbar-thumb:hover { background: var(--purple); }
-
-::selection { background: rgba(139,92,246,0.4); color: #fff; }
-:focus-visible { outline: none; box-shadow: var(--focus-ring); }
-input:focus, select:focus, textarea:focus { outline: none !important; box-shadow: 0 0 0 3px rgba(139,92,246,0.25) !important; border-color: var(--purple) !important; }
-::placeholder { color: var(--text3); opacity: 1; }
-:disabled { opacity: 0.45; cursor: not-allowed !important; }
-
-select {
-  appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='none' stroke='%234b5563' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' d='M1 1l5 5 5-5'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 10px center;
-  padding-right: 28px !important;
-}
-
-/* Force dark background on native dropdown lists */
-select option, select optgroup {
-  background-color: #0e0e1f;
-  color: #f1f5f9;
-}
-select option:checked,
-select option:focus,
-select option:hover {
-  background-color: #1e1040;
-  color: #c4b5fd;
-}
-
-@keyframes fadeUp { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
-@keyframes fadeIn { from{opacity:0} to{opacity:1} }
-@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.45} }
-@keyframes roomPulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
-@keyframes sectionIn { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
-
-/* ═══════════════════════════════════════════════
-   TOPBAR
-═══════════════════════════════════════════════ */
-.topbar {
-  background: rgba(6,6,15,0.9);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border-bottom: 1px solid rgba(139,92,246,0.18);
-  padding: 10px 20px;
-  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
-  position: sticky; top: 0; z-index: 100;
-  box-shadow: 0 1px 0 rgba(139,92,246,0.12), 0 4px 24px rgba(0,0,0,0.6);
-}
-.topbar h1 {
-  font-size: 1rem; font-weight: 800; letter-spacing: -0.02em; flex-shrink: 0;
-  background: linear-gradient(135deg, #c4b5fd 0%, #a78bfa 50%, #7c3aed 100%);
-  -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
-}
-
-.tbadge {
-  font-family: var(--font-mono); font-size: 0.7rem; font-weight: 600;
-  padding: 4px 11px; border-radius: 99px; border: 1px solid; letter-spacing: 0.02em;
-  background: rgba(76,29,149,0.25); border-color: rgba(139,92,246,0.35); color: #c4b5fd;
-}
-.tbadge.outfit {
-  background: rgba(124,45,18,0.25); border-color: rgba(251,146,60,0.35); color: var(--orange);
-}
-
-/* ═══════════════════════════════════════════════
-   BUTTONS
-═══════════════════════════════════════════════ */
-.btn {
-  font-family: var(--font-ui); padding: 7px 17px; border: none; border-radius: 99px;
-  font-size: 0.79rem; font-weight: 700; cursor: pointer; transition: all 0.18s ease;
-  white-space: nowrap; display: inline-flex; align-items: center; gap: 5px; letter-spacing: 0.01em;
-}
-.btn:active { transform: scale(0.96); }
-
-.btn-primary {
-  background: linear-gradient(135deg, #6d28d9, #8b5cf6);
-  color: #fff; box-shadow: 0 2px 14px rgba(139,92,246,0.32);
-}
-.btn-primary:hover { box-shadow: 0 4px 22px rgba(139,92,246,0.55); filter: brightness(1.1); }
-
-.btn-green {
-  background: linear-gradient(135deg, #065f46, #059669);
-  color: #fff; box-shadow: 0 2px 12px rgba(5,150,105,0.3);
-}
-.btn-green:hover { box-shadow: 0 4px 20px rgba(5,150,105,0.5); filter: brightness(1.1); }
-.btn-green:disabled { opacity: 0.4; cursor: not-allowed; filter: none; box-shadow: none; }
-
-.btn-red {
-  background: linear-gradient(135deg, #7f1d1d, #dc2626);
-  color: #fff; box-shadow: 0 2px 10px rgba(220,38,38,0.25);
-}
-.btn-red:hover { box-shadow: 0 4px 18px rgba(220,38,38,0.45); filter: brightness(1.1); }
-
-.btn-orange {
-  background: linear-gradient(135deg, #7c2d12, #ea580c);
-  color: #fff; box-shadow: 0 2px 10px rgba(234,88,12,0.25);
-}
-.btn-orange:hover { box-shadow: 0 4px 18px rgba(234,88,12,0.45); filter: brightness(1.1); }
-
-.btn-copy {
-  font-family: var(--font-ui); width: 100%; margin-top: 10px; padding: 12px 16px;
-  font-size: 0.84rem; font-weight: 800; border: none; border-radius: 12px; cursor: pointer;
-  transition: all 0.18s ease;
-  background: linear-gradient(135deg, #6d28d9, #8b5cf6);
-  color: #fff; box-shadow: 0 3px 16px rgba(139,92,246,0.35); letter-spacing: 0.03em;
-}
-.btn-copy:hover { box-shadow: 0 5px 24px rgba(139,92,246,0.6); filter: brightness(1.1); }
-.btn-copy.copied { background: linear-gradient(135deg, #065f46, #059669); box-shadow: 0 3px 16px rgba(5,150,105,0.35); }
-
-.btn-row { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
-
-.btn-sync {
-  background: linear-gradient(135deg, #1e3a8a, #3b82f6);
-  color: #fff; border: none; border-radius: 99px; cursor: pointer;
-  transition: all 0.18s ease; white-space: nowrap; font-weight: 700;
-  font-family: var(--font-ui); font-size: 0.79rem; padding: 7px 17px;
-  box-shadow: 0 2px 12px rgba(59,130,246,0.3);
-}
-.btn-sync:hover { filter: brightness(1.15); box-shadow: 0 4px 20px rgba(59,130,246,0.5); }
-.btn-sync:disabled { opacity: 0.45; cursor: not-allowed; filter: none; }
-
-#execBtn { font-weight: 800; letter-spacing: 0.02em; }
-
-/* ═══════════════════════════════════════════════
-   LAYOUT
-═══════════════════════════════════════════════ */
-.layout { display: grid; grid-template-columns: 268px 1fr; min-height: calc(100vh - 49px); }
-
-.sidebar {
-  background: linear-gradient(180deg, rgba(10,10,24,0.9), rgba(8,8,20,0.95));
-  border-right: 1px solid rgba(255,255,255,0.06);
-  padding: 14px; overflow-y: auto; max-height: calc(100vh - 49px); position: sticky; top: 49px;
-}
-
-.sidebar-search {
-  width: 100%; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);
-  border-radius: 99px; color: var(--text); padding: 8px 15px; font-size: 0.82rem;
-  font-family: var(--font-ui); margin-bottom: 12px; transition: all 0.18s ease;
-}
-.sidebar-search:focus { border-color: var(--purple); box-shadow: 0 0 0 3px rgba(139,92,246,0.2); background: rgba(139,92,246,0.06); }
-
-.group-hdr {
-  font-size: 0.76rem; font-weight: 600; color: var(--text3); padding: 6px 10px;
-  border-radius: 8px; cursor: pointer; display: flex; justify-content: space-between;
-  align-items: center; user-select: none; transition: all 0.15s ease; letter-spacing: 0.02em;
-}
-.group-hdr:hover { background: rgba(255,255,255,0.05); color: var(--text2); }
-.group-hdr.open { background: rgba(139,92,246,0.1); color: #c4b5fd; }
-
-.group-items { display: none; padding-left: 8px; margin-bottom: 4px; }
-.group-items.open { display: block; }
-
-.item-row { display: flex; align-items: center; border-radius: 7px; }
-.item-btn {
-  flex: 1; text-align: left; background: none; border: none; color: var(--text3);
-  font-size: 0.79rem; font-family: var(--font-ui); padding: 5px 9px; border-radius: 7px;
-  cursor: pointer; transition: all 0.13s ease;
-}
-.item-btn:hover { background: rgba(255,255,255,0.05); color: var(--text); }
-.item-btn.active {
-  background: rgba(139,92,246,0.15); color: #c4b5fd; font-weight: 700;
-  box-shadow: inset 2px 0 0 var(--purple);
-}
-
-.star-btn {
-  background: none; border: none; cursor: pointer; font-size: 0.88rem;
-  padding: 4px 6px; border-radius: 5px; opacity: 0.3; flex-shrink: 0; transition: opacity 0.15s;
-}
-.star-btn:hover, .star-btn.fav { opacity: 1; }
-
-.fav-hdr {
-  font-size: 0.71rem; font-weight: 800; color: var(--yellow); padding: 6px 10px;
-  background: rgba(251,191,36,0.08); border: 1px solid rgba(251,191,36,0.15);
-  border-radius: 8px; margin-bottom: 8px; display: flex; align-items: center; gap: 6px;
-  letter-spacing: 0.04em; text-transform: uppercase;
-}
-
-.main { padding: 20px; overflow-y: auto; max-height: calc(100vh - 49px); }
-
-/* ═══════════════════════════════════════════════
-   IMPORT / CONNECT
-═══════════════════════════════════════════════ */
-.import-box {
-  background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 18px; padding: 20px; margin-bottom: 18px;
-}
-.import-box h2 { font-size: 0.9rem; font-weight: 800; color: #c4b5fd; margin-bottom: 8px; }
-.import-box p { font-size: 0.8rem; color: var(--text2); margin-bottom: 10px; line-height: 1.65; }
-.import-box textarea {
-  width: 100%; height: 90px; background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.1);
-  border-radius: 8px; color: #86efac; font-family: var(--font-mono); font-size: 0.72rem;
-  padding: 9px; resize: vertical; transition: border-color 0.18s;
-}
-
-#connectHint { border-color: rgba(139,92,246,0.2); background: rgba(139,92,246,0.04); }
-#connectHint h2 { color: var(--text); }
-
-/* ═══════════════════════════════════════════════
-   SECTIONS (Glass Cards)
-═══════════════════════════════════════════════ */
-.section {
-  background: rgba(255,255,255,0.025);
-  border: 1px solid rgba(255,255,255,0.07);
-  border-radius: 14px; padding: 17px; margin-bottom: 13px;
-  position: relative; overflow: hidden; animation: sectionIn 0.2s ease;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
-}
-.section::before {
-  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(139,92,246,0.5), transparent);
-}
-
-.sec-hdr {
-  display: flex; align-items: center; justify-content: space-between;
-  margin-bottom: 14px; padding-bottom: 10px; border-bottom: 1px solid rgba(255,255,255,0.07);
-}
-.sec-hdr h3 {
-  font-size: 0.71rem; font-weight: 800; color: var(--text2); text-transform: uppercase;
-  letter-spacing: 1.6px; margin: 0;
-}
-
-.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-.full { grid-column: 1/-1; }
-
-.field { display: flex; flex-direction: column; gap: 4px; }
-.field label { font-size: 0.7rem; font-weight: 700; color: var(--text3); letter-spacing: 0.05em; text-transform: uppercase; }
-.field input, .field select {
-  width: 100%; background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.1);
-  border-radius: 8px; color: var(--text); padding: 8px 12px; font-size: 0.82rem;
-  font-family: var(--font-ui); transition: all 0.18s ease;
-}
-.field input:focus, .field select:focus {
-  border-color: var(--purple); box-shadow: 0 0 0 3px rgba(139,92,246,0.2);
-  background: rgba(139,92,246,0.05);
-}
-
-.hint { font-size: 0.7rem; color: var(--text3); margin-top: 3px; line-height: 1.45; }
-
-.warn {
-  font-size: 0.73rem; color: var(--yellow);
-  background: rgba(251,191,36,0.08); border: 1px solid rgba(251,191,36,0.2);
-  padding: 8px 12px; border-radius: 8px; margin-top: 6px; line-height: 1.55;
-}
-.info-box {
-  font-size: 0.73rem; color: var(--blue);
-  background: rgba(96,165,250,0.07); border: 1px solid rgba(96,165,250,0.2);
-  padding: 8px 12px; border-radius: 8px; margin-top: 6px; line-height: 1.55;
-}
-.hidden { display: none !important; }
-
-/* ═══════════════════════════════════════════════
-   MODULE / TYPE RECORD
-═══════════════════════════════════════════════ */
-.arch-badge {
-  font-size: 0.65rem; font-weight: 800; padding: 3px 11px; border-radius: 99px;
-  border: 1px solid; display: inline-block; margin-bottom: 10px; letter-spacing: 0.05em; text-transform: uppercase;
-}
-.arch-badge.modular { background: rgba(6,78,59,0.35); color: #6ee7b7; border-color: rgba(52,211,153,0.3); }
-.arch-badge.classic { background: rgba(30,27,75,0.5); color: #c7d2fe; border-color: rgba(129,140,248,0.3); }
-
-.dim-block {
-  border: 1px solid rgba(255,255,255,0.07); border-radius: 12px;
-  margin-bottom: 10px; overflow: hidden; transition: border-color 0.18s;
-}
-.dim-block:hover { border-color: rgba(255,255,255,0.13); }
-
-.dim-hdr {
-  display: flex; align-items: center; gap: 9px; padding: 10px 14px;
-  background: rgba(255,255,255,0.02); border-bottom: 1px solid rgba(255,255,255,0.06);
-}
-.key-badge {
-  background: rgba(139,92,246,0.18); color: #c4b5fd; padding: 3px 9px;
-  border-radius: 99px; font-size: 0.66rem; font-family: var(--font-mono); font-weight: 700;
-  flex-shrink: 0; border: 1px solid rgba(139,92,246,0.3);
-}
-.dim-title { font-size: 0.8rem; font-weight: 500; color: var(--text2); flex: 1; }
-.multi-toggle { display: flex; align-items: center; gap: 5px; font-size: 0.69rem; color: var(--text3); cursor: pointer; user-select: none; flex-shrink: 0; }
-.multi-toggle input { accent-color: var(--purple); width: 13px; height: 13px; cursor: pointer; }
-
-.dim-opts { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; }
-
-.opt-row {
-  border: 1px solid rgba(255,255,255,0.07); border-radius: 9px; overflow: hidden;
-  transition: border-color 0.18s, box-shadow 0.18s;
-}
-.opt-row:hover { border-color: rgba(255,255,255,0.14); }
-.opt-row.sel {
-  border-color: rgba(139,92,246,0.5);
-  box-shadow: 0 0 0 1px rgba(139,92,246,0.12), inset 0 0 14px rgba(139,92,246,0.04);
-}
-
-.opt-hdr {
-  display: flex; align-items: center; gap: 8px; padding: 9px 12px;
-  cursor: pointer; user-select: none; background: rgba(255,255,255,0.015); transition: background 0.13s;
-}
-.opt-row.sel .opt-hdr { background: rgba(139,92,246,0.1); }
-.opt-hdr:hover { background: rgba(255,255,255,0.04); }
-.opt-check { width: 15px; height: 15px; accent-color: var(--purple); flex-shrink: 0; pointer-events: none; }
-.opt-idx { font-size: 0.63rem; color: rgba(255,255,255,0.2); font-family: var(--font-mono); }
-.opt-name { font-size: 0.83rem; color: var(--text2); flex: 1; }
-.opt-row.sel .opt-name { color: #c4b5fd; font-weight: 700; }
-.opt-badge-row { display: flex; flex-wrap: wrap; gap: 4px; margin-left: auto; }
-
-.b {
-  font-size: 0.62rem; padding: 2px 8px; border-radius: 99px; line-height: 1.3;
-  white-space: nowrap; font-weight: 700; border: 1px solid;
-}
-.b.e { background: rgba(6,78,59,0.35); color: #6ee7b7; border-color: rgba(52,211,153,0.25); }
-.b.bl { background: rgba(127,29,29,0.35); color: #fca5a5; border-color: rgba(251,113,133,0.25); }
-.b.p { background: rgba(30,58,95,0.4); color: #93c5fd; border-color: rgba(96,165,250,0.25); }
-.b.y { background: rgba(120,53,15,0.45); color: #fbbf24; border-color: rgba(251,191,36,0.25); }
-.b.gr { background: rgba(6,78,59,0.25); color: #86efac; border-color: rgba(134,239,172,0.2); }
-
-.opt-sub { display: none; padding: 10px 14px; background: rgba(0,0,0,0.2); border-top: 1px solid rgba(255,255,255,0.06); }
-.opt-row.sel .opt-sub { display: block; }
-.sub-info { margin-bottom: 8px; display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
-.sub-info-label { font-size: 0.64rem; color: var(--text3); margin-right: 3px; }
-.sub-props { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px,1fr)); gap: 6px; }
-.sub-prop { background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.07); border-radius: 8px; padding: 7px 10px; }
-.sub-prop-label { font-size: 0.67rem; color: var(--text3); font-family: var(--font-mono); margin-bottom: 4px; font-weight: 600; }
-.sub-prop select, .sub-prop input {
-  width: 100%; background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.1);
-  border-radius: 5px; color: var(--text); padding: 4px 8px; font-size: 0.77rem;
-  font-family: var(--font-ui); transition: border-color 0.18s;
-}
-.sub-inline { display: flex; gap: 6px; align-items: center; }
-.sub-inline input[type=checkbox] { accent-color: var(--purple); width: 14px; height: 14px; flex-shrink: 0; cursor: pointer; }
-
-/* ═══════════════════════════════════════════════
-   COLORS
-═══════════════════════════════════════════════ */
-.color-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px,1fr)); gap: 10px; }
-.color-item label { font-size: 0.68rem; font-weight: 700; color: var(--text3); display: block; margin-bottom: 5px; letter-spacing: 0.05em; text-transform: uppercase; }
-.color-row { display: flex; gap: 6px; align-items: center; }
-.color-row input[type=color] { flex: 1; height: 32px; border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; background: none; cursor: pointer; transition: border-color 0.18s; }
-.color-row input[type=color]:hover { border-color: var(--purple); }
-.color-default-btn {
-  font-size: 0.63rem; font-family: var(--font-ui); background: rgba(255,255,255,0.04);
-  border: 1px solid rgba(255,255,255,0.1); border-radius: 99px; color: var(--text3);
-  padding: 3px 9px; cursor: pointer; white-space: nowrap; transition: all 0.18s; font-weight: 600;
-}
-.color-default-btn:hover { border-color: var(--purple); color: #c4b5fd; background: rgba(139,92,246,0.1); }
-.color-item.is-default label { color: rgba(255,255,255,0.2); }
-.color-item.is-default .color-row input[type=color] { opacity: 0.3; }
-
-/* ═══════════════════════════════════════════════
-   TIGHTNESS
-═══════════════════════════════════════════════ */
-.tightness-row { display: flex; align-items: center; gap: 14px; }
-.tightness-slider { flex: 1; accent-color: var(--purple); height: 6px; cursor: pointer; }
-.tightness-val {
-  font-family: var(--font-mono); font-weight: 800; color: #c4b5fd; font-size: 0.92rem;
-  min-width: 38px; text-align: right; background: rgba(139,92,246,0.12); padding: 3px 9px;
-  border-radius: 99px; border: 1px solid rgba(139,92,246,0.25);
-}
-.tightness-info { display: flex; gap: 16px; margin-top: 10px; font-size: 0.72rem; color: var(--text3); }
-.tightness-info span { color: var(--text2); font-weight: 600; }
-
-/* ═══════════════════════════════════════════════
-   LSCG
-═══════════════════════════════════════════════ */
-.lscg-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px,1fr)); gap: 6px; }
-.lscg-item {
-  display: flex; align-items: center; gap: 8px; padding: 8px 11px;
-  background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.07);
-  border-radius: 8px; cursor: pointer; font-size: 0.81rem; font-family: var(--font-ui);
-  transition: all 0.18s;
-}
-.lscg-item:hover { border-color: rgba(255,255,255,0.14); background: rgba(255,255,255,0.04); }
-.lscg-item.on { background: rgba(244,114,182,0.1); border-color: rgba(244,114,182,0.35); color: #f472b6; }
-.lscg-item input[type=checkbox] { accent-color: #f472b6; width: 14px; height: 14px; flex-shrink: 0; }
-.lscg-divider { grid-column: 1/-1; border-top: 1px solid rgba(255,255,255,0.06); margin: 4px 0; }
-.lscg-curse-row { grid-column: 1/-1; display: flex; align-items: center; gap: 10px; font-size: 0.8rem; color: var(--text2); }
-.lscg-curse-row select { background: rgba(0,0,0,0.35); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: var(--text); padding: 6px 10px; font-size: 0.79rem; flex: 1; }
-
-/* ═══════════════════════════════════════════════
-   GLOBAL PROPS
-═══════════════════════════════════════════════ */
-.props-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px,1fr)); gap: 7px; }
-.prop-card { background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.07); border-radius: 8px; padding: 9px 12px; transition: border-color 0.18s; }
-.prop-card:hover { border-color: rgba(255,255,255,0.14); }
-.prop-name { font-family: var(--font-mono); font-size: 0.73rem; font-weight: 700; color: #c4b5fd; margin-bottom: 5px; }
-.prop-ctrl { display: flex; gap: 6px; align-items: center; }
-.prop-ctrl select, .prop-ctrl input { background: rgba(0,0,0,0.35); border: 1px solid rgba(255,255,255,0.1); border-radius: 5px; color: var(--text); padding: 4px 8px; font-size: 0.78rem; flex: 1; font-family: var(--font-ui); transition: border-color 0.18s; }
-.prop-ctrl input[type=checkbox] { flex: none; width: 14px; height: 14px; accent-color: var(--purple); cursor: pointer; }
-
-/* ═══════════════════════════════════════════════
-   LOCK + OUTPUT
-═══════════════════════════════════════════════ */
-.timer-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
-
-.type-preview {
-  background: rgba(139,92,246,0.07); border: 1px solid rgba(139,92,246,0.22);
-  border-radius: 8px; padding: 10px 14px; font-family: var(--font-mono); font-size: 0.75rem;
-  color: #c4b5fd; margin-bottom: 10px; word-break: break-all; line-height: 1.75;
-}
-
-textarea.code-out {
-  width: 100%; min-height: 290px; background: rgba(0,0,0,0.55); border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 12px; color: #86efac; font-family: var(--font-mono); font-size: 0.73rem;
-  padding: 14px; resize: vertical; line-height: 1.78; transition: border-color 0.18s;
-}
-textarea.code-out:focus { border-color: var(--purple); box-shadow: 0 0 0 3px rgba(139,92,246,0.18); }
-
-.empty { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 55vh; color: var(--text3); gap: 10px; font-size: 0.92rem; }
-
-/* ═══════════════════════════════════════════════
-   MODAL
-═══════════════════════════════════════════════ */
-.modal-overlay {
-  position: fixed; inset: 0; background: rgba(0,0,0,0.8); z-index: 200;
-  display: flex; align-items: center; justify-content: center; backdrop-filter: blur(10px);
-}
-.modal {
-  background: rgba(10,10,24,0.97); border: 1px solid rgba(255,255,255,0.12);
-  border-radius: 20px; width: min(720px,95vw); max-height: 90vh;
-  display: flex; flex-direction: column; overflow: hidden;
-  box-shadow: 0 8px 40px rgba(0,0,0,0.7), 0 0 0 1px rgba(139,92,246,0.1);
-}
-.modal-head {
-  padding: 18px 22px; border-bottom: 1px solid rgba(255,255,255,0.08);
-  display: flex; align-items: center; justify-content: space-between;
-  background: linear-gradient(135deg, rgba(234,88,12,0.07), transparent);
-}
-.modal-head h2 { font-size: 1rem; font-weight: 800; color: var(--orange); letter-spacing: -0.01em; }
-.modal-body { flex: 1; overflow-y: auto; padding: 18px 22px; }
-.modal-foot { padding: 14px 22px; border-top: 1px solid rgba(255,255,255,0.07); display: flex; gap: 9px; }
-
-.outfit-item-row {
-  display: flex; align-items: center; gap: 10px; padding: 10px 14px;
-  background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.07);
-  border-radius: 9px; margin-bottom: 7px; transition: border-color 0.18s;
-}
-.outfit-item-row:hover { border-color: rgba(255,255,255,0.14); }
-.outfit-item-name { flex: 1; font-size: 0.85rem; color: var(--text); }
-.outfit-item-group { font-size: 0.69rem; color: var(--text3); font-family: var(--font-mono); }
-.outfit-item-badges { display: flex; gap: 4px; }
-.outfit-add-btn {
-  background: linear-gradient(135deg, #7c2d12, #ea580c); color: #fff; border: none;
-  border-radius: 9px; padding: 10px 16px; font-size: 0.83rem; font-weight: 700;
-  cursor: pointer; width: 100%; margin-top: 8px; transition: all 0.18s; font-family: var(--font-ui);
-}
-.outfit-add-btn:hover { filter: brightness(1.1); box-shadow: 0 4px 18px rgba(234,88,12,0.35); }
-textarea.outfit-code { width: 100%; min-height: 210px; background: rgba(0,0,0,0.45); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: #86efac; font-family: var(--font-mono); font-size: 0.71rem; padding: 10px; resize: vertical; line-height: 1.65; }
-
-/* ═══════════════════════════════════════════════
-   VIBRATING
-═══════════════════════════════════════════════ */
-.vib-mode-grid { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 14px; }
-.vib-mode-btn {
-  padding: 7px 16px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 99px; color: var(--text2); font-size: 0.79rem; font-weight: 600;
-  cursor: pointer; transition: all 0.18s; font-family: var(--font-ui);
-}
-.vib-mode-btn:hover { border-color: rgba(255,255,255,0.18); color: var(--text); }
-.vib-mode-btn.on { background: rgba(52,211,153,0.12); border-color: rgba(52,211,153,0.4); color: #6ee7b7; font-weight: 800; }
-
-.vib-intensity-row { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 14px; }
-.vib-int-btn {
-  flex: 1; min-width: 52px; padding: 9px 6px; background: rgba(255,255,255,0.03);
-  border: 1px solid rgba(255,255,255,0.08); border-radius: 9px; color: var(--text2);
-  font-size: 0.77rem; cursor: pointer; text-align: center; transition: all 0.18s; font-family: var(--font-ui);
-}
-.vib-int-btn.on { background: rgba(139,92,246,0.15); border-color: rgba(139,92,246,0.4); color: #c4b5fd; font-weight: 800; }
-
-.vib-effects-row { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 6px; }
-.vib-eff-btn { padding: 5px 13px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 99px; color: var(--text3); font-size: 0.74rem; cursor: pointer; transition: all 0.18s; font-family: var(--font-ui); }
-.vib-eff-btn.on { background: rgba(52,211,153,0.12); border-color: rgba(52,211,153,0.35); color: #6ee7b7; }
-
-.dir-opts { display: flex; flex-wrap: wrap; gap: 8px; }
-.dir-opt-btn { padding: 9px 18px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.09); border-radius: 10px; color: var(--text2); font-size: 0.84rem; cursor: pointer; transition: all 0.18s; font-family: var(--font-ui); }
-.dir-opt-btn:hover { border-color: rgba(255,255,255,0.18); color: var(--text); }
-.dir-opt-btn.on { background: rgba(139,92,246,0.15); border-color: rgba(139,92,246,0.5); color: #c4b5fd; font-weight: 800; box-shadow: 0 0 16px rgba(139,92,246,0.14); }
-
-.baseline-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px,1fr)); gap: 8px; }
-.bl-card { background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.07); border-radius: 8px; padding: 9px 12px; }
-.bl-card-label { font-size: 0.72rem; font-weight: 700; color: var(--text2); margin-bottom: 5px; }
-.bl-card select, .bl-card input { width: 100%; background: rgba(0,0,0,0.35); border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; color: var(--text); padding: 5px 9px; font-size: 0.79rem; font-family: var(--font-ui); }
-
-/* ═══════════════════════════════════════════════
-   PROFILES
-═══════════════════════════════════════════════ */
-.profile-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px,1fr)); gap: 9px; margin-bottom: 14px; }
-.profile-card {
-  background: rgba(255,255,255,0.025); border: 1px solid rgba(255,255,255,0.07);
-  border-radius: 13px; padding: 14px 15px; cursor: pointer; transition: all 0.2s;
-  position: relative; overflow: hidden;
-}
-.profile-card::before {
-  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
-  background: linear-gradient(90deg, #6d28d9, #8b5cf6); opacity: 0; transition: opacity 0.2s;
-}
-.profile-card:hover { border-color: rgba(139,92,246,0.35); box-shadow: 0 4px 20px rgba(139,92,246,0.12), 0 0 0 1px rgba(139,92,246,0.1); }
-.profile-card:hover::before { opacity: 1; }
-.profile-card-name { font-size: 0.9rem; font-weight: 800; color: #c4b5fd; margin-bottom: 4px; }
-.profile-card-info { font-size: 0.7rem; color: var(--text3); }
-.profile-new-row { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; }
-.profile-name-input { flex: 1; background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: var(--text); padding: 7px 12px; font-size: 0.83rem; font-family: var(--font-ui); transition: all 0.18s; }
-.profile-name-input:focus { border-color: var(--purple); box-shadow: 0 0 0 3px rgba(139,92,246,0.2); }
-
-/* ═══════════════════════════════════════════════
-   STATUS MESSAGES
-═══════════════════════════════════════════════ */
-.status-msg {
-  font-size: 0.75rem; font-weight: 700; padding: 6px 14px; border-radius: 99px;
-  margin-left: 6px; animation: fadeIn 0.2s ease; letter-spacing: 0.01em; border: 1px solid;
-}
-@keyframes fadeIn { from{opacity:0;transform:translateY(-3px)} to{opacity:1;transform:translateY(0)} }
-.status-info    { background: rgba(96,165,250,0.1); color: #60a5fa; border-color: rgba(96,165,250,0.25); }
-.status-success { background: rgba(52,211,153,0.1); color: #34d399; border-color: rgba(52,211,153,0.25); }
-.status-error   { background: rgba(251,113,133,0.1); color: #fb7185; border-color: rgba(251,113,133,0.25); }
-#loadingSpinner { animation: pulse 1.5s infinite; }
-@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.45} }
-
-/* ═══════════════════════════════════════════════
-   TABS
-═══════════════════════════════════════════════ */
-.tab-nav {
-  display: flex; gap: 0;
-  background: rgba(6,6,15,0.85); backdrop-filter: blur(12px);
-  border-bottom: 1px solid rgba(255,255,255,0.07);
-  position: sticky; top: 49px; z-index: 99;
-  overflow-x: auto; scrollbar-width: none; padding: 0 16px;
-  box-shadow: 0 2px 16px rgba(0,0,0,0.4);
-}
-.tab-nav::-webkit-scrollbar { display: none; }
-
-.tab-btn {
-  padding: 13px 20px; font-size: 0.8rem; font-weight: 700; font-family: var(--font-ui);
-  border: none; background: none; color: var(--text3); cursor: pointer;
-  border-bottom: 2px solid transparent; margin-bottom: -1px;
-  transition: all 0.2s ease; white-space: nowrap; flex-shrink: 0;
-  letter-spacing: 0.01em; position: relative;
-}
-.tab-btn:hover { color: var(--text2); }
-.tab-btn.active { color: #c4b5fd; border-bottom-color: var(--purple); }
-
-.tab-pane { display: none; }
-.tab-pane.active { display: block; }
-
-/* ═══════════════════════════════════════════════
-   OUTFIT TAB
-═══════════════════════════════════════════════ */
-.outfit-tab-layout { display: grid; grid-template-columns: 1fr 390px; min-height: calc(100vh - 100px); }
-.outfit-left { padding: 20px; overflow-y: auto; max-height: calc(100vh - 100px); }
-.outfit-right { background: rgba(10,10,24,0.6); border-left: 1px solid rgba(255,255,255,0.07); padding: 20px; overflow-y: auto; max-height: calc(100vh - 100px); }
-.outfit-code-live { width: 100%; height: 270px; background: rgba(0,0,0,0.55); border: 1px solid rgba(255,255,255,0.09); border-radius: 12px; color: #86efac; font-family: var(--font-mono); font-size: 0.71rem; padding: 12px; resize: vertical; line-height: 1.78; transition: border-color 0.18s; }
-.outfit-code-live:focus { border-color: var(--purple); box-shadow: 0 0 0 3px rgba(139,92,246,0.18); }
-.outfit-empty-hint { color: var(--text3); font-size: 0.86rem; text-align: center; padding: 46px 24px; border: 1px dashed rgba(255,255,255,0.07); border-radius: 14px; line-height: 1.75; }
-.profile-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px,1fr)); gap: 9px; margin-top: 12px; }
-.section-hdr2 { font-size: 0.7rem; font-weight: 800; color: var(--text2); text-transform: uppercase; letter-spacing: 1.6px; padding-bottom: 9px; border-bottom: 1px solid rgba(255,255,255,0.07); margin-bottom: 13px; display: flex; align-items: center; justify-content: space-between; }
-
-.outfit-search-row { display: flex; gap: 8px; margin-bottom: 12px; align-items: center; }
-.outfit-search { flex: 1; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1); border-radius: 99px; color: var(--text); padding: 7px 14px; font-size: 0.81rem; font-family: var(--font-ui); transition: all 0.18s; }
-.outfit-search:focus { border-color: var(--purple); box-shadow: 0 0 0 3px rgba(139,92,246,0.2); }
-
-.outfit-target-bar { display: flex; align-items: center; gap: 9px; margin-bottom: 12px; }
-.outfit-target-label { font-size: .73rem; font-weight: 800; color: var(--text3); white-space: nowrap; text-transform: uppercase; letter-spacing: .06em; }
-.outfit-member-chips { display: flex; flex-wrap: wrap; gap: 5px; }
-.outfit-member-chip { display: inline-flex; align-items: center; gap: 5px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); border-radius: 99px; padding: 3px 10px; cursor: pointer; transition: all 0.18s; font-size: .75rem; color: var(--text2); }
-.outfit-member-chip:hover { border-color: rgba(139,92,246,0.4); color: #c4b5fd; }
-.outfit-member-chip.sel { background: rgba(139,92,246,0.14); border-color: rgba(139,92,246,0.5); color: #c4b5fd; font-weight: 700; }
-
-/* ═══════════════════════════════════════════════
-   CURSE TAB
-═══════════════════════════════════════════════ */
-.curse-topbar { display: flex; align-items: center; gap: 9px; padding: 12px 18px; background: rgba(255,255,255,0.01); border-bottom: 1px solid rgba(255,255,255,0.07); flex-wrap: wrap; }
-.curse-stats { display: flex; gap: 7px; flex-wrap: wrap; flex: 1; }
-.curse-stat { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 99px; padding: 4px 14px; font-size: 0.72rem; white-space: nowrap; }
-.curse-stat span { font-weight: 800; color: #c4b5fd; }
-.curse-body { padding: 16px; overflow-y: auto; max-height: calc(100vh - 130px); }
-
-.curse-owner-block { margin-bottom: 13px; border: 1px solid rgba(255,255,255,0.07); border-radius: 12px; overflow: hidden; transition: border-color 0.18s; }
-.curse-owner-block:hover { border-color: rgba(255,255,255,0.13); }
-.curse-owner-hdr { display: flex; align-items: center; gap: 9px; padding: 10px 15px; background: rgba(255,255,255,0.02); cursor: pointer; user-select: none; transition: background 0.13s; }
-.curse-owner-hdr:hover { background: rgba(255,255,255,0.04); }
-.curse-owner-name { font-size: 0.85rem; font-weight: 800; color: var(--text); flex: 1; }
-.curse-owner-num { font-size: 0.65rem; color: var(--text3); font-family: var(--font-mono); }
-.curse-owner-count { font-size: 0.66rem; background: rgba(139,92,246,0.18); color: #c4b5fd; padding: 2px 9px; border-radius: 99px; font-weight: 800; border: 1px solid rgba(139,92,246,0.3); }
-.curse-owner-chevron { color: var(--text3); font-size: 0.72rem; transition: transform 0.2s ease; }
-.curse-owner-block.open .curse-owner-chevron { transform: rotate(90deg); }
-.curse-rows { display: none; }
-.curse-owner-block.open .curse-rows { display: table; width: 100%; border-collapse: collapse; }
-
-.curse-row { border-top: 1px solid rgba(255,255,255,0.06); }
-.curse-row td { padding: 7px 12px; font-size: 0.75rem; vertical-align: top; }
-.curse-row:hover { background: rgba(139,92,246,0.04); }
-.curse-row.lscg { background: rgba(52,211,153,0.04); }
-.curse-row td.cn { color: var(--text); font-weight: 700; min-width: 130px; }
-.curse-row td.item { color: var(--text2); font-family: var(--font-mono); font-size: 0.69rem; }
-.curse-row td.grp { color: var(--text3); font-size: 0.65rem; font-family: var(--font-mono); }
-.curse-row td.badges { white-space: nowrap; }
-.curse-row td.lscg-col { color: #34d399; font-size: 0.67rem; }
-.curse-row td.comment-col { min-width: 170px; }
-.curse-comment-input { width: 100%; background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.08); border-radius: 5px; color: var(--text2); padding: 4px 8px; font-size: 0.73rem; resize: none; height: 34px; transition: border-color 0.18s; font-family: var(--font-ui); }
-.curse-comment-input:focus { outline: none; border-color: var(--purple); }
-.curse-row td.actions { white-space: nowrap; }
-.curse-apply-btn { padding: 4px 12px; border: 1px solid; border-radius: 99px; font-size: 0.69rem; cursor: pointer; font-weight: 800; background: rgba(52,211,153,0.12); color: #6ee7b7; border-color: rgba(52,211,153,0.25); margin-right: 4px; transition: all 0.18s; font-family: var(--font-ui); }
-.curse-apply-btn:hover { background: rgba(52,211,153,0.22); }
-.curse-apply-btn.other { background: rgba(139,92,246,0.12); color: #c4b5fd; border-color: rgba(139,92,246,0.3); }
-.curse-apply-btn.other:hover { background: rgba(139,92,246,0.24); }
-
-.curse-detail-row { background: rgba(0,0,0,0.25); display: none; }
-.curse-owner-block.open .curse-detail-row.open { display: table-row; }
-.curse-detail-cell { padding: 9px 14px 12px; font-size: 0.69rem; color: var(--text2); }
-.curse-detail-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px,1fr)); gap: 6px; margin-top: 6px; }
-.curse-detail-field { background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.07); border-radius: 6px; padding: 5px 10px; }
-.curse-detail-label { font-size: 0.62rem; color: var(--text3); font-family: var(--font-mono); margin-bottom: 3px; font-weight: 600; }
-.curse-detail-val { color: var(--text); font-family: var(--font-mono); font-size: 0.72rem; }
-.curse-detail-badge { display: inline-block; padding: 2px 8px; border-radius: 99px; font-size: 0.63rem; background: rgba(96,165,250,0.1); color: #60a5fa; margin-right: 3px; margin-top: 2px; border: 1px solid rgba(96,165,250,0.18); }
-.curse-detail-badge.lscg { background: rgba(52,211,153,0.1); color: #34d399; border-color: rgba(52,211,153,0.18); }
-.curse-detail-badge.cursed { background: rgba(139,92,246,0.12); color: #c4b5fd; border-color: rgba(139,92,246,0.22); }
-
-.cursor-detail-toggle { cursor: pointer; color: var(--text3); font-size: 0.72rem; margin-right: 5px; transition: transform 0.15s; display: inline-block; }
-.curse-row.expanded .cursor-detail-toggle { transform: rotate(90deg); }
-.curse-empty { text-align: center; padding: 52px; color: var(--text3); font-size: 0.9rem; }
-
-.curse-filter-bar { display: flex; align-items: center; gap: 9px; padding: 9px 16px; background: rgba(255,255,255,0.01); border-bottom: 1px solid rgba(255,255,255,0.06); flex-wrap: wrap; }
-.curse-search { background: rgba(0,0,0,0.35); border: 1px solid rgba(255,255,255,0.1); border-radius: 99px; color: var(--text); padding: 6px 14px; font-size: 0.78rem; width: 210px; font-family: var(--font-ui); transition: all 0.18s; }
-.curse-search:focus { outline: none; border-color: var(--purple); box-shadow: 0 0 0 3px rgba(139,92,246,0.2); }
-.filter-chip { display: inline-flex; align-items: center; gap: 5px; padding: 4px 12px; border-radius: 99px; border: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.03); color: var(--text3); font-size: 0.72rem; cursor: pointer; user-select: none; transition: all 0.18s; white-space: nowrap; font-weight: 600; font-family: var(--font-ui); }
-.filter-chip:hover { border-color: rgba(139,92,246,0.45); color: #c4b5fd; }
-.filter-chip.on { border-color: rgba(139,92,246,0.5); background: rgba(139,92,246,0.12); color: #c4b5fd; }
-.filter-chip.on.green { border-color: rgba(52,211,153,0.4); background: rgba(52,211,153,0.08); color: #6ee7b7; }
-.filter-chip.on.yellow { border-color: rgba(251,191,36,0.4); background: rgba(251,191,36,0.07); color: #fbbf24; }
-.filter-sep { width: 1px; height: 16px; background: rgba(255,255,255,0.08); flex-shrink: 0; }
-.slot-filter-wrap { position: relative; }
-.slot-select { background: rgba(0,0,0,0.35); border: 1px solid rgba(255,255,255,0.1); border-radius: 99px; color: var(--text2); padding: 4px 12px; font-size: 0.72rem; cursor: pointer; font-family: var(--font-ui); }
-
-/* ═══════════════════════════════════════════════
-   BOT TAB
-═══════════════════════════════════════════════ */
-.bot-wrap { display: grid; grid-template-columns: 272px 1fr; height: calc(100vh - 112px); overflow: hidden; }
-.bot-sidebar { border-right: 1px solid rgba(255,255,255,0.07); display: flex; flex-direction: column; overflow-y: auto; background: rgba(10,10,24,0.8); }
-.bot-main { overflow-y: auto; background: var(--bg); }
-.bs-head { padding: 13px 16px; border-bottom: 1px solid rgba(255,255,255,0.07); display: flex; align-items: center; gap: 7px; background: rgba(255,255,255,0.01); }
-.bs-head span { flex: 1; font-size: 0.78rem; font-weight: 800; color: var(--text); letter-spacing: -0.01em; }
-.bot-list { flex: 1; overflow-y: auto; }
-.bot-item { padding: 11px 16px; border-bottom: 1px solid rgba(255,255,255,0.06); cursor: pointer; display: flex; align-items: center; gap: 9px; transition: background 0.13s; }
-.bot-item:hover { background: rgba(255,255,255,0.03); }
-.bot-item.sel { background: rgba(139,92,246,0.1); border-left: 3px solid var(--purple); }
-.bot-item .bi-name { flex: 1; font-size: 0.78rem; font-weight: 700; color: var(--text); }
-.bot-item .bi-stat { font-size: 0.63rem; color: var(--text3); }
-
-.bot-toggle { width: 36px; height: 20px; border-radius: 10px; border: none; cursor: pointer; flex-shrink: 0; transition: all 0.25s ease; position: relative; }
-.bot-toggle.on { background: rgba(52,211,153,0.35); box-shadow: 0 0 10px rgba(52,211,153,0.25); }
-.bot-toggle.off { background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.12); }
-.bot-toggle::after { content: ''; position: absolute; top: 3px; width: 14px; height: 14px; border-radius: 50%; background: #fff; transition: left 0.22s cubic-bezier(0.34,1.56,0.64,1); box-shadow: 0 1px 3px rgba(0,0,0,0.35); }
-.bot-toggle.on::after { left: 19px; }
-.bot-toggle.off::after { left: 3px; }
-
-/* ── Bot-Gruppen ──────────────────────────── */
-.bg-section { border-bottom: 1px solid rgba(255,255,255,0.07); }
-.bg-hdr {
-  display: flex; align-items: center; gap: 6px;
-  padding: 8px 14px; cursor: pointer; user-select: none;
-  background: rgba(255,255,255,0.01); transition: background 0.13s;
-  font-size: 0.72rem; font-weight: 800; color: var(--text2);
-  letter-spacing: 0.04em; text-transform: uppercase;
-}
-.bg-hdr:hover { background: rgba(255,255,255,0.04); }
-.bg-hdr .bg-arrow { font-size: 0.6rem; transition: transform 0.18s; color: var(--text3); flex-shrink:0; }
-.bg-hdr.open .bg-arrow { transform: rotate(90deg); }
-.bg-hdr .bg-title { flex: 1; }
-.bg-hdr .bg-count { font-size: 0.62rem; font-family: var(--font-mono); color: var(--text3); font-weight: 600; background: rgba(255,255,255,0.06); padding: 1px 7px; border-radius: 99px; }
-.bg-hdr .bg-run-btn, .bg-hdr .bg-stop-btn {
-  font-size: 0.6rem; padding: 2px 8px; border-radius: 99px; border: none; cursor: pointer;
-  font-weight: 800; transition: all 0.15s; font-family: var(--font-ui);
-}
-.bg-hdr .bg-run-btn  { background: rgba(52,211,153,0.18); color: #34d399; }
-.bg-hdr .bg-run-btn:hover  { background: rgba(52,211,153,0.35); }
-.bg-hdr .bg-stop-btn { background: rgba(251,113,133,0.15); color: #fb7185; }
-.bg-hdr .bg-stop-btn:hover { background: rgba(251,113,133,0.3); }
-.bg-hdr .bg-del-btn  { font-size: 0.6rem; background: none; border: none; color: var(--text3); cursor: pointer; padding: 2px 4px; border-radius: 4px; transition: color 0.13s; }
-.bg-hdr .bg-del-btn:hover { color: var(--red); }
-.bg-body { display: none; padding: 4px 0 6px 10px; background: rgba(0,0,0,0.2); }
-.bg-body.open { display: block; }
-.bg-add-row { display: flex; gap: 5px; padding: 5px 14px 4px; }
-.bg-add-row select { flex: 1; background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; color: var(--text2); padding: 4px 8px; font-size: 0.71rem; font-family: var(--font-ui); }
-.bg-add-row button { font-size: 0.68rem; padding: 3px 10px; background: rgba(139,92,246,0.2); border: 1px solid rgba(139,92,246,0.35); color: #c4b5fd; border-radius: 6px; cursor: pointer; font-weight: 700; font-family: var(--font-ui); transition: all 0.15s; white-space:nowrap; }
-.bg-add-row button:hover { background: rgba(139,92,246,0.35); }
-.bg-bot-row { display: flex; align-items: center; gap: 6px; padding: 5px 14px 5px 10px; border-radius: 6px; margin: 1px 4px; transition: background 0.12s; cursor: pointer; }
-.bg-bot-row:hover { background: rgba(255,255,255,0.04); }
-.bg-bot-row.sel { background: rgba(139,92,246,0.1); }
-.bg-bot-row .bg-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; background: rgba(255,255,255,0.12); transition: background 0.2s; }
-.bg-bot-row .bg-dot.on  { background: #34d399; box-shadow: 0 0 6px rgba(52,211,153,0.5); }
-.bg-bot-row .bg-bot-name { flex: 1; font-size: 0.75rem; color: var(--text2); font-weight: 600; }
-.bg-bot-row.sel .bg-bot-name { color: #c4b5fd; }
-.bg-bot-row .bg-rm-btn { font-size: 0.6rem; background: none; border: none; color: var(--text3); cursor: pointer; padding: 1px 3px; border-radius: 3px; transition: color 0.13s; opacity: 0; }
-.bg-bot-row:hover .bg-rm-btn { opacity: 1; }
-.bg-bot-row .bg-rm-btn:hover { color: var(--red); }
-.bg-new-row { display: flex; gap: 6px; padding: 6px 14px; border-top: 1px solid rgba(255,255,255,0.06); margin-top: 2px; }
-.bg-new-row input { flex: 1; background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; color: var(--text); padding: 4px 9px; font-size: 0.71rem; font-family: var(--font-ui); }
-.bg-new-row button { font-size: 0.68rem; padding: 3px 10px; background: rgba(52,211,153,0.15); border: 1px solid rgba(52,211,153,0.3); color: #34d399; border-radius: 6px; cursor: pointer; font-weight: 700; font-family: var(--font-ui); transition: all 0.15s; white-space:nowrap; }
-.bg-new-row button:hover { background: rgba(52,211,153,0.3); }
-.bg-status-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: rgba(255,255,255,0.15); flex-shrink:0; }
-.bg-status-dot.any-on { background: #34d399; box-shadow: 0 0 6px rgba(52,211,153,0.45); }
-.bg-status-dot.all-on { background: #34d399; box-shadow: 0 0 8px rgba(52,211,153,0.7); animation: pulse 1.8s infinite; }
-.ungrouped-hdr { font-size: 0.62rem; font-weight: 800; color: var(--text3); letter-spacing: 0.06em; text-transform: uppercase; padding: 8px 16px 4px; }
-
-/* ── If/Else Logic ───────────────────────────── */
-.ifelse-wrapper {
-  border: 1px solid rgba(139,92,246,0.25); border-radius: 12px;
-  background: rgba(139,92,246,0.03); overflow: hidden; margin-top: 4px;
-}
-.ifelse-dann-hdr, .ifelse-sonst-hdr {
-  display: flex; align-items: center; gap: 8px;
-  padding: 8px 14px; font-size: 0.7rem; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase;
-}
-.ifelse-dann-hdr {
-  background: rgba(52,211,153,0.08); border-bottom: 1px solid rgba(52,211,153,0.15); color: #34d399;
-}
-.ifelse-sonst-hdr {
-  background: rgba(251,113,133,0.08); border-bottom: 1px solid rgba(251,113,133,0.15); color: #fb7185;
-  border-top: 2px dashed rgba(251,113,133,0.2);
-}
-.ifelse-dann-body { padding: 10px 14px; background: rgba(52,211,153,0.02); }
-.ifelse-sonst-body { padding: 10px 14px; background: rgba(251,113,133,0.02); }
-.ifelse-separator {
-  display: flex; align-items: center; gap: 10px;
-  padding: 6px 14px; background: rgba(255,255,255,0.01);
-  border-top: 1px dashed rgba(255,255,255,0.08);
-}
-.ifelse-toggle-row {
-  display: flex; align-items: center; gap: 9px; padding: 7px 14px 7px;
-  background: rgba(139,92,246,0.04); border-top: 1px solid rgba(139,92,246,0.12);
-}
-.ifelse-toggle-lbl { font-size: 0.69rem; font-weight: 700; color: var(--purple); cursor: pointer; display: flex; align-items: center; gap: 7px; }
-.ifelse-toggle-lbl input[type=checkbox] { accent-color: var(--purple); width: 14px; height: 14px; cursor: pointer; }
-.ifelse-hint { font-size: 0.62rem; color: var(--text3); }
-.ifelse-add-btn {
-  display: block; width: 100%; padding: 7px; text-align: center; background: none;
-  border: 1px dashed rgba(139,92,246,0.2); border-radius: 8px; color: rgba(139,92,246,0.6);
-  font-size: 0.72rem; cursor: pointer; margin-top: 5px; transition: all 0.18s;
-  font-family: var(--font-ui); font-weight: 600;
-}
-.ifelse-add-btn.sonst { border-color: rgba(251,113,133,0.2); color: rgba(251,113,133,0.6); }
-.ifelse-add-btn:hover { border-color: var(--purple); color: #c4b5fd; background: rgba(139,92,246,0.05); }
-.ifelse-add-btn.sonst:hover { border-color: #fb7185; color: #fb7185; background: rgba(251,113,133,0.05); }
-.ifelse-if-hdr {
-  display: flex; align-items: center; gap: 8px;
-  padding: 8px 14px; font-size: 0.7rem; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase;
-  background: rgba(139,92,246,0.1); border-bottom: 1px solid rgba(139,92,246,0.2); color: #a78bfa;
-}
-.ifelse-if-body {
-  padding: 10px 14px; background: rgba(139,92,246,0.03);
-  border-bottom: 2px solid rgba(139,92,246,0.15);
-}
-.ifelse-if-add-btn {
-  display: inline-flex; align-items: center; gap: 4px;
-  padding: 3px 9px; background: none;
-  border: 1px dashed rgba(139,92,246,0.3); border-radius: 5px; color: rgba(139,92,246,0.7);
-  font-size: 0.66rem; cursor: pointer; margin: 3px 3px 0 0; transition: all 0.15s;
-  font-family: var(--font-ui); font-weight: 600;
-}
-.ifelse-if-add-btn:hover { border-color: var(--purple); color: #c4b5fd; background: rgba(139,92,246,0.07); }
-
-.be-topbar { padding: 12px 20px; border-bottom: 1px solid rgba(255,255,255,0.07); display: flex; align-items: center; gap: 9px; background: rgba(255,255,255,0.01); }
-.be-topbar input { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: var(--text); padding: 6px 12px; font-size: 0.82rem; font-weight: 800; font-family: var(--font-mono); transition: border-color 0.18s; }
-.be-body { padding: 20px 22px; }
-
-.bot-status { padding: 7px 20px; font-size: 0.71rem; font-family: var(--font-mono); display: none; }
-.bot-status.running { background: rgba(52,211,153,0.06); border-bottom: 1px solid rgba(52,211,153,0.18); color: #6ee7b7; display: block; }
-.bot-status.stopped { background: rgba(255,255,255,0.015); border-bottom: 1px solid rgba(255,255,255,0.06); color: var(--text3); display: block; }
-.be-empty { padding: 70px 22px; text-align: center; color: var(--text3); font-size: 0.82rem; }
-.be-empty .be-empty-icon { font-size: 3rem; margin-bottom: 14px; }
-.bot-cfg-panel { background: rgba(255,255,255,0.01); border-bottom: 1px solid rgba(255,255,255,0.07); padding: 10px 20px; display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
-.bot-cfg-label { font-size: 0.7rem; color: var(--text3); font-weight: 600; }
-.bot-cfg-panel input[type=checkbox] { accent-color: var(--purple); }
-
-.trig-card { background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.07); border-radius: 13px; margin-bottom: 10px; overflow: hidden; transition: border-color 0.18s; }
-.trig-card:hover { border-color: rgba(255,255,255,0.13); }
-.trig-card.trig-on { border-color: rgba(139,92,246,0.35); }
-.trig-head { display: flex; align-items: center; gap: 9px; padding: 11px 14px; cursor: pointer; user-select: none; transition: background 0.13s; }
-.trig-head:hover { background: rgba(255,255,255,0.03); }
-.trig-label { font-size: 0.76rem; font-weight: 800; color: #c4b5fd; font-family: var(--font-mono); flex: 1; }
-.trig-meta { font-size: 0.63rem; color: var(--text3); }
-.trig-body { padding: 14px 16px; border-top: 1px solid rgba(255,255,255,0.07); display: none; }
-.trig-body.open { display: block; }
-
-.te-section { margin-bottom: 14px; }
-.te-section-title { font-size: 0.63rem; text-transform: uppercase; letter-spacing: 0.09em; color: var(--text3); font-weight: 800; margin-bottom: 8px; display: flex; align-items: center; gap: 10px; }
-.te-section-title button { font-size: 0.64rem; padding: 3px 11px; border-radius: 99px; border: 1px dashed rgba(255,255,255,0.1); background: none; color: var(--text3); cursor: pointer; transition: all 0.18s; font-family: var(--font-ui); font-weight: 600; }
-.te-section-title button:hover { border-color: rgba(139,92,246,0.5); color: #c4b5fd; }
-
-.cond-card, .act-card { background: rgba(255,255,255,0.025); border: 1px solid rgba(255,255,255,0.08); border-radius: 9px; padding: 8px 12px; margin-bottom: 6px; display: grid; grid-template-columns: 1fr auto; gap: 7px; align-items: start; }
-.cond-card.cond-op { background: rgba(139,92,246,0.06); border-color: rgba(139,92,246,0.2); }
-.card-fields { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
-.cf { background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.1); border-radius: 5px; color: var(--text); padding: 4px 8px; font-size: 0.7rem; font-family: var(--font-mono); transition: border-color 0.18s; }
-.cf:focus { outline: none; border-color: var(--purple); }
-.cf-w80{width:80px}.cf-w100{width:100px}.cf-w120{width:120px}.cf-w160{width:160px}.cf-w200{width:200px}.cf-flex{flex:1;min-width:100px}
-.rm-btn { background: none; border: none; color: #fb7185; cursor: pointer; font-size: 0.85rem; padding: 3px 5px; line-height: 1; flex-shrink: 0; transition: opacity 0.15s; border-radius: 4px; }
-.rm-btn:hover { opacity: 0.7; background: rgba(251,113,133,0.1); }
-.act-icon { font-size: 0.95rem; margin-right: 5px; }
-.be-addtrig { width: 100%; padding: 10px; background: none; border: 1px dashed rgba(255,255,255,0.08); border-radius: 12px; color: var(--text3); font-size: 0.74rem; cursor: pointer; margin-top: 5px; transition: all 0.18s; font-family: var(--font-ui); }
-.be-addtrig:hover { border-color: rgba(139,92,246,0.4); color: #c4b5fd; background: rgba(139,92,246,0.04); }
-
-.trig-order-num { font-size: 0.6rem; font-weight: 800; color: var(--text3); background: rgba(255,255,255,0.05); border-radius: 4px; padding: 2px 6px; flex-shrink: 0; min-width: 20px; text-align: center; }
-.order-btn { background: none; border: 1px solid rgba(255,255,255,0.1); border-radius: 3px; color: var(--text3); cursor: pointer; font-size: 0.58rem; line-height: 1; padding: 2px 4px; transition: all 0.18s; }
-.order-btn:hover:not(:disabled) { border-color: rgba(139,92,246,0.5); color: #c4b5fd; }
-.order-btn:disabled { opacity: 0.25; cursor: default; }
-.act-kritisch { border-color: rgba(220,38,38,0.4) !important; background: rgba(127,29,29,0.15) !important; }
-
-.event-card { background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.07); border-radius: 12px; margin-bottom: 9px; overflow: hidden; transition: border-color 0.18s; }
-.event-head { display: flex; align-items: center; gap: 8px; padding: 9px 12px; cursor: pointer; user-select: none; transition: background 0.13s; }
-.event-head:hover { background: rgba(255,255,255,0.03); }
-.event-body { padding: 12px 16px; border-top: 1px solid rgba(255,255,255,0.07); display: none; }
-.event-card.ev-on .event-head { border-left: 3px solid var(--purple); }
-.event-card .event-body.open { display: block; }
-.ev-label { flex: 1; font-size: 0.76rem; font-weight: 700; color: var(--text); }
-.ev-meta { font-size: 0.63rem; color: var(--text3); }
-.ev-type-badge { font-size: 0.62rem; padding: 2px 9px; border-radius: 99px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1); color: var(--text3); font-weight: 700; }
-.ev-type-badge.manual { background: rgba(139,92,246,0.12); border-color: rgba(139,92,246,0.3); color: #c4b5fd; }
-.ev-type-badge.auto { background: rgba(52,211,153,0.1); border-color: rgba(52,211,153,0.3); color: #6ee7b7; }
-.ev-type-badge.interval { background: rgba(251,146,60,0.1); border-color: rgba(251,146,60,0.3); color: #fb923c; }
-.ev-type-badge.chat-ev { background: rgba(52,211,153,0.06); border-color: rgba(52,211,153,0.18); color: #5f5; }
-.ev-type-badge.betritt-ev { background: rgba(244,114,182,0.08); border-color: rgba(244,114,182,0.22); color: #f472b6; }
-.be-addevent { display: block; width: 100%; padding: 10px; text-align: center; background: none; border: 1px dashed rgba(139,92,246,0.2); border-radius: 9px; color: rgba(139,92,246,0.6); font-size: 0.73rem; cursor: pointer; margin-top: 5px; transition: all 0.18s; font-family: var(--font-ui); font-weight: 600; }
-.be-addevent:hover { border-color: var(--purple); color: #c4b5fd; }
-
-.cond-group-oder::before { content:"ODER"; display:block; font-size:.59rem; color:#fbbf24; font-weight:800; letter-spacing:.09em; text-align:center; margin:4px 0 2px 7px; }
-.cond-when-lbl { font-size:.63rem; color:var(--text3); padding:2px 9px; background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.1); border-radius:99px; margin:3px 0 3px 7px; display:inline-block; }
-.cond-group { display:flex; flex-direction:column; gap:0; }
-.cond-num { font-size:.6rem; font-weight:800; color:var(--text3); background:rgba(255,255,255,0.05); border-radius:4px; padding:2px 6px; flex-shrink:0; min-width:20px; text-align:center; }
-.logik-btn { font-size:.6rem; padding:2px 9px; border:1px solid rgba(255,255,255,0.1); background:rgba(255,255,255,0.03); color:var(--text3); cursor:pointer; line-height:1.5; transition:all 0.18s; }
-.logik-btn:first-child { border-radius:5px 0 0 5px; }
-.logik-btn:last-child { border-radius:0 5px 5px 0; border-left:none; }
-.logik-btn.active { background:rgba(139,92,246,0.2); color:#c4b5fd; border-color:rgba(139,92,246,0.4); }
-.tp-slot-valid { font-size:.6rem; padding:2px 8px; border-radius:99px; cursor:pointer; border:1px solid; font-weight:700; transition:all 0.18s; }
-.tp-slot-valid.zählt { background:rgba(52,211,153,0.1); color:#5c5; border-color:rgba(52,211,153,0.28); }
-.tp-slot-valid.zählt-nicht { background:rgba(220,38,38,0.1); color:#e55; border-color:rgba(220,38,38,0.28); }
-
-/* ═══════════════════════════════════════════════
-   LOGS
-═══════════════════════════════════════════════ */
-.log-entry { display:flex; align-items:center; gap:9px; padding:8px 12px; border-radius:9px; border:1px solid rgba(255,255,255,0.08); background:rgba(255,255,255,0.015); font-size:.74rem; transition:border-color 0.13s; }
-.log-entry.log-ok { border-color:rgba(52,211,153,0.2); background:rgba(52,211,153,0.04); }
-.log-entry.log-ungueltig { border-color:rgba(251,113,133,0.2); background:rgba(251,113,133,0.04); }
-.log-entry.log-skip { border-color:rgba(251,191,36,0.1); background:rgba(251,191,36,0.02); opacity:.7; }
-.log-ts { font-size:.62rem; color:var(--text3); white-space:nowrap; min-width:56px; font-family:var(--font-mono); }
-.log-badge { font-size:.63rem; padding:2px 9px; border-radius:99px; white-space:nowrap; flex-shrink:0; font-weight:800; border:1px solid; }
-.log-badge.ok { background:rgba(52,211,153,0.1); color:#5c5; border-color:rgba(52,211,153,0.2); }
-.log-badge.ungueltig { background:rgba(220,38,38,0.1); color:#e55; border-color:rgba(220,38,38,0.2); }
-.log-badge.skip { background:rgba(251,191,36,0.07); color:#aa9; border-color:rgba(251,191,36,0.14); }
-.log-bot { color:#c4b5fd; font-weight:800; flex-shrink:0; font-family:var(--font-mono); }
-.log-trig { color:var(--text2); flex-shrink:0; }
-.log-player { color:#34d399; flex:1; }
-.log-pos { color:var(--text3); font-size:.62rem; white-space:nowrap; }
-.log-filter-btn { font-size:.69rem; padding:4px 12px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.1); color:var(--text3); border-radius:99px; cursor:pointer; transition:all 0.18s; font-family:var(--font-ui); font-weight:600; }
-.log-filter-btn.active { background:rgba(139,92,246,0.15); border-color:rgba(139,92,246,0.4); color:#c4b5fd; }
-.log-badge.join-neu { background:rgba(96,165,250,0.1); color:#5af; border-color:rgba(96,165,250,0.2); }
-.log-badge.join-rejoin { background:rgba(167,139,250,0.1); color:#a5f; border-color:rgba(167,139,250,0.2); }
-.log-badge.leave { background:rgba(255,255,255,0.04); color:#888; border-color:rgba(255,255,255,0.1); }
-.log-entry.log-join { border-color:rgba(96,165,250,0.2); background:rgba(96,165,250,0.03); }
-.log-entry.log-leave { border-color:rgba(255,255,255,0.06); background:rgba(255,255,255,0.01); opacity:.6; }
-
-/* ═══════════════════════════════════════════════
-   MONEY
-═══════════════════════════════════════════════ */
-.money-card { display:flex; align-items:center; gap:12px; padding:12px 16px; border:1px solid rgba(255,255,255,0.08); border-radius:13px; background:rgba(255,255,255,0.02); margin-bottom:9px; transition:all 0.2s; }
-.money-card:hover { border-color:rgba(251,191,36,0.2); box-shadow:0 3px 14px rgba(251,191,36,0.06); }
-.money-balance { font-size:1.2rem; font-weight:800; color:#f5c842; min-width:76px; text-align:right; font-family:var(--font-mono); }
-.money-name { color:var(--text); flex:1; font-size:.84rem; font-weight:600; }
-.money-adj { display:flex; gap:5px; align-items:center; }
-.money-adj input { width:70px; font-family:var(--font-mono); }
-.money-adj button { padding:5px 14px; font-size:.71rem; border:1px solid; border-radius:99px; cursor:pointer; transition:all 0.18s; font-weight:800; font-family:var(--font-ui); }
-.money-adj button:hover { filter:brightness(1.25); }
-.money-plus { background:rgba(52,211,153,0.12); color:#34d399; border-color:rgba(52,211,153,0.25); }
-.money-minus { background:rgba(251,113,133,0.1); color:#fb7185; border-color:rgba(251,113,133,0.2); }
-
-/* ═══════════════════════════════════════════════
-   ROOM PANEL
-═══════════════════════════════════════════════ */
-.room-panel { background: rgba(6,6,15,0.7); border-bottom: 1px solid rgba(255,255,255,0.07); padding: 7px 18px; display: flex; align-items: center; gap: 9px; flex-wrap: wrap; min-height: 36px; }
-.room-label { color: var(--text3); flex-shrink: 0; font-size: 0.7rem; white-space: nowrap; font-weight: 800; text-transform: uppercase; letter-spacing: 0.07em; }
-.room-members { display: flex; flex-wrap: wrap; gap: 5px; flex: 1; }
-.room-chip { display: inline-flex; align-items: center; gap: 5px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); border-radius: 99px; padding: 3px 11px; cursor: pointer; transition: all 0.18s; font-size: 0.74rem; color: var(--text2); white-space: nowrap; user-select: none; font-family: var(--font-ui); }
-.room-chip:hover { border-color: rgba(139,92,246,0.5); color: #c4b5fd; background: rgba(139,92,246,0.08); }
-.room-chip.self { border-color: rgba(52,211,153,0.4); color: #6ee7b7; background: rgba(52,211,153,0.06); cursor: default; }
-.room-chip.selected { border-color: rgba(139,92,246,0.5); color: #c4b5fd; background: rgba(139,92,246,0.12); font-weight: 700; }
-.room-num { font-size: 0.61rem; color: var(--text3); font-family: var(--font-mono); }
-.room-chip.self .room-num { color: rgba(52,211,153,0.65); }
-.room-refresh-btn { background: none; border: 1px solid rgba(255,255,255,0.1); border-radius: 99px; color: var(--text3); font-size: 0.7rem; padding: 3px 11px; cursor: pointer; flex-shrink: 0; transition: all 0.18s; font-family: var(--font-ui); }
-.room-refresh-btn:hover { border-color: rgba(139,92,246,0.5); color: #c4b5fd; }
-.room-empty { color: var(--text3); font-style: italic; font-size: 0.73rem; }
-.room-scanning { animation: roomPulse 1s infinite; }
-
-/* ═══════════════════════════════════════════════
-   ITEM PICKER
-═══════════════════════════════════════════════ */
-.ipicker-overlay { position:fixed; inset:0; background:rgba(0,0,0,.85); z-index:600; display:flex; align-items:center; justify-content:center; backdrop-filter:blur(12px); }
-.ipicker-box { background:rgba(10,10,24,0.98); border:1px solid rgba(255,255,255,0.12); border-radius:20px; width:580px; max-height:80vh; display:flex; flex-direction:column; overflow:hidden; box-shadow:0 8px 40px rgba(0,0,0,0.7); }
-.ipicker-head { padding:14px 18px; display:flex; gap:9px; align-items:center; border-bottom:1px solid rgba(255,255,255,0.08); }
-.ipicker-tabs { display:flex; gap:6px; padding:10px 16px; border-bottom:1px solid rgba(255,255,255,0.07); }
-.ipicker-tab { padding:5px 14px; border-radius:99px; border:1px solid rgba(255,255,255,0.1); background:rgba(255,255,255,0.03); color:var(--text3); font-size:.71rem; cursor:pointer; transition:all 0.18s; font-weight:700; font-family:var(--font-ui); }
-.ipicker-tab.on { background:rgba(139,92,246,0.18); color:#c4b5fd; border-color:rgba(139,92,246,0.4); }
-.ipicker-list { overflow-y:auto; flex:1; }
-.ipicker-row { padding:10px 16px; font-size:.75rem; cursor:pointer; border-bottom:1px solid rgba(255,255,255,0.06); display:flex; gap:9px; align-items:center; transition:background 0.13s; font-family:var(--font-ui); }
-.ipicker-row:hover { background:rgba(139,92,246,0.06); color:#c4b5fd; }
-.ipicker-tag { font-size:.62rem; background:rgba(139,92,246,0.16); color:#c4b5fd; border-radius:99px; padding:2px 9px; white-space:nowrap; font-weight:700; border:1px solid rgba(139,92,246,0.2); }
-.ipicker-tag.green { background:rgba(52,211,153,0.12); color:#6ee7b7; border-color:rgba(52,211,153,0.2); }
-.ipicker-tag.purple { background:rgba(139,92,246,0.12); color:#c4b5fd; }
-
-/* ═══════════════════════════════════════════════
-   TP SLOT + MISC
-═══════════════════════════════════════════════ */
-.tp-slot-list { display:flex; flex-direction:column; gap:5px; margin-top:8px; }
-.tp-slot-row { display:flex; align-items:center; gap:7px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.08); border-radius:8px; padding:6px 10px; }
-.tp-slot-badge { font-size:.62rem; padding:2px 9px; border-radius:99px; font-weight:800; white-space:nowrap; flex-shrink:0; border:1px solid; }
-.tp-slot-badge.primary { background:rgba(52,211,153,0.12); color:#6ee7b7; border-color:rgba(52,211,153,0.25); }
-.tp-slot-badge.fallback { background:rgba(96,165,250,0.1); color:#60a5fa; border-color:rgba(96,165,250,0.2); }
-.tp-slot-add-btn { width:100%; background:none; border:1px dashed rgba(255,255,255,0.09); color:var(--text3); border-radius:8px; padding:5px; font-size:.69rem; cursor:pointer; margin-top:4px; transition:all 0.18s; font-family:var(--font-ui); }
-.tp-slot-add-btn:hover { border-color:rgba(139,92,246,0.4); color:#c4b5fd; }
-.tp-no-fb-row { display:flex; align-items:center; gap:5px; margin-top:6px; }
-.tp-no-fb-row label { font-size:.65rem; color:var(--text3); flex-shrink:0; }
-
-#targetMember { width:100%; background:rgba(0,0,0,0.4); color:var(--text); border:1px solid rgba(255,255,255,0.1); border-radius:8px; padding:8px 12px; font-size:.82rem; font-family:var(--font-ui); }
-
-/* cursor fixes */
-button { cursor: pointer; }
-[title]:not(input):not(select):not(textarea):not(button) { cursor: default; }
-
-/* section animation */
-.section { animation: sectionIn .2s ease; }
-
-
-
-.curse-row.fav { background: rgba(251,191,36,0.04); }
-.curse-row.fav:hover { background: rgba(251,191,36,0.08); }
-.fav-cell { width: 28px; text-align: center; cursor: pointer; user-select: none; padding: 6px 4px !important; font-size: 1rem; transition: transform .15s; }
-.fav-cell:hover { transform: scale(1.3); }
-
-.change-added   { color: #6fcf97; }
-.change-updated { color: #f2994a; }
-
-/* ═══════════════════════════════════════════════
-   RANG SYSTEM
-═══════════════════════════════════════════════ */
-.rank-wrap { display: grid; grid-template-columns: 320px 1fr; height: calc(100vh - 112px); overflow: hidden; }
-.rank-cfg { border-right: 1px solid rgba(255,255,255,0.07); overflow-y: auto; background: rgba(10,10,24,0.8); padding: 14px; }
-.rank-cfg-title { font-size: .72rem; font-weight: 800; color: var(--text3); text-transform: uppercase; letter-spacing: .08em; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
-.rank-def-card { background: rgba(255,255,255,0.025); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 8px 11px; margin-bottom: 7px; display: flex; align-items: center; gap: 8px; transition: border-color .18s; cursor: default; }
-.rank-def-card:hover { border-color: rgba(255,255,255,0.14); }
-.rank-def-badge { font-size: .72rem; padding: 3px 11px; border-radius: 99px; font-weight: 800; border: 1px solid; white-space: nowrap; flex-shrink: 0; }
-.rank-def-name { flex: 1; font-size: .78rem; font-weight: 700; color: var(--text); }
-.rank-def-level { font-size: .62rem; font-family: var(--font-mono); color: var(--text3); flex-shrink: 0; }
-.rank-add-btn { width: 100%; padding: 9px; background: none; border: 1px dashed rgba(139,92,246,0.25); border-radius: 9px; color: rgba(139,92,246,0.6); font-size: .72rem; cursor: pointer; transition: all .18s; font-family: var(--font-ui); font-weight: 600; margin-top: 4px; }
-.rank-add-btn:hover { border-color: var(--purple); color: #c4b5fd; background: rgba(139,92,246,0.05); }
-.rank-players { overflow-y: auto; background: var(--bg); }
-.rank-filter-bar { display: flex; align-items: center; gap: 9px; padding: 10px 16px; border-bottom: 1px solid rgba(255,255,255,0.07); flex-wrap: wrap; }
-.rank-search { background: rgba(0,0,0,0.35); border: 1px solid rgba(255,255,255,0.1); border-radius: 99px; color: var(--text); padding: 6px 14px; font-size: .78rem; width: 200px; font-family: var(--font-ui); transition: all .18s; }
-.rank-search:focus { outline: none; border-color: var(--purple); box-shadow: 0 0 0 3px rgba(139,92,246,0.2); }
-.rank-player-card { display: flex; align-items: center; gap: 12px; padding: 11px 18px; border-bottom: 1px solid rgba(255,255,255,0.05); transition: background .13s; }
-.rank-player-card:hover { background: rgba(255,255,255,0.025); }
-.rank-player-name { font-size: .82rem; font-weight: 700; color: var(--text); min-width: 140px; }
-.rank-player-num { font-size: .62rem; color: var(--text3); font-family: var(--font-mono); }
-.rank-player-rank { flex: 1; }
-.rank-badge-none { font-size: .72rem; color: var(--text3); font-style: italic; }
-.rank-history-btn { background: none; border: 1px solid rgba(255,255,255,0.1); border-radius: 5px; color: var(--text3); font-size: .62rem; padding: 2px 8px; cursor: pointer; transition: all .15s; font-family: var(--font-ui); }
-.rank-history-btn:hover { border-color: rgba(139,92,246,0.4); color: #c4b5fd; }
-
-/* ══════════════════ SHOP ══════════════════ */
-.shop-wrap { display: grid; grid-template-columns: 340px 1fr; height: calc(100vh - 112px); overflow: hidden; }
-.shop-cfg  { border-right: 1px solid rgba(255,255,255,0.07); overflow-y: auto; background: rgba(10,10,24,0.8); padding: 14px; }
-.shop-cfg-title { font-size: .72rem; font-weight: 800; color: var(--text3); text-transform: uppercase; letter-spacing: .08em; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
-.shop-item-card { background: rgba(255,255,255,0.025); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 9px 12px; margin-bottom: 7px; display: flex; align-items: center; gap: 9px; transition: border-color .18s; cursor: default; }
-.shop-item-card:hover { border-color: rgba(255,255,255,0.14); }
-.shop-item-icon { font-size: 1.1rem; flex-shrink: 0; }
-.shop-item-name { flex: 1; font-size: .80rem; font-weight: 700; color: var(--text); }
-.shop-item-price { font-size: .68rem; font-family: var(--font-mono); color: var(--green); font-weight: 700; flex-shrink: 0; }
-.shop-item-inactive { opacity: .45; }
-.shop-add-btn { width: 100%; padding: 9px; background: none; border: 1px dashed rgba(52,211,153,0.25); border-radius: 9px; color: rgba(52,211,153,0.6); font-size: .72rem; cursor: pointer; transition: all .18s; font-family: var(--font-ui); font-weight: 600; margin-top: 4px; }
-.shop-add-btn:hover { border-color: var(--green); color: var(--green); background: rgba(52,211,153,0.05); }
-.shop-right { overflow-y: auto; background: var(--bg); padding: 20px 24px; }
-.shop-empty { text-align: center; padding: 60px 20px; color: var(--text3); font-size: .85rem; }
-.shop-modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.8); z-index: 800; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(8px); }
-.shop-modal { background: var(--bg3); border: 1px solid rgba(52,211,153,0.3); border-radius: 16px; padding: 24px; min-width: 380px; max-width: 480px; box-shadow: 0 12px 48px rgba(0,0,0,.8); }
-.shop-modal h3 { font-size: .95rem; font-weight: 800; color: #6ee7b7; margin-bottom: 16px; }
-.shop-modal label { display: block; font-size: .67rem; color: var(--text3); font-weight: 700; text-transform: uppercase; letter-spacing: .06em; margin-bottom: 4px; margin-top: 11px; }
-.shop-modal input, .shop-modal select, .shop-modal textarea { width: 100%; }
-.shop-modal-btns { display: flex; gap: 8px; margin-top: 18px; justify-content: flex-end; }
-.shop-log-card { background: rgba(52,211,153,0.04); border: 1px solid rgba(52,211,153,0.12); border-radius: 8px; padding: 9px 13px; margin-bottom: 6px; font-size: .73rem; }
-.shop-log-card .shop-log-who { font-weight: 700; color: var(--green); }
-.shop-log-card .shop-log-item { color: var(--text1); }
-.shop-log-card .shop-log-meta { color: var(--text3); font-size: .62rem; font-family: var(--font-mono); margin-top: 2px; }
-.rank-history-popup { position: fixed; z-index: 700; background: var(--bg3); border: 1px solid rgba(139,92,246,0.3); border-radius: 12px; padding: 14px 18px; min-width: 260px; box-shadow: 0 8px 32px rgba(0,0,0,0.7); }
-.rank-edit-inline { display: flex; gap: 5px; align-items: center; }
-.rank-empty { text-align: center; padding: 60px 20px; color: var(--text3); font-size: .85rem; }
-.rank-modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.8); z-index: 800; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(8px); }
-.rank-modal { background: var(--bg3); border: 1px solid rgba(139,92,246,0.3); border-radius: 16px; padding: 24px; min-width: 340px; max-width: 440px; box-shadow: 0 12px 48px rgba(0,0,0,.8); }
-.rank-modal h3 { font-size: .95rem; font-weight: 800; color: #c4b5fd; margin-bottom: 16px; }
-.rank-modal label { display: block; font-size: .67rem; color: var(--text3); font-weight: 700; text-transform: uppercase; letter-spacing: .06em; margin-bottom: 4px; margin-top: 11px; }
-.rank-modal input, .rank-modal select { width: 100%; }
-.rank-modal-btns { display: flex; gap: 8px; margin-top: 18px; justify-content: flex-end; }
-
-/* UND NICHT Logik */
-.logik-btn.active-nicht { background:rgba(251,113,133,0.2); color:#fb7185; border-color:rgba(251,113,133,0.4); }
-.cond-group-nicht::before { content:"UND NICHT"; display:block; font-size:.59rem; color:#fb7185; font-weight:800; letter-spacing:.09em; text-align:center; margin:4px 0 2px 7px; }
-/* AntiStrip in Aktion */
-.as-act-box { margin-top:7px; padding:8px 10px; background:rgba(52,211,153,0.04); border:1px solid rgba(52,211,153,0.18); border-radius:8px; }
-.as-act-row { display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-top:5px; }
-.as-act-label { font-size:.6rem; color:var(--text3); white-space:nowrap; }
-
-</style>
-</head>
-<body>
-
-
-<!-- TOPBAR -->
-<div class="topbar">
-  <h1>🔒 BC Konfigurator <span style="font-weight:400;font-size:.72rem;opacity:.4;-webkit-text-fill-color:#94a3b8;background:none">v12</span> <span id="engineVer" style="font-weight:400;font-size:.72rem;opacity:.4;-webkit-text-fill-color:#94a3b8;background:none"></span></h1>
-  <span class="tbadge" id="connStatus" style="color:#fb7185" title="Verbindungsstatus mit dem Bondage Club">🔴 Nicht verbunden</span>
-  <span class="tbadge" id="playerInfo" style="display:none" title="Aktueller Spieler"></span>
-  <span class="tbadge" id="cacheInfo" title="Geladene Item-Daten">Kein Cache</span>
-  <button class="btn btn-green" id="loadCacheBtn" onclick="loadCacheFromBC()" title="Item-Daten aus dem laufenden Bondage Club Spiel laden">⚡ Aus Spiel laden</button>
-  <button class="btn btn-primary" id="reconnectBtn" onclick="manualReconnect()" title="Verbindung zum Bondage Club neu herstellen">🔄 Verbinden</button>
-  <button class="btn btn-red hidden" id="clearBtn" onclick="clearCache()" title="Cache löschen">🗑 Löschen</button>
-  <div id="statusMsg" class="status-msg hidden"></div>
-</div>
-
-<!-- RAUM-SPIELER -->
-<div class="room-panel" id="roomPanel">
-  <span class="room-label">👥 Im Raum:</span>
-  <div class="room-members" id="roomMembers">
-    <span class="room-empty" id="roomEmpty">– noch nicht verbunden –</span>
-  </div>
-  <button class="room-refresh-btn" id="roomRefreshBtn" onclick="scanRoom()" title="Raum neu scannen">🔄</button>
-</div>
-
-
-<!-- TAB NAVIGATION -->
-<div class="tab-nav">
-  <button class="tab-btn active" id="tab-items-btn"  onclick="switchTab('items')">🔧 Item Manager</button>
-  <button class="tab-btn"        id="tab-outfit-btn" onclick="switchTab('outfit')">👗 Outfit &amp; Profile</button>
-  <button class="tab-btn"        id="tab-curse-btn"  onclick="switchTab('curse')">🔮 Craft &amp; Curse</button>
-  <button class="tab-btn"        id="tab-bot-btn"    onclick="switchTab('bot')">🤖 Bot</button>
-  <button class="tab-btn"        id="tab-log-btn"    onclick="switchTab('log')">📋 Logs</button>
-  <button class="tab-btn"        id="tab-money-btn"  onclick="switchTab('money')">💰 Money</button>
-  <button class="tab-btn"        id="tab-rank-btn"   onclick="switchTab('rank')">🏆 Rang</button>
-  <button class="tab-btn"        id="tab-shop-btn"   onclick="switchTab('shop')">🛒 Shop</button>
-</div>
-
-<!-- TAB 1: ITEM MANAGER -->
-<div id="tab-items" class="tab-pane active">
-<!-- LAYOUT -->
-<div class="layout">
-  <div class="sidebar">
-    <input class="sidebar-search" placeholder="🔍 Item suchen..." oninput="renderGroups(this.value)">
-    <div id="favSection" class="hidden">
-      <div class="fav-hdr">⭐ Favoriten</div>
-      <div id="favList" style="margin-bottom:10px"></div>
-    </div>
-    <div id="groupsList"></div>
-  </div>
-
-  <div class="main">
-    <!-- Kein Import-Box mehr – direkt via BC laden -->
-    <div id="connectHint" class="import-box" style="text-align:center;padding:40px 28px">
-      <div style="font-size:3rem;margin-bottom:16px;filter:drop-shadow(0 0 12px rgba(139,92,246,0.4))">🔗</div>
-      <h2 style="margin:0 0 12px;font-size:1.25rem;font-weight:800;background:linear-gradient(135deg,#c4b5fd,#8b5cf6);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">Noch nicht verbunden</h2>
-      <p style="color:#64748b;font-size:.84rem;margin-bottom:6px;line-height:1.75;max-width:380px;margin-inline:auto">
-        <span style="color:#94a3b8;font-weight:700">Schritt 1:</span> Öffne Bondage Club und lade das Bookmarklet.<br>
-        <span style="color:#94a3b8;font-weight:700">Schritt 2:</span> Klicke auf den grünen Button unten.
-      </p>
-      <p style="color:#374151;font-size:.76rem;margin-bottom:20px">Das Loader-Popup muss geöffnet sein.</p>
-      <button class="btn btn-green" onclick="loadCacheFromBC()" style="font-size:.95rem;padding:11px 28px;border-radius:99px;min-width:220px">
-        ⚡ Aus Spiel laden
-      </button>
-      <div id="loadingSpinner" class="hidden" style="margin-top:14px;color:#64748b;font-size:.83rem">
-        ⏳ Lade Asset-Daten aus dem Spiel…
-      </div>
-    </div>
-
-    <div id="configurator" class="hidden">
-
-      <!-- ZIEL -->
-      <div class="section">
-        <div class="sec-hdr"><h3>🎯 Ziel-Spieler</h3></div>
-        <div class="two-col">
-          <div class="field">
-            <label>Auf wen?</label>
-            <select id="targetMode" onchange="onTargetChange()">
-              <option value="self">👤 Ich selbst (Player)</option>
-              <option value="other">👥 Anderer Spieler</option>
-            </select>
-          </div>
-          <div class="field hidden" id="targetMemberWrap">
-            <label>Spieler im Raum</label>
-            <select id="targetMember" onchange="generate()">
-              <option value="">– Auswählen –</option>
-            </select>
-            <div class="hint" style="margin-top:4px">Oder direkt: <input type="number" id="targetMemberDirect" placeholder="Member #" style="width:110px;padding:2px 6px;background:var(--card);border:1px solid var(--border1);color:var(--text1);border-radius:4px" oninput="document.getElementById('targetMember').value=this.value;generate()"></div>
-          </div>
-        </div>
-      </div>
-
-      <!-- MODULE -->
-      <div class="section hidden" id="moduleSection">
-        <div class="sec-hdr">
-          <h3>🧩 Module / TypeRecord</h3>
-          <span style="font-size:.65rem;color:var(--text3)">☑ = Mehrfachauswahl (Bitmask)</span>
-        </div>
-        <div id="moduleGrid"></div>
-      </div>
-
-
-      <!-- DIRECT OPTIONS (BallGag, Mittens...) -->
-      <div class="section hidden" id="directOptsSection">
-        <div class="sec-hdr"><h3>🎛️ Optionen</h3><span class="arch-badge classic" id="dirOptsBadge">📋 Classic Options</span></div>
-        <div class="dir-opts" id="directOptsBtns"></div>
-      </div>
-
-      <!-- VIBRATING (VibratingEgg, FuturisticTrainingBelt...) -->
-      <div class="section hidden" id="vibratingSection">
-        <div class="sec-hdr"><h3>🔊 Vibrator-Konfiguration</h3><span class="arch-badge classic" style="background:#1a1a3f;color:#a5b4fc;border-color:#312e81">⚡ Vibrating</span></div>
-        <div style="font-size:.68rem;color:var(--text3);margin-bottom:6px">Modus:</div>
-        <div class="vib-mode-grid" id="vibModeGrid"></div>
-        <div style="font-size:.68rem;color:var(--text3);margin-bottom:6px">Intensität:</div>
-        <div class="vib-intensity-row" id="vibIntRow"></div>
-        <div style="font-size:.68rem;color:var(--text3);margin-bottom:5px">Aktive Effekte:</div>
-        <div class="vib-effects-row" id="vibEffRow"></div>
-      </div>
-
-      <!-- BASELINE PROPS (Punishment für Vibrating-Items) -->
-      <div class="section hidden" id="baselineSection">
-        <div class="sec-hdr"><h3>⚙️ Punishment / Erweiterte Einstellungen</h3></div>
-        <div class="baseline-grid" id="baselineGrid"></div>
-      </div>
-      <!-- FARBEN -->
-      <div class="section">
-        <div class="sec-hdr">
-          <h3>🎨 Farben</h3>
-          <button class="btn btn-primary" style="font-size:.65rem;padding:3px 8px" onclick="resetAllColors()">↺ Alle zurücksetzen</button>
-        </div>
-        <div class="color-grid" id="colorGrid"></div>
-      </div>
-
-      <!-- TIGHTNESS -->
-      <div class="section hidden" id="tightnessSection">
-        <div class="sec-hdr">
-          <h3>🔧 Tightness</h3>
-          <label style="display:flex;align-items:center;gap:5px;font-size:.68rem;color:var(--text3);cursor:pointer">
-            <input type="checkbox" id="tightnessEnabled" onchange="onTightnessToggle()" style="accent-color:var(--purple)">
-            Setzen
-          </label>
-        </div>
-        <div id="tightnessBody" class="hidden">
-          <div class="tightness-row">
-            <input type="range" class="tightness-slider" id="tightnessSlider" min="-10" max="50" value="0" oninput="onTightnessChange()">
-            <span class="tightness-val" id="tightnessVal">0</span>
-          </div>
-          <div class="tightness-info">
-            <div>Min: <span id="tightnessMin">-10</span></div>
-            <div>Max: <span id="tightnessMax">50</span></div>
-            <div>Item-Basis: <span id="tightnessBase">–</span></div>
-          </div>
-        </div>
-      </div>
-
-      <!-- WEITERE PROPS -->
-      <div class="section hidden" id="propsSection">
-        <div class="sec-hdr">
-          <h3>⚙️ Weitere Properties</h3>
-          <span style="font-size:.65rem;color:var(--text3)" id="propsHint"></span>
-        </div>
-        <div class="props-grid" id="propsGrid"></div>
-      </div>
-
-      <!-- CRAFT -->
-      <div class="section">
-        <div class="sec-hdr"><h3>✏️ Craft (optional)</h3></div>
-        <div class="two-col">
-          <div class="field"><label>Name (max. 40)</label><input type="text" id="craftName" maxlength="40" placeholder="Leer = kein Craft" oninput="generate()"></div>
-          <div class="field"><label>Beschreibung (max. 100)</label><input type="text" id="craftDesc" maxlength="100" oninput="generate()"></div>
-          <div class="field"><label>Craft Property</label><select id="craftProp" onchange="generate()"></select></div>
-        </div>
-      </div>
-
-      <!-- SCHLOSS -->
-      <div class="section">
-        <div class="sec-hdr"><h3>🔒 Schloss</h3></div>
-        <div class="two-col">
-          <div class="field full">
-            <label>Schloss-Typ</label>
-            <select id="lockType" onchange="onLockChange()">
-              <option value="">Kein Schloss</option>
-              <optgroup label="Standard">
-                <option value="MetalPadlock">🔒 Metal Padlock</option>
-                <option value="SafewordPadlock">🛡️ Safeword Padlock</option>
-                <option value="ExclusivePadlock">⭐ Exclusive Padlock</option>
-                <option value="HighSecurityPadlock">🔐 High Security Padlock</option>
-                <option value="TimerPadlock">⏱️ Timer Padlock</option>
-                <option value="CombinationPadlock">🔢 Combination Padlock</option>
-                <option value="PasswordPadlock">🔑 Password Padlock</option>
-                <option value="TimerPasswordPadlock">⏱️🔑 Timer + Password</option>
-              </optgroup>
-              <optgroup label="Beziehungs-Schlösser">
-                <option value="OwnerPadlock">👑 Owner Padlock</option>
-                <option value="LoversPadlock">💕 Lovers Padlock</option>
-                <option value="MistressPadlock">🎩 Mistress Padlock</option>
-              </optgroup>
-              <optgroup label="Addons (BCX)">
-                <option value="LewdCrestPadlock">🌸 Lewd Crest (BCX)</option>
-                <option value="DeviousPadlock">😈 Devious Padlock (BCX)</option>
-                <option value="LuziPadlock">✨ Magic Inscription (SugarChain)</option>
-              </optgroup>
-            </select>
-          </div>
-
-          <!-- Timer -->
-          <div class="field full hidden" id="timerGroup">
-            <label>⏱️ Timer-Dauer</label>
-            <div class="timer-row">
-              <div><label style="font-size:.65rem;color:var(--text3)">Stunden</label><input type="number" id="timerH" value="1" min="0" oninput="generate()"></div>
-              <div><label style="font-size:.65rem;color:var(--text3)">Minuten</label><input type="number" id="timerM" value="0" min="0" max="59" oninput="generate()"></div>
-              <div><label style="font-size:.65rem;color:var(--text3)">Sekunden</label><input type="number" id="timerS" value="0" min="0" max="59" oninput="generate()"></div>
-            </div>
-          </div>
-
-          <!-- Kombination -->
-          <div class="field hidden" id="comboGroup">
-            <label>🔢 Kombination (4 Ziffern)</label>
-            <input type="text" id="comboCode" value="1234" maxlength="4" oninput="generate()">
-          </div>
-
-          <!-- Passwort -->
-          <div class="field hidden" id="passwordGroup">
-            <label>🔑 Passwort <span style="color:var(--text3);font-size:.65rem">(genau 4 Ziffern, z.B. 1234)</span></label>
-            <input type="text" id="lockPassword" value="1234" maxlength="4" pattern="[0-9]{4}" placeholder="1234" oninput="validatePwInput(this);generate()">
-            <div class="hint" id="pwHint" style="color:var(--red);display:none">⚠️ BC erwartet genau 4 Ziffern (0-9)</div>
-          </div>
-
-          <!-- Beziehungs-Schlösser -->
-          <div class="full hidden" id="relLockGroup">
-            <div class="warn" style="margin-bottom:7px">⚠️ Beziehungs-Schlösser brauchen eine aktive Beziehung im Spiel.</div>
-            <div class="two-col">
-              <div class="field">
-                <label>Member Number des Owners/Lovers/Mistress</label>
-                <input type="number" id="relMemberNum" placeholder="Leer = Player.MemberNumber" oninput="generate()">
-              </div>
-              <div class="field">
-                <label>⏱️ Timer optional (Stunden, 0 = keiner)</label>
-                <input type="number" id="relTimerH" value="0" min="0" oninput="generate()">
-              </div>
-            </div>
-          </div>
-
-          <!-- BCX-Hinweis -->
-          <div class="full hidden" id="bcxLockHint">
-            <div class="info-box">💡 Addon-Schloss: Code prüft ob Asset in ItemMisc oder anderen Gruppen existiert. BCX muss geladen sein.</div>
-          </div>
-        </div>
-      </div>
-
-      <!-- OUTPUT -->
-      <div class="section">
-        <div class="sec-hdr"><h3>💻 Generierter Code</h3></div>
-        <div class="type-preview" id="typePreview">–</div>
-        <textarea class="code-out" id="codeOut" readonly></textarea>
-        <div class="btn-row">
-          <button class="btn btn-green" id="execBtn" onclick="executeCode()" style="flex:1;font-size:.82rem">
-            ▶ Direkt ausführen
-          </button>
-          <button class="btn-copy" id="copyBtn" onclick="copyCode()" style="min-width:140px">📋 Kopieren</button>
-          <button class="btn btn-orange" onclick="addToOutfit()" style="min-width:120px">👗 Outfit</button>
-        </div>
-      </div>
-
-    </div><!-- /configurator -->
-
-    <div class="empty hidden" id="emptyState">
-      <div style="font-size:2.2rem">🔍</div>
-      <div>Wähle ein Item aus der Sidebar</div>
-    </div>
-  </div>
-</div>
-
-</div><!-- /tab-items -->
-
-<!-- ── TAB 2: OUTFIT & PROFILE ── -->
-<div id="tab-outfit" class="tab-pane">
-  <div class="outfit-tab-layout">
-
-    <!-- LEFT: Item list + profiles -->
-    <div class="outfit-left">
-      <div class="outfit-target-bar" style="margin-bottom:12px">
-        <span class="outfit-target-label">🎯 Ziel:</span>
-        <div class="outfit-member-chips" id="outfitMemberChips">
-          <span style="color:var(--text3);font-size:.72rem">– Raum noch nicht geladen –</span>
-        </div>
-      </div>
-
-      <div class="section-hdr2">
-        <span>👗 Outfit Items</span>
-        <button class="btn btn-red" style="font-size:.65rem;padding:3px 8px" onclick="clearOutfit()">🗑️ Leeren</button>
-      </div>
-      <div class="outfit-search-row">
-        <input class="outfit-search" id="outfitItemSearch" placeholder="🔍 Item suchen..." oninput="renderOutfitList()">
-      </div>
-      <div id="outfitList">
-        <div class="outfit-empty-hint">Noch keine Items.<br>Konfiguriere ein Item im <strong>Item Manager</strong> und klicke <strong>„👗 Outfit"</strong>.</div>
-      </div>
-
-      <!-- PROFILES -->
-      <div style="margin-top:20px">
-        <div class="section-hdr2">
-          <div style="display:flex;align-items:center;gap:6px"><span>📁 Profile</span><input class="outfit-search" id="profileSearch" placeholder="🔍 Profil suchen..." oninput="renderProfileList()" style="width:150px;font-size:.69rem;padding:3px 8px"></div>
-          <div style="display:flex;gap:6px;align-items:center">
-            <input class="profile-name-input" id="profileNameInput" placeholder="Profilname..." maxlength="40" style="font-size:.72rem;padding:3px 7px">
-            <button class="btn btn-green" style="font-size:.68rem;padding:4px 9px" onclick="saveProfile()">💾 Speichern</button>
-          </div>
-        </div>
-        <div id="profileListEl" class="profile-grid">
-          <p style="color:var(--text3);font-size:.8rem;grid-column:1/-1">Noch keine Profile.</p>
-        </div>
-      </div>
-    </div>
-
-    <!-- RIGHT: Live code -->
-    <div class="outfit-right">
-      <div class="section-hdr2" style="margin-bottom:8px">
-        <span>💻 Generierter Code</span>
-        <span id="outfitAutoStatus" style="font-size:.62rem;color:var(--text3)">– kein Outfit –</span>
-      </div>
-      <textarea class="outfit-code-live" id="outfitCode" readonly
-        placeholder="Code erscheint automatisch wenn du Items hinzufügst..."></textarea>
-      <div class="btn-row" style="margin-top:8px">
-        <button class="btn btn-green" id="execOutfitBtn" onclick="executeOutfitCode()" style="flex:1;font-size:.8rem">▶ Ausführen</button>
-        <button class="btn-copy" onclick="copyOutfitCode()" style="margin-top:0;min-width:120px">📋 Kopieren</button>
-      </div>
-    </div>
-  </div>
-</div>
-<!-- /tab-outfit -->
-
-
-<script src="items.js"></script>
-
-
-
-<!-- ── TAB 3: CRAFT & CURSE ── -->
-<div id="tab-curse" class="tab-pane">
-  <div class="curse-topbar">
-    <button class="btn btn-green" onclick="curseScan()">🔍 Scannen</button>
-    <button class="btn btn-green" onclick="curseClearAndScan()" title="Alte Einträge löschen und frisch scannen">🔄 Neu scannen</button>
-    <button class="btn btn-primary" id="csAutoScanBtn" onclick="toggleAutoCurseScan()" title="Automatisch alle 30s scannen">⏰ Auto-Scan</button>
-    <button class="btn btn-primary" onclick="curseExport()">⬇️ Export</button>
-    <button class="btn btn-primary" onclick="curseImport()">⬆️ Import</button>
-    <button class="btn btn-red" onclick="curseClear()" title="Alle gespeicherten Einträge löschen">🗑️ Leeren</button>
-    <div class="curse-stats">
-      <div class="curse-stat">Crafts: <span id="csStat-total">0</span></div>
-      <div class="curse-stat">🔮 Cursed: <span id="csStat-cursed">0</span></div>
-      <div class="curse-stat">🧿 LSCG: <span id="csStat-lscg">0</span></div>
-      <div class="curse-stat">💾 Cache: <span id="csStat-cache">0</span></div>
-    </div>
-    <span id="csScanStatus" style="font-size:.7rem;color:var(--text3)"></span>
-  </div>
-  <div id="csChangeBadge" style="display:none;padding:4px 10px;font-size:.68rem;background:var(--bg3);border-bottom:1px solid var(--border);color:var(--text2)">
-  </div>
-  <!-- Filter bar -->
-  <div class="curse-filter-bar" id="curseFilterBar">
-    <input class="curse-search" id="curseSearch" placeholder="🔍 Name, Item, Gruppe..." oninput="renderCurseTab()">
-    <div class="filter-sep"></div>
-    <span class="filter-chip on" id="fc-all"      onclick="setCurseFilter('all')"     >Alle</span>
-    <span class="filter-chip"    id="fc-cursed"   onclick="setCurseFilter('cursed')"  >🔮 Cursed</span>
-    <span class="filter-chip"    id="fc-lscg"     onclick="setCurseFilter('lscg')"   >🧿 LSCG</span>
-    <div class="filter-sep"></div>
-    <span class="filter-chip" id="fc-fav" onclick="setCurseFilter('fav')" title="Nur Favoriten">⭐ Favoriten</span>
-    <div class="filter-sep"></div>
-    <span class="filter-chip" id="fc-cache" onclick="toggleCacheFilter()" title="Nur Einträge mit LSCG-Daten anzeigen">💾 Im Cache</span>
-    <div class="filter-sep"></div>
-    <div class="slot-filter-wrap">
-      <select class="slot-select" id="slotFilter" onchange="renderCurseTab()">
-        <option value="">Alle Slots</option>
-      </select>
-    </div>
-  </div>
-  <div class="curse-body" id="curseBody">
-    <div class="curse-empty" id="curseEmpty">
-      <div style="font-size:2rem;margin-bottom:8px">🔮</div>
-      Noch kein Scan. Klicke <strong>Scannen</strong> um alle Crafts zu laden.
-    </div>
-  </div>
-</div>
-<!-- /tab-curse -->
-
-
-
-<!-- ══ BOT TAB ══════════════════════════════════════════════ -->
-<div id="tab-bot" class="tab-pane">
-  <div class="bot-wrap">
-
-    <!-- Sidebar: Bot list -->
-    <div class="bot-sidebar">
-      <div class="bs-head">
-        <span>🤖 Meine Bots</span>
-        <button class="btn btn-green" onclick="botNew()" style="font-size:.65rem;padding:3px 8px">+ Neu</button>
-      </div>
-      <!-- Groups area -->
-      <div id="botGroupList"></div>
-      <!-- Ungrouped bots -->
-      <div class="bot-list" id="botList"></div>
-    </div>
-
-    <!-- Main: Editor -->
-    <div class="bot-main" id="botEditor">
-      <div class="be-empty"><div class="be-empty-icon">🤖</div>Wähle einen Bot aus oder erstelle einen neuen.</div>
-    </div>
-  </div>
-</div>
-
-<!-- Item/Curse/Profile Picker Modal -->
-<div class="ipicker-overlay" id="ipickerOverlay" style="display:none" onclick="if(event.target===this)ipickerClose()">
-  <div class="ipicker-box">
-    <div class="ipicker-head">
-      <span style="font-size:.78rem;font-weight:600">Auswählen</span>
-      <input class="cf cf-flex" id="ipickerSearch" placeholder="🔍 Suchen..." oninput="ipickerRender()">
-      <button class="btn btn-red" onclick="ipickerClose()" style="font-size:.65rem;padding:3px 8px">✕</button>
-    </div>
-    <div class="ipicker-tabs" id="ipickerTabs"></div>
-    <div class="ipicker-list" id="ipickerList"></div>
-  </div>
-</div>
-
-<div id="tab-log" class="tab-pane">
-  <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px 10px;border-bottom:1px solid var(--border)">
-    <span style="font-weight:600;font-size:.85rem;color:var(--text1)">📋 Bot-Logs</span>
-    <div style="display:flex;gap:8px;align-items:center">
-      <span id="log-count" style="font-size:.68rem;color:var(--text3)"></span>
-      <button onclick="logFilter('')"             id="logf-all"    class="log-filter-btn active">Alle</button>
-      <button onclick="logFilter('ok')"           id="logf-ok"    class="log-filter-btn">✅ Ausgelöst</button>
-      <button onclick="logFilter('ungueltig')"    id="logf-ug"    class="log-filter-btn">❌ Ungültig</button>
-      <button onclick="logFilter('skip')"         id="logf-skip"  class="log-filter-btn">⏭ Übersprungen</button>
-      <button onclick="logFilter('join')"         id="logf-join"  class="log-filter-btn">👋 Joins</button>
-      <button onclick="logFilter('leave')"        id="logf-leave" class="log-filter-btn">🚪 Verlassen</button>
-      <button onclick="logFilter('join')"       id="logf-join"  class="log-filter-btn">👋 Joins/Leaves</button>
-      <button onclick="logFilter('join')"       id="logf-join"  class="log-filter-btn">👋 Beitritte</button>
-      <button onclick="logClearFiltered()" style="font-size:.68rem;padding:3px 10px;background:#2a0a0a;border:1px solid var(--red);color:var(--red);border-radius:5px;cursor:pointer">🗑 Sichtbare löschen</button>
-      <button onclick="logClearAll()" style="font-size:.68rem;padding:3px 10px;background:var(--bg3);border:1px solid var(--border);color:var(--text3);border-radius:5px;cursor:pointer">Alle löschen</button>
-    </div>
-  </div>
-  <div id="log-entries" style="overflow-y:auto;height:calc(100vh - 162px);padding:10px 14px;display:flex;flex-direction:column;gap:4px"></div>
-</div>
-
-
-
-<div id="tab-money" class="tab-pane">
-  <div style="display:flex;gap:18px;padding:14px 18px;border-bottom:1px solid var(--border);align-items:center;flex-wrap:wrap">
-    <span style="font-weight:600;font-size:.85rem">💰 Money System</span>
-    <label style="font-size:.7rem;color:var(--text3)">Währungsname:
-      <input id="money-name-inp" class="cf" style="width:100px;margin-left:4px" placeholder="Gold"
-        value="" oninput="moneySetName(this.value)">
-    </label>
-    <label style="font-size:.7rem;color:var(--text3)">Abfrage-Befehl (Chat):
-      <input id="money-cmd-inp" class="cf" style="width:100px;margin-left:4px" placeholder="!gold"
-        value="" oninput="moneySetCmd(this.value)">
-    </label>
-    <label style="font-size:.7rem;color:var(--text3)">Antwort:
-      <select id="money-typ-inp" class="cf" style="margin-left:4px" onchange="moneySetTyp(this.value)">
-        <option value="whisper">🤫 Whisper</option>
-        <option value="chat">💬 Chat</option>
-      </select>
-    </label>
-    <button onclick="moneyAddPlayer()" style="font-size:.68rem;padding:4px 11px;background:var(--pd);border:none;color:var(--pl);border-radius:5px;cursor:pointer">+ Spieler hinzufügen</button>
-    <button onclick="moneyResetAll()" style="font-size:.68rem;padding:4px 11px;background:#2a0a0a;border:1px solid var(--red);color:var(--red);border-radius:5px;cursor:pointer">Alle zurücksetzen</button>
-  </div>
-  <div id="money-entries" style="overflow-y:auto;height:calc(100vh - 162px);padding:10px 14px"></div>
-</div>
-
-<!-- TAB: RANG SYSTEM -->
-<div id="tab-rank" class="tab-pane">
-  <div class="rank-wrap">
-    <!-- LEFT: Rang Definitionen -->
-    <div class="rank-cfg">
-      <div class="rank-cfg-title">🏆 Rang-Definitionen
-        <button onclick="rankExport()" title="Exportieren" style="margin-left:auto;background:none;border:1px solid rgba(255,255,255,0.1);border-radius:5px;color:var(--text3);font-size:.62rem;padding:2px 8px;cursor:pointer">⬇️</button>
-        <button onclick="rankImport()" title="Importieren" style="background:none;border:1px solid rgba(255,255,255,0.1);border-radius:5px;color:var(--text3);font-size:.62rem;padding:2px 8px;cursor:pointer">⬆️</button>
-      </div>
-      <div style="font-size:.65rem;color:var(--text3);margin-bottom:10px;line-height:1.55">
-        Definiere Ränge mit Namen, Icon und Farbe. Level 1 = niedrigster Rang.<br>
-        Im Bot kannst du Ränge per Aktion setzen, erhöhen oder entfernen.
-      </div>
-      <div id="rank-def-list"></div>
-      <button class="rank-add-btn" onclick="rankDefNew()">+ Neuen Rang hinzufügen</button>
-
-      <div style="margin-top:20px;padding-top:14px;border-top:1px solid rgba(255,255,255,0.07)">
-        <div class="rank-cfg-title">⚙️ Abfrage-Befehl</div>
-        <div style="display:flex;flex-direction:column;gap:7px">
-          <label style="font-size:.65rem;color:var(--text3)">Chat-Befehl für Rang-Abfrage:
-            <input id="rank-cmd-inp" class="cf" style="width:100%;margin-top:3px" placeholder="!rang"
-              value="" oninput="rankSetCmd(this.value)">
-          </label>
-          <label style="font-size:.65rem;color:var(--text3)">Antwort-Typ:
-            <select id="rank-cmdtyp-inp" class="cf" style="margin-top:3px;width:100%" onchange="rankSetCmdTyp(this.value)">
-              <option value="whisper">🤫 Whisper (privat)</option>
-              <option value="chat">💬 Chat (öffentlich)</option>
-            </select>
-          </label>
-          <div style="font-size:.6rem;color:var(--text3)">Variablen: {name} {rang} {rang_icon} {rang_level}</div>
-          <label style="font-size:.65rem;color:var(--text3)">Antwort-Text:
-            <input id="rank-cmdtext-inp" class="cf" style="width:100%;margin-top:3px" 
-              placeholder="{name} hat Rang: {rang_icon} {rang}"
-              value="" oninput="rankSetCmdText(this.value)">
-          </label>
-        </div>
-      </div>
-
-      <div style="margin-top:16px;padding-top:14px;border-top:1px solid rgba(255,255,255,0.07)">
-        <div class="rank-cfg-title">🗑 Daten</div>
-        <button onclick="rankResetAllPlayers()" style="width:100%;font-size:.68rem;padding:6px;background:#2a0a0a;border:1px solid var(--red);color:var(--red);border-radius:6px;cursor:pointer">Alle Spieler-Ränge zurücksetzen</button>
-      </div>
-    </div>
-
-    <!-- RIGHT: Spieler-Ränge -->
-    <div class="rank-players">
-      <div class="rank-filter-bar">
-        <span style="font-weight:700;font-size:.82rem">👥 Spieler-Ränge</span>
-        <input class="rank-search" id="rank-search" placeholder="🔍 Spieler suchen…" oninput="renderRankPlayers()">
-        <select id="rank-filter-sel" class="cf" style="width:150px" onchange="renderRankPlayers()">
-          <option value="">Alle Ränge</option>
-        </select>
-        <button onclick="rankAddPlayerManual()" style="font-size:.68rem;padding:4px 12px;background:var(--pd);border:none;color:var(--pl);border-radius:5px;cursor:pointer;margin-left:auto">+ Spieler hinzufügen</button>
-      </div>
-      <div id="rank-player-list">
-        <div class="rank-empty">🏆 Noch keine Spieler-Ränge.<br><span style="font-size:.72rem;color:var(--text3)">Ränge werden automatisch gesetzt wenn ein Bot die Aktion „Rang setzen" ausführt.</span></div>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- Rang Edit Modal -->
-<div id="rank-modal-overlay" class="rank-modal-overlay" style="display:none" onclick="if(event.target===this)rankModalClose()">
-  <div class="rank-modal">
-    <h3 id="rank-modal-title">🏆 Rang bearbeiten</h3>
-    <input type="hidden" id="rank-modal-id">
-    <label>Name</label>
-    <input class="cf" id="rank-modal-name" placeholder="z.B. Neuling, Meister, Legende…">
-    <label>Icon / Emoji</label>
-    <input class="cf" id="rank-modal-icon" placeholder="🏆" style="width:80px">
-    <label>Farbe</label>
-    <div style="display:flex;gap:8px;align-items:center;margin-top:4px">
-      <input type="color" id="rank-modal-color" value="#c4b5fd" style="width:40px;height:28px;padding:1px;border:none;background:none;cursor:pointer">
-      <input class="cf" id="rank-modal-color-hex" placeholder="#c4b5fd" style="width:90px" oninput="document.getElementById('rank-modal-color').value=this.value">
-    </div>
-    <label>Level (Reihenfolge)</label>
-    <input class="cf" id="rank-modal-level" type="number" min="1" value="1" placeholder="1">
-    <div class="rank-modal-btns">
-      <button onclick="rankModalClose()" style="padding:7px 16px;border:1px solid rgba(255,255,255,0.1);background:none;color:var(--text3);border-radius:8px;cursor:pointer;font-family:var(--font-ui);font-size:.78rem">Abbrechen</button>
-      <button onclick="rankModalSave()" class="btn btn-primary" style="font-size:.78rem;padding:7px 18px">✓ Speichern</button>
-    </div>
-  </div>
-</div>
-
-<!-- TAB: SHOP SYSTEM -->
-<div id="tab-shop" class="tab-pane">
-  <div class="shop-wrap">
-    <!-- LEFT: Shop-Artikel Definitionen -->
-    <div class="shop-cfg">
-      <div class="shop-cfg-title">🛒 Shop-Artikel
-        <button onclick="shopExport()" title="Exportieren" style="margin-left:auto;background:none;border:1px solid rgba(255,255,255,0.1);border-radius:5px;color:var(--text3);font-size:.62rem;padding:2px 8px;cursor:pointer">⬇️</button>
-        <button onclick="shopImport()" title="Importieren" style="background:none;border:1px solid rgba(255,255,255,0.1);border-radius:5px;color:var(--text3);font-size:.62rem;padding:2px 8px;cursor:pointer">⬆️</button>
-      </div>
-      <div style="font-size:.65rem;color:var(--text3);margin-bottom:10px;line-height:1.5">
-        Definiere kaufbare Artikel. Jeder Artikel löst Trigger mit der Bedingung <b>🛒 Shop-Kauf</b> aus.<br>
-        Befehl: <code style="color:var(--green)">&lt;!pay&gt; "Artikelname"</code> · Für anderen: <code style="color:var(--green)">&lt;!pay&gt; "Artikel" "Spielername"</code> · Für alle: <code style="color:var(--yellow)">&lt;!pay&gt; "Artikel" All</code><br>
-        Flags: <code style="color:#a78bfa">/u</code> = anonym &nbsp;·&nbsp; <code style="color:#f87171">/nostrip</code> = Item kann nicht abgelegt werden &nbsp;·&nbsp; <code style="color:var(--text3)">/w</code> = Flüstern
-      </div>
-      <div id="shop-item-list"></div>
-      <button class="shop-add-btn" onclick="shopItemNew()">+ Neuen Artikel hinzufügen</button>
-
-      <div style="margin-top:18px">
-        <div class="shop-cfg-title">⚙️ Shop-Einstellungen</div>
-        <label style="font-size:.65rem;color:var(--text3)">Pay-Befehl (Chat):
-          <input id="shop-cmd-inp" class="cf" style="width:100%;margin-top:3px" placeholder="!pay"
-            value="" oninput="shopSetCmd(this.value)">
-        </label>
-        <label style="font-size:.65rem;color:var(--text3);margin-top:8px;display:block">Listen-Befehl (!shop – leer = deaktiviert):
-          <input id="shop-list-cmd-inp" class="cf" style="width:100%;margin-top:3px" placeholder="!shop"
-            value="" oninput="shopSetListCmd(this.value)">
-        </label>
-        <label style="font-size:.65rem;color:var(--text3);margin-top:8px;display:block">Standard-Bestätigung (Whisper an Käufer):
-          <input id="shop-confirm-inp" class="cf" style="width:100%;margin-top:3px"
-            placeholder="{name} kauft: {item} für {preis} {waehrung}. Kontostand: {kontostand}"
-            value="" oninput="shopSetConfirm(this.value)">
-        </label>
-        <label style="font-size:.65rem;color:var(--text3);margin-top:8px;display:block">Fremdkauf-Ankündigung (Chat, wenn für anderen Spieler):
-          <input id="shop-announce-inp" class="cf" style="width:100%;margin-top:3px"
-            placeholder="{name} hat für {ziel} das Item {item} gekauft."
-            value="" oninput="shopSetAnnounce(this.value)">
-        </label>
-        <label style="font-size:.65rem;color:var(--text3);margin-top:8px;display:block">All-Kauf Ankündigung (Chat, für alle Spieler):
-          <input id="shop-announce-all-inp" class="cf" style="width:100%;margin-top:3px"
-            placeholder="{name} kauft {item} für alle ({anzahl} Spieler, {gesamt} {waehrung})."
-            value="" oninput="shopSetAnnounceAll(this.value)">
-        </label>
-        <label style="font-size:.65rem;color:#f87171;margin-top:8px;display:block">🔒 NoStrip-Ankündigung (Chat bei /nostrip):
-          <input id="shop-announce-nostrip-inp" class="cf" style="width:100%;margin-top:3px;border-color:rgba(248,113,113,0.35)"
-            placeholder="🔒 {ziel} trägt {item} und kann es nicht ablegen."
-            value="" oninput="shopSetAnnounceNostrip(this.value)">
-        </label>
-        <label style="font-size:.65rem;color:var(--text3);margin-top:8px;display:block">Standard-Fehlermeldung (zu wenig Coins):
-          <input id="shop-error-inp" class="cf" style="width:100%;margin-top:3px"
-            placeholder="Nicht genug {waehrung}! Du hast {kontostand}, benötigt: {preis}."
-            value="" oninput="shopSetError(this.value)">
-        </label>
-        <div style="font-size:.59rem;color:var(--text3);margin-top:6px">Variablen: {name} {ziel} {item} {preis}=Basis {gesamt}=Endpreis {waehrung} {kontostand} · All: {anzahl}</div>
-      </div>
-
-      <div style="margin-top:18px">
-        <div class="shop-cfg-title">🚩 Flag-Aufpreise</div>
-        <div style="font-size:.62rem;color:var(--text3);margin-bottom:8px;line-height:1.5">
-          Optionale Zusatzkosten wenn Spieler Flags verwenden.<br>
-          <code style="color:var(--green)">/u</code> = Käufername anonym &nbsp;·&nbsp;
-          <code style="color:#f87171">/nostrip</code> = Item kann nicht abgelegt werden (AntiStrip)<br>
-          <span style="color:var(--text3)">0 = kostenlos. Kann pro Artikel überschrieben werden.</span>
-        </div>
-        <div style="display:flex;gap:10px;flex-wrap:wrap">
-          <label style="font-size:.65rem;color:var(--text3);flex:1;min-width:120px">/u Aufpreis (Coins):
-            <input id="shop-preis-u-inp" class="cf" type="number" min="0" value="0" style="width:100%;margin-top:3px"
-              oninput="shopSetPreisU(this.value)" placeholder="0 = kostenlos">
-          </label>
-          <label style="font-size:.65rem;color:var(--text3);flex:1;min-width:120px">/nostrip Aufpreis (Coins):
-            <input id="shop-preis-nostrip-inp" class="cf" type="number" min="0" value="0" style="width:100%;margin-top:3px"
-              oninput="shopSetPreisNostrip(this.value)" placeholder="0 = kostenlos">
-          </label>
-        </div>
-      </div>
-
-      <div style="margin-top:18px">
-        <div class="shop-cfg-title">🗑 Daten</div>
-        <button onclick="shopResetLog()" style="width:100%;font-size:.68rem;padding:6px;background:#0a1a0a;border:1px solid var(--green);color:var(--green);border-radius:6px;cursor:pointer;margin-bottom:6px">Kauf-Log leeren</button>
-        <button onclick="shopResetAll()" style="width:100%;font-size:.68rem;padding:6px;background:#2a0a0a;border:1px solid var(--red);color:var(--red);border-radius:6px;cursor:pointer">Alle Shop-Daten zurücksetzen</button>
-      </div>
-    </div>
-
-    <!-- RIGHT: Kauf-Log -->
-    <div class="shop-right">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid rgba(255,255,255,0.07)">
-        <span style="font-size:.85rem;font-weight:700;color:var(--text1)">📋 Kauf-Verlauf</span>
-        <span id="shop-log-count" style="font-size:.65rem;color:var(--text3)"></span>
-      </div>
-      <div id="shop-log-list">
-        <div class="shop-empty">🛒 Noch keine Käufe.<br><span style="font-size:.72rem;color:var(--text3)">Käufe erscheinen hier wenn der Bot aktiv ist und ein Spieler einen Artikel kauft.</span></div>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- Shop Item Edit Modal -->
-<div id="shop-modal-overlay" class="shop-modal-overlay" style="display:none" onclick="if(event.target===this)shopModalClose()">
-  <div class="shop-modal">
-    <h3 id="shop-modal-title">🛒 Artikel bearbeiten</h3>
-    <input type="hidden" id="shop-modal-id">
-    <label>Artikelname (wird im Befehl verwendet)</label>
-    <input class="cf" id="shop-modal-name" placeholder="z.B. Gag, Handschellen, VIP…">
-    <label>Beschreibung (optional, für Log)</label>
-    <input class="cf" id="shop-modal-desc" placeholder="z.B. Ein einfacher Knebel">
-    <label>Icon / Emoji</label>
-    <input class="cf" id="shop-modal-icon" placeholder="🛒" style="width:80px">
-    <label>Preis (Coins)</label>
-    <input class="cf" id="shop-modal-preis" type="number" min="0" value="10">
-    <label>Aktiv</label>
-    <select class="cf" id="shop-modal-aktiv">
-      <option value="true">✅ Aktiv</option>
-      <option value="false">❌ Deaktiviert</option>
-    </select>
-    <label>Bestätigungsnachricht (leer = Standard)</label>
-    <input class="cf" id="shop-modal-confirm" placeholder="Leer = Standard-Nachricht">
-    <label>Fremdkauf-Ankündigung (öffentlicher Chat, leer = Standard)</label>
-    <input class="cf" id="shop-modal-announce" placeholder="Leer = Standard-Nachricht">
-    <label>All-Kauf Ankündigung (öffentlicher Chat, leer = Standard)</label>
-    <input class="cf" id="shop-modal-announce-all" placeholder="Leer = Standard-Nachricht">
-    <label>Fehlermeldung bei zu wenig Coins (leer = Standard)</label>
-    <input class="cf" id="shop-modal-error" placeholder="Leer = Standard-Nachricht">
-    <div style="font-size:.59rem;color:var(--text3);margin-top:4px">Variablen: {name} {ziel} {item} {preis} {waehrung} {kontostand} · All-Kauf: {anzahl} {gesamt}</div>
-    <div style="margin-top:12px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.07)">
-      <div style="font-size:.66rem;font-weight:700;color:var(--purple);margin-bottom:6px">🚩 Flag-Aufpreis (Artikel-Override, leer = globale Einstellung)</div>
-      <div style="display:flex;gap:10px">
-        <label style="font-size:.63rem;color:var(--text3);flex:1">/u Aufpreis:
-          <input class="cf" id="shop-modal-preis-u" type="number" min="0" placeholder="leer = global" style="width:100%;margin-top:2px">
-        </label>
-        <label style="font-size:.63rem;color:var(--text3);flex:1">/nostrip Aufpreis:
-          <input class="cf" id="shop-modal-preis-nostrip" type="number" min="0" placeholder="leer = global" style="width:100%;margin-top:2px">
-        </label>
-      </div>
-    </div>
-    <div class="shop-modal-btns">
-      <button onclick="shopModalClose()" style="padding:7px 16px;border:1px solid rgba(255,255,255,0.1);background:none;color:var(--text3);border-radius:8px;cursor:pointer;font-family:var(--font-ui);font-size:.78rem">Abbrechen</button>
-      <button onclick="shopModalSave()" style="padding:7px 18px;background:var(--green);border:none;color:#000;border-radius:8px;cursor:pointer;font-family:var(--font-ui);font-size:.78rem;font-weight:700">✓ Speichern</button>
-    </div>
-  </div>
-</div>
-
-
-<script src="money.js"></script>
-<script src="rank.js"></script>
-<script src="shop.js"></script>
-<script src="bot-data.js"></script>
-<script src="bot-ui.js"></script>
-<script src="bot-engine.js"></script>
-<script>
-  // Engine-Version in Topbar anzeigen
-  if(window.BOT_ENGINE_VERSION){
-    document.getElementById('engineVer').textContent='| Engine v'+window.BOT_ENGINE_VERSION;
+// BC-Konfigurator Loader v1
+// Wird via Bookmarklet in die BC-Seite injiziert.
+// Öffnet das Konfigurator-Popup und leitet Befehle direkt ans Spiel.
+(function () {
+  'use strict';
+
+  // ── 🪵 BC-Seite Logger ────────────────────────────────────────────
+  const BCK = (function() {
+    const P = '[BCK-BC]';
+    function _l(lv, color, ...a) { console.log('%c' + P + ' [' + lv + ']', 'color:' + color + ';font-weight:bold', ...a); }
+    return {
+      info: (...a) => _l('INFO', '#93c5fd', ...a),
+      ok:   (...a) => _l('OK',   '#6ee7b7', ...a),
+      // FIX: warn and err now use the correct console methods for proper DevTools filtering
+      warn: (...a) => console.warn('%c' + P + ' [WARN]', 'color:#fbbf24;font-weight:bold', ...a),
+      err:  (...a) => console.error('%c' + P + ' [ERR]',  'color:#fca5a5;font-weight:bold', ...a),
+    };
+  })();
+
+  BCK.info('Loader gestartet');
+  BCK.info('Asset[]:', typeof Asset !== 'undefined' ? Asset.length + ' Items' : 'FEHLT!');
+  BCK.info('AssetFemale3DCGExtended:', typeof AssetFemale3DCGExtended !== 'undefined');
+  BCK.info('Listener bereits aktiv:', !!window.__BCK_LISTENER__);
+  BCK.info('Popup-Ref:', !!window.__BCK_WIN__, '| geschlossen:', window.__BCK_WIN__?.closed);
+
+
+  const APP      = 'BCKonfigurator';
+  const POPUP_W  = 1380;
+  const POPUP_H  = 900;
+  const POPUP_URL = 'https://animereviewer1-sketch.github.io/bc-configurator/';
+  // FIX: Validate origin to prevent other pages from sending EXEC commands
+  const ALLOWED_ORIGIN = 'https://animereviewer1-sketch.github.io';
+
+  // ── Cache-Builder ─────────────────────────────────────
+  function buildBCCache() {
+  const VIBRATING_MODES = ["Off","Constant","Escalate","Random","Tease","Deny","Edge"];
+
+  // ── Echte Modul-Namen via AssetTextGet ───────────────
+  function getModularOptionName(prefix, moduleKey, optionIndex) {
+    if (!prefix) return null;
+    try {
+      const text = AssetTextGet(`${prefix}${moduleKey}${optionIndex}`);
+      if (text && !text.startsWith("MISSING") && text !== `${prefix}${moduleKey}${optionIndex}`) return text;
+    } catch {}
+    return null;
   }
-</script>
-</body>
+
+  function getDialogPrefix(extCfg) {
+    const dp = extCfg?.DialogPrefix;
+    if (!dp) return null;
+    return dp.option ?? dp.Option ?? dp.select ?? dp.Select ?? null;
+  }
+
+  // Fallback-Prefix wenn kein DialogPrefix: "ItemPelvisModularChastityBeltOption"
+  function buildFallbackPrefix(group, name) {
+    return `${group}${name}Option`;
+  }
+
+  // ── Modular: Module + Optionen extrahieren ────────────
+  function extractModularTypeKeys(extCfg, group, name) {
+    const modules = extCfg?.Modules;
+    if (!Array.isArray(modules)) return { typeKeys: {}, moduleNames: {} };
+
+    const dp = getDialogPrefix(extCfg) ?? buildFallbackPrefix(group, name);
+
+    const typeKeys = {}, moduleNames = {};
+    for (const rawMod of modules) {
+      const key    = rawMod.Key  ?? String(Object.keys(typeKeys).length);
+      const modName = rawMod.Name ?? key;
+      moduleNames[key] = modName;
+
+      typeKeys[key] = (rawMod.Options ?? []).map((opt, i) => {
+        // 1. Echter Text via AssetTextGet
+        const realText = getModularOptionName(dp, key, i);
+        // 2. Fallback: Property.Type CamelCase → Label
+        const propType = typeof opt?.Property?.Type === 'string' ? opt.Property.Type : null;
+        const label    = realText ?? propType ?? opt?.Name ?? opt?.Label ?? `${key}${i}`;
+
+        const e = { index: i, name: label };
+        if (opt?.Property?.Effect?.length)  e.effect  = opt.Property.Effect;
+        if (opt?.Property?.Block?.length)   e.block   = opt.Property.Block;
+        if (opt?.Prerequisite?.length)      e.prereq  = opt.Prerequisite;
+        return e;
+      });
+    }
+    return { typeKeys, moduleNames };
+  }
+
+  // ── Classic Options (BallGag, FuturisticMittens) ─────
+  function extractDirectOptions(extCfg, assetObj) {
+    // 1. extCfg.Options (typed/copied items, e.g. BallGag, HarnessBallGag via CopyConfig)
+    const opts = extCfg?.Options;
+    if (Array.isArray(opts) && opts.length > 0) {
+      const prefix = extCfg?.DialogPrefix?.Option ?? extCfg?.DialogPrefix?.option ?? "";
+      return opts.map((o, i) => {
+        if (typeof o === "string") return o;
+        // Versuche echten Text via AssetTextGet
+        if (prefix && o.Name) {
+          try {
+            const t = AssetTextGet(prefix + o.Name);
+            if (t && t !== prefix + o.Name && !t.startsWith("MISSING")) return t;
+          } catch {}
+        }
+        return o.Name ?? `Option ${i}`;
+      });
+    }
+    // 2. assetObj.Type[] direkt (letzter Fallback)
+    if (Array.isArray(assetObj?.Type) && assetObj.Type.length > 0)
+      return assetObj.Type;
+    return null;
+  }
+
+  // ── Classic TypeRecord Key-Arrays ────────────────────
+  const META_KEYS = new Set([
+    "Layer","Options","ScriptParams","ChatSetting","ChatTags","GroupName","Top","Left",
+    "Height","Width","Fetching","Alpha","Prerequisite","Effect","Block","Restrain","Hide",
+    "HideItem","AllowLock","Random","IsRestraint","BodyCosplay","OverrideHeight",
+    "DrawingPriority","DrawingLeft","DrawingTop","DefaultColor","Opacity","MinOpacity",
+    "MaxOpacity","Attribute","RemoveItemOnRemove","ArousalZone","AllowActivity","AllowEffect",
+    "DynamicBeforeDraw","DynamicAfterDraw","DynamicGroupName","DynamicDescription","DynamicName",
+    "Extended","FuturisticRecolor","FuturisticRecolorDisplay","AllowLockType",
+    "DontHavePrerequisite","CustomBlindBackground","HideDefaultEars","HideDefaultHairs",
+    "IgnoreParentGroup","ChildGroup","MirrorExpression","AllowColorize","AllowTypes",
+    "InheritColor","CopyLayerColor","TextureNames","AnimationData","HasType","Difficulty",
+    "SelfUnlock","MemberNumberListKeys","PortalLinkCode","PortalLinkTarget","ChatMessagePrefix",
+    "Archetype","Modules","BaselineProperty","ScriptHooks","ChangeWhenLocked","DrawImages","DrawData",
+    "DialogPrefix","MirrorActivitiesFrom","AllowExpression","PassthroughProps",
+  ]);
+
+  function isLayerObj(obj) {
+    return typeof obj === "object" && obj !== null &&
+      ("DrawingLeft" in obj || "DrawingTop" in obj || "AllowColorize" in obj ||
+       "CopyLayerColor" in obj || "InheritColor" in obj || "Name" in obj && "Priority" in obj);
+  }
+
+  function isClassicOptionArray(arr) {
+    if (!Array.isArray(arr) || arr.length === 0) return false;
+    if (typeof arr[0] === "string") return true;
+    if (arr.some(v => typeof v !== "object" || v === null || isLayerObj(v))) return false;
+    const OPTKEYS = ["Name","Property","Prerequisite","Description","Default","BuyGroup","Fetching","HasSubscreen"];
+    return arr.some(v => OPTKEYS.some(k => k in v));
+  }
+
+  function parseClassicOption(opt, idx, key) {
+    if (typeof opt === "string") return { index: idx, name: opt };
+    const propType = opt?.Property?.Type;
+    const name = (typeof propType === "string" ? propType : null) ?? opt?.Name ?? opt?.Label ?? `${key}${idx}`;
+    const e = { index: idx, name };
+    if (opt?.Property?.Effect?.length)  e.effect = opt.Property.Effect;
+    if (opt?.Property?.Block?.length)   e.block  = opt.Property.Block;
+    return e;
+  }
+
+  function extractClassicTypeKeys(extCfg) {
+    const typeKeys = {};
+    for (const key in extCfg) {
+      if (META_KEYS.has(key) || key === "Options") continue;
+      const val = extCfg[key];
+      if (!isClassicOptionArray(val)) continue;
+      typeKeys[key] = val.map((opt, idx) => parseClassicOption(opt, idx, key));
+    }
+    return typeKeys;
+  }
+
+  // ── Farben: echte DefaultColor aus Asset.Layer ────────
+  function isValidHex(c) { return typeof c === "string" && /^#[0-9a-fA-F]{6}$/.test(c); }
+
+  function getColorInfo(assetObj, extCfg) {
+    const assetLayers = assetObj?.Layer ?? [];
+    const extLayers   = extCfg?.Layer   ?? [];
+    const assetDef    = assetObj?.DefaultColor;
+    const extDef      = extCfg?.DefaultColor;
+
+    // Layer-Quelle: assetObj für Namen/Struktur
+    const layerSrc = assetLayers.length > 0 ? assetLayers : extLayers;
+    if (layerSrc.length === 0) {
+      // Kein Layer-Array: DefaultColor direkt als Fallback
+      const dc = assetDef ?? extDef;
+      if (Array.isArray(dc) && dc.length > 0)
+        return { count: dc.length, names: dc.map((_,i) => `Layer ${i+1}`), defaults: dc.map(c => isValidHex(c) ? c : "Default") };
+      if (isValidHex(dc))
+        return { count: 1, names: ["Layer 1"], defaults: [dc] };
+      return { count: 1, names: ["Layer 1"], defaults: ["Default"] };
+    }
+
+    const colorable = layerSrc.filter(l => l.AllowColorize !== false);
+    if (colorable.length === 0)
+      return { count: 1, names: ["Layer 1"], defaults: ["Default"] };
+
+    // Baut eine Name→DefaultColor Map aus extCfg.Layer (für CopyConfig-Items)
+    const extLayerByName = {};
+    for (const el of extLayers) {
+      if (el.Name && el.DefaultColor) extLayerByName[el.Name] = el.DefaultColor;
+    }
+
+    const resolveColor = (l, i) => {
+      // 1. assetObj.DefaultColor[i]
+      if (Array.isArray(assetDef) && isValidHex(assetDef[i])) return assetDef[i];
+      if (isValidHex(assetDef)) return assetDef;
+      // 2. extCfg.DefaultColor[i]
+      if (Array.isArray(extDef) && isValidHex(extDef[i])) return extDef[i];
+      if (isValidHex(extDef)) return extDef;
+      // 3. Layer.DefaultColor direkt (am besten für klassische Items wie ClassicBelt)
+      const lc = l.DefaultColor;
+      if (isValidHex(lc)) return lc;
+      if (Array.isArray(lc) && isValidHex(lc[0])) return lc[0];
+      // 4. extCfg.Layer by Name (für CopyConfig-aufgelöste Items)
+      if (l.Name && extLayerByName[l.Name]) {
+        const ec = extLayerByName[l.Name];
+        if (isValidHex(ec)) return ec;
+        if (Array.isArray(ec) && isValidHex(ec[0])) return ec[0];
+      }
+      // 5. CopyLayerColor → Farbe von anderem Layer
+      if (typeof l.CopyLayerColor === "string") {
+        const src = colorable.find(ll => ll.Name === l.CopyLayerColor);
+        if (src) {
+          // Direkt auf src
+          const sc = src.DefaultColor;
+          if (isValidHex(sc)) return sc;
+          if (Array.isArray(sc) && isValidHex(sc[0])) return sc[0];
+          // Via extLayerByName
+          if (src.Name && extLayerByName[src.Name]) {
+            const ec2 = extLayerByName[src.Name];
+            if (isValidHex(ec2)) return ec2;
+          }
+          // Via assetDef/extDef am Index des src-Layers
+          const srcIdx = colorable.indexOf(src);
+          if (srcIdx >= 0) {
+            if (Array.isArray(assetDef) && isValidHex(assetDef[srcIdx])) return assetDef[srcIdx];
+            if (Array.isArray(extDef) && isValidHex(extDef[srcIdx])) return extDef[srcIdx];
+          }
+        }
+      }
+      // 6. InheritColor → ersten vorherigen Layer mit bekannter Farbe
+      if (l.InheritColor) {
+        for (let j = 0; j < i; j++) {
+          if (Array.isArray(assetDef) && isValidHex(assetDef[j])) return assetDef[j];
+          if (Array.isArray(extDef) && isValidHex(extDef[j])) return extDef[j];
+          const pc = colorable[j]?.DefaultColor;
+          if (isValidHex(pc)) return pc;
+        }
+      }
+      return "Default";
+    };
+
+    return {
+      count:    colorable.length,
+      names:    colorable.map((l, i) => l.Name || `Layer ${i+1}`),
+      defaults: colorable.map((l, i) => resolveColor(l, i)),
+    };
+  }
+
+  // ── Props aus Funktionscode ───────────────────────────
+  const PROP_SKIP = new Set([
+    "LockedBy","LockMemberNumber","RemoveTimer","Password","CombinationNumber","Type","TypeRecord",
+    "Effect","Block","Hide","HideItem","AllowLock","Attribute","Restrain","Prerequisite","Opacity",
+    "DrawingPriority","InflateLevel","Intensity","ShockLevel","SelfUnlock","MemberNumberListKeys",
+    "LockPickSeed","EnableRandomInput","HeightModifier","OverridePriority","Length","Size",
+    "Position","PortalLinkCode","Color","Craft","Locked","ShowTimer","Mode","AccessMode","TriggerValues",
+  ]);
+
+  function extractProps(group, name) {
+    const prefix = `InventoryItem${group}${name}`;
+    const fns = [], props = new Set();
+    for (const s of ["Update","CheckPunish","HandleChat","Init","Load","Draw","Click","Exit"]) {
+      const fn = window[prefix + s];
+      if (typeof fn !== "function") continue;
+      fns.push(s);
+      const src = fn.toString();
+      for (const m of src.matchAll(/\.Property\??\.(\w+)\s*(?:[=!<>]|[^.[\w])/g)) props.add(m[1]);
+      for (const m of src.matchAll(/Property\[["'](\w+)["']\]/g)) props.add(m[1]);
+    }
+    return { functions: fns, props: [...props].filter(p => !PROP_SKIP.has(p) && /^[A-Z]/.test(p)) };
+  }
+
+  // ── HAUPT-LOOP ────────────────────────────────────────
+  const extFemale = typeof AssetFemale3DCGExtended !== "undefined" ? AssetFemale3DCGExtended : {};
+  const extMale   = typeof AssetMale3DCGExtended   !== "undefined" ? AssetMale3DCGExtended   : {};
+
+  if (!Array.isArray(Asset) || Asset.length === 0) {
+    console.error("❌ Asset-Array nicht gefunden!");
+    return;
+  }
+
+  const cache = {};
+  let total = 0, modularCnt = 0, vibratingCnt = 0, classicOptCnt = 0, classicTRCnt = 0;
+
+  for (const assetObj of Asset) {
+    const group = assetObj.Group?.Name;
+    const name  = assetObj.Name;
+    if (!group || !name) continue;
+    if (!group.startsWith("Item") && !group.startsWith("Cloth")) continue;
+
+    // 1. Direkte Suche
+    let extCfg = extFemale[group]?.[name] ?? extMale[group]?.[name];
+    // 2. CopyConfig auflösen (z.B. HarnessBallGag/BallGag in ItemMouth2 → ItemMouth)
+    if (extCfg?.CopyConfig) {
+      const srcName = extCfg.CopyConfig.AssetName ?? name;
+      // Wenn kein Group angegeben: zuerst Parent-Gruppe (ItemMouth2→ItemMouth), dann gleiche Gruppe
+      const parentGroup = group.replace(/\d+$/, '');
+      const srcGroup = extCfg.CopyConfig.Group
+        ?? (parentGroup !== group ? parentGroup : group);
+      const resolved = extFemale[srcGroup]?.[srcName] ?? extMale[srcGroup]?.[srcName]
+        ?? extFemale[group]?.[srcName] ?? extMale[group]?.[srcName];
+      if (resolved) extCfg = resolved;
+    }
+    // 3. Parent-Gruppe als Fallback (ItemMouth2 → ItemMouth)
+    if (!extCfg) {
+      const parentGroup = group.replace(/\d+$/, '');
+      if (parentGroup !== group) {
+        let parentCfg = extFemale[parentGroup]?.[name] ?? extMale[parentGroup]?.[name];
+        if (parentCfg?.CopyConfig) {
+          const srcGroup = parentCfg.CopyConfig.Group    ?? parentGroup;
+          const srcName  = parentCfg.CopyConfig.AssetName ?? name;
+          parentCfg = extFemale[srcGroup]?.[srcName] ?? extMale[srcGroup]?.[srcName] ?? parentCfg;
+        }
+        extCfg = parentCfg;
+      }
+    }
+    extCfg = extCfg ?? {};
+
+    let typeKeys = {}, moduleNames = {}, archetype = "classic";
+    let vibratingInfo = null, directOptions = null;
+
+    if (extCfg.Archetype === "modular" && Array.isArray(extCfg.Modules)) {
+      archetype = "modular"; modularCnt++;
+      const ext = extractModularTypeKeys(extCfg, group, name);
+      typeKeys = ext.typeKeys; moduleNames = ext.moduleNames;
+
+    } else if (extCfg.Archetype === "vibrating") {
+      archetype = "vibrating"; vibratingCnt++;
+      // AccessMode options and TriggerValues for FuturisticVibrator-style items
+      const defaultTriggers = "Increase,Decrease,Disable,Edge,Random,Deny,Tease,Shock";
+      const availTriggers = (extCfg.BaselineProperty?.TriggerValues ?? defaultTriggers).split(",").filter(Boolean);
+      const availAccess = ["", "Locked"];  // "" = always, "Locked" = only when locked
+      vibratingInfo = {
+        modes:           VIBRATING_MODES,
+        allowedEffects:  extCfg.AllowEffect ?? [],
+        baselineProps:   extCfg.BaselineProperty ?? {},
+        availTriggers,
+        availAccess,
+      };
+
+    } else if (extCfg.Archetype === "typed") {
+      // "typed" = Classic Options array (HarnessBallGag, etc.)
+      archetype = "classic";
+      directOptions = extractDirectOptions(extCfg, assetObj);
+      if (directOptions?.length) classicOptCnt++;
+
+    } else {
+      directOptions = extractDirectOptions(extCfg, assetObj);
+      // Ultimativer Fallback: assetObj.Type[] direkt (z.B. HarnessBallGag in ItemMouth2/3)
+      if (!directOptions?.length && Array.isArray(assetObj.Type) && assetObj.Type.length > 0) {
+        directOptions = assetObj.Type;
+        classicOptCnt++;
+      } else if (directOptions?.length) {
+        classicOptCnt++;
+      }
+      typeKeys = extractClassicTypeKeys(extCfg);
+      if (Object.keys(typeKeys).length > 0) classicTRCnt++;
+    }
+
+    const colorInfo = getColorInfo(assetObj, extCfg);
+    const { functions, props } = extractProps(group, name);
+
+    if (!cache[group]) cache[group] = {};
+    cache[group][name] = {
+      archetype,
+      colorCount:    colorInfo.count,
+      layerNames:    colorInfo.names,
+      defaultColors: colorInfo.defaults,
+      typeKeys, moduleNames,
+      directOptions,
+      vibratingInfo,
+      props,
+      difficulty:        assetObj.Difficulty ?? 0,
+      allowedCraftProps: assetObj.Crafting?.Property ?? ["Normal"],
+      hasLock:           !!(assetObj.AllowLock ?? extCfg.AllowLock),
+      functions,
+    };
+    total++;
+  }
+  return cache;
+  }
+
+
+  // ══════════════════════════════════════════════════════
+  //  CURSE SCANNER (eingebettet)
+  // ══════════════════════════════════════════════════════
+
+window.CurseScanner = (() => {
+  let database = {};
+  let lscgTable = {};
+
+  // ── Eigener persistenter Cache via IndexedDB (kein localStorage-Quota-Problem) ──
+  const LSCG_CACHE_KEY  = 'CurseScanner_lscgCache_v1';
+  const CRAFT_CACHE_KEY = 'CurseScanner_craftCache_v1';
+
+  // Minimaler IndexedDB-Wrapper (läuft auf BC's Origin)
+  const _CS_IDB = (() => {
+    const DB_NAME = 'BCKonfigurator_CS';
+    const STORE   = 'kv';
+    let _db = null;
+    function _open() {
+      if (_db) return Promise.resolve(_db);
+      return new Promise((res, rej) => {
+        const r = indexedDB.open(DB_NAME, 1);
+        r.onupgradeneeded = e => { const db = e.target.result; if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE); };
+        r.onsuccess = e => { _db = e.target.result; res(_db); };
+        r.onerror   = e => rej(e.target.error);
+      });
+    }
+    return {
+      get: async key => { try { const db = await _open(); return await new Promise((res,rej)=>{ const r=db.transaction(STORE,'readonly').objectStore(STORE).get(key); r.onsuccess=e=>res(e.target.result??null); r.onerror=e=>rej(e.target.error); }); } catch { return null; } },
+      set: async (key, val) => { try { const db = await _open(); await new Promise((res,rej)=>{ const r=db.transaction(STORE,'readwrite').objectStore(STORE).put(val,key); r.onsuccess=()=>res(); r.onerror=e=>rej(e.target.error); }); } catch(e) { console.warn('[CS-IDB] set error:', e); } },
+    };
+  })();
+
+  // In-Memory Caches – werden async aus IDB befüllt
+  const lscgCache  = {};
+  const craftCache = {};
+
+  // Einmalige Migration aus localStorage → IDB + RAM
+  (async () => {
+    for (const [key, target] of [[LSCG_CACHE_KEY, lscgCache],[CRAFT_CACHE_KEY, craftCache]]) {
+      try {
+        // Erst IDB laden
+        const idbVal = await _CS_IDB.get(key);
+        if (idbVal) Object.assign(target, idbVal);
+        // Dann ggf. localStorage migrieren (falls noch vorhanden)
+        const lsRaw = localStorage.getItem(key);
+        if (lsRaw) {
+          Object.assign(target, JSON.parse(lsRaw));
+          await _CS_IDB.set(key, target);
+          localStorage.removeItem(key);
+          console.info('[CurseScanner] Migriert aus localStorage:', key);
+        }
+      } catch(e) { console.warn('[CurseScanner] Cache-Init-Fehler:', key, e); }
+    }
+    console.log('[CurseScanner] Craft-Cache: ' + Object.keys(craftCache).length + ' Einträge, LSCG-Cache: ' + Object.keys(lscgCache).length + ' Einträge');
+  })();
+
+  let _persistTimer = null;
+  function _persistLscgCache() {
+    if (_persistTimer) return;
+    _persistTimer = setTimeout(() => {
+      _persistTimer = null;
+      _CS_IDB.set(LSCG_CACHE_KEY, lscgCache);
+    }, 2000);
+  }
+
+  let _craftPersistTimer = null;
+  function _persistCraftCache() {
+    if (_craftPersistTimer) return;
+    _craftPersistTimer = setTimeout(() => {
+      _craftPersistTimer = null;
+      _CS_IDB.set(CRAFT_CACHE_KEY, craftCache);
+    }, 2000);
+  }
+
+  function _cacheLSCG(memberNumber, curseObj) {
+    if (!curseObj?.Name) return;
+    // Speichere unter LSCG-Name UND unter Craft-Namen (falls verfügbar) gleichzeitig
+    const key = memberNumber + ':' + curseObj.Name.toLowerCase();
+    const isNew = !lscgCache[key];
+    lscgCache[key] = { ...curseObj, _cachedAt: new Date().toLocaleTimeString(), _memberNum: memberNumber };
+    if (isNew) {
+      console.log('💾 LSCG Cache: #' + memberNumber + ' → "' + curseObj.Name + '"');
+      _persistLscgCache();
+    }
+  }
+
+  function _cacheLSCGWithCraftAlias(memberNumber, curseObj, craftName) {
+    _cacheLSCG(memberNumber, curseObj);
+    // Auch unter Craft-Namen speichern wenn abweichend → lookup by craftName funktioniert immer
+    if (craftName && craftName.toLowerCase() !== curseObj.Name?.toLowerCase()) {
+      const aliasKey = memberNumber + ':' + craftName.toLowerCase();
+      lscgCache[aliasKey] = { ...lscgCache[memberNumber + ':' + curseObj.Name.toLowerCase()], _craftAlias: craftName };
+      _persistLscgCache();
+    }
+  }
+
+  // Snapshot ALLE LSCG-Curse-Daten eines Charakters aggressiv
+  function _snapshotAllLSCG(C) {
+    const items = C?.LSCG?.CursedItemModule?.CursedItems;
+    if (!Array.isArray(items) || items.length === 0) return;
+    let changed = false;
+    items.forEach(ci => {
+      if (!ci?.Name) return;
+      const key = C.MemberNumber + ':' + ci.Name.toLowerCase();
+      const existing = lscgCache[key];
+      // Immer aktualisieren wenn live-Daten vorhanden (nie auf alten Cache stehen lassen)
+      lscgCache[key] = { ...ci, _cachedAt: new Date().toLocaleTimeString(), _memberNum: C.MemberNumber };
+      if (!existing) changed = true;
+    });
+    // Craft-Namen als Aliases eintragen: gehe alle crafts durch und verknüpfe
+    (C.Crafting ?? []).forEach(craft => {
+      if (!craft?.Name) return;
+      const lscgMatch = items.find(ci => ci.Name?.toLowerCase() === craft.Name?.toLowerCase());
+      if (lscgMatch && lscgMatch.Name?.toLowerCase() !== craft.Name?.toLowerCase()) {
+        const aliasKey = C.MemberNumber + ':' + craft.Name.toLowerCase();
+        lscgCache[aliasKey] = { ...lscgCache[C.MemberNumber + ':' + lscgMatch.Name.toLowerCase()], _craftAlias: craft.Name };
+        changed = true;
+      }
+    });
+    if (changed) _persistLscgCache();
+  }
+
+  let _hookInstalled = false;
+  function installLSCGHook() {
+    if (_hookInstalled) return;
+    // Poll alle 6s – kein CharacterRefresh-Override (kein BCX-Warning)
+    setInterval(() => {
+      try { [Player, ...(ChatRoomCharacter ?? [])].forEach(_snapshotAllLSCG); } catch {}
+    }, 6000);
+    _hookInstalled = true;
+    console.log('✅ LSCG-Cache-Polling aktiv (alle 6s, eigener persistenter Cache)');
+  }
+
+  function _getLSCGFromCache(memberNumber, craftName) {
+    return lscgCache[memberNumber + ':' + craftName.toLowerCase()] ?? null;
+  }
+
+  function findeGruppe(itemName) {
+    const gruppen = [
+      'ItemHandheld','ItemMisc','ItemAddon','ItemHands','ItemArms','ItemLegs','ItemFeet',
+      'ItemNeck','ItemHead','ItemMouth','ItemEyes','ItemEars','ItemNose','ItemTorso',
+      'ItemTorso2','ItemPelvis','ItemVulva','ItemVulvaPiercings','ItemButt','ItemNipples',
+      'ItemNipplesPiercings','ItemBoots','ItemHood','ItemDevices','ItemNeckAccessories',
+      'ItemNeckRestraints','ItemMouthAccessory','Cloth','ClothLower','ClothAccessory',
+      'Shoes','Hat','Gloves','Socks','Bracelet','Mask','Decals','Bra','Panties',
+      'Corset','SocksRight'
+    ];
+    for (const g of gruppen) {
+      if (typeof AssetGet === 'function' && AssetGet('Female3DCG', g, itemName)) return g;
+    }
+    return null;
+  }
+
+  function isCursed(craft) {
+    const terms = ['cursed','enchanted'];
+    const name = (craft.Name ?? '').toLowerCase();
+    const desc = (craft.Description ?? '').toLowerCase();
+    return terms.some(b => name.includes(b) || desc.includes(b));
+  }
+
+  function scan() {
+    // Nur Raum-Charaktere scannen (nicht Player.Crafting – das ist die gesamte Garderobe)
+    // Vor dem Scan: craftCache in database laden (historische Einträge verfügbar halten)
+    Object.entries(craftCache).forEach(([k, e]) => { if (!database[k]) database[k] = { ...e, _fromCache: true }; });
+    const raumChars = ChatRoomCharacter ?? [];
+    _snapshotAllLSCG(Player);
+    const spieler = raumChars;
+    let neuDB = 0, aktualisiert = 0, neuLSCG = 0;
+    spieler.forEach(C => {
+      _snapshotAllLSCG(C);
+      (C.Crafting ?? []).forEach(craft => {
+        if (!craft?.Item) return;
+        const gruppe = findeGruppe(craft.Item);
+        const key    = C.MemberNumber + ':' + craft.Item + ':' + craft.Name;
+        const istNeu = !database[key];
+        // LSCG: erst live schauen, dann in eigenem persistenten Cache nachschlagen
+        const liveCursedItems = C.LSCG?.CursedItemModule?.CursedItems ?? [];
+        const lscgLive = liveCursedItems.find(ci => ci.Name?.toLowerCase() === craft.Name?.toLowerCase()) ?? null;
+        if (lscgLive) _cacheLSCGWithCraftAlias(C.MemberNumber, lscgLive, craft.Name); // immer cachen
+        const lscg = lscgLive ?? _getLSCGFromCache(C.MemberNumber, craft.Name);
+        const lscgIsFromCache = lscg !== null && lscgLive === null;
+
+        const cursed = isCursed(craft);
+        // R125: craft.Property kann jetzt ein Objekt/Array sein (multiple craft properties)
+        const craftProperty = (() => {
+          const p = craft.Property;
+          if (!p) return '';
+          if (typeof p === 'string') return p;
+          if (Array.isArray(p)) return p.join(',');
+          if (typeof p === 'object') return JSON.stringify(p);
+          return String(p);
+        })();
+        const eintrag = {
+          CraftName:      craft.Name ?? craft.Item,
+          Description:    craft.Description ?? '',
+          ItemName:       craft.Item,
+          Gruppe:         gruppe ?? 'UNBEKANNT',
+          Farbe:          craft.Color ?? '#ffffff',
+          Property:       craftProperty,
+          Private:        craft.Private ?? false,
+          IstCursed:      cursed,
+          IstLSCGCurse:   lscg !== null,
+          Besitzer:       { Name: C.Name, Nummer: C.MemberNumber },
+          ZuletztGesehen: new Date().toLocaleTimeString(),
+          Craft:          { ...craft, MemberName: C.Name, MemberNumber: C.MemberNumber },
+          LSCG:           lscg,
+          LSCGAusCache:   lscgIsFromCache,
+        };
+        if (istNeu) neuDB++; else aktualisiert++;
+        database[key] = eintrag;
+        // Persistenter Craft-Cache: immer aktualisieren wenn live-Daten vorhanden
+        craftCache[key] = eintrag;
+        _persistCraftCache();
+        if (lscg !== null) {
+          const lscgKey = C.MemberNumber + ':' + craft.Name;
+          if (!lscgTable[lscgKey]) neuLSCG++;
+          lscgTable[lscgKey] = {
+            CraftName: eintrag.CraftName, ItemName: eintrag.ItemName,
+            Gruppe: eintrag.Gruppe, Crafter: C.Name, CrafterNummer: C.MemberNumber,
+            IstCursed: cursed, LSCGName: lscg.Name, OutfitKey: lscg.OutfitKey,
+            Speed: lscg.Speed, Enabled: lscg.Enabled, Inexhaustable: lscg.Inexhaustable,
+            AusCache: eintrag.LSCGAusCache, ZuletztGesehen: new Date().toLocaleTimeString(),
+          };
+        }
+      });
+    });
+    return { database, lscgTable, lscgCache, neuDB, aktualisiert, neuLSCG };
+  }
+
+  function _finde(indexOderName) {
+    const entries = Object.values(database);
+    if (typeof indexOderName === 'number') return entries[indexOderName];
+    // Exact dbKey lookup: "memberNum:itemName:craftName"
+    if (database[indexOderName]) return database[indexOderName];
+    // Fallback: name search
+    return entries.find(e =>
+      e.CraftName.toLowerCase().includes(String(indexOderName).toLowerCase()) ||
+      e.ItemName.toLowerCase().includes(String(indexOderName).toLowerCase())
+    );
+  }
+
+  function wear(indexOderName, target) {
+    target = target ?? Player;
+    const entry = _finde(indexOderName);
+    if (!entry) return { err: '"' + indexOderName + '" nicht gefunden' };
+    if (entry.Gruppe === 'UNBEKANNT') return { err: 'Gruppe unbekannt für ' + entry.ItemName };
+    // Color: BC wants string or array; parse comma-separated if needed
+    let _color = entry.Farbe;
+    if (typeof _color === 'string' && _color.includes(',')) _color = _color.split(',');
+    // R125: craft.Property can be object/array - pass original Craft object as-is
+    // BC's InventoryWear handles the craft object internally
+    const craftObj = entry.Craft ?? null;
+    InventoryWear(target, entry.ItemName, entry.Gruppe,
+      _color, 0, Player.MemberNumber, craftObj);
+    CharacterRefresh(target);
+    ChatRoomCharacterUpdate(target);
+    return { ok: true, msg: '"' + entry.CraftName + '" → ' + target.Name };
+  }
+
+  function wearOn(indexOderName, memberNumber) {
+    const TARGET = ChatRoomCharacter.find(c => c.MemberNumber === memberNumber);
+    if (!TARGET) return { err: '#' + memberNumber + ' nicht im Raum' };
+    return wear(indexOderName, TARGET);
+  }
+
+  installLSCGHook();
+
+  function injectEntry(key, entry) {
+    if (!database[key]) database[key] = { ...entry, _injected: true };
+  }
+
+  function loadDatabase(extDb) {
+    let n = 0;
+    Object.entries(extDb).forEach(([k, e]) => {
+      const entry = { ...e, _injected: true };
+      if (!database[k]) { database[k] = entry; n++; }
+      // Auch in craftCache schreiben (neuere ZuletztGesehen gewinnt)
+      if (!craftCache[k] || (e.ZuletztGesehen && e.ZuletztGesehen > (craftCache[k].ZuletztGesehen ?? ''))) {
+        craftCache[k] = entry;
+      }
+    });
+    if (n > 0) _persistCraftCache();
+    console.log('[CurseScanner] loadDatabase: ' + n + ' neue Einträge (craftCache: ' + Object.keys(craftCache).length + ')');
+  }
+
+  function getLscgCache() {
+    return { ...lscgCache };
+  }
+
+  function mergeLscgCache(extCache) {
+    let n = 0;
+    Object.entries(extCache).forEach(([key, val]) => {
+      const existing = lscgCache[key];
+      if (!existing || (val._cachedAt && (!existing._cachedAt || val._cachedAt > existing._cachedAt))) {
+        lscgCache[key] = val;
+        n++;
+      }
+    });
+    if (n > 0) _persistLscgCache();
+    console.log('[CurseScanner] mergeLscgCache: ' + n + ' neue/neuere Einträge');
+    return n;
+  }
+
+  function getCraftCache() {
+    return { ...craftCache };
+  }
+
+  function mergeCraftCache(extCache) {
+    let n = 0;
+    Object.entries(extCache).forEach(([key, val]) => {
+      const existing = craftCache[key];
+      if (!existing || (val.ZuletztGesehen && val.ZuletztGesehen > (existing.ZuletztGesehen ?? ''))) {
+        craftCache[key] = { ...val, _injected: true };
+        if (!database[key]) database[key] = craftCache[key];
+        n++;
+      }
+    });
+    if (n > 0) _persistCraftCache();
+    console.log('[CurseScanner] mergeCraftCache: ' + n + ' neue/neuere Einträge');
+    return n;
+  }
+
+  return { scan, wear, wearOn, injectEntry, loadDatabase, getLscgCache, mergeLscgCache, getCraftCache, mergeCraftCache, database, lscgTable, lscgCache, craftCache };
+})();
+
+
+  // ── PostMessage Listener ───────────────────────────────
+  if (!window.__BCK_LISTENER__) {
+    window.__BCK_LISTENER__ = true;
+
+    window.addEventListener('message', function (ev) {
+      // FIX: Validate origin - only accept messages from the known popup URL
+      // This prevents arbitrary pages from executing EXEC commands in the BC context
+      if (!ev.data || ev.data.app !== APP) return;
+      if (ev.origin !== ALLOWED_ORIGIN) {
+        BCK.warn('postMessage von unbekannter Origin blockiert:', ev.origin);
+        return;
+      }
+      const src = ev.source;
+      window.__BCK_popupRef = src; // Bot kann damit Logs zurückschicken
+      BCK.info('\u2190 postMessage:', ev.data.type, '| origin:', ev.origin);
+
+      switch (ev.data.type) {
+        case 'PING':
+          BCK.info('PING \u2192 sende PONG');
+          src.postMessage({ app: APP, type: 'PONG' }, ALLOWED_ORIGIN);
+          break;
+
+        case 'GET_CACHE': {
+          BCK.info('GET_CACHE \u2013 baue Cache...');
+          let cache = {}, err = null;
+          try {
+            cache = buildBCCache();
+            const gc = Object.keys(cache).length;
+            const ic = Object.values(cache).reduce((n,g)=>n+Object.keys(g).length,0);
+            BCK.ok('Cache: ' + gc + ' Gruppen, ' + ic + ' Items');
+          } catch (ex) {
+            err = ex.message;
+            BCK.err('buildBCCache FEHLER:', ex.message);
+          }
+          BCK.info('Sende CACHE_DATA | err:', err ?? 'keiner');
+          src.postMessage({ app: APP, type: 'CACHE_DATA', cache, err }, ALLOWED_ORIGIN);
+          break;
+        }
+
+        case 'GET_PLAYER': {
+          try {
+            const P = window.Player;
+            src.postMessage({ app: APP, type: 'PLAYER_DATA',
+              memberNumber: P?.MemberNumber,
+              name: P?.Name,
+              members: (window.ChatRoomCharacter ?? []).map(c => ({ num: c.MemberNumber, name: c.Name })),
+            }, ALLOWED_ORIGIN);
+          } catch (ex) {
+            src.postMessage({ app: APP, type: 'PLAYER_DATA', err: ex.message }, ALLOWED_ORIGIN);
+          }
+          break;
+        }
+
+        case 'GET_CHAR_APPEARANCE': {
+          // Returns the full Appearance of a character as a saveable profile item list.
+          // memberNum: number – target character. null/undefined → Player.
+          // reqId: string – echoed back so the popup can match the response to a callback.
+          try {
+            const _targetNum = ev.data.memberNum;
+            let _C = null;
+            if (_targetNum) {
+              _C = (window.ChatRoomCharacter ?? []).find(c => c.MemberNumber === _targetNum) ?? null;
+            }
+            if (!_C) _C = window.Player;
+            if (!_C) throw new Error('Charakter nicht gefunden');
+
+            // Convert BC Appearance items → profile item format
+            // Skip groups where AllowNone===false AND the group name suggests base anatomy
+            // (Body, BodyUpper, BodyLower, Mouth, Eyes*, Head base) – these are not clothes.
+            // Everything else (hair, clothes, restraints, accessories, piercings, locks) → include.
+            const _SKIP_GROUPS = new Set([
+              'BodyUpper','BodyLower','BodyMarkings',
+              'Eyes','Eyes2','EyesColor','EyesColor2',
+              'Mouth','Head','Blush','Emoticon','Fluids',
+              'ExpressionFull',
+            ]);
+
+            const _items = (_C.Appearance ?? [])
+              .filter(item => {
+                if (!item?.Asset?.Group) return false;
+                const gn = item.Asset.Group.Name ?? '';
+                if (_SKIP_GROUPS.has(gn)) return false;
+                // AllowNone===false → mandatory anatomy slot → skip
+                if (item.Asset.Group.AllowNone === false) return false;
+                return true;
+              })
+              .map(item => {
+                const prop = item.Property ?? {};
+                // TypeRecord: only keep if non-empty
+                const tr = prop.TypeRecord && Object.keys(prop.TypeRecord).length
+                  ? prop.TypeRecord : undefined;
+                return {
+                  asset:  item.Asset.Name,
+                  group:  item.Asset.Group.Name,
+                  colors: item.Color ?? '#ffffff',
+                  craft:  item.Craft ?? null,
+                  lock:   prop.LockedBy ?? null,
+                  tr:     tr,
+                  // Preserve lock member so bot can re-lock correctly
+                  lockMember: prop.LockMemberNumber ?? null,
+                };
+              });
+
+            src.postMessage({
+              app: APP, type: 'CHAR_APPEARANCE_DATA',
+              reqId: ev.data.reqId,
+              memberNum: _C.MemberNumber,
+              name: _C.Name,
+              items: _items,
+            }, ALLOWED_ORIGIN);
+            BCK.ok('CHAR_APPEARANCE_DATA: ' + _items.length + ' Items für ' + _C.Name);
+          } catch (ex) {
+            src.postMessage({ app: APP, type: 'CHAR_APPEARANCE_DATA',
+              reqId: ev.data.reqId, err: ex.message }, ALLOWED_ORIGIN);
+          }
+          break;
+        }
+
+        case 'EXEC': {
+          const _execCode = ev.data.code;
+          const _execLen  = _execCode?.length ?? 0;
+
+          try {
+            // eslint-disable-next-line no-new-func
+            new Function(_execCode)();
+            BCK.ok('EXEC OK');
+            src.postMessage({ app: APP, type: 'EXEC_OK' }, ALLOWED_ORIGIN);
+          } catch (ex) {
+            BCK.err('EXEC FEHLER:', ex.message);
+            // Zeilennummer aus Error-Stack extrahieren
+            const _lm = ex.message.match(/line (\d+)/i) || (ex.stack || '').match(/<anonymous>:(\d+)/);
+            if (_lm) {
+              const _el = parseInt(_lm[1]) - 2; // IIFE-Wrapper hat 2 Zeilen Overhead
+              const _ls = (_execCode || '').split('\n');
+              const _ef = Math.max(0, _el - 3), _et = Math.min(_ls.length, _el + 3);
+              BCK.err('Fehler nahe Zeile ' + _el + ':', JSON.stringify(_ls.slice(_ef, _et).join('\n')));
+            }
+            src.postMessage({ app: APP, type: 'EXEC_ERR', msg: ex.message }, ALLOWED_ORIGIN);
+          }
+          break;
+        }
+
+        case 'SCAN_CURSES': {
+          BCK.info('SCAN_CURSES');
+          try {
+            const result = window.CurseScanner.scan();
+            src.postMessage({
+              app: APP, type: 'CURSE_DATA',
+              database:  result.database,
+              lscgTable: result.lscgTable,
+              lscgCache: result.lscgCache,
+            }, ALLOWED_ORIGIN);
+            BCK.ok('CURSE_DATA gesendet: ' + Object.keys(result.database).length + ' Crafts');
+          } catch (ex) {
+            BCK.err('SCAN_CURSES Fehler:', ex.message);
+            src.postMessage({ app: APP, type: 'CURSE_DATA', err: ex.message }, ALLOWED_ORIGIN);
+          }
+          break;
+        }
+
+        case 'WEAR_CURSE': {
+          BCK.info('WEAR_CURSE key=' + ev.data.dbKey + ' target=' + ev.data.targetNum);
+          try {
+            // Inject entry from popup if local DB empty (browser switch / restart)
+            if (ev.data.entry) {
+              window.CurseScanner.injectEntry(ev.data.dbKey, ev.data.entry);
+            }
+            let result;
+            if (ev.data.targetNum != null) {
+              result = window.CurseScanner.wearOn(ev.data.dbKey, ev.data.targetNum);
+            } else {
+              result = window.CurseScanner.wear(ev.data.dbKey);
+            }
+            if (result?.err) {
+              src.postMessage({ app: APP, type: 'WEAR_CURSE_ERR', msg: result.err }, ALLOWED_ORIGIN);
+            } else {
+              src.postMessage({ app: APP, type: 'WEAR_CURSE_OK', msg: result?.msg }, ALLOWED_ORIGIN);
+            }
+          } catch (ex) {
+            BCK.err('WEAR_CURSE Fehler:', ex.message);
+            src.postMessage({ app: APP, type: 'WEAR_CURSE_ERR', msg: ex.message }, ALLOWED_ORIGIN);
+          }
+          break;
+        }
+
+        case 'LOAD_CURSE_DB': {
+          BCK.info('LOAD_CURSE_DB: ' + Object.keys(ev.data.database ?? {}).length + ' Einträge');
+          try {
+            window.CurseScanner.loadDatabase(ev.data.database ?? {});
+          } catch (ex) { BCK.err('LOAD_CURSE_DB Fehler:', ex.message); }
+          break;
+        }
+
+        case 'GET_LSCG_CACHE': {
+          BCK.info('GET_LSCG_CACHE');
+          try {
+            const cache = window.CurseScanner.getLscgCache();
+            src.postMessage({ app: APP, type: 'LSCG_CACHE_DATA', cache }, ALLOWED_ORIGIN);
+            BCK.ok('LSCG_CACHE_DATA: ' + Object.keys(cache).length + ' Einträge');
+          } catch (ex) {
+            src.postMessage({ app: APP, type: 'LSCG_CACHE_DATA', cache: {}, err: ex.message }, ALLOWED_ORIGIN);
+          }
+          break;
+        }
+
+        case 'LOAD_LSCG_CACHE': {
+          BCK.info('LOAD_LSCG_CACHE: ' + Object.keys(ev.data.cache ?? {}).length + ' Einträge');
+          try {
+            const n = window.CurseScanner.mergeLscgCache(ev.data.cache ?? {});
+            BCK.ok('LSCG-Cache: ' + n + ' neue Einträge gemergt');
+          } catch (ex) { BCK.err('LOAD_LSCG_CACHE Fehler:', ex.message); }
+          break;
+        }
+
+        case 'GET_CRAFT_CACHE': {
+          BCK.info('GET_CRAFT_CACHE');
+          try {
+            const cache = window.CurseScanner.getCraftCache();
+            src.postMessage({ app: APP, type: 'CRAFT_CACHE_DATA', cache }, ALLOWED_ORIGIN);
+            BCK.ok('CRAFT_CACHE_DATA: ' + Object.keys(cache).length + ' Einträge');
+          } catch (ex) {
+            src.postMessage({ app: APP, type: 'CRAFT_CACHE_DATA', cache: {}, err: ex.message }, ALLOWED_ORIGIN);
+          }
+          break;
+        }
+
+        case 'LOAD_CRAFT_CACHE': {
+          BCK.info('LOAD_CRAFT_CACHE: ' + Object.keys(ev.data.cache ?? {}).length + ' Einträge');
+          try {
+            const n = window.CurseScanner.mergeCraftCache(ev.data.cache ?? {});
+            BCK.ok('Craft-Cache: ' + n + ' neue Einträge gemergt');
+          } catch (ex) { BCK.err('LOAD_CRAFT_CACHE Fehler:', ex.message); }
+          break;
+        }
+      }
+    });
+
+    console.log('[BC-Konfigurator] Listener aktiv ✅');
+  }
+
+  // ── BCX Ausgehende Whisper blockieren ────────────────────────────────
+  // Priorität 9999 → läuft nach BCX, verwirft alle ausgehenden BCX-Whisper.
+  // Guard __BCK_BCX_FILTER__ verhindert doppelte Registrierung beim erneuten
+  // Ausführen des Bookmarklets. Kein unregisterMod() – existiert nicht in ModSDK 1.2.0.
+  if (!window.__BCK_BCX_FILTER__) {
+    window.__BCK_BCX_FILTER__ = true;
+
+    function installBCXFilter() {
+      if (typeof bcModSdk === 'undefined' || typeof bcModSdk.registerMod !== 'function') {
+        BCK.warn('[BCXFilter] bcModSdk nicht bereit – retry in 500ms');
+        setTimeout(installBCXFilter, 500);
+        return;
+      }
+
+      try {
+        var mod = bcModSdk.registerMod({
+          name:     'BCK_BCXFilter',
+          fullName: 'BCK BCX-Filter',
+          version:  '1.0.0',
+        });
+
+        mod.hookFunction('ServerSend', 9999, function(args, next) {
+          var typ  = args[0];
+          var data = args[1];
+          if (
+            typ === 'ChatRoomChat' &&
+            data &&
+            data.Type === 'Whisper' &&
+            typeof data.Content === 'string' &&
+            data.Content.startsWith('[BCX]')
+          ) {
+            BCK.info('[BCXFilter] BCX-Whisper blockiert → Ziel #' + data.Target);
+            return; // nicht senden
+          }
+          return next(args);
+        });
+
+        BCK.ok('[BCXFilter] aktiv ✅ – alle ausgehenden BCX-Whisper werden blockiert');
+      } catch (e) {
+        BCK.err('[BCXFilter] Fehler:', e.message);
+      }
+    }
+
+    installBCXFilter();
+  }
+
+  // ── Popup öffnen / fokussieren ─────────────────────────
+  if (window.__BCK_WIN__ && !window.__BCK_WIN__.closed) {
+    window.__BCK_WIN__.focus();
+    console.log('[BC-Konfigurator] Popup fokussiert');
+    return;
+  }
+
+  const left = Math.max(0, Math.round(screen.width  / 2 - POPUP_W / 2));
+  const top  = Math.max(0, Math.round(screen.height / 2 - POPUP_H / 2));
+
+  const win = window.open(
+    POPUP_URL,
+    APP,
+    `width=${POPUP_W},height=${POPUP_H},left=${left},top=${top},resizable=yes,scrollbars=yes`
+  );
+
+  if (!win) {
+    alert('❌ Popup blockiert!\nBitte Popup-Blocker für diese Seite deaktivieren und nochmal klicken.');
+    return;
+  }
+
+  window.__BCK_WIN__ = win;
+  console.log('[BC-Konfigurator] Popup geöffnet ✅');
+})();
