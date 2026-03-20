@@ -2215,6 +2215,10 @@ function renderCurseTab() {
       const k2 = (i.Besitzer?.Nummer ?? '') + ':' + i.ItemName + ':' + i.CraftName;
       return CURSE_FAVOURITES.has(k2);
     }).length;
+    const ownerOutfitCount = owner.items.filter(i => {
+      const k2 = (i.Besitzer?.Nummer ?? '') + ':' + i.ItemName + ':' + i.CraftName;
+      return !!CURSE_OUTFIT_FLAGS[k2];
+    }).length;
 
     block.innerHTML =
       '<div class="curse-owner-hdr" onclick="toggleCurseOwner(\'' + blockId + '\')">'+
@@ -2224,6 +2228,7 @@ function renderCurseTab() {
         (cursedCount ? '<span class="curse-owner-count">🔮 '+cursedCount+'</span>' : '')+
         '<span class="curse-owner-count" style="background:var(--bg3);color:var(--text2)">'+owner.items.length+'</span>'+
         (ownerFavCount ? '<span class="curse-owner-count curse-owner-fav-badge" style="background:rgba(251,191,36,.12);color:#fbbf24;border-color:rgba(251,191,36,.3)">⭐ '+ownerFavCount+'</span>' : '<span class="curse-owner-fav-badge" style="display:none"></span>')+
+        '<span class="curse-owner-count curse-owner-outfit-badge" style="background:rgba(52,211,153,0.12);color:#6ee7b7;border-color:rgba(52,211,153,0.3);'+(!ownerOutfitCount?'display:none':'')+'" title="Als Outfit markierte Items">👗 '+ownerOutfitCount+'</span>'+
         '<button onclick="event.stopPropagation();curseSaveAllAsProfile(\'' + owner.num + '\')"'
           + ' style="margin-left:auto;background:rgba(139,92,246,0.12);border:1px solid rgba(139,92,246,0.3);color:#a78bfa;cursor:pointer;font-size:.68rem;padding:2px 8px;border-radius:4px;white-space:nowrap"'
           + ' title="Alle Curses als Outfit-Profil speichern">💾 Alle speichern</button>'+
@@ -2378,17 +2383,12 @@ function toggleCurseOutfitFlag(dbKey, cellEl) {
     // Owner-Block Badge aktualisieren
     const block = cellEl.closest('.curse-owner-block');
     if (block) {
-      let badge = block.querySelector('.curse-owner-outfit-badge');
+      const badge = block.querySelector('.curse-owner-outfit-badge');
       const cnt = block.querySelectorAll('.curse-row.outfit-flagged').length;
-      if (!badge) {
-        badge = document.createElement('span');
-        badge.className = 'curse-owner-count curse-owner-outfit-badge';
-        badge.style.cssText = 'background:rgba(52,211,153,0.12);color:#6ee7b7;border-color:rgba(52,211,153,0.3)';
-        const hdr = block.querySelector('.curse-owner-hdr');
-        if (hdr) hdr.insertBefore(badge, hdr.querySelector('.curse-owner-chevron'));
+      if (badge) {
+        badge.textContent = '👗 ' + cnt;
+        badge.style.display = cnt > 0 ? '' : 'none';
       }
-      if (cnt > 0) { badge.textContent = '👗 ' + cnt; badge.style.display = ''; }
-      else badge.style.display = 'none';
     }
   } else {
     renderCurseTab();
