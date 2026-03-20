@@ -462,56 +462,102 @@ try {
   const raw = localStorage.getItem('BC_PROFILES_v11') || '{}';
   const loaded = JSON.parse(raw);
   
-  // AUTO-MIGRATION v1→v2: Erkennen und konvertieren
-  const isV1 = Object.values(loaded).some(v => 
+  // Detect Format: Check if it's v2 nested structure or v1 flat
+  const isV2Nested = Object.values(loaded).some(v => 
     v && typeof v === 'object' && 
-    (v.items?.length > 0 || v.date || v.name) && 
-    !Object.values(v).some(sub => sub?.items?.length > 0)  // Kein nested items gefunden
+    Object.values(v).some(sub => sub?.items && Array.isArray(sub.items))
   );
   
-  if (isV1) {
-    console.log('🔄 Migrating v1 → v2 PROFILES structure...');
+  // Force Migration auch von v2-flat ("Legacy" ordner) zurück zu real owners
+  let needsMigration = false;
+  
+  if (!isV2Nested) {
+    needsMigration = true;
+    console.log('🔴 v1 Format detected - Full migration needed');
+  } else if (loaded['Legacy']) {
+    // Detect if we have a "Legacy" folder from previous bad migration
+    const legacyCount = Object.keys(loaded['Legacy'] || {}).length;
+    const otherOwners = Object.keys(loaded).filter(k => k !== 'Legacy' && loaded[k] && typeof loaded[k] === 'object');
+    if (legacyCount > 0 && otherOwners.length === 0) {
+      needsMigration = true;
+      console.log('🟡 Legacy-only Format detected - Need real owner extraction');
+    }
+  }
+  
+  if (needsMigration) {
+    console.log('🔄 FORCE MIGRATION: v1/Legacy → v2 with Owner parsing...');
     const migrated = {};
-    for (const [key, profile] of Object.entries(loaded)) {
-      if (profile && profile.items) {
-        // Versuche Owner aus "Name - Owner" Format zu extrahieren
-        let owner = 'Legacy';
-        let profileName = key;
-        
-        if (key.includes(' - ')) {
-          const parts = key.split(' - ');
-          const possibleOwner = parts[parts.length - 1].trim();
-          // Wenn der letzte Teil kurz ist (wahrscheinlich Owner), verwende ihn
-          if (possibleOwner.length < 30 && possibleOwner.length > 1) {
-            owner = possibleOwner;
-            profileName = parts.slice(0, -1).join(' - ').trim();
-          }
+    
+    // Flatten alle Strukturen zu einem einzigen Array zum Verarbeiten
+    const allProfiles = [];
+    
+    if (loaded['Legacy']) {
+      // Legacy-Ordner vorhanden - nimm seine Profile
+      for (const [pname, profile] of Object.entries(loaded['Legacy'])) {
+        if (profile && profile.items) {
+          allProfiles.push({ originalKey: pname, profile });
         }
-        
-        if (!migrated[owner]) migrated[owner] = {};
-        migrated[owner][profileName] = {
-          ...profile,
-          owner: owner,
-          date: profile.date || new Date().toLocaleDateString('de-DE')
-        };
+      }
+    } else {
+      // Direkt v1-Format
+      for (const [key, profile] of Object.entries(loaded)) {
+        if (profile && profile.items && typeof profile.items === 'object') {
+          allProfiles.push({ originalKey: key, profile });
+        }
       }
     }
+    
+    // Parse jedes Profil und extrahiere Owner
+    allProfiles.forEach(({ originalKey, profile }) => {
+      let owner = 'Other';
+      let profileName = originalKey;
+      
+      // Versuch 1: Split bei " - " (z.B. "Name - Owner")
+      if (originalKey.includes(' - ')) {
+        const parts = originalKey.split(' - ');
+        const possibleOwner = parts[parts.length - 1].trim();
+        
+        // Validierung: Owner sollte relativ kurz sein (< 30 chars), nicht "items", "date" etc
+        if (possibleOwner.length < 30 && 
+            possibleOwner.length > 1 && 
+            possibleOwner !== 'items' && 
+            possibleOwner !== 'date' && 
+            possibleOwner !== 'name' &&
+            !possibleOwner.startsWith('[')) {
+          owner = possibleOwner;
+          profileName = parts.slice(0, -1).join(' - ').trim();
+        }
+      }
+      
+      if (!migrated[owner]) migrated[owner] = {};
+      migrated[owner][profileName] = {
+        ...profile,
+        owner: owner,
+        date: profile.date || new Date().toLocaleDateString('de-DE'),
+        items: profile.items || []
+      };
+    });
+    
     PROFILES = migrated;
     localStorage.setItem('BC_PROFILES_v11', JSON.stringify(PROFILES));
     
-    // Zähle migrated Profiles pro Owner
-    let totalMigrated = 0;
-    const ownerCounts = {};
+    // Statistik
+    let totalProfiles = 0;
+    const stats = {};
     for (const [owner, profiles] of Object.entries(migrated)) {
       const count = Object.keys(profiles).length;
-      ownerCounts[owner] = count;
-      totalMigrated += count;
+      stats[owner] = count;
+      totalProfiles += count;
     }
-    console.log('✅ Migration complete: ' + totalMigrated + ' profiles', ownerCounts);
+    console.log('✅ MIGRATION COMPLETE:', totalProfiles, 'profiles', stats);
   } else {
     PROFILES = loaded;
+    console.log('✅ PROFILES v2 already in correct format');
   }
-} catch (e) { console.warn('⚠️ PROFILES load error:', e); }
+} catch (e) { 
+  console.warn('⚠️ PROFILES load error:', e); 
+  PROFILES = {};
+}
 
 // NEW: Profile Favorites
 let PROFILE_FAVOURITES = new Set();
@@ -1898,7 +1944,81 @@ function loadProfile(ownerName, profileName) {
   _autoOutfitCode();
 }
 
-function renameProfile(owner, oldProfileName) {
+function forceProfilesMigration() {
+  if (!confirm('⚠️ FORCE MIGRATION - Dies wird "Legacy" Ordner splitten und richtig organisieren.\n\nWirklich fortfahren?')) return;
+  
+  console.log('🔴 FORCE MIGRATION INITIATED');
+  const raw = localStorage.getItem('BC_PROFILES_v11') || '{}';
+  const loaded = JSON.parse(raw);
+  
+  const migrated = {};
+  const allProfiles = [];
+  
+  // Sammle ALLE Profile aus jeder Struktur
+  for (const [key, val] of Object.entries(loaded)) {
+    // Fallback v1: Direktes Profil mit items
+    if (val && val.items && Array.isArray(val.items)) {
+      allProfiles.push({ originalKey: key, profile: val, source: 'flat' });
+    }
+    // Nested v2: Owner mit Profilen drin
+    else if (val && typeof val === 'object' && !Array.isArray(val)) {
+      for (const [pname, profile] of Object.entries(val)) {
+        if (profile && profile.items && Array.isArray(profile.items)) {
+          allProfiles.push({ originalKey: pname, profile, source: 'nested:' + key, owner: key });
+        }
+      }
+    }
+  }
+  
+  console.log('📦 Found ' + allProfiles.length + ' profiles total');
+  
+  // Parse jedes Profil
+  allProfiles.forEach(({ originalKey, profile, owner }) => {
+    let finalOwner = owner || 'Other';
+    let profileName = originalKey;
+    
+    // Extrahiere Owner aus Name wenn vorhanden
+    if (originalKey.includes(' - ') && !owner) {
+      const parts = originalKey.split(' - ');
+      const possibleOwner = parts[parts.length - 1].trim();
+      
+      if (possibleOwner.length < 30 && 
+          possibleOwner.length > 1 && 
+          possibleOwner !== 'items' && 
+          possibleOwner !== 'date' && 
+          possibleOwner !== 'name' &&
+          !possibleOwner.startsWith('[')) {
+        finalOwner = possibleOwner;
+        profileName = parts.slice(0, -1).join(' - ').trim();
+      }
+    }
+    
+    if (!migrated[finalOwner]) migrated[finalOwner] = {};
+    migrated[finalOwner][profileName] = {
+      ...profile,
+      owner: finalOwner,
+      date: profile.date || new Date().toLocaleDateString('de-DE'),
+      items: profile.items || []
+    };
+  });
+  
+  // Speichere
+  PROFILES = migrated;
+  localStorage.setItem('BC_PROFILES_v11', JSON.stringify(PROFILES));
+  
+  // Stats
+  let totalProfiles = 0;
+  const stats = {};
+  for (const [owner, profiles] of Object.entries(migrated)) {
+    const count = Object.keys(profiles).length;
+    stats[owner] = count;
+    totalProfiles += count;
+  }
+  
+  console.log('✅ MIGRATION SUCCESS:', totalProfiles, 'profiles organized:', stats);
+  renderProfileList();
+  showStatus('✅ Migration abgeschlossen: ' + totalProfiles + ' Profile neu organisiert!', 'success');
+}
   const oldProfile = PROFILES[owner]?.[oldProfileName];
   if (!oldProfile) { showStatus('❌ Profil nicht gefunden!', 'error'); return; }
   
