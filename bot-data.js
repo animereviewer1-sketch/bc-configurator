@@ -785,9 +785,8 @@ function ipickerOpenForEvAct(eid, ai) {
       a.curseName  = v.name;
       a.curseEntry = v.entry;
     } else if (v.type === 'profil') {
-      a.profilOwner = v.owner;  // NEW: owner name
-      a.profilName  = v.profileName;
-      a.profilItems = PROFILES[v.owner]?.[v.profileName]?.items ?? [];
+      a.profilName  = v.name;
+      a.profilItems = PROFILES[v.name]?.items ?? [];
     }
     _saveBots();
     document.getElementById('evacts-'+eid).innerHTML = (e.aktionen||[]).map((a2,ai2)=>renderEvAct(eid,a2,ai2)).join('');

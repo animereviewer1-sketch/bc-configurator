@@ -15,7 +15,7 @@ function _buildBotCode(bot) {
     ifBedingungen: (t.ifBedingungen||[]),
     aktionen: (t.aktionen||[]).map(a => {
       const base = a.typ==='item' && a.curseKey && !a.curseEntry ? {...a, curseEntry: CURSE_DB[a.curseKey]??null}
-                 : a.typ==='item' && a.profilName && (!a.profilItems||!a.profilItems.length) ? {...a, profilItems: PROFILES[a.profilOwner]?.[a.profilName]?.items??[]}
+                 : a.typ==='item' && a.profilName && (!a.profilItems||!a.profilItems.length) ? {...a, profilItems: PROFILES[a.profilName]?.items??[]}
                  : {...a};
       base.aktZiel = a.aktZiel ?? 'ausloeser';
       base.aktZielNummern = (a.aktZielNummern||[]).map(Number);
@@ -23,7 +23,7 @@ function _buildBotCode(bot) {
     }),
     aktionen_sonst: (t.aktionen_sonst||[]).map(a => {
       const base = a.typ==='item' && a.curseKey && !a.curseEntry ? {...a, curseEntry: CURSE_DB[a.curseKey]??null}
-                 : a.typ==='item' && a.profilName && (!a.profilItems||!a.profilItems.length) ? {...a, profilItems: PROFILES[a.profilOwner]?.[a.profilName]?.items??[]}
+                 : a.typ==='item' && a.profilName && (!a.profilItems||!a.profilItems.length) ? {...a, profilItems: PROFILES[a.profilName]?.items??[]}
                  : {...a};
       base.aktZiel = a.aktZiel ?? 'ausloeser';
       base.aktZielNummern = (a.aktZielNummern||[]).map(Number);
@@ -46,7 +46,7 @@ function _buildBotCode(bot) {
     bedingungen: e.bedingungen??[],
     aktionen: (e.aktionen||[]).map(a => {
       if (a.typ==='item' && a.curseKey && !a.curseEntry) return {...a, curseEntry: CURSE_DB[a.curseKey]??null};
-      if (a.typ==='item' && a.profilName && (!a.profilItems||!a.profilItems.length)) return {...a, profilItems: PROFILES[a.profilOwner]?.[a.profilName]?.items??[]};
+      if (a.typ==='item' && a.profilName && (!a.profilItems||!a.profilItems.length)) return {...a, profilItems: PROFILES[a.profilName]?.items??[]};
       return a;
     }),
   }));

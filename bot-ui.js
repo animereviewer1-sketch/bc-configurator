@@ -953,9 +953,8 @@ function ipickerOpenForAct(tid, ai, branch) {
       a.curseName = v.name;
       a.curseEntry = v.entry;
     } else if (v.type === 'profil') {
-      a.profilOwner = v.owner;  // NEW: owner name
-      a.profilName  = v.profileName;
-      a.profilItems = PROFILES[v.owner]?.[v.profileName]?.items ?? [];
+      a.profilName  = v.name;
+      a.profilItems = PROFILES[v.name]?.items ?? [];
     }
     _saveBots();
     actRerender(tid, ai, branch);
@@ -1058,34 +1057,17 @@ function ipickerRender() {
       </div>`;
     }).join('');
   } else if (_ipickerTab === 'profil') {
-    // NESTED: owner -> profileName -> profile
-    const owners = Object.keys(PROFILES).sort();
-    if (!owners.length) { el.innerHTML='<div style="padding:20px;color:var(--text3);font-size:.72rem;text-align:center">Keine Profile. Zuerst ein Outfit-Profil speichern.</div>'; return; }
-    
-    html = '';
-    owners.forEach(owner => {
-      const profileNames = Object.keys(PROFILES[owner] || {}).sort();
-      const filtered = profileNames.filter(p => !search || owner.toLowerCase().includes(search) || p.toLowerCase().includes(search));
-      
-      if (!filtered.length) return;
-      
-      // Owner header
-      html += `<div style="padding:8px 10px;background:var(--bg3);border-bottom:1px solid var(--border);font-size:.68rem;color:var(--text2);font-weight:500">📁 ${escHtml(owner)}</div>`;
-      
-      // Profiles under owner
-      filtered.forEach(pname => {
-        const profile = PROFILES[owner][pname];
-        const idx = _ipickerCacheIdx++;
-        _ipickerCache[idx] = {type:'profil', owner, profileName: pname};
-        html += `<div class="ipicker-row" onclick="ipickerSelectIdx(${idx})">
-          <span class="ipicker-tag green">👗</span>
-          <span style="flex:1;margin-left:4px">${escHtml(pname)}</span>
-          <span style="color:var(--text3);font-size:.6rem">${profile?.date||''}</span>
-        </div>`;
-      });
-    });
-    
-    if (!html) { el.innerHTML='<div style="padding:20px;color:var(--text3);font-size:.72rem;text-align:center">Keine Profile gefunden.</div>'; return; }
+    const profiles = Object.keys(PROFILES).filter(p=>!search||p.toLowerCase().includes(search));
+    if (!profiles.length) { el.innerHTML='<div style="padding:20px;color:var(--text3);font-size:.72rem;text-align:center">Keine Profile. Zuerst ein Outfit-Profil speichern.</div>'; return; }
+    html = profiles.map(p=>{
+      const idx = _ipickerCacheIdx++;
+      _ipickerCache[idx] = {type:'profil', name:p};
+      return `<div class="ipicker-row" onclick="ipickerSelectIdx(${idx})">
+        <span class="ipicker-tag green">👗</span>
+        <span style="flex:1">${escHtml(p)}</span>
+        <span style="color:var(--text3);font-size:.6rem">${PROFILES[p]?.date||''}</span>
+      </div>`;
+    }).join('');
   }
   el.innerHTML = html;
 }

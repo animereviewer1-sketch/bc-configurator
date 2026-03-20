@@ -61,20 +61,15 @@ function renderShopItems() {
   const el = document.getElementById('shop-item-list'); if (!el) return;
   const items = _shop.items;
   if (!items.length) { el.innerHTML = '<div style="font-size:.7rem;color:var(--text3);text-align:center;padding:12px 0">Noch keine Artikel.</div>'; return; }
-  
-  // OPTIMIERT: DocumentFragment statt innerHTML mit map().join()
-  const frag = document.createDocumentFragment();
-  for (const item of items) {
+  el.innerHTML = items.map(item => {
     const nostripPreis = item.preisNostrip != null ? item.preisNostrip : (_shop.settings.preisNostrip??0);
     const uPreis       = item.preisU       != null ? item.preisU       : (_shop.settings.preisU??0);
     const flagBadges   = [
       uPreis>0       ? `<span style="font-size:.55rem;background:rgba(139,92,246,0.15);border:1px solid rgba(139,92,246,0.3);color:#a78bfa;padding:1px 5px;border-radius:3px">/u +${uPreis}💰</span>` : '',
       nostripPreis>0 ? `<span style="font-size:.55rem;background:rgba(248,113,113,0.12);border:1px solid rgba(248,113,113,0.3);color:#f87171;padding:1px 5px;border-radius:3px">/nostrip +${nostripPreis}💰</span>` : (nostripPreis===0?`<span style="font-size:.55rem;background:rgba(248,113,113,0.07);border:1px solid rgba(248,113,113,0.2);color:#f87171;padding:1px 5px;border-radius:3px">/nostrip ✓</span>`:''),
     ].filter(Boolean).join(' ');
-    
-    const card = document.createElement('div');
-    card.className = `shop-item-card ${item.aktiv?'':'shop-item-inactive'}`;
-    card.innerHTML = `
+    return `
+    <div class="shop-item-card ${item.aktiv?'':'shop-item-inactive'}">
       <span class="shop-item-icon">${escHtml(item.icon||'🛒')}</span>
       <div style="flex:1;min-width:0">
         <div class="shop-item-name">${escHtml(item.name||'–')}</div>
@@ -84,12 +79,8 @@ function renderShopItems() {
       <span class="shop-item-price">${item.preis??0} 💰</span>
       <button onclick="shopItemEdit('${item.id}')" style="background:none;border:1px solid rgba(255,255,255,0.1);border-radius:5px;color:var(--text3);font-size:.62rem;padding:2px 7px;cursor:pointer">✏️</button>
       <button onclick="shopItemDelete('${item.id}')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.75rem;padding:2px 5px">✕</button>
-    `;
-    frag.appendChild(card);
-  }
-  
-  el.innerHTML = '';
-  el.appendChild(frag);
+    </div>
+  `}).join('');
 }
 
 function renderShopLog() {
@@ -101,10 +92,7 @@ function renderShopLog() {
     el.innerHTML = '<div class="shop-empty">🛒 Noch keine Käufe.<br><span style="font-size:.72rem;color:var(--text3)">Käufe erscheinen hier wenn der Bot aktiv ist und ein Spieler einen Artikel kauft.</span></div>';
     return;
   }
-  
-  // OPTIMIERT: DocumentFragment statt innerHTML mit map().join()
-  const frag = document.createDocumentFragment();
-  for (const e of log) {
+  el.innerHTML = log.map(e => {
     const d = new Date(e.ts);
     const timeStr = d.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
     let targetStr = '';
@@ -116,20 +104,13 @@ function renderShopLog() {
     const preisLabel = e.isAll
       ? `<span style="color:var(--yellow)">${e.preis} 💰</span> <span style="font-size:.6rem;color:var(--text3)">(${e.anzahl}×${e.preis/e.anzahl})</span>`
       : `<span style="color:var(--green)">${e.preis} 💰</span>`;
-    
-    const card = document.createElement('div');
-    card.className = 'shop-log-card';
-    card.innerHTML = `
+    return `<div class="shop-log-card">
       <span class="shop-log-who">${escHtml(e.buyerName||('#'+e.buyerNum))}</span>${targetStr}
       kauft <span class="shop-log-item">${e.isAll?'🌍 ':''}${escHtml(e.itemName||'?')}</span>
       für ${preisLabel}
       <div class="shop-log-meta">${timeStr} · #${e.buyerNum}${e.targetNum&&e.targetNum!==e.buyerNum&&!e.isAll?' → #'+e.targetNum:''}</div>
-    `;
-    frag.appendChild(card);
-  }
-  
-  el.innerHTML = '';
-  el.appendChild(frag);
+    </div>`;
+  }).join('');
 }
 
 function shopSetCmd(v)             { _shop.settings.cmd = v.trim(); _saveShop(); }
