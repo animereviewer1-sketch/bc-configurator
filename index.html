@@ -615,11 +615,30 @@ textarea.outfit-code { width: 100%; min-height: 210px; background: rgba(0,0,0,0.
 }
 .profile-card:hover { border-color: rgba(139,92,246,0.35); box-shadow: 0 4px 20px rgba(139,92,246,0.12), 0 0 0 1px rgba(139,92,246,0.1); }
 .profile-card:hover::before { opacity: 1; }
-.profile-card-name { font-size: 0.9rem; font-weight: 800; color: #c4b5fd; margin-bottom: 4px; }
+.profile-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 14px; }
+.profile-card-name { font-size: 0.9rem; font-weight: 800; color: #c4b5fd; margin-bottom: 4px; display:flex; align-items:center; gap:5px; }
 .profile-card-info { font-size: 0.7rem; color: var(--text3); }
+.profile-card.profile-fav { border-color: rgba(251,191,36,0.35); background: rgba(251,191,36,0.04); }
+.profile-card.profile-fav::before { background: linear-gradient(90deg,#b45309,#fbbf24); opacity:1; }
+.profile-star-btn { background:none; border:none; cursor:pointer; font-size:.95rem; line-height:1; padding:0 2px; color:inherit; transition: transform .15s; }
+.profile-star-btn:hover { transform: scale(1.3); }
 .profile-new-row { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; }
 .profile-name-input { flex: 1; background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: var(--text); padding: 7px 12px; font-size: 0.83rem; font-family: var(--font-ui); transition: all 0.18s; }
 .profile-name-input:focus { border-color: var(--purple); box-shadow: 0 0 0 3px rgba(139,92,246,0.2); }
+/* Owner Folder */
+.profile-owner-folder { background: rgba(255,255,255,0.015); border: 1px solid rgba(255,255,255,0.07); border-radius: 11px; overflow: hidden; }
+.profile-owner-hdr { display:flex; align-items:center; gap:7px; padding: 9px 13px; cursor:pointer; user-select:none; background:rgba(255,255,255,0.02); transition: background .15s; }
+.profile-owner-hdr:hover { background:rgba(255,255,255,0.045); }
+.profile-owner-icon { font-size:.95rem; }
+.profile-owner-name { font-size:.82rem; font-weight:700; color:var(--text2); flex:1; }
+.profile-owner-count { font-size:.65rem; color:var(--text3); background:var(--bg3); padding:2px 7px; border-radius:99px; border:1px solid var(--border); }
+.profile-owner-fav { font-size:.65rem; color:#fbbf24; background:rgba(251,191,36,0.1); padding:2px 7px; border-radius:99px; border:1px solid rgba(251,191,36,0.25); }
+.profile-owner-chevron { font-size:.6rem; color:var(--text3); transition: transform .2s; }
+.profile-owner-folder.open .profile-owner-chevron { transform: rotate(90deg); }
+.profile-owner-body { display:none; padding: 10px 10px 10px; flex-direction:column; gap:8px; }
+.profile-owner-folder.open .profile-owner-body { display:flex; }
+.profile-folder-btn { background:none; border:1px solid rgba(255,255,255,0.1); border-radius:5px; color:var(--text3); font-size:.62rem; padding:2px 7px; cursor:pointer; flex-shrink:0; }
+.profile-folder-btn:hover { color:var(--text2); border-color:rgba(255,255,255,0.2); }
 
 /* ═══════════════════════════════════════════════
    STATUS MESSAGES
@@ -1428,9 +1447,11 @@ button { cursor: pointer; }
       <div style="margin-top:20px">
         <div class="section-hdr2">
           <div style="display:flex;align-items:center;gap:6px"><span>📁 Profile</span><input class="outfit-search" id="profileSearch" placeholder="🔍 Profil suchen..." oninput="renderProfileList()" style="width:150px;font-size:.69rem;padding:3px 8px"></div>
-          <div style="display:flex;gap:6px;align-items:center">
+          <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
             <button class="btn btn-primary" style="font-size:.68rem;padding:4px 9px" onclick="profilesExportAll()" title="Alle Profile als JSON exportieren">⬇️ Export</button>
             <button class="btn btn-primary" style="font-size:.68rem;padding:4px 9px" onclick="profilesImport()" title="Profile aus JSON importieren">⬆️ Import</button>
+            <button class="btn" style="font-size:.68rem;padding:4px 9px;background:rgba(52,211,153,0.08);border:1px solid rgba(52,211,153,0.25);color:#6ee7b7" onclick="profileAutoReorganize()" title="Besitzer automatisch aus Profilnamen erkennen und in Ordner organisieren">🔄 Reorganisieren</button>
+            <button class="btn" style="font-size:.68rem;padding:4px 9px;background:rgba(251,191,36,0.08);border:1px solid rgba(251,191,36,0.25);color:#fbbf24" onclick="profileAutoMark()" title="Items die als Profil gespeichert sind mit &#34;outfit&#34;-Kommentar markieren">📝 Auto-Mark</button>
             <input class="profile-name-input" id="profileNameInput" placeholder="Profilname..." maxlength="40" style="font-size:.72rem;padding:3px 7px">
             <button class="btn btn-green" style="font-size:.68rem;padding:4px 9px" onclick="saveProfile()">💾 Speichern</button>
           </div>
