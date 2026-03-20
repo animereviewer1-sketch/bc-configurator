@@ -1775,15 +1775,27 @@ function deleteProfile(name) {
   renderProfileList();
 }
 
-// ── Profile Edit Mode State ───────────────────────────
-let _profileEditMode = null; // profileName currently in edit mode
+// ── Profile name map for safe event binding ───────────
+const _profileNameMap = {}; // slotKey → profileName
 
 function _profileSortKey(name) {
-  // Sort by the part after last " - " (owner name), then full name
-  const parts = name.split(' - ');
+  // Split on " - " or "- " (with or without leading space)
+  const parts = name.split(/\s*-\s+/);
   const owner = parts.length > 1 ? parts[parts.length - 1].toLowerCase() : '';
   return owner + '\x00' + name.toLowerCase();
 }
+
+function _profileOwnerOf(name) {
+  const parts = name.split(/\s*-\s+/);
+  return parts.length > 1 ? parts[parts.length - 1].trim() : '– Ohne Zuordnung –';
+}
+
+function _profileShortName(name, owner) {
+  return name.replace(new RegExp('\\s*-\\s+' + owner.replace(/[.*+?^${}()|[\]\\]/g,'\\$&') + '$'), '').trim() || name;
+}
+
+// ── Profile Edit Mode State ───────────────────────────
+let _profileEditMode = null; // profileName currently in edit mode
 
 function renderProfileList() {
   const el = document.getElementById('profileListEl');
@@ -1795,15 +1807,17 @@ function renderProfileList() {
     el._profileKeys = [];
     return;
   }
-  // Sort by owner (last segment after " - "), then full name
   keys = keys.slice().sort((a, b) => _profileSortKey(a).localeCompare(_profileSortKey(b)));
   el._profileKeys = keys;
 
-  // Group by owner (last segment after " - ")
+  // Build name map for safe event binding
+  Object.keys(_profileNameMap).forEach(k => delete _profileNameMap[k]);
+  keys.forEach((name, idx) => { _profileNameMap['p_' + idx] = name; });
+
+  // Group by owner
   const byOwner = {};
   keys.forEach((k, idx) => {
-    const parts = k.split(' - ');
-    const owner = parts.length > 1 ? parts[parts.length - 1] : '– Ohne Zuordnung –';
+    const owner = _profileOwnerOf(k);
     if (!byOwner[owner]) byOwner[owner] = [];
     byOwner[owner].push({ name: k, idx });
   });
@@ -1811,40 +1825,54 @@ function renderProfileList() {
   const html = Object.entries(byOwner).map(([owner, profiles]) => {
     const blockId = 'pb_' + owner.replace(/[^a-zA-Z0-9]/g, '_');
     const wasOpen = document.getElementById(blockId)?.classList.contains('open');
+
     const rows = profiles.map(({ name, idx }) => {
       const p = PROFILES[name];
-      const shortName = name.replace(new RegExp(' - ' + owner.replace(/[.*+?^${}()|[\]\\]/g,'\\$&') + '$'), '').trim();
+      const shortName = _profileShortName(name, owner);
       const isEdit = _profileEditMode === name;
+      const slotKey = 'p_' + idx;
 
-      // Item rows (only shown in edit mode)
-      const itemRows = isEdit ? (p.items || []).map((item, iIdx) => {
-        const hasCfg = !!CACHE[item.group]?.[item.asset];
-        return '<div class="profile-item-row">'
-          + '<span class="profile-item-asset">' + escHtml(item.asset) + '</span>'
-          + '<span class="profile-item-group">' + escHtml(item.group) + '</span>'
-          + (item.lock ? '<span class="profile-item-badge lock">🔒 ' + escHtml(item.lock) + '</span>' : '')
-          + (item.craft?.Name ? '<span class="profile-item-badge craft">✏️ ' + escHtml(item.craft.Name) + '</span>' : '')
-          + (hasCfg
-            ? '<button class="profile-gear-btn" title="Im Item Manager öffnen" onclick="profileOpenInItemManager(' + JSON.stringify(name) + ',' + iIdx + ')">⚙️</button>'
-            : '<span style="font-size:.6rem;color:var(--text3)" title="Nicht im Cache">–</span>')
+      // Edit panel: name input + item rows
+      let editPanel = '';
+      if (isEdit) {
+        const nameInput = '<div class="profile-edit-name-row">'
+          + '<label style="font-size:.62rem;color:var(--text3)">Profilname:</label>'
+          + '<input class="profile-edit-name-inp" id="pedit_name_' + idx + '" value="' + escHtml(name) + '" maxlength="60">'
+          + '<button class="profile-gear-btn" onclick="profileRename(\'' + slotKey + '\')" title="Umbenennen">💾 Speichern</button>'
           + '</div>';
-      }).join('') : '';
+
+        const itemRows = (p.items || []).map((item, iIdx) => {
+          const hasCfg = !!CACHE[item.group]?.[item.asset];
+          return '<div class="profile-item-row" id="pirow_' + idx + '_' + iIdx + '">'
+            + '<span class="profile-item-asset">' + escHtml(item.asset) + '</span>'
+            + '<span class="profile-item-group">' + escHtml(item.group) + '</span>'
+            + (item.lock ? '<span class="profile-item-badge lock">🔒 ' + escHtml(item.lock) + '</span>' : '')
+            + (item.craft?.Name ? '<span class="profile-item-badge craft">✏️ ' + escHtml(item.craft.Name) + '</span>' : '')
+            + (hasCfg
+              ? '<button class="profile-gear-btn" data-slot="' + slotKey + '" data-iidx="' + iIdx + '" onclick="profileOpenInItemManager(this.dataset.slot,this.dataset.iidx)" title="Im Item Manager öffnen">⚙️</button>'
+              : '<span style="font-size:.6rem;color:var(--text3)" title="Nicht im Cache">–</span>')
+            + '<button class="profile-row-del" data-slot="' + slotKey + '" data-iidx="' + iIdx + '" onclick="profileDeleteItem(this.dataset.slot,this.dataset.iidx)" title="Item entfernen" style="margin-left:4px">✕</button>'
+            + '</div>';
+        }).join('');
+
+        editPanel = '<div class="profile-item-list">' + nameInput + itemRows + '</div>';
+      }
 
       return '<div class="profile-row" id="prow_' + idx + '">'
         + '<div class="profile-row-main">'
-        + '<button class="profile-row-load" data-pkey="' + idx + '" onclick="loadProfileByIdx(this.dataset.pkey)" title="Laden">📥</button>'
-        + '<span class="profile-row-name">' + escHtml(shortName || name) + '</span>'
+        + '<button class="profile-row-load" data-slot="' + slotKey + '" onclick="profileLoadBySlot(this.dataset.slot)" title="Laden">📥</button>'
+        + '<span class="profile-row-name">' + escHtml(shortName) + '</span>'
         + '<span class="profile-row-count">' + (p.items?.length ?? 0) + ' Items</span>'
         + '<span class="profile-row-date">' + (p.date || '') + '</span>'
-        + '<button class="profile-row-edit' + (isEdit ? ' active' : '') + '" onclick="profileToggleEdit(' + JSON.stringify(name) + ')" title="Bearbeiten">✏️</button>'
+        + '<button class="profile-row-edit' + (isEdit ? ' active' : '') + '" data-slot="' + slotKey + '" onclick="profileToggleEdit(this.dataset.slot)" title="Bearbeiten">✏️</button>'
         + '<button class="profile-row-export" data-pkey="' + idx + '" onclick="profileExportSingle(this.dataset.pkey)" title="Exportieren">⬇️</button>'
         + '<button class="profile-row-del" data-pkey="' + idx + '" onclick="deleteProfileByIdx(this.dataset.pkey)" title="Löschen">✕</button>'
         + '</div>'
-        + (isEdit && itemRows ? '<div class="profile-item-list">' + itemRows + '</div>' : '')
+        + editPanel
         + '</div>';
     }).join('');
 
-    return '<div class="profile-owner-block' + (wasOpen || profiles.length <= 5 ? ' open' : '') + '" id="' + blockId + '">'
+    return '<div class="profile-owner-block' + ((wasOpen !== false) ? ' open' : '') + '" id="' + blockId + '">'
       + '<div class="profile-owner-hdr" onclick="document.getElementById(\'' + blockId + '\').classList.toggle(\'open\')">'
       + '<span class="profile-owner-name">' + escHtml(owner) + '</span>'
       + '<span class="profile-owner-count">' + profiles.length + '</span>'
@@ -1857,15 +1885,50 @@ function renderProfileList() {
   el.innerHTML = html;
 }
 
-function profileToggleEdit(name) {
+function profileLoadBySlot(slot) {
+  const name = _profileNameMap[slot];
+  if (name) loadProfile(name);
+}
+
+function profileToggleEdit(slot) {
+  const name = _profileNameMap[slot];
+  if (!name) return;
   _profileEditMode = _profileEditMode === name ? null : name;
   renderProfileList();
 }
 
-function profileOpenInItemManager(profileName, itemIdx) {
-  const p = PROFILES[profileName];
-  if (!p) return;
-  const item = p.items?.[itemIdx];
+function profileRename(slot) {
+  const oldName = _profileNameMap[slot];
+  if (!oldName) return;
+  // Find input by iterating since we can't use the idx directly
+  const inputs = document.querySelectorAll('.profile-edit-name-inp');
+  let newName = null;
+  inputs.forEach(inp => { if (inp.value.trim() && _profileEditMode === oldName) newName = inp.value.trim(); });
+  if (!newName || newName === oldName) return;
+  if (PROFILES[newName] && !confirm('Name "' + newName + '" existiert bereits. Überschreiben?')) return;
+  PROFILES[newName] = { ...PROFILES[oldName], name: newName };
+  delete PROFILES[oldName];
+  _profileEditMode = newName;
+  try { localStorage.setItem('BC_PROFILES_v11', JSON.stringify(PROFILES)); } catch {}
+  showStatus('✅ Profil umbenannt → "' + newName + '"', 'success');
+  renderProfileList();
+}
+
+function profileDeleteItem(slot, iIdx) {
+  const name = _profileNameMap[slot];
+  if (!name) return;
+  const p = PROFILES[name];
+  if (!p?.items) return;
+  p.items.splice(parseInt(iIdx), 1);
+  try { localStorage.setItem('BC_PROFILES_v11', JSON.stringify(PROFILES)); } catch {}
+  renderProfileList();
+}
+
+function profileOpenInItemManager(slot, iIdx) {
+  const name = _profileNameMap[slot];
+  if (!name) return;
+  const p = PROFILES[name];
+  const item = p?.items?.[parseInt(iIdx)];
   if (!item) return;
   const cfg = CACHE[item.group]?.[item.asset];
   if (!cfg) { showStatus('❌ Item nicht im Cache', 'error'); return; }
