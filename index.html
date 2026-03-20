@@ -1050,7 +1050,9 @@ button { cursor: pointer; }
 
 .curse-row.fav { background: rgba(251,191,36,0.04); }
 .curse-row.fav:hover { background: rgba(251,191,36,0.08); }
-.curse-row td.outfit-flag-cell { text-align: center; vertical-align: middle; cursor: pointer; padding: 7px 4px; user-select: none; }
+.curse-row td.outfit-flag-cell { text-align: center; vertical-align: middle; cursor: pointer; padding: 7px 4px; user-select: none; white-space: nowrap; }
+.outfit-flag-pill { display: inline-block; padding: 2px 8px; border-radius: 99px; font-size: 0.62rem; font-weight: 700; font-family: var(--font-ui); border: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.03); color: var(--text3); transition: all 0.18s; cursor: pointer; }
+.outfit-flag-pill.on { background: rgba(52,211,153,0.15); border-color: rgba(52,211,153,0.4); color: #6ee7b7; }
 .curse-row.outfit-flagged { background: rgba(52,211,153,0.05); }
 .curse-row.outfit-flagged:hover { background: rgba(52,211,153,0.09); }
 .fav-cell { width: 28px; text-align: center; cursor: pointer; user-select: none; padding: 6px 4px !important; font-size: 1rem; transition: transform .15s; }
@@ -1495,6 +1497,9 @@ button { cursor: pointer; }
     <span class="filter-chip"    id="fc-lscg"     onclick="setCurseFilter('lscg')"   >🧿 LSCG</span>
     <div class="filter-sep"></div>
     <span class="filter-chip" id="fc-fav" onclick="setCurseFilter('fav')" title="Nur Favoriten">⭐ Favoriten</span>
+    <div class="filter-sep"></div>
+    <span class="filter-chip" id="fc-outfit"    onclick="setCurseFilter('outfit')"    title="Nur Outfits">👗 Outfit</span>
+    <span class="filter-chip" id="fc-no-outfit" onclick="setCurseFilter('no-outfit')" title="Noch kein Outfit">☐ Kein Outfit</span>
     <div class="filter-sep"></div>
     <span class="filter-chip" id="fc-cache" onclick="toggleCacheFilter()" title="Nur Einträge mit LSCG-Daten anzeigen">💾 Im Cache</span>
     <div class="filter-sep"></div>

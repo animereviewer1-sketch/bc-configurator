@@ -2102,7 +2102,7 @@ function _handleCurseData(data) {
 
 
 // ── CURSE FILTER STATE ───────────────────────────────
-let _curseFilter  = 'all';  // 'all' | 'cursed' | 'lscg'
+let _curseFilter  = 'all';  // 'all' | 'cursed' | 'lscg' | 'fav' | 'outfit' | 'no-outfit'
 let _pendingExport = false;
 let _curseEntryMap = {};    // rowId → dbKey, for safe onclick
 
@@ -2114,7 +2114,7 @@ function toggleCacheFilter() {
 
 function setCurseFilter(f) {
   _curseFilter = f;
-  ['all','cursed','lscg','fav'].forEach(k => {
+  ['all','cursed','lscg','fav','outfit','no-outfit'].forEach(k => {
     const el = document.getElementById('fc-' + k);
     if (el) el.classList.toggle('on', k === f);
   });
@@ -2156,6 +2156,18 @@ function renderCurseTab() {
     entries = entries.filter(e => {
       const k = (e.Besitzer?.Nummer ?? '') + ':' + e.ItemName + ':' + e.CraftName;
       return CURSE_FAVOURITES.has(k);
+    });
+  }
+  if (_curseFilter === 'outfit') {
+    entries = entries.filter(e => {
+      const k = (e.Besitzer?.Nummer ?? '') + ':' + e.ItemName + ':' + e.CraftName;
+      return !!CURSE_OUTFIT_FLAGS[k];
+    });
+  }
+  if (_curseFilter === 'no-outfit') {
+    entries = entries.filter(e => {
+      const k = (e.Besitzer?.Nummer ?? '') + ':' + e.ItemName + ':' + e.CraftName;
+      return !CURSE_OUTFIT_FLAGS[k];
     });
   }
   if (cacheOnly)   entries = entries.filter(e => !!e.IstLSCGCurse);
@@ -2258,7 +2270,9 @@ function renderCurseTab() {
           (isFav ? '⭐' : '<span style="opacity:.25;font-size:.85em">☆</span>')+
         '</td>'+
         '<td class="outfit-flag-cell" onclick="toggleCurseOutfitFlag(\'' + dbKey.replace(/'/g,"&apos;") + '\',this)" title="Outfit-Markierung">'+
-          (isOutfit ? '✅' : '<span style="opacity:.25;font-size:.85em">☐</span>')+
+          (isOutfit
+            ? '<span class="outfit-flag-pill on">👗 Outfit</span>'
+            : '<span class="outfit-flag-pill">+ Outfit</span>')+
         '</td>'+
         '<td class="cn"><span class="cursor-detail-toggle" onclick="toggleCurseDetail(\'' + detId + '\',\'' + rowId + '\')">▶</span>'+escHtml(entry.CraftName)+(echoTranslate(entry.CraftName)?'<span style="font-size:.58rem;color:#a78bfa;margin-left:4px">('+echoTranslate(entry.CraftName)+')</span>':'')+'</td>'+
         '<td class="item">'+escHtml(entry.ItemName)+(echoTranslate(entry.ItemName)?'<span style="font-size:.58rem;color:var(--text3);margin-left:4px">('+echoTranslate(entry.ItemName)+')</span>':'')+'</td>'+
@@ -2356,7 +2370,9 @@ function toggleCurseOutfitFlag(dbKey, cellEl) {
   _saveCurseOutfitFlags();
   if (cellEl) {
     const isSet = !wasSet;
-    cellEl.innerHTML = isSet ? '✅' : '<span style="opacity:.25;font-size:.85em">☐</span>';
+    cellEl.innerHTML = isSet
+      ? '<span class="outfit-flag-pill on">👗 Outfit</span>'
+      : '<span class="outfit-flag-pill">+ Outfit</span>';
     const row = cellEl.closest('tr');
     if (row) row.classList.toggle('outfit-flagged', isSet);
     // Owner-Block Badge aktualisieren
@@ -2526,7 +2542,7 @@ function curseSaveAsProfile(rowIdOrDbKey) {
     if (row) {
       row.classList.add('outfit-flagged');
       const cell = row.querySelector('.outfit-flag-cell');
-      if (cell) cell.innerHTML = '✅';
+      if (cell) cell.innerHTML = '<span class="outfit-flag-pill on">👗 Outfit</span>';
     }
   }
   const craftName = entry.CraftName || entry.ItemName || 'Curse';
@@ -2677,7 +2693,6 @@ function curseClearAndScan() {
       if (d.favourites) d.favourites.forEach(k => CURSE_FAVOURITES.add(k));
       _updateCurseStats();
       console.log('[BCK-Popup] Curse DB geladen: ' + Object.keys(CURSE_DB).length + ' Crafts');
-      if (document.getElementById('curseBody')) renderCurseTab();
     }
     const comments = await idbGet('BC_CURSE_COMMENTS_v1');
     if (comments) Object.assign(CURSE_COMMENTS, comments);
@@ -2685,6 +2700,8 @@ function curseClearAndScan() {
     if (Array.isArray(favs)) favs.forEach(k => CURSE_FAVOURITES.add(k));
     const outfitFlags = await idbGet('BC_CURSE_OUTFIT_v1');
     if (outfitFlags && typeof outfitFlags === 'object') Object.assign(CURSE_OUTFIT_FLAGS, outfitFlags);
+    // Erst rendern nachdem ALLE Daten geladen sind (inkl. outfit-flags)
+    if (document.getElementById('curseBody') && Object.keys(CURSE_DB).length) renderCurseTab();
   } catch(e) { console.warn('[BCK-Popup] Curse IDB load error:', e); }
 })();
 
