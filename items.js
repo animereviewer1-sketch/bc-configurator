@@ -2019,6 +2019,8 @@ function forceProfilesMigration() {
   renderProfileList();
   showStatus('✅ Migration abgeschlossen: ' + totalProfiles + ' Profile neu organisiert!', 'success');
 }
+
+function renameProfile(owner, oldProfileName) {
   const oldProfile = PROFILES[owner]?.[oldProfileName];
   if (!oldProfile) { showStatus('❌ Profil nicht gefunden!', 'error'); return; }
   
