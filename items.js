@@ -474,22 +474,44 @@ try {
     const migrated = {};
     for (const [key, profile] of Object.entries(loaded)) {
       if (profile && profile.items) {
-        // v1 Format: put under "Legacy" folder
-        if (!migrated['Legacy']) migrated['Legacy'] = {};
-        migrated['Legacy'][key] = {
+        // Versuche Owner aus "Name - Owner" Format zu extrahieren
+        let owner = 'Legacy';
+        let profileName = key;
+        
+        if (key.includes(' - ')) {
+          const parts = key.split(' - ');
+          const possibleOwner = parts[parts.length - 1].trim();
+          // Wenn der letzte Teil kurz ist (wahrscheinlich Owner), verwende ihn
+          if (possibleOwner.length < 30 && possibleOwner.length > 1) {
+            owner = possibleOwner;
+            profileName = parts.slice(0, -1).join(' - ').trim();
+          }
+        }
+        
+        if (!migrated[owner]) migrated[owner] = {};
+        migrated[owner][profileName] = {
           ...profile,
-          owner: 'Legacy',
+          owner: owner,
           date: profile.date || new Date().toLocaleDateString('de-DE')
         };
       }
     }
     PROFILES = migrated;
     localStorage.setItem('BC_PROFILES_v11', JSON.stringify(PROFILES));
-    console.log('✅ Migration complete: ' + Object.keys(migrated['Legacy'] || {}).length + ' profiles migrated to "Legacy" folder');
+    
+    // Zähle migrated Profiles pro Owner
+    let totalMigrated = 0;
+    const ownerCounts = {};
+    for (const [owner, profiles] of Object.entries(migrated)) {
+      const count = Object.keys(profiles).length;
+      ownerCounts[owner] = count;
+      totalMigrated += count;
+    }
+    console.log('✅ Migration complete: ' + totalMigrated + ' profiles', ownerCounts);
   } else {
     PROFILES = loaded;
   }
-} catch {}
+} catch (e) { console.warn('⚠️ PROFILES load error:', e); }
 
 // NEW: Profile Favorites
 let PROFILE_FAVOURITES = new Set();
@@ -1876,22 +1898,80 @@ function loadProfile(ownerName, profileName) {
   _autoOutfitCode();
 }
 
-function deleteProfile(owner, profileName) {
-  if (!confirm('Profil "' + profileName + '" von ' + owner + ' löschen?')) return;
-  if (PROFILES[owner]) {
-    delete PROFILES[owner][profileName];
-    // Remove owner folder if empty
-    if (!Object.keys(PROFILES[owner]).length) {
-      delete PROFILES[owner];
+function renameProfile(owner, oldProfileName) {
+  const oldProfile = PROFILES[owner]?.[oldProfileName];
+  if (!oldProfile) { showStatus('❌ Profil nicht gefunden!', 'error'); return; }
+  
+  const newName = prompt('Neuer Name für Profil:', oldProfileName);
+  if (!newName?.trim() || newName === oldProfileName) return;
+  
+  const trimmed = newName.trim();
+  
+  // Prüfe auf Duplikate
+  if (PROFILES[owner][trimmed] && !confirm('Profil "' + trimmed + '" existiert bereits. Überschreiben?')) return;
+  
+  // Umbenennen
+  PROFILES[owner][trimmed] = { ...oldProfile, name: trimmed };
+  delete PROFILES[owner][oldProfileName];
+  
+  // Favoriten aktualisieren wenn nötig
+  const oldKey = owner + ':' + oldProfileName;
+  const newKey = owner + ':' + trimmed;
+  if (PROFILE_FAVOURITES.has(oldKey)) {
+    PROFILE_FAVOURITES.delete(oldKey);
+    PROFILE_FAVOURITES.add(newKey);
+    _saveProfileFavourites();
+  }
+  
+  try {
+    localStorage.setItem('BC_PROFILES_v11', JSON.stringify(PROFILES));
+    renderProfileList();
+    showStatus('✅ Profil umbenannt: "' + oldProfileName + '" → "' + trimmed + '"', 'success');
+  } catch(e) {
+    showStatus('❌ Umbenennen fehlgeschlagen: ' + e.message, 'error');
+  }
+}
+
+function renameOwner(oldOwner) {
+  if (!PROFILES[oldOwner] || !Object.keys(PROFILES[oldOwner]).length) { 
+    showStatus('❌ Owner-Ordner nicht gefunden!', 'error'); 
+    return; 
+  }
+  
+  const newOwner = prompt('Neuer Name für Ordner:', oldOwner);
+  if (!newOwner?.trim() || newOwner === oldOwner) return;
+  
+  const trimmed = newOwner.trim();
+  
+  // Prüfe auf Duplikate
+  if (PROFILES[trimmed] && !confirm('Ordner "' + trimmed + '" existiert bereits. Zusammenführen?')) return;
+  
+  // Merge oder Create
+  if (!PROFILES[trimmed]) PROFILES[trimmed] = {};
+  
+  // Alle Profile des alten Owners zum neuen verschieben
+  for (const [pname, profile] of Object.entries(PROFILES[oldOwner])) {
+    PROFILES[trimmed][pname] = { ...profile, owner: trimmed };
+    
+    // Favoriten-Keys aktualisieren
+    const oldKey = oldOwner + ':' + pname;
+    const newKey = trimmed + ':' + pname;
+    if (PROFILE_FAVOURITES.has(oldKey)) {
+      PROFILE_FAVOURITES.delete(oldKey);
+      PROFILE_FAVOURITES.add(newKey);
     }
   }
-  // Remove from favorites
-  PROFILE_FAVOURITES.delete(owner + ':' + profileName);
-  try { 
+  
+  delete PROFILES[oldOwner];
+  
+  try {
     localStorage.setItem('BC_PROFILES_v11', JSON.stringify(PROFILES));
     _saveProfileFavourites();
-  } catch {}
-  renderProfileList();
+    renderProfileList();
+    showStatus('✅ Ordner umbenannt: "' + oldOwner + '" → "' + trimmed + '"', 'success');
+  } catch(e) {
+    showStatus('❌ Umbenennen fehlgeschlagen: ' + e.message, 'error');
+  }
 }
 
 function renderProfileList() {
@@ -1924,9 +2004,12 @@ function renderProfileList() {
     const filtered = profileNames.filter(pname => !q || owner.toLowerCase().includes(q) || pname.toLowerCase().includes(q));
     if (!filtered.length) return;
     
-    // Owner folder header
+    // Owner folder header with rename button
     html += '<div class="profile-owner-section" style="margin-bottom:12px;border-left:3px solid var(--purple);padding-left:8px">';
-    html += '<div style="font-weight:600;color:var(--purple);margin-bottom:6px;font-size:.75rem">📁 ' + escHtml(owner) + '</div>';
+    html += '<div style="display:flex;align-items:center;gap:8px">'
+      + '<span style="font-weight:600;color:var(--purple);font-size:.75rem">📁 ' + escHtml(owner) + '</span>'
+      + '<button class="btn btn-primary" style="font-size:.65rem;padding:2px 4px;margin-left:auto" onclick="renameOwner(\'' + owner.replace(/'/g,"&apos;") + '\')" title="Ordner umbenennen">✏️ Umbenennen</button>'
+      + '</div>';
     
     // Profiles under this owner
     filtered.forEach(pname => {
@@ -1946,6 +2029,7 @@ function renderProfileList() {
         + '</div>'
         + '<div class="btn-row" style="display:flex;gap:4px;margin-left:auto">'
         + '<button class="btn btn-green" style="font-size:.65rem;padding:3px 6px" data-pkey="' + profileIdx + '" onclick="loadProfileByIdx(this.dataset.pkey)">📥</button>'
+        + '<button class="btn btn-primary" style="font-size:.65rem;padding:3px 6px" onclick="renameProfile(\'' + owner.replace(/'/g,"&apos;") + '\',\'' + pname.replace(/'/g,"&apos;") + '\')" title="Profil umbenennen">✏️</button>'
         + '<button class="btn btn-primary" style="font-size:.65rem;padding:3px 6px" data-pkey="' + profileIdx + '" onclick="profileExportSingle(this.dataset.pkey)" title="Exportieren">⬇️</button>'
         + '<button class="btn btn-red" style="font-size:.65rem;padding:3px 6px" data-pkey="' + profileIdx + '" onclick="deleteProfileByIdx(this.dataset.pkey)">🗑️</button>'
         + '</div>'
