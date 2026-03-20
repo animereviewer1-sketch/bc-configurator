@@ -458,7 +458,38 @@ let baselinePropVals = {};
 
 // ── Outfit Profiles (NESTED: owner → profileName → data) ──────────
 let PROFILES = {};  // Structure: { owner: { profileName: { name, date, items, isFav } } }
-try { PROFILES = JSON.parse(localStorage.getItem('BC_PROFILES_v11') || '{}'); } catch {}
+try { 
+  const raw = localStorage.getItem('BC_PROFILES_v11') || '{}';
+  const loaded = JSON.parse(raw);
+  
+  // AUTO-MIGRATION v1→v2: Erkennen und konvertieren
+  const isV1 = Object.values(loaded).some(v => 
+    v && typeof v === 'object' && 
+    (v.items?.length > 0 || v.date || v.name) && 
+    !Object.values(v).some(sub => sub?.items?.length > 0)  // Kein nested items gefunden
+  );
+  
+  if (isV1) {
+    console.log('🔄 Migrating v1 → v2 PROFILES structure...');
+    const migrated = {};
+    for (const [key, profile] of Object.entries(loaded)) {
+      if (profile && profile.items) {
+        // v1 Format: put under "Legacy" folder
+        if (!migrated['Legacy']) migrated['Legacy'] = {};
+        migrated['Legacy'][key] = {
+          ...profile,
+          owner: 'Legacy',
+          date: profile.date || new Date().toLocaleDateString('de-DE')
+        };
+      }
+    }
+    PROFILES = migrated;
+    localStorage.setItem('BC_PROFILES_v11', JSON.stringify(PROFILES));
+    console.log('✅ Migration complete: ' + Object.keys(migrated['Legacy'] || {}).length + ' profiles migrated to "Legacy" folder');
+  } else {
+    PROFILES = loaded;
+  }
+} catch {}
 
 // NEW: Profile Favorites
 let PROFILE_FAVOURITES = new Set();
@@ -1868,7 +1899,14 @@ function renderProfileList() {
   const q = (document.getElementById('profileSearch')?.value || '').toLowerCase();
   
   // NESTED: owner → { profileName → profile }
-  const owners = Object.keys(PROFILES).sort();
+  // Filter nur echte Owner-Ordner (Objects mit Profile-Daten drin, nicht primitive values)
+  const owners = Object.keys(PROFILES).filter(key => {
+    const val = PROFILES[key];
+    // Ein Owner ist ein Object mit verschachtelten Profile-Objects
+    return val && typeof val === 'object' && !Array.isArray(val) && 
+           // und ist NICHT selbst ein v1-Profil (das würde items, date, name haben)
+           Object.values(val).some(v => v && typeof v === 'object' && v.items);
+  }).sort();
   if (!owners.length) {
     el.innerHTML = '<p style="color:var(--text3);font-size:.8rem">Noch keine Profile gespeichert.</p>';
     return;
