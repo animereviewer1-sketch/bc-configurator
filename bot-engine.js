@@ -1,6 +1,18 @@
 const BOT_ENGINE_VERSION = '1.1.0';
 window.BOT_ENGINE_VERSION = BOT_ENGINE_VERSION;
 
+// OPTIMIERT: Gemeinsame Action-Transformation Funktion (DRY-Prinzip)
+const _transformAction = (a) => {
+  const base = a.typ === 'item' && a.curseKey && !a.curseEntry 
+    ? { ...a, curseEntry: CURSE_DB[a.curseKey] ?? null }
+    : a.typ === 'item' && a.profilName && (!a.profilItems || !a.profilItems.length)
+    ? { ...a, profilItems: PROFILES[a.profilName]?.items ?? [] }
+    : { ...a };
+  base.aktZiel = a.aktZiel ?? 'ausloeser';
+  base.aktZielNummern = (a.aktZielNummern || []).map(Number);
+  return base;
+};
+
 function _buildBotCode(bot) {
   const s = bot.settings;
   const triggers = (bot.triggers||[]).filter(t=>t.aktiv).map(t => ({
@@ -13,22 +25,8 @@ function _buildBotCode(bot) {
       ifElse: !!t.ifElse,
     bedingungen: (t.bedingungen||[]),
     ifBedingungen: (t.ifBedingungen||[]),
-    aktionen: (t.aktionen||[]).map(a => {
-      const base = a.typ==='item' && a.curseKey && !a.curseEntry ? {...a, curseEntry: CURSE_DB[a.curseKey]??null}
-                 : a.typ==='item' && a.profilName && (!a.profilItems||!a.profilItems.length) ? {...a, profilItems: PROFILES[a.profilName]?.items??[]}
-                 : {...a};
-      base.aktZiel = a.aktZiel ?? 'ausloeser';
-      base.aktZielNummern = (a.aktZielNummern||[]).map(Number);
-      return base;
-    }),
-    aktionen_sonst: (t.aktionen_sonst||[]).map(a => {
-      const base = a.typ==='item' && a.curseKey && !a.curseEntry ? {...a, curseEntry: CURSE_DB[a.curseKey]??null}
-                 : a.typ==='item' && a.profilName && (!a.profilItems||!a.profilItems.length) ? {...a, profilItems: PROFILES[a.profilName]?.items??[]}
-                 : {...a};
-      base.aktZiel = a.aktZiel ?? 'ausloeser';
-      base.aktZielNummern = (a.aktZielNummern||[]).map(Number);
-      return base;
-    }),
+    aktionen: (t.aktionen||[]).map(_transformAction),
+    aktionen_sonst: (t.aktionen_sonst||[]).map(_transformAction),
   }));
   const safeId   = bot.id.replace(/\W/g,'_');
   const safeName = bot.name.replace(/\\/g,'\\\\').replace(/`/g,'\\`');
@@ -44,11 +42,7 @@ function _buildBotCode(bot) {
     wiederholung: e.wiederholung??'immer', maxMal: e.maxMal??2,
     fallbackTyp: e.fallbackTyp??'nichts', fallbackText: e.fallbackText??'',
     bedingungen: e.bedingungen??[],
-    aktionen: (e.aktionen||[]).map(a => {
-      if (a.typ==='item' && a.curseKey && !a.curseEntry) return {...a, curseEntry: CURSE_DB[a.curseKey]??null};
-      if (a.typ==='item' && a.profilName && (!a.profilItems||!a.profilItems.length)) return {...a, profilItems: PROFILES[a.profilName]?.items??[]};
-      return a;
-    }),
+    aktionen: (e.aktionen||[]).map(_transformAction),
   }));
   const eventsJson = btoa(unescape(encodeURIComponent(JSON.stringify(events))));
   // Build roomEver from logs – members who joined and haven't left yet

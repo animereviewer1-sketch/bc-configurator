@@ -5,6 +5,15 @@ let _rankData = {
   players: {}
 };
 
+// OPTIMIERT: Element-Cache für häufig verwendete DOM-Queries
+const _rankElementCache = new Map();
+function _getRankEl(id) {
+  if (!_rankElementCache.has(id)) {
+    _rankElementCache.set(id, document.getElementById(id));
+  }
+  return _rankElementCache.get(id);
+}
+
 // Async load from IndexedDB on startup
 (async () => {
   try {
@@ -45,8 +54,15 @@ function renderRankDefs() {
     el.innerHTML = '<div style="color:var(--text3);font-size:.72rem;text-align:center;padding:18px 0">Noch keine Raenge. Fuege deinen ersten Rang hinzu!</div>';
     return;
   }
-  el.innerHTML = sorted.map((r,i)=>`
-    <div class="rank-def-card" id="rdef-${r.id}">
+  
+  // OPTIMIERT: DocumentFragment statt innerHTML
+  const frag = document.createDocumentFragment();
+  for (let i = 0; i < sorted.length; i++) {
+    const r = sorted[i];
+    const card = document.createElement('div');
+    card.className = 'rank-def-card';
+    card.id = `rdef-${r.id}`;
+    card.innerHTML = `
       <span style="display:flex;flex-direction:column;gap:1px">
         <button class="order-btn" onclick="rankDefMoveUp('${r.id}')" ${i===0?'disabled':''}>&#9650;</button>
         <button class="order-btn" onclick="rankDefMoveDown('${r.id}')" ${i===sorted.length-1?'disabled':''}>&#9660;</button>
@@ -56,7 +72,12 @@ function renderRankDefs() {
       <span style="flex:1"></span>
       <button onclick="rankDefEdit('${r.id}')" style="background:none;border:1px solid rgba(255,255,255,0.1);border-radius:5px;color:var(--text3);font-size:.62rem;padding:2px 7px;cursor:pointer">&#9999;&#65039;</button>
       <button onclick="rankDefDelete('${r.id}')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.75rem;padding:2px 5px">&#x2715;</button>
-    </div>`).join('');
+    `;
+    frag.appendChild(card);
+  }
+  
+  el.innerHTML = '';
+  el.appendChild(frag);
 }
 
 function renderRankPlayers() {
@@ -71,26 +92,41 @@ function renderRankPlayers() {
     el.innerHTML = `<div class="rank-empty">&#127942; Keine Spieler gefunden.<br><span style="font-size:.72rem;color:var(--text3)">Raenge werden automatisch gesetzt wenn der Bot die Aktion "Rang setzen" ausfuehrt.</span></div>`;
     return;
   }
+  
   const sorted = _rankSorted();
-  el.innerHTML = entries.sort((a,b)=>{ const la=_rankById(a[1].rankId)?.level??-1; const lb=_rankById(b[1].rankId)?.level??-1; return lb-la; }).map(([num,p])=>{
-    const rank=_rankById(p.rankId);
-    const badge=rank?`<span class="rank-def-badge" style="background:${rank.farbe}22;color:${rank.farbe};border-color:${rank.farbe}55;font-size:.69rem">${escHtml(rank.icon||'\uD83C\uDFC5')} ${escHtml(rank.name)}</span>`:`<span class="rank-badge-none">- Kein Rang -</span>`;
-    const ts=p.assignedAt?new Date(p.assignedAt).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'}):'';
-    const histCount=(p.history||[]).length;
-    return `<div class="rank-player-card">
+  const sortedEntries = entries.sort((a,b)=>{ const la=_rankById(a[1].rankId)?.level??-1; const lb=_rankById(b[1].rankId)?.level??-1; return lb-la; });
+  
+  // OPTIMIERT: DocumentFragment statt innerHTML mit map().join()
+  const frag = document.createDocumentFragment();
+  for (const [num, p] of sortedEntries) {
+    const rank = _rankById(p.rankId);
+    const badge = rank
+      ? `<span class="rank-def-badge" style="background:${rank.farbe}22;color:${rank.farbe};border-color:${rank.farbe}55;font-size:.69rem">${escHtml(rank.icon||'\uD83C\uDFC5')} ${escHtml(rank.name)}</span>`
+      : `<span class="rank-badge-none">- Kein Rang -</span>`;
+    const ts = p.assignedAt ? new Date(p.assignedAt).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'}) : '';
+    const histCount = (p.history||[]).length;
+    const optionsHtml = sorted.map(r=>`<option value="${r.id}" ${p.rankId===r.id?'selected':''}>${escHtml(r.icon+' '+r.name)} (Lv.${r.level})</option>`).join('');
+    
+    const card = document.createElement('div');
+    card.className = 'rank-player-card';
+    card.innerHTML = `
       <div><div class="rank-player-name">${escHtml(p.name||('#'+num))}</div><div class="rank-player-num">#${num}</div></div>
       <div class="rank-player-rank">${badge}</div>
       <div style="display:flex;gap:6px;align-items:center;flex-shrink:0">
         <select class="cf" style="font-size:.68rem;width:160px" onchange="rankSetPlayerDirect('${num}',this.value)">
           <option value="">- Kein Rang -</option>
-          ${sorted.map(r=>`<option value="${r.id}" ${p.rankId===r.id?'selected':''}>${escHtml(r.icon+' '+r.name)} (Lv.${r.level})</option>`).join('')}
+          ${optionsHtml}
         </select>
         ${histCount?`<button class="rank-history-btn" onclick="rankShowHistory('${num}')" title="${histCount} Eintraege">&#128345; ${histCount}</button>`:''}
         <span style="font-size:.6rem;color:var(--text3);white-space:nowrap">${ts}</span>
         <button onclick="rankRemovePlayer('${num}')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.75rem;padding:2px 5px">&#x2715;</button>
       </div>
-    </div>`;
-  }).join('');
+    `;
+    frag.appendChild(card);
+  }
+  
+  el.innerHTML = '';
+  el.appendChild(frag);
 }
 
 function _rankUpdateFilterSelect() {
@@ -117,12 +153,20 @@ function _rankOpenModal(id) {
   setTimeout(()=>document.getElementById('rank-modal-name')?.focus(),50);
 }
 
-document.addEventListener('input', e=>{
-  if(e.target.id==='rank-modal-color') document.getElementById('rank-modal-color-hex').value=e.target.value;
-  if(e.target.id==='rank-modal-color-hex') document.getElementById('rank-modal-color').value=e.target.value;
+document.addEventListener('input', e => {
+  // OPTIMIERT: Cache statt jedesmal getElementById aufrufen
+  if (e.target.id === 'rank-modal-color') {
+    _getRankEl('rank-modal-color-hex').value = e.target.value;
+  }
+  if (e.target.id === 'rank-modal-color-hex') {
+    _getRankEl('rank-modal-color').value = e.target.value;
+  }
 });
 
-function rankModalClose() { document.getElementById('rank-modal-overlay').style.display='none'; }
+function rankModalClose() {
+  document.getElementById('rank-modal-overlay').style.display='none';
+  _rankElementCache.clear(); // Cache invalidieren
+}
 
 function rankModalSave() {
   const id = document.getElementById('rank-modal-id').value;

@@ -44,22 +44,47 @@ async function idbSet(key, value) {
   } catch (err) { console.warn('[IDB] set:', err); }
 }
 
-// Migration localStorage → IDB (einmalig)
+// Migration localStorage → IDB (einmalig) – OPTIMIERT: Parallel statt sequenziell
 (async function() {
   const keys = ['BC_Money_v1','BC_Rank_v1','BC_Shop_v1','BC_Bots_v2','BC_BotGroups_v1',
                  'BCBot_Logs','BC_CURSE_DB_v1','BC_CURSE_COMMENTS_v1','BC_CURSE_FAV_v1'];
+  
+  // Schritt 1: Sammle alle Daten und Parse sie ERST (synchron)
+  const toMigrate = [];
   for (const key of keys) {
     try {
       const raw = localStorage.getItem(key);
       if (!raw) continue;
-      if ((await idbGet(key)) === null) {
-        await idbSet(key, JSON.parse(raw));
+      const parsed = JSON.parse(raw);
+      toMigrate.push({ key, data: parsed });
+    } catch(e) { console.warn('[IDB] Parse Error:', key, e); }
+  }
+  
+  // Schritt 2: Überprüfe welche nicht existieren und migriere PARALLEL
+  const migratePromises = toMigrate.map(async ({ key, data }) => {
+    try {
+      const existing = await idbGet(key);
+      if (existing === null) {
+        await idbSet(key, data);
         console.info('[IDB] Migriert:', key);
       }
       localStorage.removeItem(key);
     } catch(e) { console.warn('[IDB] Migration:', key, e); }
-  }
+  });
+  
+  // Warte auf ALLE parallel
+  await Promise.all(migratePromises);
+  console.info('[IDB] Migration Complete:', toMigrate.length, 'Keys');
 })();
+
+// OPTIMIERT: Globale Debounce-Funktion für Input-Handler
+const _debounce = (fn, delay = 300) => {
+  let timeoutId;
+  return (...args) => {
+    clearTimeout(timeoutId);
+    timeoutId = setTimeout(() => fn(...args), delay);
+  };
+};
 
 // Echo's Clothing Extension – Chinesisch → Englisch Lookup
 // Quelle: Echo_Extension_CN_Items.docx

@@ -1124,6 +1124,31 @@ button { cursor: pointer; }
 .as-act-row { display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-top:5px; }
 .as-act-label { font-size:.6rem; color:var(--text3); white-space:nowrap; }
 
+/* OPTIMIERT: CSS Containment für Layout-Isolation und schnellere Repaints */
+/* Container für Listen – Layout bleibt isoliert */
+#money-entries,
+#rank-player-list,
+#rank-def-list,
+#shop-item-list,
+#shop-log-list {
+  contain: layout style;
+}
+
+/* Individuelle Cards – Paint Isolation für schnellere Updates */
+.money-card,
+.rank-player-card,
+.rank-def-card,
+.shop-item-card,
+.shop-log-card {
+  contain: layout style paint;
+  will-change: transform;
+}
+
+/* Optimierung für Listen-Rendering */
+[role="list"] {
+  contain: layout;
+}
+
 </style>
 </head>
 <body>

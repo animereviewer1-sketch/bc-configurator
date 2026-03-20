@@ -42,12 +42,22 @@ function renderMoneyTab() {
   if (typSel) typSel.value = _money.settings.queryTyp ?? 'whisper';
   const entries = Object.entries(_money.balances);
   const cur = _money.settings.name || 'Gold';
+  const el = document.getElementById('money-entries');
+  
   if (!entries.length) {
-    document.getElementById('money-entries').innerHTML = `<div style="color:var(--text3);font-size:.75rem;text-align:center;margin-top:40px">Noch keine Spieler – „+ Spieler hinzufügen" oder wird automatisch via Bot befüllt</div>`;
+    el.innerHTML = `<div style="color:var(--text3);font-size:.75rem;text-align:center;margin-top:40px">Noch keine Spieler – „+ Spieler hinzufügen" oder wird automatisch via Bot befüllt</div>`;
     return;
   }
-  const html = entries.sort((a,b)=>b[1].balance-a[1].balance).map(([id, p]) => `
-    <div class="money-card" id="mcrd-${id}">
+  
+  // OPTIMIERT: DocumentFragment statt innerHTML (nur 1 DOM-Operation statt N)
+  const frag = document.createDocumentFragment();
+  const sorted = entries.sort((a,b)=>b[1].balance-a[1].balance);
+  
+  for (const [id, p] of sorted) {
+    const card = document.createElement('div');
+    card.className = 'money-card';
+    card.id = `mcrd-${id}`;
+    card.innerHTML = `
       <span class="money-name">👤 ${escHtml(p.name||id)}</span>
       <span class="money-balance">${p.balance ?? 0}</span>
       <span style="font-size:.65rem;color:var(--text3)">${escHtml(cur)}</span>
@@ -58,8 +68,13 @@ function renderMoneyTab() {
         <button onclick="moneySet('${id}',prompt('Genauen Wert setzen für ${escHtml(p.name||id)}:',${p.balance??0}))" style="font-size:.62rem;padding:3px 7px;background:var(--bg3);border:1px solid var(--border2);color:var(--text3);border-radius:4px;cursor:pointer">= Setzen</button>
         <button onclick="moneyRemovePlayer('${id}')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.75rem;padding:2px 6px">✕</button>
       </div>
-    </div>`).join('');
-  document.getElementById('money-entries').innerHTML = html;
+    `;
+    frag.appendChild(card);
+  }
+  
+  // Nur EINE DOM-Operation
+  el.innerHTML = '';
+  el.appendChild(frag);
 }
 
 function moneySetName(v) { _money.settings.name = v.trim()||'Gold'; _saveMoney(); }
