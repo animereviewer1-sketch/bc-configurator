@@ -1848,9 +1848,7 @@ function renderProfileList() {
             + '<span class="profile-item-group">' + escHtml(item.group) + '</span>'
             + (item.lock ? '<span class="profile-item-badge lock">🔒 ' + escHtml(item.lock) + '</span>' : '')
             + (item.craft?.Name ? '<span class="profile-item-badge craft">✏️ ' + escHtml(item.craft.Name) + '</span>' : '')
-            + (hasCfg
-              ? '<button class="profile-gear-btn" data-slot="' + slotKey + '" data-iidx="' + iIdx + '" onclick="profileOpenInItemManager(this.dataset.slot,this.dataset.iidx)" title="Im Item Manager öffnen">⚙️</button>'
-              : '<span style="font-size:.6rem;color:var(--text3)" title="Nicht im Cache">–</span>')
+            + '<button class="profile-gear-btn' + (!hasCfg ? ' nocache' : '') + '" data-slot="' + slotKey + '" data-iidx="' + iIdx + '" onclick="profileOpenInItemManager(this.dataset.slot,this.dataset.iidx)" title="' + (hasCfg ? 'Im Item Manager öffnen' : 'Zur Gruppe navigieren (nicht im Cache)') + '">⚙️</button>'
             + '<button class="profile-row-del" data-slot="' + slotKey + '" data-iidx="' + iIdx + '" onclick="profileDeleteItem(this.dataset.slot,this.dataset.iidx)" title="Item entfernen" style="margin-left:4px">✕</button>'
             + '</div>';
         }).join('');
@@ -1930,11 +1928,17 @@ function profileOpenInItemManager(slot, iIdx) {
   const p = PROFILES[name];
   const item = p?.items?.[parseInt(iIdx)];
   if (!item) return;
-  const cfg = CACHE[item.group]?.[item.asset];
-  if (!cfg) { showStatus('❌ Item nicht im Cache', 'error'); return; }
   switchTab('items');
-  selectItem(item.group, item.asset);
-  showStatus('⚙️ ' + item.asset + ' im Item Manager geöffnet', 'info');
+  const cfg = CACHE[item.group]?.[item.asset];
+  if (cfg) {
+    selectItem(item.group, item.asset);
+    showStatus('⚙️ ' + item.asset + ' im Item Manager geöffnet', 'info');
+  } else {
+    // Nicht im Cache – Sidebar-Suche auf Asset-Name setzen
+    const searchEl = document.querySelector('.sidebar-search');
+    if (searchEl) { searchEl.value = item.asset; renderGroups(item.asset); }
+    showStatus('⚠️ ' + item.asset + ' nicht im Cache – Suche gesetzt', 'info');
+  }
 }
 
 // ── Export / Import ──────────────────────────────────────────────────────
@@ -2663,12 +2667,30 @@ function _fetchOutfitAndSave(ownerNum, defaultName, fallbackItems) {
       }
       return;
     }
-    // defaultName already contains "{CraftName} - {OwnerName}" – use it directly
     _doSaveProfile(items.map(_appearanceItemToProfile), defaultName);
   };
 
   bcSend({ type: 'GET_CHAR_APPEARANCE', memberNum: tgtNum, reqId });
   showStatus('⏳ Lese Outfit aus BC…', 'info');
+}
+
+// Scan Outfit Button im Outfit-Tab
+function scanOutfitAndSave() {
+  if (!_connected) { showStatus('❌ Nicht verbunden mit BC', 'error'); return; }
+  const reqId  = 'os_scan_' + Date.now();
+  const tgtNum = _outfitTargetNum ?? null;
+  const defaultName = tgtNum
+    ? ('Scan - ' + (_lastRoomMembers.find(m => m.num === tgtNum)?.name || ('#' + tgtNum)))
+    : 'Scan - Player';
+
+  _pendingOutfitSave[reqId] = function(items) {
+    if (!items?.length) { showStatus('❌ Keine Items erhalten', 'error'); return; }
+    _doSaveProfile(items.map(_appearanceItemToProfile), defaultName);
+    renderProfileList();
+  };
+
+  bcSend({ type: 'GET_CHAR_APPEARANCE', memberNum: tgtNum, reqId });
+  showStatus('⏳ Scanne Outfit aus BC…', 'info');
 }
 // Button: 💾 Profil (pro Curse-Zeile) → "{CraftName} - {OwnerName}"
 function curseSaveAsProfile(rowIdOrDbKey) {

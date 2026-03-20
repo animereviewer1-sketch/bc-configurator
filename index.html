@@ -704,6 +704,8 @@ textarea.outfit-code { width: 100%; min-height: 210px; background: rgba(0,0,0,0.
 .profile-item-badge.craft { background: rgba(139,92,246,0.1); color: #c4b5fd; border: 1px solid rgba(139,92,246,0.2); }
 .profile-gear-btn { margin-left: auto; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1); color: var(--text3); border-radius: 6px; padding: 2px 7px; font-size: 0.72rem; cursor: pointer; flex-shrink: 0; }
 .profile-gear-btn:hover { background: rgba(139,92,246,0.15); border-color: rgba(139,92,246,0.4); color: #c4b5fd; }
+.profile-gear-btn.nocache { opacity: 0.45; border-style: dashed; }
+.profile-gear-btn.nocache:hover { opacity: 1; background: rgba(251,191,36,0.1); border-color: rgba(251,191,36,0.4); color: #fbbf24; }
 .section-hdr2 { font-size: 0.7rem; font-weight: 800; color: var(--text2); text-transform: uppercase; letter-spacing: 1.6px; padding-bottom: 9px; border-bottom: 1px solid rgba(255,255,255,0.07); margin-bottom: 13px; display: flex; align-items: center; justify-content: space-between; }
 
 .outfit-search-row { display: flex; gap: 8px; margin-bottom: 12px; align-items: center; }
@@ -1453,7 +1455,10 @@ button { cursor: pointer; }
 
       <div class="section-hdr2">
         <span>👗 Outfit Items</span>
-        <button class="btn btn-red" style="font-size:.65rem;padding:3px 8px" onclick="clearOutfit()">🗑️ Leeren</button>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-primary" style="font-size:.65rem;padding:3px 8px" onclick="scanOutfitAndSave()" title="Aktuelles BC-Outfit scannen und als Profil speichern">📷 Scan Outfit</button>
+          <button class="btn btn-red" style="font-size:.65rem;padding:3px 8px" onclick="clearOutfit()">🗑️ Leeren</button>
+        </div>
       </div>
       <div class="outfit-search-row">
         <input class="outfit-search" id="outfitItemSearch" placeholder="🔍 Item suchen..." oninput="renderOutfitList()">
