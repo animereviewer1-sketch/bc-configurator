@@ -2049,6 +2049,32 @@ function _saveCurseComments() { idbSet('BC_CURSE_COMMENTS_v1', CURSE_COMMENTS); 
 // ── Favoriten ────────────────────────────────────────────────
 let CURSE_FAVOURITES = new Set();
 function _saveCurseFavourites() { idbSet('BC_CURSE_FAV_v1', [...CURSE_FAVOURITES]); }
+// ── OPTIMIERT: Outfit-Profile gespeichert (ähnlich wie Favoriten) ────
+let CURSE_OUTFIT_SAVED = new Set();
+function _saveCurseOutfitSaved() { idbSet('BC_CURSE_OUTFIT_SAVED_v1', [...CURSE_OUTFIT_SAVED]); }
+function toggleCurseOutfitSaved(dbKey, cellEl) {
+  const wasSaved = CURSE_OUTFIT_SAVED.has(dbKey);
+  if (wasSaved) CURSE_OUTFIT_SAVED.delete(dbKey); else CURSE_OUTFIT_SAVED.add(dbKey);
+  _saveCurseOutfitSaved();
+  if (cellEl) {
+    const isSaved = !wasSaved;
+    cellEl.innerHTML = isSaved ? '✅' : '<span style="opacity:.25;font-size:.85em">☐</span>';
+    const row = cellEl.closest('tr');
+    if (row) row.classList.toggle('outfit-saved', isSaved);
+    // OPTIMIERT: Outfit-Zähler im Owner-Block aktualisieren
+    const block = cellEl.closest('.curse-owner-block');
+    if (block) {
+      const badge = block.querySelector('.curse-owner-outfit-badge');
+      const cnt = block.querySelectorAll('.curse-row.outfit-saved').length;
+      if (badge) {
+        badge.textContent = '✅ ' + cnt;
+        badge.style.display = cnt > 0 ? '' : 'none';
+      }
+    }
+  } else {
+    renderCurseTab();
+  }
+}
 function toggleCurseFavourite(dbKey, cellEl) {
   const wasFav = CURSE_FAVOURITES.has(dbKey);
   if (wasFav) CURSE_FAVOURITES.delete(dbKey); else CURSE_FAVOURITES.add(dbKey);
@@ -2225,6 +2251,12 @@ function renderCurseTab() {
       const k2 = (i.Besitzer?.Nummer ?? '') + ':' + i.ItemName + ':' + i.CraftName;
       return CURSE_FAVOURITES.has(k2);
     }).length;
+    
+    // OPTIMIERT: Anzahl gespeicherter Outfits für diesen Owner
+    const ownerOutfitCount = owner.items.filter(i => {
+      const k2 = (i.Besitzer?.Nummer ?? '') + ':' + i.ItemName + ':' + i.CraftName;
+      return CURSE_OUTFIT_SAVED.has(k2);
+    }).length;
 
     block.innerHTML =
       '<div class="curse-owner-hdr" onclick="toggleCurseOwner(\'' + blockId + '\')">'+
@@ -2234,6 +2266,10 @@ function renderCurseTab() {
         (cursedCount ? '<span class="curse-owner-count">🔮 '+cursedCount+'</span>' : '')+
         '<span class="curse-owner-count" style="background:var(--bg3);color:var(--text2)">'+owner.items.length+'</span>'+
         (ownerFavCount ? '<span class="curse-owner-count curse-owner-fav-badge" style="background:rgba(251,191,36,.12);color:#fbbf24;border-color:rgba(251,191,36,.3)">⭐ '+ownerFavCount+'</span>' : '<span class="curse-owner-fav-badge" style="display:none"></span>')+
+        (ownerOutfitCount ? '<span class="curse-owner-count curse-owner-outfit-badge" style="background:rgba(74,222,128,.12);color:#4ade80;border-color:rgba(74,222,128,.3)">✅ '+ownerOutfitCount+'</span>' : '<span class="curse-owner-outfit-badge" style="display:none"></span>')+
+        '<button onclick="event.stopPropagation();markOutfitsByComment(\'' + owner.num + '\')"'
+          + ' style="background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.3);color:#22c55e;cursor:pointer;font-size:.68rem;padding:2px 8px;border-radius:4px;margin-left:4px;white-space:nowrap"'
+          + ' title="Alle Items mit \'Outfit\' im Kommentar markieren">📝 Auto-Mark</button>'+
         '<button onclick="event.stopPropagation();curseSaveAllAsProfile(\'' + owner.num + '\')"'
           + ' style="margin-left:auto;background:rgba(139,92,246,0.12);border:1px solid rgba(139,92,246,0.3);color:#a78bfa;cursor:pointer;font-size:.68rem;padding:2px 8px;border-radius:4px;white-space:nowrap"'
           + ' title="Alle Curses als Outfit-Profil speichern">💾 Alle speichern</button>'+
@@ -2241,6 +2277,7 @@ function renderCurseTab() {
       '</div>'+
       '<table class="curse-rows"><thead><tr style="background:var(--bg3)">'+
         '<th style="padding:4px 4px;font-size:.63rem;color:var(--text3);text-align:center;font-weight:500" title="Favorit">⭐</th>'+
+        '<th style="padding:4px 4px;font-size:.63rem;color:var(--text3);text-align:center;font-weight:500" title="Outfit gespeichert">✅</th>'+
         '<th style="padding:4px 10px;font-size:.63rem;color:var(--text3);text-align:left;font-weight:500">Name</th>'+
         '<th style="padding:4px 10px;font-size:.63rem;color:var(--text3);text-align:left;font-weight:500">Item</th>'+
         '<th style="padding:4px 10px;font-size:.63rem;color:var(--text3);text-align:left;font-weight:500">Gruppe</th>'+
@@ -2265,7 +2302,8 @@ function renderCurseTab() {
 
       const tr = document.createElement('tr');
       const isFav = CURSE_FAVOURITES.has(dbKey);
-    tr.className = 'curse-row' + (isLSCG ? ' lscg' : '') + (isFav ? ' fav' : '');
+      const isOutfitSaved = CURSE_OUTFIT_SAVED.has(dbKey);
+    tr.className = 'curse-row' + (isLSCG ? ' lscg' : '') + (isFav ? ' fav' : '') + (isOutfitSaved ? ' outfit-saved' : '');
       tr.id = rowId;
 
       const lscgText = isLSCG
@@ -2276,6 +2314,9 @@ function renderCurseTab() {
       tr.innerHTML =
         '<td class="fav-cell" onclick="toggleCurseFavourite(\'' + dbKey.replace(/'/g,"&apos;") + '\',this)" title="Favorit">'+
           (isFav ? '⭐' : '<span style="opacity:.25;font-size:.85em">☆</span>')+
+        '</td>'+
+        '<td class="outfit-cell" onclick="toggleCurseOutfitSaved(\'' + dbKey.replace(/'/g,"&apos;") + '\',this)" title="Als Outfit-Profil gespeichert" style="cursor:pointer;text-align:center">'+
+          (isOutfitSaved ? '✅' : '<span style="opacity:.25;font-size:.85em">☐</span>')+
         '</td>'+
         '<td class="cn"><span class="cursor-detail-toggle" onclick="toggleCurseDetail(\'' + detId + '\',\'' + rowId + '\')">▶</span>'+escHtml(entry.CraftName)+(echoTranslate(entry.CraftName)?'<span style="font-size:.58rem;color:#a78bfa;margin-left:4px">('+echoTranslate(entry.CraftName)+')</span>':'')+'</td>'+
         '<td class="item">'+escHtml(entry.ItemName)+(echoTranslate(entry.ItemName)?'<span style="font-size:.58rem;color:var(--text3);margin-left:4px">('+echoTranslate(entry.ItemName)+')</span>':'')+'</td>'+
@@ -2490,17 +2531,92 @@ function curseSaveAsProfile(rowIdOrDbKey) {
   const dbKey = _curseEntryMap[rowIdOrDbKey] ?? rowIdOrDbKey;
   const entry = CURSE_DB[dbKey];
   if (!entry) { showStatus('❌ Eintrag nicht gefunden', 'error'); return; }
+  
+  // OPTIMIERT: Automatisch Häkchen setzen und "Outfit" aus Kommentar entfernen
+  CURSE_OUTFIT_SAVED.add(dbKey);
+  _saveCurseOutfitSaved();
+  
+  // Kommentar: "Outfit" entfernen wenn vorhanden
+  const comment = CURSE_COMMENTS[dbKey] || '';
+  if (comment.includes('Outfit')) {
+    CURSE_COMMENTS[dbKey] = comment.replace(/Outfit/g, '').trim();
+    _saveCurseComments();
+  }
+  
+  // Render aktualisieren damit Häkchen sichtbar wird
+  renderCurseTab();
+  
   const craftName = entry.CraftName || entry.ItemName || 'Curse';
   const ownerName = entry.Besitzer?.Name || (entry.Besitzer?.Nummer ? '#' + entry.Besitzer.Nummer : 'Player');
   const defaultName = craftName + ' - ' + ownerName;
   _fetchOutfitAndSave(null, defaultName, [_curseEntryToProfileItem(entry)]);
 }
 
+// Button: 📝 Alle mit Outfit-Mark (Global) → Alle Items mit "Outfit" im Kommentar markieren
+function markAllOutfitsByComment() {
+  let markedCount = 0;
+  
+  Object.entries(CURSE_DB).forEach(([key, e]) => {
+    const comment = CURSE_COMMENTS[key] || '';
+    // Case-insensitive Suche nach "Outfit"
+    if (comment.toLowerCase().includes('outfit')) {
+      CURSE_OUTFIT_SAVED.add(key);
+      markedCount++;
+    }
+  });
+  
+  if (markedCount > 0) {
+    _saveCurseOutfitSaved();
+    renderCurseTab();
+    showStatus('✅ ' + markedCount + ' Items mit "Outfit" im Kommentar markiert!', 'success');
+  } else {
+    showStatus('ℹ️ Keine Items mit "Outfit" im Kommentar gefunden', 'info');
+  }
+}
+
+// Button: 📝 Auto-Mark (Owner-Header) → Alle Items mit "Outfit" im Kommentar markieren
+function markOutfitsByComment(ownerNum) {
+  const entries = Object.entries(CURSE_DB)
+    .filter(([, e]) => String(e.Besitzer?.Nummer ?? '') === String(ownerNum))
+    .map(([key, e]) => [key, e]);
+  
+  let markedCount = 0;
+  entries.forEach(([key, e]) => {
+    const comment = CURSE_COMMENTS[key] || '';
+    // Case-insensitive Suche nach "Outfit"
+    if (comment.toLowerCase().includes('outfit')) {
+      CURSE_OUTFIT_SAVED.add(key);
+      markedCount++;
+    }
+  });
+  
+  if (markedCount > 0) {
+    _saveCurseOutfitSaved();
+    renderCurseTab();
+    showStatus('✅ ' + markedCount + ' Items mit "Outfit" im Kommentar markiert', 'success');
+  } else {
+    showStatus('ℹ️ Keine Items mit "Outfit" im Kommentar gefunden', 'info');
+  }
+}
+
 // Button: 💾 Alle speichern (Owner-Header) → "{OwnerName} Outfit" (Sammlung mehrerer Items)
 function curseSaveAllAsProfile(ownerNum) {
   const entries = Object.entries(CURSE_DB)
     .filter(([, e]) => String(e.Besitzer?.Nummer ?? '') === String(ownerNum))
-    .map(([, e]) => e);
+    .map(([key, e]) => {
+      // OPTIMIERT: Für jedes Curse-Item Häkchen setzen und "Outfit" aus Kommentar entfernen
+      CURSE_OUTFIT_SAVED.add(key);
+      const comment = CURSE_COMMENTS[key] || '';
+      if (comment.includes('Outfit')) {
+        CURSE_COMMENTS[key] = comment.replace(/Outfit/g, '').trim();
+      }
+      return e;
+    });
+  
+  _saveCurseOutfitSaved();
+  _saveCurseComments();
+  renderCurseTab();
+  
   const ownerName = entries[0]?.Besitzer?.Name || ('#' + ownerNum);
   // Mehrere Items: kein einzelner CraftName sinnvoll → nur OwnerName
   const defaultName = ownerName + ' Outfit';
@@ -2638,6 +2754,9 @@ function curseClearAndScan() {
     if (comments) Object.assign(CURSE_COMMENTS, comments);
     const favs = await idbGet('BC_CURSE_FAV_v1');
     if (Array.isArray(favs)) favs.forEach(k => CURSE_FAVOURITES.add(k));
+    // OPTIMIERT: Outfit-Saved auch laden
+    const outfitSaved = await idbGet('BC_CURSE_OUTFIT_SAVED_v1');
+    if (Array.isArray(outfitSaved)) outfitSaved.forEach(k => CURSE_OUTFIT_SAVED.add(k));
   } catch(e) { console.warn('[BCK-Popup] Curse IDB load error:', e); }
 })();
 
