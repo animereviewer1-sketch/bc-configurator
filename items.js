@@ -1733,7 +1733,6 @@ function loadProfile(name) {
 
     const tr = (item.tr && typeof item.tr === 'object' && Object.keys(item.tr).length) ? item.tr : null;
 
-    // craftStr aus Craft-Objekt
     let craftStr = '';
     const craft = item.craft;
     if (craft && craft.Name) {
@@ -1752,14 +1751,12 @@ function loadProfile(name) {
     restored.push({
       ...item,
       cfg:              cfg ?? {},
-      propCode:         '',    // handled via property/preB64/postB64 in buildItemInner
+      propCode:         '',
       craftStr,
       lockParams,
       trStr:            tr ? JSON.stringify(tr) : '{}',
       typeStr:          tr ? Object.entries(tr).map(([k,v]) => k+v).join('') : '',
-      // Full property snapshot forwarded to buildItemInner
       property:         item.property ?? null,
-      // Legacy separate fields kept for backward compat
       overridePriority: item.overridePriority ?? null,
       layerProperties:  item.layerProperties  ?? null,
       difficulty:       item.difficulty       ?? null,
@@ -1767,9 +1764,8 @@ function loadProfile(name) {
   }
 
   OUTFIT = restored;
-  switchTab('outfit');
-  renderOutfitList();
   _autoOutfitCode();
+  showStatus('✅ Profil "' + name + '" geladen (' + restored.length + ' Items)', 'success');
 }
 
 function deleteProfile(name) {
@@ -1779,26 +1775,103 @@ function deleteProfile(name) {
   renderProfileList();
 }
 
+// ── Profile Edit Mode State ───────────────────────────
+let _profileEditMode = null; // profileName currently in edit mode
+
+function _profileSortKey(name) {
+  // Sort by the part after last " - " (owner name), then full name
+  const parts = name.split(' - ');
+  const owner = parts.length > 1 ? parts[parts.length - 1].toLowerCase() : '';
+  return owner + '\x00' + name.toLowerCase();
+}
+
 function renderProfileList() {
   const el = document.getElementById('profileListEl');
+  if (!el) return;
   const q = (document.getElementById('profileSearch')?.value || '').toLowerCase();
-  const keys = Object.keys(PROFILES).filter(k => !q || k.toLowerCase().includes(q));
+  let keys = Object.keys(PROFILES).filter(k => !q || k.toLowerCase().includes(q));
   if (!keys.length) {
     el.innerHTML = '<p style="color:var(--text3);font-size:.8rem">Noch keine Profile gespeichert.</p>';
+    el._profileKeys = [];
     return;
   }
-  el.innerHTML = '<div class="profile-list">' + keys.map((k, idx) => {
-    const p = PROFILES[k];
-    return '<div class="profile-card">'
-      + '<div class="profile-card-name">📁 ' + p.name + '</div>'
-      + '<div class="profile-card-info">' + (p.items?.length ?? 0) + ' Items · ' + (p.date || '') + '</div>'
-      + '<div class="btn-row" style="margin-top:6px">'
-      + '<button class="btn btn-green" style="flex:1;font-size:.68rem" data-pkey="' + idx + '" onclick="loadProfileByIdx(this.dataset.pkey)">📥 Laden</button>'
-      + '<button class="btn btn-primary" style="font-size:.68rem;padding:4px 7px" data-pkey="' + idx + '" onclick="profileExportSingle(this.dataset.pkey)" title="Dieses Profil exportieren">⬇️</button>'
-      + '<button class="btn btn-red" style="font-size:.68rem" data-pkey="' + idx + '" onclick="deleteProfileByIdx(this.dataset.pkey)">🗑️</button>'
-      + '</div></div>';
-  }).join('') + '</div>';
+  // Sort by owner (last segment after " - "), then full name
+  keys = keys.slice().sort((a, b) => _profileSortKey(a).localeCompare(_profileSortKey(b)));
   el._profileKeys = keys;
+
+  // Group by owner (last segment after " - ")
+  const byOwner = {};
+  keys.forEach((k, idx) => {
+    const parts = k.split(' - ');
+    const owner = parts.length > 1 ? parts[parts.length - 1] : '– Ohne Zuordnung –';
+    if (!byOwner[owner]) byOwner[owner] = [];
+    byOwner[owner].push({ name: k, idx });
+  });
+
+  const html = Object.entries(byOwner).map(([owner, profiles]) => {
+    const blockId = 'pb_' + owner.replace(/[^a-zA-Z0-9]/g, '_');
+    const wasOpen = document.getElementById(blockId)?.classList.contains('open');
+    const rows = profiles.map(({ name, idx }) => {
+      const p = PROFILES[name];
+      const shortName = name.replace(new RegExp(' - ' + owner.replace(/[.*+?^${}()|[\]\\]/g,'\\$&') + '$'), '').trim();
+      const isEdit = _profileEditMode === name;
+
+      // Item rows (only shown in edit mode)
+      const itemRows = isEdit ? (p.items || []).map((item, iIdx) => {
+        const hasCfg = !!CACHE[item.group]?.[item.asset];
+        return '<div class="profile-item-row">'
+          + '<span class="profile-item-asset">' + escHtml(item.asset) + '</span>'
+          + '<span class="profile-item-group">' + escHtml(item.group) + '</span>'
+          + (item.lock ? '<span class="profile-item-badge lock">🔒 ' + escHtml(item.lock) + '</span>' : '')
+          + (item.craft?.Name ? '<span class="profile-item-badge craft">✏️ ' + escHtml(item.craft.Name) + '</span>' : '')
+          + (hasCfg
+            ? '<button class="profile-gear-btn" title="Im Item Manager öffnen" onclick="profileOpenInItemManager(' + JSON.stringify(name) + ',' + iIdx + ')">⚙️</button>'
+            : '<span style="font-size:.6rem;color:var(--text3)" title="Nicht im Cache">–</span>')
+          + '</div>';
+      }).join('') : '';
+
+      return '<div class="profile-row" id="prow_' + idx + '">'
+        + '<div class="profile-row-main">'
+        + '<button class="profile-row-load" data-pkey="' + idx + '" onclick="loadProfileByIdx(this.dataset.pkey)" title="Laden">📥</button>'
+        + '<span class="profile-row-name">' + escHtml(shortName || name) + '</span>'
+        + '<span class="profile-row-count">' + (p.items?.length ?? 0) + ' Items</span>'
+        + '<span class="profile-row-date">' + (p.date || '') + '</span>'
+        + '<button class="profile-row-edit' + (isEdit ? ' active' : '') + '" onclick="profileToggleEdit(' + JSON.stringify(name) + ')" title="Bearbeiten">✏️</button>'
+        + '<button class="profile-row-export" data-pkey="' + idx + '" onclick="profileExportSingle(this.dataset.pkey)" title="Exportieren">⬇️</button>'
+        + '<button class="profile-row-del" data-pkey="' + idx + '" onclick="deleteProfileByIdx(this.dataset.pkey)" title="Löschen">✕</button>'
+        + '</div>'
+        + (isEdit && itemRows ? '<div class="profile-item-list">' + itemRows + '</div>' : '')
+        + '</div>';
+    }).join('');
+
+    return '<div class="profile-owner-block' + (wasOpen || profiles.length <= 5 ? ' open' : '') + '" id="' + blockId + '">'
+      + '<div class="profile-owner-hdr" onclick="document.getElementById(\'' + blockId + '\').classList.toggle(\'open\')">'
+      + '<span class="profile-owner-name">' + escHtml(owner) + '</span>'
+      + '<span class="profile-owner-count">' + profiles.length + '</span>'
+      + '<span class="profile-owner-chevron">▶</span>'
+      + '</div>'
+      + '<div class="profile-owner-rows">' + rows + '</div>'
+      + '</div>';
+  }).join('');
+
+  el.innerHTML = html;
+}
+
+function profileToggleEdit(name) {
+  _profileEditMode = _profileEditMode === name ? null : name;
+  renderProfileList();
+}
+
+function profileOpenInItemManager(profileName, itemIdx) {
+  const p = PROFILES[profileName];
+  if (!p) return;
+  const item = p.items?.[itemIdx];
+  if (!item) return;
+  const cfg = CACHE[item.group]?.[item.asset];
+  if (!cfg) { showStatus('❌ Item nicht im Cache', 'error'); return; }
+  switchTab('items');
+  selectItem(item.group, item.asset);
+  showStatus('⚙️ ' + item.asset + ' im Item Manager geöffnet', 'info');
 }
 
 // ── Export / Import ──────────────────────────────────────────────────────
@@ -2233,7 +2306,7 @@ function renderCurseTab() {
         (cursedCount ? '<span class="curse-owner-count">🔮 '+cursedCount+'</span>' : '')+
         '<span class="curse-owner-count" style="background:var(--bg3);color:var(--text2)">'+owner.items.length+'</span>'+
         (ownerFavCount ? '<span class="curse-owner-count curse-owner-fav-badge" style="background:rgba(251,191,36,.12);color:#fbbf24;border-color:rgba(251,191,36,.3)">⭐ '+ownerFavCount+'</span>' : '<span class="curse-owner-fav-badge" style="display:none"></span>')+
-        '<span class="curse-owner-count curse-owner-outfit-badge" style="background:rgba(52,211,153,0.12);color:#6ee7b7;border-color:rgba(52,211,153,0.3);'+(!ownerOutfitCount?'display:none':'')+'" title="Als Outfit markierte Items">'+ownerOutfitCount+' 👗</span>'+
+        '<span class="curse-owner-count curse-owner-outfit-badge" style="background:rgba(52,211,153,0.12);color:#6ee7b7;border-color:rgba(52,211,153,0.3);'+(!ownerOutfitCount?'display:none':'')+'" title="Als Outfit markierte Items">👗 '+ownerOutfitCount+'</span>'+
         '<button onclick="event.stopPropagation();curseSaveAllAsProfile(\'' + owner.num + '\')"'
           + ' style="margin-left:auto;background:rgba(139,92,246,0.12);border:1px solid rgba(139,92,246,0.3);color:#a78bfa;cursor:pointer;font-size:.68rem;padding:2px 8px;border-radius:4px;white-space:nowrap"'
           + ' title="Alle Curses als Outfit-Profil speichern">💾 Alle speichern</button>'+
@@ -2391,7 +2464,7 @@ function toggleCurseOutfitFlag(dbKey, cellEl) {
       const badge = block.querySelector('.curse-owner-outfit-badge');
       const cnt = block.querySelectorAll('.curse-row.outfit-flagged').length;
       if (badge) {
-        badge.textContent = cnt + ' 👗';
+        badge.textContent = '👗 ' + cnt;
         badge.style.display = cnt > 0 ? '' : 'none';
       }
     }
