@@ -44,47 +44,22 @@ async function idbSet(key, value) {
   } catch (err) { console.warn('[IDB] set:', err); }
 }
 
-// Migration localStorage → IDB (einmalig) – OPTIMIERT: Parallel statt sequenziell
+// Migration localStorage → IDB (einmalig)
 (async function() {
   const keys = ['BC_Money_v1','BC_Rank_v1','BC_Shop_v1','BC_Bots_v2','BC_BotGroups_v1',
                  'BCBot_Logs','BC_CURSE_DB_v1','BC_CURSE_COMMENTS_v1','BC_CURSE_FAV_v1'];
-  
-  // Schritt 1: Sammle alle Daten und Parse sie ERST (synchron)
-  const toMigrate = [];
   for (const key of keys) {
     try {
       const raw = localStorage.getItem(key);
       if (!raw) continue;
-      const parsed = JSON.parse(raw);
-      toMigrate.push({ key, data: parsed });
-    } catch(e) { console.warn('[IDB] Parse Error:', key, e); }
-  }
-  
-  // Schritt 2: Überprüfe welche nicht existieren und migriere PARALLEL
-  const migratePromises = toMigrate.map(async ({ key, data }) => {
-    try {
-      const existing = await idbGet(key);
-      if (existing === null) {
-        await idbSet(key, data);
+      if ((await idbGet(key)) === null) {
+        await idbSet(key, JSON.parse(raw));
         console.info('[IDB] Migriert:', key);
       }
       localStorage.removeItem(key);
     } catch(e) { console.warn('[IDB] Migration:', key, e); }
-  });
-  
-  // Warte auf ALLE parallel
-  await Promise.all(migratePromises);
-  console.info('[IDB] Migration Complete:', toMigrate.length, 'Keys');
+  }
 })();
-
-// OPTIMIERT: Globale Debounce-Funktion für Input-Handler
-const _debounce = (fn, delay = 300) => {
-  let timeoutId;
-  return (...args) => {
-    clearTimeout(timeoutId);
-    timeoutId = setTimeout(() => fn(...args), delay);
-  };
-};
 
 // Echo's Clothing Extension – Chinesisch → Englisch Lookup
 // Quelle: Echo_Extension_CN_Items.docx
@@ -456,131 +431,9 @@ let classicOptionSel = 0;
 // ── Baseline / Punishment ────────────────────────────
 let baselinePropVals = {};
 
-// ── Outfit Profiles (NESTED: owner → profileName → data) ──────────
-let PROFILES = {};  // Structure: { owner: { profileName: { name, date, items, isFav } } }
-try { 
-  const raw = localStorage.getItem('BC_PROFILES_v11') || '{}';
-  const loaded = JSON.parse(raw);
-  
-  // Detect Format: Check if it's v2 nested structure or v1 flat
-  const isV2Nested = Object.values(loaded).some(v => 
-    v && typeof v === 'object' && 
-    Object.values(v).some(sub => sub?.items && Array.isArray(sub.items))
-  );
-  
-  // Force Migration auch von v2-flat ("Legacy" ordner) zurück zu real owners
-  let needsMigration = false;
-  
-  if (!isV2Nested) {
-    needsMigration = true;
-    console.log('🔴 v1 Format detected - Full migration needed');
-  } else if (loaded['Legacy']) {
-    // Detect if we have a "Legacy" folder from previous bad migration
-    const legacyCount = Object.keys(loaded['Legacy'] || {}).length;
-    const otherOwners = Object.keys(loaded).filter(k => k !== 'Legacy' && loaded[k] && typeof loaded[k] === 'object');
-    if (legacyCount > 0 && otherOwners.length === 0) {
-      needsMigration = true;
-      console.log('🟡 Legacy-only Format detected - Need real owner extraction');
-    }
-  }
-  
-  if (needsMigration) {
-    console.log('🔄 FORCE MIGRATION: v1/Legacy → v2 with Owner parsing...');
-    const migrated = {};
-    
-    // Flatten alle Strukturen zu einem einzigen Array zum Verarbeiten
-    const allProfiles = [];
-    
-    if (loaded['Legacy']) {
-      // Legacy-Ordner vorhanden - nimm seine Profile
-      for (const [pname, profile] of Object.entries(loaded['Legacy'])) {
-        if (profile && profile.items) {
-          allProfiles.push({ originalKey: pname, profile });
-        }
-      }
-    } else {
-      // Direkt v1-Format
-      for (const [key, profile] of Object.entries(loaded)) {
-        if (profile && profile.items && typeof profile.items === 'object') {
-          allProfiles.push({ originalKey: key, profile });
-        }
-      }
-    }
-    
-    // Parse jedes Profil und extrahiere Owner
-    allProfiles.forEach(({ originalKey, profile }) => {
-      let owner = 'Other';
-      let profileName = originalKey;
-      
-      // Versuch 1: Split bei " - " (z.B. "Name - Owner")
-      if (originalKey.includes(' - ')) {
-        const parts = originalKey.split(' - ');
-        const possibleOwner = parts[parts.length - 1].trim();
-        
-        // Validierung: Owner sollte relativ kurz sein (< 30 chars), nicht "items", "date" etc
-        if (possibleOwner.length < 30 && 
-            possibleOwner.length > 1 && 
-            possibleOwner !== 'items' && 
-            possibleOwner !== 'date' && 
-            possibleOwner !== 'name' &&
-            !possibleOwner.startsWith('[')) {
-          owner = possibleOwner;
-          profileName = parts.slice(0, -1).join(' - ').trim();
-        }
-      }
-      
-      if (!migrated[owner]) migrated[owner] = {};
-      migrated[owner][profileName] = {
-        ...profile,
-        owner: owner,
-        date: profile.date || new Date().toLocaleDateString('de-DE'),
-        items: profile.items || []
-      };
-    });
-    
-    PROFILES = migrated;
-    localStorage.setItem('BC_PROFILES_v11', JSON.stringify(PROFILES));
-    
-    // Statistik
-    let totalProfiles = 0;
-    const stats = {};
-    for (const [owner, profiles] of Object.entries(migrated)) {
-      const count = Object.keys(profiles).length;
-      stats[owner] = count;
-      totalProfiles += count;
-    }
-    console.log('✅ MIGRATION COMPLETE:', totalProfiles, 'profiles', stats);
-  } else {
-    PROFILES = loaded;
-    console.log('✅ PROFILES v2 already in correct format');
-  }
-} catch (e) { 
-  console.warn('⚠️ PROFILES load error:', e); 
-  PROFILES = {};
-}
-
-// NEW: Profile Favorites
-let PROFILE_FAVOURITES = new Set();
-function _saveProfileFavourites() { localStorage.setItem('BC_PROFILES_FAV_v1', JSON.stringify([...PROFILE_FAVOURITES])); }
-
-// Load profile favorites on startup
-try {
-  const favs = localStorage.getItem('BC_PROFILES_FAV_v1');
-  if (favs) JSON.parse(favs).forEach(k => PROFILE_FAVOURITES.add(k));
-} catch {}
-
-function toggleProfileFavourite(ownerName, profileName, cellEl) {
-  const key = ownerName + ':' + profileName;
-  const wasFav = PROFILE_FAVOURITES.has(key);
-  if (wasFav) PROFILE_FAVOURITES.delete(key); else PROFILE_FAVOURITES.add(key);
-  _saveProfileFavourites();
-  if (cellEl) {
-    const isFav = !wasFav;
-    cellEl.innerHTML = isFav ? '⭐' : '<span style="opacity:.25">☆</span>';
-  } else {
-    renderProfileList();
-  }
-}
+// ── Outfit Profiles ──────────────────────────────────
+let PROFILES = {};
+try { PROFILES = JSON.parse(localStorage.getItem('BC_PROFILES_v11') || '{}'); } catch {}
 
 
 // ── Init ─────────────────────────────────────────────
@@ -1840,15 +1693,10 @@ function closeProfiles() { switchTab('outfit'); }
 
 function saveProfile() {
   if (!OUTFIT.length) { showStatus('❌ Erst Outfit-Items hinzufügen!', 'error'); return; }
-  
-  // NEW: Owner name eingeben
-  const ownerName = prompt('Owner-Name (z.B. Yu, Ava, etc.):', '');
-  if (!ownerName?.trim()) { showStatus('❌ Owner-Name erforderlich!', 'error'); return; }
-  
-  const profileName = document.getElementById('profileNameInput').value.trim();
-  if (!profileName) { showStatus('❌ Profilname eingeben!', 'error'); return; }
+  const name = document.getElementById('profileNameInput').value.trim();
+  if (!name) { showStatus('❌ Profilname eingeben!', 'error'); return; }
 
-  // Nur die nötigen Felder speichern
+  // Nur die nötigen Felder speichern – cfg/propCode/craftStr sind zu groß (localStorage-Limit)
   const SAVE_KEYS = ['group','asset','colors','tr','trStr','typeStr','tightCode','lock','lockParams','isOther','memberNum','label'];
   const stripped = OUTFIT.map(item => {
     const out = {};
@@ -1856,42 +1704,22 @@ function saveProfile() {
     return out;
   });
 
-  // NESTED: owner → profileName
-  if (!PROFILES[ownerName]) PROFILES[ownerName] = {};
-  PROFILES[ownerName][profileName] = { 
-    name: profileName, 
-    owner: ownerName,
-    date: new Date().toLocaleDateString('de-DE'), 
-    items: stripped,
-    isFav: false
-  };
+  PROFILES[name] = { name, date: new Date().toLocaleDateString('de-DE'), items: stripped };
 
   try {
     const json = JSON.stringify(PROFILES);
     localStorage.setItem('BC_PROFILES_v11', json);
     renderProfileList();
     document.getElementById('profileNameInput').value = '';
-    showStatus('✅ Profil "' + profileName + '" unter ' + ownerName + ' gespeichert (' + stripped.length + ' Items)', 'success');
+    showStatus('✅ Profil "' + name + '" gespeichert (' + stripped.length + ' Items)', 'success');
   } catch(e) {
     showStatus('❌ Speichern fehlgeschlagen: ' + e.message, 'error');
   }
 }
 
-function loadProfile(ownerName, profileName) {
-  // Can be called as loadProfile('owner:profileName') or loadProfile('owner', 'profileName')
-  let owner, profile;
-  
-  if (ownerName && !profileName && ownerName.includes(':')) {
-    // Format: 'owner:profileName'
-    const parts = ownerName.split(':');
-    owner = parts[0];
-    profileName = parts[1];
-  } else {
-    owner = ownerName;
-  }
-  
-  profile = PROFILES[owner]?.[profileName];
-  if (!profile) { showStatus('❌ Profil nicht gefunden!', 'error'); return; }
+function loadProfile(name) {
+  const profile = PROFILES[name];
+  if (!profile) return;
 
   if (!Object.keys(CACHE).length) {
     showStatus('❌ Cache nicht geladen! Erst Dump-Script ausführen und Cache importieren.', 'error');
@@ -1944,241 +1772,43 @@ function loadProfile(ownerName, profileName) {
   _autoOutfitCode();
 }
 
-function forceProfilesMigration() {
-  if (!confirm('⚠️ FORCE MIGRATION - Dies wird "Legacy" Ordner splitten und richtig organisieren.\n\nWirklich fortfahren?')) return;
-  
-  console.log('🔴 FORCE MIGRATION INITIATED');
-  const raw = localStorage.getItem('BC_PROFILES_v11') || '{}';
-  const loaded = JSON.parse(raw);
-  
-  const migrated = {};
-  const allProfiles = [];
-  
-  // Sammle ALLE Profile aus jeder Struktur
-  for (const [key, val] of Object.entries(loaded)) {
-    // Fallback v1: Direktes Profil mit items
-    if (val && val.items && Array.isArray(val.items)) {
-      allProfiles.push({ originalKey: key, profile: val, source: 'flat' });
-    }
-    // Nested v2: Owner mit Profilen drin
-    else if (val && typeof val === 'object' && !Array.isArray(val)) {
-      for (const [pname, profile] of Object.entries(val)) {
-        if (profile && profile.items && Array.isArray(profile.items)) {
-          allProfiles.push({ originalKey: pname, profile, source: 'nested:' + key, owner: key });
-        }
-      }
-    }
-  }
-  
-  console.log('📦 Found ' + allProfiles.length + ' profiles total');
-  
-  // Parse jedes Profil
-  allProfiles.forEach(({ originalKey, profile, owner }) => {
-    let finalOwner = owner || 'Other';
-    let profileName = originalKey;
-    
-    // Extrahiere Owner aus Name wenn vorhanden
-    if (originalKey.includes(' - ') && !owner) {
-      const parts = originalKey.split(' - ');
-      const possibleOwner = parts[parts.length - 1].trim();
-      
-      if (possibleOwner.length < 30 && 
-          possibleOwner.length > 1 && 
-          possibleOwner !== 'items' && 
-          possibleOwner !== 'date' && 
-          possibleOwner !== 'name' &&
-          !possibleOwner.startsWith('[')) {
-        finalOwner = possibleOwner;
-        profileName = parts.slice(0, -1).join(' - ').trim();
-      }
-    }
-    
-    if (!migrated[finalOwner]) migrated[finalOwner] = {};
-    migrated[finalOwner][profileName] = {
-      ...profile,
-      owner: finalOwner,
-      date: profile.date || new Date().toLocaleDateString('de-DE'),
-      items: profile.items || []
-    };
-  });
-  
-  // Speichere
-  PROFILES = migrated;
-  localStorage.setItem('BC_PROFILES_v11', JSON.stringify(PROFILES));
-  
-  // Stats
-  let totalProfiles = 0;
-  const stats = {};
-  for (const [owner, profiles] of Object.entries(migrated)) {
-    const count = Object.keys(profiles).length;
-    stats[owner] = count;
-    totalProfiles += count;
-  }
-  
-  console.log('✅ MIGRATION SUCCESS:', totalProfiles, 'profiles organized:', stats);
+function deleteProfile(name) {
+  if (!confirm('Profil "' + name + '" löschen?')) return;
+  delete PROFILES[name];
+  try { localStorage.setItem('BC_PROFILES_v11', JSON.stringify(PROFILES)); } catch {}
   renderProfileList();
-  showStatus('✅ Migration abgeschlossen: ' + totalProfiles + ' Profile neu organisiert!', 'success');
-}
-
-function renameProfile(owner, oldProfileName) {
-  const oldProfile = PROFILES[owner]?.[oldProfileName];
-  if (!oldProfile) { showStatus('❌ Profil nicht gefunden!', 'error'); return; }
-  
-  const newName = prompt('Neuer Name für Profil:', oldProfileName);
-  if (!newName?.trim() || newName === oldProfileName) return;
-  
-  const trimmed = newName.trim();
-  
-  // Prüfe auf Duplikate
-  if (PROFILES[owner][trimmed] && !confirm('Profil "' + trimmed + '" existiert bereits. Überschreiben?')) return;
-  
-  // Umbenennen
-  PROFILES[owner][trimmed] = { ...oldProfile, name: trimmed };
-  delete PROFILES[owner][oldProfileName];
-  
-  // Favoriten aktualisieren wenn nötig
-  const oldKey = owner + ':' + oldProfileName;
-  const newKey = owner + ':' + trimmed;
-  if (PROFILE_FAVOURITES.has(oldKey)) {
-    PROFILE_FAVOURITES.delete(oldKey);
-    PROFILE_FAVOURITES.add(newKey);
-    _saveProfileFavourites();
-  }
-  
-  try {
-    localStorage.setItem('BC_PROFILES_v11', JSON.stringify(PROFILES));
-    renderProfileList();
-    showStatus('✅ Profil umbenannt: "' + oldProfileName + '" → "' + trimmed + '"', 'success');
-  } catch(e) {
-    showStatus('❌ Umbenennen fehlgeschlagen: ' + e.message, 'error');
-  }
-}
-
-function renameOwner(oldOwner) {
-  if (!PROFILES[oldOwner] || !Object.keys(PROFILES[oldOwner]).length) { 
-    showStatus('❌ Owner-Ordner nicht gefunden!', 'error'); 
-    return; 
-  }
-  
-  const newOwner = prompt('Neuer Name für Ordner:', oldOwner);
-  if (!newOwner?.trim() || newOwner === oldOwner) return;
-  
-  const trimmed = newOwner.trim();
-  
-  // Prüfe auf Duplikate
-  if (PROFILES[trimmed] && !confirm('Ordner "' + trimmed + '" existiert bereits. Zusammenführen?')) return;
-  
-  // Merge oder Create
-  if (!PROFILES[trimmed]) PROFILES[trimmed] = {};
-  
-  // Alle Profile des alten Owners zum neuen verschieben
-  for (const [pname, profile] of Object.entries(PROFILES[oldOwner])) {
-    PROFILES[trimmed][pname] = { ...profile, owner: trimmed };
-    
-    // Favoriten-Keys aktualisieren
-    const oldKey = oldOwner + ':' + pname;
-    const newKey = trimmed + ':' + pname;
-    if (PROFILE_FAVOURITES.has(oldKey)) {
-      PROFILE_FAVOURITES.delete(oldKey);
-      PROFILE_FAVOURITES.add(newKey);
-    }
-  }
-  
-  delete PROFILES[oldOwner];
-  
-  try {
-    localStorage.setItem('BC_PROFILES_v11', JSON.stringify(PROFILES));
-    _saveProfileFavourites();
-    renderProfileList();
-    showStatus('✅ Ordner umbenannt: "' + oldOwner + '" → "' + trimmed + '"', 'success');
-  } catch(e) {
-    showStatus('❌ Umbenennen fehlgeschlagen: ' + e.message, 'error');
-  }
 }
 
 function renderProfileList() {
   const el = document.getElementById('profileListEl');
   const q = (document.getElementById('profileSearch')?.value || '').toLowerCase();
-  
-  // NESTED: owner → { profileName → profile }
-  // Filter nur echte Owner-Ordner (Objects mit Profile-Daten drin, nicht primitive values)
-  const owners = Object.keys(PROFILES).filter(key => {
-    const val = PROFILES[key];
-    // Ein Owner ist ein Object mit verschachtelten Profile-Objects
-    return val && typeof val === 'object' && !Array.isArray(val) && 
-           // und ist NICHT selbst ein v1-Profil (das würde items, date, name haben)
-           Object.values(val).some(v => v && typeof v === 'object' && v.items);
-  }).sort();
-  if (!owners.length) {
+  const keys = Object.keys(PROFILES).filter(k => !q || k.toLowerCase().includes(q));
+  if (!keys.length) {
     el.innerHTML = '<p style="color:var(--text3);font-size:.8rem">Noch keine Profile gespeichert.</p>';
     return;
   }
-  
-  let html = '<div class="profile-list">';
-  let profileIdx = 0;
-  const indexMap = {};  // profileIdx → { owner, profileName }
-  
-  owners.forEach(owner => {
-    const profileNames = Object.keys(PROFILES[owner] || {}).sort();
-    if (!profileNames.length) return;
-    
-    // Filter by search
-    const filtered = profileNames.filter(pname => !q || owner.toLowerCase().includes(q) || pname.toLowerCase().includes(q));
-    if (!filtered.length) return;
-    
-    // Owner folder header with rename button
-    html += '<div class="profile-owner-section" style="margin-bottom:12px;border-left:3px solid var(--purple);padding-left:8px">';
-    html += '<div style="display:flex;align-items:center;gap:8px">'
-      + '<span style="font-weight:600;color:var(--purple);font-size:.75rem">📁 ' + escHtml(owner) + '</span>'
-      + '<button class="btn btn-primary" style="font-size:.65rem;padding:2px 4px;margin-left:auto" onclick="renameOwner(\'' + owner.replace(/'/g,"&apos;") + '\')" title="Ordner umbenennen">✏️ Umbenennen</button>'
-      + '</div>';
-    
-    // Profiles under this owner
-    filtered.forEach(pname => {
-      const p = PROFILES[owner][pname];
-      const isFav = PROFILE_FAVOURITES.has(owner + ':' + pname);
-      
-      indexMap[profileIdx] = { owner, profileName: pname };
-      
-      html += '<div class="profile-card" style="margin-bottom:6px;padding:8px;background:var(--bg3);border-radius:4px;border:1px solid var(--border)">'
-        + '<div style="display:flex;gap:4px;align-items:center">'
-        + '<span class="fav-star" onclick="event.stopPropagation();toggleProfileFavourite(\'' + owner.replace(/'/g,"&apos;") + '\',\'' + pname.replace(/'/g,"&apos;") + '\',this)" style="cursor:pointer;font-size:1rem">'
-          + (isFav ? '⭐' : '<span style="opacity:.25">☆</span>')
-        + '</span>'
-        + '<div style="flex:1">'
-        + '<div class="profile-card-name" style="font-size:.75rem;font-weight:500">📋 ' + escHtml(pname) + '</div>'
-        + '<div class="profile-card-info" style="font-size:.65rem;color:var(--text3)">' + (p.items?.length ?? 0) + ' Items · ' + (p.date || '') + '</div>'
-        + '</div>'
-        + '<div class="btn-row" style="display:flex;gap:4px;margin-left:auto">'
-        + '<button class="btn btn-green" style="font-size:.65rem;padding:3px 6px" data-pkey="' + profileIdx + '" onclick="loadProfileByIdx(this.dataset.pkey)">📥</button>'
-        + '<button class="btn btn-primary" style="font-size:.65rem;padding:3px 6px" onclick="renameProfile(\'' + owner.replace(/'/g,"&apos;") + '\',\'' + pname.replace(/'/g,"&apos;") + '\')" title="Profil umbenennen">✏️</button>'
-        + '<button class="btn btn-primary" style="font-size:.65rem;padding:3px 6px" data-pkey="' + profileIdx + '" onclick="profileExportSingle(this.dataset.pkey)" title="Exportieren">⬇️</button>'
-        + '<button class="btn btn-red" style="font-size:.65rem;padding:3px 6px" data-pkey="' + profileIdx + '" onclick="deleteProfileByIdx(this.dataset.pkey)">🗑️</button>'
-        + '</div>'
-        + '</div></div>';
-      
-      profileIdx++;
-    });
-    
-    html += '</div>';  // close owner section
-  });
-  
-  html += '</div>';
-  el.innerHTML = html;
-  el._profileIndexMap = indexMap;
+  el.innerHTML = '<div class="profile-list">' + keys.map((k, idx) => {
+    const p = PROFILES[k];
+    return '<div class="profile-card">'
+      + '<div class="profile-card-name">📁 ' + p.name + '</div>'
+      + '<div class="profile-card-info">' + (p.items?.length ?? 0) + ' Items · ' + (p.date || '') + '</div>'
+      + '<div class="btn-row" style="margin-top:6px">'
+      + '<button class="btn btn-green" style="flex:1;font-size:.68rem" data-pkey="' + idx + '" onclick="loadProfileByIdx(this.dataset.pkey)">📥 Laden</button>'
+      + '<button class="btn btn-primary" style="font-size:.68rem;padding:4px 7px" data-pkey="' + idx + '" onclick="profileExportSingle(this.dataset.pkey)" title="Dieses Profil exportieren">⬇️</button>'
+      + '<button class="btn btn-red" style="font-size:.68rem" data-pkey="' + idx + '" onclick="deleteProfileByIdx(this.dataset.pkey)">🗑️</button>'
+      + '</div></div>';
+  }).join('') + '</div>';
+  el._profileKeys = keys;
 }
 
 // ── Export / Import ──────────────────────────────────────────────────────
 
 // Alle Profile exportieren
 function profilesExportAll() {
-  let count = 0;
-  for (const owner of Object.keys(PROFILES)) {
-    count += Object.keys(PROFILES[owner] || {}).length;
-  }
+  const count = Object.keys(PROFILES).length;
   if (!count) { showStatus('❌ Keine Profile zum Exportieren', 'error'); return; }
   const payload = {
-    _meta: { exportedAt: new Date().toISOString(), version: 2, count },
+    _meta: { exportedAt: new Date().toISOString(), version: 1, count },
     profiles: PROFILES,
   };
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
@@ -2190,30 +1820,30 @@ function profilesExportAll() {
   showStatus('✅ ' + count + ' Profile exportiert', 'success');
 }
 
-// Einzelnes Profil exportieren (per Index aus _profileIndexMap)
+// Einzelnes Profil exportieren (per Index aus _profileKeys)
 function profileExportSingle(idx) {
   const el = document.getElementById('profileListEl');
-  const map = el._profileIndexMap;
-  if (!map || !map[idx]) return;
-  const { owner, profileName } = map[idx];
-  const profile = PROFILES[owner]?.[profileName];
+  const keys = el._profileKeys;
+  if (!keys || !keys[idx]) return;
+  const name = keys[idx];
+  const profile = PROFILES[name];
   if (!profile) return;
   const payload = {
-    _meta: { exportedAt: new Date().toISOString(), version: 2, count: 1 },
-    profiles: { [owner]: { [profileName]: profile } },
+    _meta: { exportedAt: new Date().toISOString(), version: 1, count: 1 },
+    profiles: { [name]: profile },
   };
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   // Sanitize filename
-  const safeName = (owner + '_' + profileName).replace(/[^a-zA-Z0-9_\- ]/g, '_').trim().slice(0, 60);
+  const safeName = name.replace(/[^a-zA-Z0-9_\- ]/g, '_').trim().slice(0, 60);
   a.download = 'Profil_' + safeName + '.json';
   a.click();
   URL.revokeObjectURL(a.href);
-  showStatus('✅ Profil "' + profileName + '" von ' + owner + ' exportiert', 'success');
+  showStatus('✅ Profil "' + name + '" exportiert', 'success');
 }
 
-// Profile importieren (mit Duplikat-Behandlung und v1→v2 Migration)
+// Profile importieren (mit Duplikat-Behandlung)
 function profilesImport() {
   const inp = document.createElement('input');
   inp.type = 'file';
@@ -2225,51 +1855,25 @@ function profilesImport() {
     reader.onload = ev => {
       try {
         const data = JSON.parse(ev.target.result);
+        // Support both {profiles:{...}} format and raw {name:{items:[...]}} format
         const incoming = data.profiles ?? data;
         if (typeof incoming !== 'object' || !Object.keys(incoming).length) {
           showStatus('❌ Keine Profile in der Datei gefunden', 'error');
           return;
         }
-        
         let added = 0, skipped = 0, overwritten = 0;
-        
-        // Detect format: v1 (flat) vs v2 (nested with owner)
-        const isV2 = Object.values(incoming).some(v => v && typeof v === 'object' && Object.values(v).some(pv => pv?.items));
-        
-        if (isV2) {
-          // v2: nested { owner: { profileName: profile } }
-          for (const [owner, profiles] of Object.entries(incoming)) {
-            if (!PROFILES[owner]) PROFILES[owner] = {};
-            for (const [pname, profile] of Object.entries(profiles || {})) {
-              if (!profile?.items) continue;
-              if (PROFILES[owner][pname]) {
-                // Eindeutigen Namen vergeben
-                const unique = _uniqueProfileName(owner, pname);
-                PROFILES[owner][unique] = { ...profile, name: unique, owner };
-                overwritten++;
-              } else {
-                PROFILES[owner][pname] = { ...profile, owner };
-                added++;
-              }
-            }
-          }
-        } else {
-          // v1: flat { profileName: profile } → migrate to v2 under "Imported"
-          const owner = 'Imported';
-          if (!PROFILES[owner]) PROFILES[owner] = {};
-          for (const [pname, profile] of Object.entries(incoming)) {
-            if (!profile?.items) continue;
-            if (PROFILES[owner][pname]) {
-              const unique = _uniqueProfileName(owner, pname);
-              PROFILES[owner][unique] = { ...profile, name: unique, owner };
-              overwritten++;
-            } else {
-              PROFILES[owner][pname] = { ...profile, owner };
-              added++;
-            }
+        for (const [name, profile] of Object.entries(incoming)) {
+          if (!profile?.items) continue;
+          if (PROFILES[name]) {
+            // Eindeutigen Namen vergeben statt leise überschreiben
+            const unique = _uniqueProfileName(name);
+            PROFILES[unique] = { ...profile, name: unique };
+            overwritten++;
+          } else {
+            PROFILES[name] = profile;
+            added++;
           }
         }
-        
         localStorage.setItem('BC_PROFILES_v11', JSON.stringify(PROFILES));
         renderProfileList();
         const msg = [
@@ -2289,18 +1893,16 @@ function profilesImport() {
 
 function loadProfileByIdx(idx) {
   const el = document.getElementById('profileListEl');
-  const map = el._profileIndexMap;
-  if (!map || !map[idx]) return;
-  const { owner, profileName } = map[idx];
-  loadProfile(owner, profileName);
+  const keys = el._profileKeys;
+  if (!keys || !keys[idx]) return;
+  loadProfile(keys[idx]);
 }
 
 function deleteProfileByIdx(idx) {
   const el = document.getElementById('profileListEl');
-  const map = el._profileIndexMap;
-  if (!map || !map[idx]) return;
-  const { owner, profileName } = map[idx];
-  deleteProfile(owner, profileName);
+  const keys = el._profileKeys;
+  if (!keys || !keys[idx]) return;
+  deleteProfile(keys[idx]);
 }
 
 // Init profile button visibility
@@ -2422,32 +2024,6 @@ function _saveCurseComments() { idbSet('BC_CURSE_COMMENTS_v1', CURSE_COMMENTS); 
 // ── Favoriten ────────────────────────────────────────────────
 let CURSE_FAVOURITES = new Set();
 function _saveCurseFavourites() { idbSet('BC_CURSE_FAV_v1', [...CURSE_FAVOURITES]); }
-// ── OPTIMIERT: Outfit-Profile gespeichert (ähnlich wie Favoriten) ────
-let CURSE_OUTFIT_SAVED = new Set();
-function _saveCurseOutfitSaved() { idbSet('BC_CURSE_OUTFIT_SAVED_v1', [...CURSE_OUTFIT_SAVED]); }
-function toggleCurseOutfitSaved(dbKey, cellEl) {
-  const wasSaved = CURSE_OUTFIT_SAVED.has(dbKey);
-  if (wasSaved) CURSE_OUTFIT_SAVED.delete(dbKey); else CURSE_OUTFIT_SAVED.add(dbKey);
-  _saveCurseOutfitSaved();
-  if (cellEl) {
-    const isSaved = !wasSaved;
-    cellEl.innerHTML = isSaved ? '✅' : '<span style="opacity:.25;font-size:.85em">☐</span>';
-    const row = cellEl.closest('tr');
-    if (row) row.classList.toggle('outfit-saved', isSaved);
-    // OPTIMIERT: Outfit-Zähler im Owner-Block aktualisieren
-    const block = cellEl.closest('.curse-owner-block');
-    if (block) {
-      const badge = block.querySelector('.curse-owner-outfit-badge');
-      const cnt = block.querySelectorAll('.curse-row.outfit-saved').length;
-      if (badge) {
-        badge.textContent = '✅ ' + cnt;
-        badge.style.display = cnt > 0 ? '' : 'none';
-      }
-    }
-  } else {
-    renderCurseTab();
-  }
-}
 function toggleCurseFavourite(dbKey, cellEl) {
   const wasFav = CURSE_FAVOURITES.has(dbKey);
   if (wasFav) CURSE_FAVOURITES.delete(dbKey); else CURSE_FAVOURITES.add(dbKey);
@@ -2624,12 +2200,6 @@ function renderCurseTab() {
       const k2 = (i.Besitzer?.Nummer ?? '') + ':' + i.ItemName + ':' + i.CraftName;
       return CURSE_FAVOURITES.has(k2);
     }).length;
-    
-    // OPTIMIERT: Anzahl gespeicherter Outfits für diesen Owner
-    const ownerOutfitCount = owner.items.filter(i => {
-      const k2 = (i.Besitzer?.Nummer ?? '') + ':' + i.ItemName + ':' + i.CraftName;
-      return CURSE_OUTFIT_SAVED.has(k2);
-    }).length;
 
     block.innerHTML =
       '<div class="curse-owner-hdr" onclick="toggleCurseOwner(\'' + blockId + '\')">'+
@@ -2639,10 +2209,6 @@ function renderCurseTab() {
         (cursedCount ? '<span class="curse-owner-count">🔮 '+cursedCount+'</span>' : '')+
         '<span class="curse-owner-count" style="background:var(--bg3);color:var(--text2)">'+owner.items.length+'</span>'+
         (ownerFavCount ? '<span class="curse-owner-count curse-owner-fav-badge" style="background:rgba(251,191,36,.12);color:#fbbf24;border-color:rgba(251,191,36,.3)">⭐ '+ownerFavCount+'</span>' : '<span class="curse-owner-fav-badge" style="display:none"></span>')+
-        (ownerOutfitCount ? '<span class="curse-owner-count curse-owner-outfit-badge" style="background:rgba(74,222,128,.12);color:#4ade80;border-color:rgba(74,222,128,.3)">✅ '+ownerOutfitCount+'</span>' : '<span class="curse-owner-outfit-badge" style="display:none"></span>')+
-        '<button onclick="event.stopPropagation();markOutfitsByComment(\'' + owner.num + '\')"'
-          + ' style="background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.3);color:#22c55e;cursor:pointer;font-size:.68rem;padding:2px 8px;border-radius:4px;margin-left:4px;white-space:nowrap"'
-          + ' title="Alle Items mit \'Outfit\' im Kommentar markieren">📝 Auto-Mark</button>'+
         '<button onclick="event.stopPropagation();curseSaveAllAsProfile(\'' + owner.num + '\')"'
           + ' style="margin-left:auto;background:rgba(139,92,246,0.12);border:1px solid rgba(139,92,246,0.3);color:#a78bfa;cursor:pointer;font-size:.68rem;padding:2px 8px;border-radius:4px;white-space:nowrap"'
           + ' title="Alle Curses als Outfit-Profil speichern">💾 Alle speichern</button>'+
@@ -2650,7 +2216,6 @@ function renderCurseTab() {
       '</div>'+
       '<table class="curse-rows"><thead><tr style="background:var(--bg3)">'+
         '<th style="padding:4px 4px;font-size:.63rem;color:var(--text3);text-align:center;font-weight:500" title="Favorit">⭐</th>'+
-        '<th style="padding:4px 4px;font-size:.63rem;color:var(--text3);text-align:center;font-weight:500" title="Outfit gespeichert">✅</th>'+
         '<th style="padding:4px 10px;font-size:.63rem;color:var(--text3);text-align:left;font-weight:500">Name</th>'+
         '<th style="padding:4px 10px;font-size:.63rem;color:var(--text3);text-align:left;font-weight:500">Item</th>'+
         '<th style="padding:4px 10px;font-size:.63rem;color:var(--text3);text-align:left;font-weight:500">Gruppe</th>'+
@@ -2675,8 +2240,7 @@ function renderCurseTab() {
 
       const tr = document.createElement('tr');
       const isFav = CURSE_FAVOURITES.has(dbKey);
-      const isOutfitSaved = CURSE_OUTFIT_SAVED.has(dbKey);
-    tr.className = 'curse-row' + (isLSCG ? ' lscg' : '') + (isFav ? ' fav' : '') + (isOutfitSaved ? ' outfit-saved' : '');
+    tr.className = 'curse-row' + (isLSCG ? ' lscg' : '') + (isFav ? ' fav' : '');
       tr.id = rowId;
 
       const lscgText = isLSCG
@@ -2687,9 +2251,6 @@ function renderCurseTab() {
       tr.innerHTML =
         '<td class="fav-cell" onclick="toggleCurseFavourite(\'' + dbKey.replace(/'/g,"&apos;") + '\',this)" title="Favorit">'+
           (isFav ? '⭐' : '<span style="opacity:.25;font-size:.85em">☆</span>')+
-        '</td>'+
-        '<td class="outfit-cell" onclick="toggleCurseOutfitSaved(\'' + dbKey.replace(/'/g,"&apos;") + '\',this)" title="Als Outfit-Profil gespeichert" style="cursor:pointer;text-align:center">'+
-          (isOutfitSaved ? '✅' : '<span style="opacity:.25;font-size:.85em">☐</span>')+
         '</td>'+
         '<td class="cn"><span class="cursor-detail-toggle" onclick="toggleCurseDetail(\'' + detId + '\',\'' + rowId + '\')">▶</span>'+escHtml(entry.CraftName)+(echoTranslate(entry.CraftName)?'<span style="font-size:.58rem;color:#a78bfa;margin-left:4px">('+echoTranslate(entry.CraftName)+')</span>':'')+'</td>'+
         '<td class="item">'+escHtml(entry.ItemName)+(echoTranslate(entry.ItemName)?'<span style="font-size:.58rem;color:var(--text3);margin-left:4px">('+echoTranslate(entry.ItemName)+')</span>':'')+'</td>'+
@@ -2844,43 +2405,28 @@ function _curseEntryToProfileItem(entry) {
 
 // Hilfsfunktion: einzigartigen Profilnamen generieren
 // Basis: "{craftName} - {ownerName}", bei Duplikat: "...v2", "...v3", ...
-function _uniqueProfileName(ownerName, baseName) {
-  if (!PROFILES[ownerName] || !PROFILES[ownerName][baseName]) return baseName;
+function _uniqueProfileName(base) {
+  if (!PROFILES[base]) return base;
   let i = 2;
-  while (PROFILES[ownerName][baseName + 'v' + i]) i++;
-  return baseName + 'v' + i;
+  while (PROFILES[base + 'v' + i]) i++;
+  return base + 'v' + i;
 }
 
 // Core save helper – called after we have the item list (online or fallback)
-function _doSaveProfile(items, defaultName, ownerName) {
-  // defaultName format: "{CraftName} - {OwnerName}" → extract owner if not provided
-  if (!ownerName && defaultName.includes(' - ')) {
-    const parts = defaultName.split(' - ');
-    ownerName = parts[parts.length - 1].trim();  // Last part is owner
-  }
-  ownerName = ownerName || 'User';
-  
-  const suggested = _uniqueProfileName(ownerName, defaultName);
+function _doSaveProfile(items, defaultName) {
+  const suggested = _uniqueProfileName(defaultName);
   const name = prompt('Profil-Name:', suggested);
   if (!name?.trim()) return;
   const trimmed = name.trim();
-  
-  if (!PROFILES[ownerName]) PROFILES[ownerName] = {};
-  if (PROFILES[ownerName][trimmed] && !confirm('Profil "' + trimmed + '" unter ' + ownerName + ' existiert bereits. Überschreiben?')) return;
-  
-  // NESTED: owner → profileName
-  PROFILES[ownerName][trimmed] = {
+  if (PROFILES[trimmed] && !confirm('Profil "' + trimmed + '" existiert bereits. Überschreiben?')) return;
+  PROFILES[trimmed] = {
     name: trimmed,
-    owner: ownerName,
     date: new Date().toLocaleDateString('de-DE'),
-    items,
-    isFav: false
+    items
   };
-  
   try {
     localStorage.setItem('BC_PROFILES_v11', JSON.stringify(PROFILES));
-    renderProfileList();
-    showStatus('✅ Profil "' + trimmed + '" unter ' + ownerName + ' gespeichert (' + items.length + ' Items)!', 'success');
+    showStatus('✅ Profil "' + trimmed + '" gespeichert (' + items.length + ' Items) – nutzbar in Bot-Triggern!', 'success');
   } catch(e) { showStatus('❌ Speichern fehlgeschlagen: ' + e.message, 'error'); }
 }
 
@@ -2919,92 +2465,17 @@ function curseSaveAsProfile(rowIdOrDbKey) {
   const dbKey = _curseEntryMap[rowIdOrDbKey] ?? rowIdOrDbKey;
   const entry = CURSE_DB[dbKey];
   if (!entry) { showStatus('❌ Eintrag nicht gefunden', 'error'); return; }
-  
-  // OPTIMIERT: Automatisch Häkchen setzen und "Outfit" aus Kommentar entfernen
-  CURSE_OUTFIT_SAVED.add(dbKey);
-  _saveCurseOutfitSaved();
-  
-  // Kommentar: "Outfit" entfernen wenn vorhanden
-  const comment = CURSE_COMMENTS[dbKey] || '';
-  if (comment.includes('Outfit')) {
-    CURSE_COMMENTS[dbKey] = comment.replace(/Outfit/g, '').trim();
-    _saveCurseComments();
-  }
-  
-  // Render aktualisieren damit Häkchen sichtbar wird
-  renderCurseTab();
-  
   const craftName = entry.CraftName || entry.ItemName || 'Curse';
   const ownerName = entry.Besitzer?.Name || (entry.Besitzer?.Nummer ? '#' + entry.Besitzer.Nummer : 'Player');
   const defaultName = craftName + ' - ' + ownerName;
   _fetchOutfitAndSave(null, defaultName, [_curseEntryToProfileItem(entry)]);
 }
 
-// Button: 📝 Alle mit Outfit-Mark (Global) → Alle Items mit "Outfit" im Kommentar markieren
-function markAllOutfitsByComment() {
-  let markedCount = 0;
-  
-  Object.entries(CURSE_DB).forEach(([key, e]) => {
-    const comment = CURSE_COMMENTS[key] || '';
-    // Case-insensitive Suche nach "Outfit"
-    if (comment.toLowerCase().includes('outfit')) {
-      CURSE_OUTFIT_SAVED.add(key);
-      markedCount++;
-    }
-  });
-  
-  if (markedCount > 0) {
-    _saveCurseOutfitSaved();
-    renderCurseTab();
-    showStatus('✅ ' + markedCount + ' Items mit "Outfit" im Kommentar markiert!', 'success');
-  } else {
-    showStatus('ℹ️ Keine Items mit "Outfit" im Kommentar gefunden', 'info');
-  }
-}
-
-// Button: 📝 Auto-Mark (Owner-Header) → Alle Items mit "Outfit" im Kommentar markieren
-function markOutfitsByComment(ownerNum) {
-  const entries = Object.entries(CURSE_DB)
-    .filter(([, e]) => String(e.Besitzer?.Nummer ?? '') === String(ownerNum))
-    .map(([key, e]) => [key, e]);
-  
-  let markedCount = 0;
-  entries.forEach(([key, e]) => {
-    const comment = CURSE_COMMENTS[key] || '';
-    // Case-insensitive Suche nach "Outfit"
-    if (comment.toLowerCase().includes('outfit')) {
-      CURSE_OUTFIT_SAVED.add(key);
-      markedCount++;
-    }
-  });
-  
-  if (markedCount > 0) {
-    _saveCurseOutfitSaved();
-    renderCurseTab();
-    showStatus('✅ ' + markedCount + ' Items mit "Outfit" im Kommentar markiert', 'success');
-  } else {
-    showStatus('ℹ️ Keine Items mit "Outfit" im Kommentar gefunden', 'info');
-  }
-}
-
 // Button: 💾 Alle speichern (Owner-Header) → "{OwnerName} Outfit" (Sammlung mehrerer Items)
 function curseSaveAllAsProfile(ownerNum) {
   const entries = Object.entries(CURSE_DB)
     .filter(([, e]) => String(e.Besitzer?.Nummer ?? '') === String(ownerNum))
-    .map(([key, e]) => {
-      // OPTIMIERT: Für jedes Curse-Item Häkchen setzen und "Outfit" aus Kommentar entfernen
-      CURSE_OUTFIT_SAVED.add(key);
-      const comment = CURSE_COMMENTS[key] || '';
-      if (comment.includes('Outfit')) {
-        CURSE_COMMENTS[key] = comment.replace(/Outfit/g, '').trim();
-      }
-      return e;
-    });
-  
-  _saveCurseOutfitSaved();
-  _saveCurseComments();
-  renderCurseTab();
-  
+    .map(([, e]) => e);
   const ownerName = entries[0]?.Besitzer?.Name || ('#' + ownerNum);
   // Mehrere Items: kein einzelner CraftName sinnvoll → nur OwnerName
   const defaultName = ownerName + ' Outfit';
@@ -3142,9 +2613,6 @@ function curseClearAndScan() {
     if (comments) Object.assign(CURSE_COMMENTS, comments);
     const favs = await idbGet('BC_CURSE_FAV_v1');
     if (Array.isArray(favs)) favs.forEach(k => CURSE_FAVOURITES.add(k));
-    // OPTIMIERT: Outfit-Saved auch laden
-    const outfitSaved = await idbGet('BC_CURSE_OUTFIT_SAVED_v1');
-    if (Array.isArray(outfitSaved)) outfitSaved.forEach(k => CURSE_OUTFIT_SAVED.add(k));
   } catch(e) { console.warn('[BCK-Popup] Curse IDB load error:', e); }
 })();
 
@@ -3648,4 +3116,146 @@ function selectRoomMember(num) {
   renderGroups();
   renderProfileList();
   startPingRetry();
+
+// ═══════════════════════════════════════════════════
+// ✏️ NEUE FUNKTIONEN: Rename + Force Migration
+// ═══════════════════════════════════════════════════
+
+function forceProfilesMigration() {
+  if (!confirm('⚠️ FORCE MIGRATION - Dies wird "Legacy" Ordner splitten und richtig organisieren.\n\nWirklich fortfahren?')) return;
+  
+  console.log('🔴 FORCE MIGRATION INITIATED');
+  const raw = localStorage.getItem('BC_PROFILES_v11') || '{}';
+  const loaded = JSON.parse(raw);
+  
+  const migrated = {};
+  const allProfiles = [];
+  
+  // Sammle ALLE Profile aus jeder Struktur
+  for (const [key, val] of Object.entries(loaded)) {
+    if (val && val.items && Array.isArray(val.items)) {
+      allProfiles.push({ originalKey: key, profile: val, source: 'flat' });
+    } else if (val && typeof val === 'object' && !Array.isArray(val)) {
+      for (const [pname, profile] of Object.entries(val)) {
+        if (profile && profile.items && Array.isArray(profile.items)) {
+          allProfiles.push({ originalKey: pname, profile, source: 'nested:' + key, owner: key });
+        }
+      }
+    }
+  }
+  
+  console.log('📦 Found ' + allProfiles.length + ' profiles total');
+  
+  // Parse jedes Profil
+  allProfiles.forEach(({ originalKey, profile, owner }) => {
+    let finalOwner = owner || 'Other';
+    let profileName = originalKey;
+    
+    if (originalKey.includes(' - ') && !owner) {
+      const parts = originalKey.split(' - ');
+      const possibleOwner = parts[parts.length - 1].trim();
+      
+      if (possibleOwner.length < 30 && 
+          possibleOwner.length > 1 && 
+          possibleOwner !== 'items' && 
+          possibleOwner !== 'date' && 
+          possibleOwner !== 'name' &&
+          !possibleOwner.startsWith('[')) {
+        finalOwner = possibleOwner;
+        profileName = parts.slice(0, -1).join(' - ').trim();
+      }
+    }
+    
+    if (!migrated[finalOwner]) migrated[finalOwner] = {};
+    migrated[finalOwner][profileName] = {
+      ...profile,
+      owner: finalOwner,
+      date: profile.date || new Date().toLocaleDateString('de-DE'),
+      items: profile.items || []
+    };
+  });
+  
+  PROFILES = migrated;
+  localStorage.setItem('BC_PROFILES_v11', JSON.stringify(PROFILES));
+  
+  let totalProfiles = 0;
+  const stats = {};
+  for (const [owner, profiles] of Object.entries(migrated)) {
+    const count = Object.keys(profiles).length;
+    stats[owner] = count;
+    totalProfiles += count;
+  }
+  
+  console.log('✅ MIGRATION SUCCESS:', totalProfiles, 'profiles organized:', stats);
+  renderProfileList();
+  showStatus('✅ Migration abgeschlossen: ' + totalProfiles + ' Profile neu organisiert!', 'success');
+}
+
+function renameProfile(owner, oldProfileName) {
+  const oldProfile = PROFILES[owner]?.[oldProfileName];
+  if (!oldProfile) { showStatus('❌ Profil nicht gefunden!', 'error'); return; }
+  
+  const newName = prompt('Neuer Name für Profil:', oldProfileName);
+  if (!newName?.trim() || newName === oldProfileName) return;
+  
+  const trimmed = newName.trim();
+  
+  if (PROFILES[owner][trimmed] && !confirm('Profil "' + trimmed + '" existiert bereits. Überschreiben?')) return;
+  
+  PROFILES[owner][trimmed] = { ...oldProfile, name: trimmed };
+  delete PROFILES[owner][oldProfileName];
+  
+  if (PROFILE_FAVOURITES?.has?.(owner + ':' + oldProfileName)) {
+    PROFILE_FAVOURITES.delete(owner + ':' + oldProfileName);
+    PROFILE_FAVOURITES.add(owner + ':' + trimmed);
+    if (typeof _saveProfileFavourites === 'function') _saveProfileFavourites();
+  }
+  
+  try {
+    localStorage.setItem('BC_PROFILES_v11', JSON.stringify(PROFILES));
+    renderProfileList();
+    showStatus('✅ Profil umbenannt: "' + oldProfileName + '" → "' + trimmed + '"', 'success');
+  } catch(e) {
+    showStatus('❌ Umbenennen fehlgeschlagen: ' + e.message, 'error');
+  }
+}
+
+function renameOwner(oldOwner) {
+  if (!PROFILES[oldOwner] || !Object.keys(PROFILES[oldOwner]).length) { 
+    showStatus('❌ Owner-Ordner nicht gefunden!', 'error'); 
+    return; 
+  }
+  
+  const newOwner = prompt('Neuer Name für Ordner:', oldOwner);
+  if (!newOwner?.trim() || newOwner === oldOwner) return;
+  
+  const trimmed = newOwner.trim();
+  
+  if (PROFILES[trimmed] && !confirm('Ordner "' + trimmed + '" existiert bereits. Zusammenführen?')) return;
+  
+  if (!PROFILES[trimmed]) PROFILES[trimmed] = {};
+  
+  for (const [pname, profile] of Object.entries(PROFILES[oldOwner])) {
+    PROFILES[trimmed][pname] = { ...profile, owner: trimmed };
+    
+    const oldKey = oldOwner + ':' + pname;
+    const newKey = trimmed + ':' + pname;
+    if (PROFILE_FAVOURITES?.has?.(oldKey)) {
+      PROFILE_FAVOURITES.delete(oldKey);
+      PROFILE_FAVOURITES.add(newKey);
+    }
+  }
+  
+  delete PROFILES[oldOwner];
+  
+  try {
+    localStorage.setItem('BC_PROFILES_v11', JSON.stringify(PROFILES));
+    if (typeof _saveProfileFavourites === 'function') _saveProfileFavourites();
+    renderProfileList();
+    showStatus('✅ Ordner umbenannt: "' + oldOwner + '" → "' + trimmed + '"', 'success');
+  } catch(e) {
+    showStatus('❌ Umbenennen fehlgeschlagen: ' + e.message, 'error');
+  }
+}
+
 })();
