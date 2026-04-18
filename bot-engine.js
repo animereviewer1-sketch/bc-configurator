@@ -446,13 +446,13 @@ function _applyItemAction(a, C){
     }else if(a.profilName){
       var profilItems = a.profilItems ?? [];
 
-      // Phase 0: Strip
+      // Schritt 0: Ausziehen (Pflicht-Anatomie bleibt)
       C.Appearance = C.Appearance.filter(function(item){
         if(!item||!item.Asset||!item.Asset.Group) return true;
         return item.Asset.Group.AllowNone === false;
       });
 
-      // Phase 1: Alle InventoryWear synchron (kein CharacterRefresh dazwischen)
+      // Schritt 1: Items anlegen
       profilItems.forEach(function(item){
         var col = item.colors ?? item.cfg?.Color ?? '#ffffff';
         if(typeof col==='string' && col.includes(',')) col = col.split(',');
@@ -460,56 +460,56 @@ function _applyItemAction(a, C){
         InventoryWear(C, item.asset, item.group, col, 0, Player.MemberNumber, craft);
       });
 
-      // Phase 2: Properties + Locks in einem einzigen setTimeout
-      setTimeout(function(){
-        profilItems.forEach(function(item){
-          var worn = InventoryGet(C, item.group);
-          if(!worn) return;
-          worn.Property = worn.Property ?? {};
+      // Schritt 2a: Farbe + TypeRecord setzen, dann ExtendedItemInit
+      profilItems.forEach(function(item){
+        var worn = InventoryGet(C, item.group);
+        if(!worn) return;
+        worn.Property = worn.Property ?? {};
 
-          // Alle Properties aus vollständigem Snapshot (außer LayerProperties/OverridePriority)
-          if(item.property && typeof item.property === 'object'){
-            Object.keys(item.property).forEach(function(k){
-              if(k !== 'LayerProperties' && k !== 'OverridePriority') worn.Property[k] = item.property[k];
-            });
-          } else if(item.tr && typeof item.tr === 'object' && Object.keys(item.tr).length){
-            worn.Property.TypeRecord = item.tr;
-            worn.Property.Type = Object.entries(item.tr).map(function(e){return e[0]+e[1];}).join('');
-          }
+        // Erst alle Properties außer LayerProperties/OverridePriority setzen
+        if(item.property && typeof item.property === 'object'){
+          Object.keys(item.property).forEach(function(k){
+            if(k !== 'LayerProperties' && k !== 'OverridePriority') worn.Property[k] = item.property[k];
+          });
+        } else if(item.tr && typeof item.tr === 'object' && Object.keys(item.tr).length){
+          worn.Property.TypeRecord = item.tr;
+          worn.Property.Type = Object.entries(item.tr).map(function(e){return e[0]+e[1];}).join('');
+        }
 
-          // ExtendedItemInit für Variante
-          try{ExtendedItemInit(C, worn, false, false);}catch(e){}
+        // ExtendedItemInit setzt Variante anhand von TypeRecord
+        try{ExtendedItemInit(C, worn, false, false);}catch(e){}
 
-          // LayerProperties + OverridePriority NACH ExtendedItemInit
-          var lp = (item.property && item.property.LayerProperties) || item.layerProperties;
-          var op = (item.property && item.property.OverridePriority != null) ? item.property.OverridePriority : item.overridePriority;
-          if(lp) worn.Property.LayerProperties = lp;
-          if(op != null) worn.Property.OverridePriority = op;
+        // Schritt 2b: LayerProperties + OverridePriority NACH ExtendedItemInit setzen
+        // (ExtendedItemInit würde diese sonst zurücksetzen)
+        var lp = (item.property && item.property.LayerProperties) || item.layerProperties;
+        var op = (item.property && item.property.OverridePriority != null)
+                   ? item.property.OverridePriority
+                   : item.overridePriority;
+        if(lp) worn.Property.LayerProperties  = lp;
+        if(op != null) worn.Property.OverridePriority = op;
 
-          if(item.difficulty != null) worn.Difficulty = item.difficulty;
+        if(item.difficulty != null) worn.Difficulty = item.difficulty;
 
-          var col = item.colors ?? '#ffffff';
-          if(typeof col==='string' && col.includes(',')) col = col.split(',');
-          worn.Color = col;
-        });
+        var col = item.colors ?? '#ffffff';
+        if(typeof col==='string' && col.includes(',')) col = col.split(',');
+        worn.Color = col;
+      });
 
-        // Locks
-        profilItems.forEach(function(item){
-          if(!item.lock) return;
-          var worn = InventoryGet(C, item.group);
-          if(!worn) return;
-          var BCX_LOCKS = ['LewdCrestPadlock','DeviousPadlock','LuziPadlock'];
-          var lockAsset = BCX_LOCKS.includes(item.lock)
-            ? (Asset.find(function(a){return a.Name===item.lock && a.Group?.Name==='ItemMisc';})
-               ?? Asset.find(function(a){return a.Name===item.lock;}))
-            : Asset.find(function(a){return a.Name===item.lock && a.Group?.Name==='ItemMisc';});
-          if(lockAsset) InventoryLock(C, worn, {Asset:lockAsset}, item.lockMember||Player.MemberNumber, false);
-        });
+      // Schritt 3: Locks
+      profilItems.forEach(function(item){
+        if(!item.lock) return;
+        var worn = InventoryGet(C, item.group);
+        if(!worn) return;
+        var BCX_LOCKS = ['LewdCrestPadlock','DeviousPadlock','LuziPadlock'];
+        var lockAsset = BCX_LOCKS.includes(item.lock)
+          ? (Asset.find(function(a){return a.Name===item.lock && a.Group?.Name==='ItemMisc';})
+             ?? Asset.find(function(a){return a.Name===item.lock;}))
+          : Asset.find(function(a){return a.Name===item.lock && a.Group?.Name==='ItemMisc';});
+        if(lockAsset) InventoryLock(C, worn, {Asset:lockAsset}, item.lockMember||Player.MemberNumber, false);
+      });
 
-        // Phase 3: Ein einziger Refresh + Sync
-        CharacterRefresh(C);
-        ChatRoomCharacterUpdate(C);
-      }, 600);
+      CharacterRefresh(C);
+      ChatRoomCharacterUpdate(C);
     }else if(a.item){
       InventoryWear(C,a.item,a.gruppe,a.farbe??'#ffffff',0,Player.MemberNumber);
       _restoreDisplaced(C,snapshot,a.gruppe);

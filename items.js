@@ -1638,6 +1638,7 @@ function moveOutfitItem(i, d) {
 
 function generateOutfitCode() {
   if (!OUTFIT.length) return;
+  // Outfit-Ziel hat Vorrang; Fallback auf altes OUTFIT[0]-Ziel für Rückwärtskompatibilität
   const isOther   = _outfitTargetNum !== null;
   const memberNum = _outfitTargetNum ?? 0;
 
@@ -1653,104 +1654,21 @@ function generateOutfitCode() {
     code += 'const TARGET = Player;\n\n';
   }
 
-  // ── Phase 1: Strip alte Items ─────────────────────────────────────────
-  code += '// ── Phase 1: Strip ──\n'
+  // Erst ausziehen damit keine alten Items unter dem neuen Outfit bleiben
+  code += '// ── Strip: alte Items entfernen ──\n'
         + 'TARGET.Appearance = TARGET.Appearance.filter(i => i?.Asset?.Group?.AllowNone === false);\n\n';
 
-  // ── Phase 2: Alle InventoryWear synchron (keine Delays, kein Sync) ────
-  code += '// ── Phase 2: Items anlegen (synchron, kein Server-Sync) ──\n';
-  OUTFIT.forEach(item => {
-    code += 'InventoryWear(TARGET, ' + JSON.stringify(item.asset) + ', ' + JSON.stringify(item.group) + ',\n'
-          + '  ' + JSON.stringify(item.colors) + ', 0, null' + (item.craftStr || '') + '\n);\n';
+  OUTFIT.forEach((item, i) => {
+    code += '// ── ' + (i+1) + '. ' + item.asset + ' (' + item.group + ') ──\n';
+    code += buildItemInner({ ...item, isOther, memberNum, delayOffset: 600 + i * 700 });
+    code += '\n\n';
   });
 
-  // ── Phase 3: Alle Properties in einem einzigen setTimeout ─────────────
-  // Ein setTimeout reicht – InventoryWear ist synchron, die Assets sind danach verfügbar.
-  code += '\n// ── Phase 3: Properties + Locks setzen (einmaliges Timeout) ──\n'
-        + 'setTimeout(function() {\n';
-
-  OUTFIT.forEach(item => {
-    const fullProp = item.property ? Object.assign({}, item.property) : null;
-
-    // Pre-props (TypeRecord etc.)
-    const preProp = {};
-    const hasTr = item.tr && Object.keys(item.tr).length;
-    if (hasTr) { preProp.TypeRecord = item.tr; preProp.Type = Object.entries(item.tr).map(([k,v])=>k+v).join(''); }
-    if (fullProp) {
-      for (const [k,v] of Object.entries(fullProp)) {
-        if (k !== 'TypeRecord' && k !== 'Type' && k !== 'OverridePriority' && k !== 'LayerProperties') preProp[k] = v;
-      }
-    }
-
-    // Post-props (LayerProperties, OverridePriority) – nach ExtendedItemInit
-    const postProp = {};
-    if (fullProp?.OverridePriority != null) postProp.OverridePriority = fullProp.OverridePriority;
-    else if (item.overridePriority != null) postProp.OverridePriority = item.overridePriority;
-    if (fullProp?.LayerProperties)          postProp.LayerProperties  = fullProp.LayerProperties;
-    else if (item.layerProperties)          postProp.LayerProperties  = item.layerProperties;
-
-    const hasPreProp  = Object.keys(preProp).length > 0;
-    const hasPostProp = Object.keys(postProp).length > 0;
-    const preB64  = hasPreProp  ? btoa(unescape(encodeURIComponent(JSON.stringify(preProp))))  : null;
-    const postB64 = hasPostProp ? btoa(unescape(encodeURIComponent(JSON.stringify(postProp)))) : null;
-
-    const hasLock = !!item.lock;
-    const BCX_LOCKS_L = ['LewdCrestPadlock','DeviousPadlock','LuziPadlock'];
-    const REL_LOCKS_L = ['OwnerPadlock','LoversPadlock','MistressPadlock'];
-
-    // Only emit block if there's something to do
-    if (!hasPreProp && !hasPostProp && item.difficulty == null && !hasLock) return;
-
-    code += '  { // ' + item.asset + '\n';
-    code += '    const _i = InventoryGet(TARGET, ' + JSON.stringify(item.group) + ');\n';
-    code += '    if (_i) {\n';
-    code += '      _i.Color = ' + JSON.stringify(item.colors) + ';\n';
-    code += '      _i.Property = _i.Property ?? {};\n';
-
-    if (preB64) {
-      code += '      Object.assign(_i.Property, JSON.parse(decodeURIComponent(escape(atob(' + JSON.stringify(preB64) + ')))));\n';
-    }
-    if (hasTr) {
-      code += '      try{ExtendedItemInit(TARGET,_i,false,false);}catch(e){}\n';
-    }
-    if (postB64) {
-      code += '      Object.assign(_i.Property, JSON.parse(decodeURIComponent(escape(atob(' + JSON.stringify(postB64) + ')))));\n';
-    }
-    if (item.difficulty != null) {
-      code += '      _i.Difficulty = ' + Number(item.difficulty) + ';\n';
-    }
-
-    if (hasLock) {
-      const lock = item.lock;
-      const isBcx = BCX_LOCKS_L.includes(lock);
-      const isRel = REL_LOCKS_L.includes(lock);
-      const lp = item.lockParams ?? {};
-      const findLock = isBcx
-        ? 'Asset.find(a=>a.Name===' + JSON.stringify(lock) + '&&a.Group?.Name==="ItemMisc")??Asset.find(a=>a.Name===' + JSON.stringify(lock) + ')'
-        : 'Asset.find(a=>a.Name===' + JSON.stringify(lock) + '&&a.Group?.Name==="ItemMisc")';
-      code += '      var _la=' + findLock + ';\n';
-      code += '      if(_la){InventoryLock(TARGET,_i,{Asset:_la},Player.MemberNumber,false);\n';
-      if (lp.timer > 0)   code += '        _i.Property.RemoveTimer=Date.now()+' + lp.timer + ';\n';
-      if (lp.combo)        code += '        _i.Property.CombinationNumber=' + JSON.stringify(lp.combo) + ';\n';
-      if (lp.password)     code += '        _i.Property.Password=' + JSON.stringify(lp.password) + ';\n';
-      if (isRel) {
-        code += '        _i.Property.LockMemberNumber=' + (lp.relMember || 'Player.MemberNumber') + ';\n';
-        if (lp.relTimer > 0) code += '        _i.Property.RemoveTimer=Date.now()+' + lp.relTimer + ';\n';
-      }
-      code += '      }\n';
-    }
-
-    code += '    }\n';
-    code += '  }\n';
-  });
-
-  // ── Phase 4: Ein einziger Refresh + Sync ──────────────────────────────
-  code += '\n  // ── Phase 4: Einmaliger Sync ──\n';
-  code += '  CharacterRefresh(TARGET);\n';
-  if (!isOther) code += '  ServerPlayerAppearanceSync();\n';
-  code += '  ChatRoomCharacterUpdate(TARGET);\n';
-  code += '  console.log("✅ Outfit (' + count + ' Items) fertig!");\n';
-  code += '}, 600);\n';   // Einmaliges 600ms Delay – gibt BC Zeit Assets zu laden
+  const syncLine = (isOther && memberNum)
+    ? 'ChatRoomCharacterUpdate(TARGET);'
+    : 'ServerPlayerAppearanceSync(); ChatRoomCharacterUpdate(TARGET);';
+  const finalDelay = 600 + OUTFIT.length * 700 + 200;
+  code += 'setTimeout(function() { ' + syncLine + ' console.log("✅ Outfit fertig!"); }, ' + finalDelay + ');\n';
 
   if (isOther && memberNum) code += '}\n';
 
@@ -1815,7 +1733,6 @@ function loadProfile(name) {
 
     const tr = (item.tr && typeof item.tr === 'object' && Object.keys(item.tr).length) ? item.tr : null;
 
-    // craftStr aus Craft-Objekt
     let craftStr = '';
     const craft = item.craft;
     if (craft && craft.Name) {
@@ -1834,14 +1751,12 @@ function loadProfile(name) {
     restored.push({
       ...item,
       cfg:              cfg ?? {},
-      propCode:         '',    // handled via property/preB64/postB64 in buildItemInner
+      propCode:         '',
       craftStr,
       lockParams,
       trStr:            tr ? JSON.stringify(tr) : '{}',
       typeStr:          tr ? Object.entries(tr).map(([k,v]) => k+v).join('') : '',
-      // Full property snapshot forwarded to buildItemInner
       property:         item.property ?? null,
-      // Legacy separate fields kept for backward compat
       overridePriority: item.overridePriority ?? null,
       layerProperties:  item.layerProperties  ?? null,
       difficulty:       item.difficulty       ?? null,
@@ -1849,9 +1764,8 @@ function loadProfile(name) {
   }
 
   OUTFIT = restored;
-  switchTab('outfit');
-  renderOutfitList();
   _autoOutfitCode();
+  showStatus('✅ Profil "' + name + '" geladen (' + restored.length + ' Items)', 'success');
 }
 
 function deleteProfile(name) {
@@ -1861,26 +1775,170 @@ function deleteProfile(name) {
   renderProfileList();
 }
 
+// ── Profile name map for safe event binding ───────────
+const _profileNameMap = {}; // slotKey → profileName
+
+function _profileSortKey(name) {
+  // Split on " - " or "- " (with or without leading space)
+  const parts = name.split(/\s*-\s+/);
+  const owner = parts.length > 1 ? parts[parts.length - 1].toLowerCase() : '';
+  return owner + '\x00' + name.toLowerCase();
+}
+
+function _profileOwnerOf(name) {
+  const parts = name.split(/\s*-\s+/);
+  return parts.length > 1 ? parts[parts.length - 1].trim() : '– Ohne Zuordnung –';
+}
+
+function _profileShortName(name, owner) {
+  return name.replace(new RegExp('\\s*-\\s+' + owner.replace(/[.*+?^${}()|[\]\\]/g,'\\$&') + '$'), '').trim() || name;
+}
+
+// ── Profile Edit Mode State ───────────────────────────
+let _profileEditMode = null; // profileName currently in edit mode
+
 function renderProfileList() {
   const el = document.getElementById('profileListEl');
+  if (!el) return;
   const q = (document.getElementById('profileSearch')?.value || '').toLowerCase();
-  const keys = Object.keys(PROFILES).filter(k => !q || k.toLowerCase().includes(q));
+  let keys = Object.keys(PROFILES).filter(k => !q || k.toLowerCase().includes(q));
   if (!keys.length) {
     el.innerHTML = '<p style="color:var(--text3);font-size:.8rem">Noch keine Profile gespeichert.</p>';
+    el._profileKeys = [];
     return;
   }
-  el.innerHTML = '<div class="profile-list">' + keys.map((k, idx) => {
-    const p = PROFILES[k];
-    return '<div class="profile-card">'
-      + '<div class="profile-card-name">📁 ' + p.name + '</div>'
-      + '<div class="profile-card-info">' + (p.items?.length ?? 0) + ' Items · ' + (p.date || '') + '</div>'
-      + '<div class="btn-row" style="margin-top:6px">'
-      + '<button class="btn btn-green" style="flex:1;font-size:.68rem" data-pkey="' + idx + '" onclick="loadProfileByIdx(this.dataset.pkey)">📥 Laden</button>'
-      + '<button class="btn btn-primary" style="font-size:.68rem;padding:4px 7px" data-pkey="' + idx + '" onclick="profileExportSingle(this.dataset.pkey)" title="Dieses Profil exportieren">⬇️</button>'
-      + '<button class="btn btn-red" style="font-size:.68rem" data-pkey="' + idx + '" onclick="deleteProfileByIdx(this.dataset.pkey)">🗑️</button>'
-      + '</div></div>';
-  }).join('') + '</div>';
+  keys = keys.slice().sort((a, b) => _profileSortKey(a).localeCompare(_profileSortKey(b)));
   el._profileKeys = keys;
+
+  // Build name map for safe event binding
+  Object.keys(_profileNameMap).forEach(k => delete _profileNameMap[k]);
+  keys.forEach((name, idx) => { _profileNameMap['p_' + idx] = name; });
+
+  // Group by owner
+  const byOwner = {};
+  keys.forEach((k, idx) => {
+    const owner = _profileOwnerOf(k);
+    if (!byOwner[owner]) byOwner[owner] = [];
+    byOwner[owner].push({ name: k, idx });
+  });
+
+  const html = Object.entries(byOwner).map(([owner, profiles]) => {
+    const blockId = 'pb_' + owner.replace(/[^a-zA-Z0-9]/g, '_');
+    const wasOpen = document.getElementById(blockId)?.classList.contains('open');
+
+    const rows = profiles.map(({ name, idx }) => {
+      const p = PROFILES[name];
+      const shortName = _profileShortName(name, owner);
+      const isEdit = _profileEditMode === name;
+      const slotKey = 'p_' + idx;
+
+      // Edit panel: name input + item rows
+      let editPanel = '';
+      if (isEdit) {
+        const nameInput = '<div class="profile-edit-name-row">'
+          + '<label style="font-size:.62rem;color:var(--text3)">Profilname:</label>'
+          + '<input class="profile-edit-name-inp" id="pedit_name_' + idx + '" value="' + escHtml(name) + '" maxlength="60">'
+          + '<button class="profile-gear-btn" onclick="profileRename(\'' + slotKey + '\')" title="Umbenennen">💾 Speichern</button>'
+          + '</div>';
+
+        const itemRows = (p.items || []).map((item, iIdx) => {
+          const hasCfg = !!CACHE[item.group]?.[item.asset];
+          return '<div class="profile-item-row" id="pirow_' + idx + '_' + iIdx + '">'
+            + '<span class="profile-item-asset">' + escHtml(item.asset) + '</span>'
+            + '<span class="profile-item-group">' + escHtml(item.group) + '</span>'
+            + (item.lock ? '<span class="profile-item-badge lock">🔒 ' + escHtml(item.lock) + '</span>' : '')
+            + (item.craft?.Name ? '<span class="profile-item-badge craft">✏️ ' + escHtml(item.craft.Name) + '</span>' : '')
+            + '<button class="profile-gear-btn' + (!hasCfg ? ' nocache' : '') + '" data-slot="' + slotKey + '" data-iidx="' + iIdx + '" onclick="profileOpenInItemManager(this.dataset.slot,this.dataset.iidx)" title="' + (hasCfg ? 'Im Item Manager öffnen' : 'Zur Gruppe navigieren (nicht im Cache)') + '">⚙️</button>'
+            + '<button class="profile-row-del" data-slot="' + slotKey + '" data-iidx="' + iIdx + '" onclick="profileDeleteItem(this.dataset.slot,this.dataset.iidx)" title="Item entfernen" style="margin-left:4px">✕</button>'
+            + '</div>';
+        }).join('');
+
+        editPanel = '<div class="profile-item-list">' + nameInput + itemRows + '</div>';
+      }
+
+      return '<div class="profile-row" id="prow_' + idx + '">'
+        + '<div class="profile-row-main">'
+        + '<button class="profile-row-load" data-slot="' + slotKey + '" onclick="profileLoadBySlot(this.dataset.slot)" title="Laden">📥</button>'
+        + '<span class="profile-row-name">' + escHtml(shortName) + '</span>'
+        + '<span class="profile-row-count">' + (p.items?.length ?? 0) + ' Items</span>'
+        + '<span class="profile-row-date">' + (p.date || '') + '</span>'
+        + '<button class="profile-row-edit' + (isEdit ? ' active' : '') + '" data-slot="' + slotKey + '" onclick="profileToggleEdit(this.dataset.slot)" title="Bearbeiten">✏️</button>'
+        + '<button class="profile-row-export" data-pkey="' + idx + '" onclick="profileExportSingle(this.dataset.pkey)" title="Exportieren">⬇️</button>'
+        + '<button class="profile-row-del" data-pkey="' + idx + '" onclick="deleteProfileByIdx(this.dataset.pkey)" title="Löschen">✕</button>'
+        + '</div>'
+        + editPanel
+        + '</div>';
+    }).join('');
+
+    return '<div class="profile-owner-block' + ((wasOpen !== false) ? ' open' : '') + '" id="' + blockId + '">'
+      + '<div class="profile-owner-hdr" onclick="document.getElementById(\'' + blockId + '\').classList.toggle(\'open\')">'
+      + '<span class="profile-owner-name">' + escHtml(owner) + '</span>'
+      + '<span class="profile-owner-count">' + profiles.length + '</span>'
+      + '<span class="profile-owner-chevron">▶</span>'
+      + '</div>'
+      + '<div class="profile-owner-rows">' + rows + '</div>'
+      + '</div>';
+  }).join('');
+
+  el.innerHTML = html;
+}
+
+function profileLoadBySlot(slot) {
+  const name = _profileNameMap[slot];
+  if (name) loadProfile(name);
+}
+
+function profileToggleEdit(slot) {
+  const name = _profileNameMap[slot];
+  if (!name) return;
+  _profileEditMode = _profileEditMode === name ? null : name;
+  renderProfileList();
+}
+
+function profileRename(slot) {
+  const oldName = _profileNameMap[slot];
+  if (!oldName) return;
+  // Find input by iterating since we can't use the idx directly
+  const inputs = document.querySelectorAll('.profile-edit-name-inp');
+  let newName = null;
+  inputs.forEach(inp => { if (inp.value.trim() && _profileEditMode === oldName) newName = inp.value.trim(); });
+  if (!newName || newName === oldName) return;
+  if (PROFILES[newName] && !confirm('Name "' + newName + '" existiert bereits. Überschreiben?')) return;
+  PROFILES[newName] = { ...PROFILES[oldName], name: newName };
+  delete PROFILES[oldName];
+  _profileEditMode = newName;
+  try { localStorage.setItem('BC_PROFILES_v11', JSON.stringify(PROFILES)); } catch {}
+  showStatus('✅ Profil umbenannt → "' + newName + '"', 'success');
+  renderProfileList();
+}
+
+function profileDeleteItem(slot, iIdx) {
+  const name = _profileNameMap[slot];
+  if (!name) return;
+  const p = PROFILES[name];
+  if (!p?.items) return;
+  p.items.splice(parseInt(iIdx), 1);
+  try { localStorage.setItem('BC_PROFILES_v11', JSON.stringify(PROFILES)); } catch {}
+  renderProfileList();
+}
+
+function profileOpenInItemManager(slot, iIdx) {
+  const name = _profileNameMap[slot];
+  if (!name) return;
+  const p = PROFILES[name];
+  const item = p?.items?.[parseInt(iIdx)];
+  if (!item) return;
+  switchTab('items');
+  const cfg = CACHE[item.group]?.[item.asset];
+  if (cfg) {
+    selectItem(item.group, item.asset);
+    showStatus('⚙️ ' + item.asset + ' im Item Manager geöffnet', 'info');
+  } else {
+    // Nicht im Cache – Sidebar-Suche auf Asset-Name setzen
+    const searchEl = document.querySelector('.sidebar-search');
+    if (searchEl) { searchEl.value = item.asset; renderGroups(item.asset); }
+    showStatus('⚠️ ' + item.asset + ' nicht im Cache – Suche gesetzt', 'info');
+  }
 }
 
 // ── Export / Import ──────────────────────────────────────────────────────
@@ -2103,6 +2161,14 @@ let CURSE_CACHE_LSCG = {}; // from lscgCache
 // Comments: persisted in IndexedDB
 let CURSE_COMMENTS = {};
 function _saveCurseComments() { idbSet('BC_CURSE_COMMENTS_v1', CURSE_COMMENTS); }
+// ── Outfit-Flags ─────────────────────────────────────────────
+let CURSE_OUTFIT_FLAGS = {};  // dbKey → true
+function _saveCurseOutfitFlags() {
+  // Direkt in BC_CURSE_DB_v1 einbetten (atomar mit dem Rest)
+  _saveCurseDB();
+  // Redundant auch separat speichern als Fallback
+  idbSet('BC_CURSE_OUTFIT_v1', CURSE_OUTFIT_FLAGS);
+}
 // ── Favoriten ────────────────────────────────────────────────
 let CURSE_FAVOURITES = new Set();
 function _saveCurseFavourites() { idbSet('BC_CURSE_FAV_v1', [...CURSE_FAVOURITES]); }
@@ -2145,7 +2211,7 @@ function curseScan() {
 // called from postMessage handler
 
 function _saveCurseDB() {
-  idbSet('BC_CURSE_DB_v1', {database:CURSE_DB,lscgTable:CURSE_LSCG,lscgCache:CURSE_CACHE_LSCG,favourites:[...CURSE_FAVOURITES]});
+  idbSet('BC_CURSE_DB_v1', {database:CURSE_DB,lscgTable:CURSE_LSCG,lscgCache:CURSE_CACHE_LSCG,favourites:[...CURSE_FAVOURITES],outfitFlags:CURSE_OUTFIT_FLAGS});
 }
 
 function _handleCurseData(data) {
@@ -2181,7 +2247,7 @@ function _handleCurseData(data) {
 
 
 // ── CURSE FILTER STATE ───────────────────────────────
-let _curseFilter  = 'all';  // 'all' | 'cursed' | 'lscg'
+let _curseFilter  = 'all';  // 'all' | 'cursed' | 'lscg' | 'fav' | 'outfit' | 'no-outfit'
 let _pendingExport = false;
 let _curseEntryMap = {};    // rowId → dbKey, for safe onclick
 
@@ -2193,7 +2259,7 @@ function toggleCacheFilter() {
 
 function setCurseFilter(f) {
   _curseFilter = f;
-  ['all','cursed','lscg','fav'].forEach(k => {
+  ['all','cursed','lscg','fav','outfit','no-outfit'].forEach(k => {
     const el = document.getElementById('fc-' + k);
     if (el) el.classList.toggle('on', k === f);
   });
@@ -2235,6 +2301,18 @@ function renderCurseTab() {
     entries = entries.filter(e => {
       const k = (e.Besitzer?.Nummer ?? '') + ':' + e.ItemName + ':' + e.CraftName;
       return CURSE_FAVOURITES.has(k);
+    });
+  }
+  if (_curseFilter === 'outfit') {
+    entries = entries.filter(e => {
+      const k = (e.Besitzer?.Nummer ?? '') + ':' + e.ItemName + ':' + e.CraftName;
+      return !!CURSE_OUTFIT_FLAGS[k];
+    });
+  }
+  if (_curseFilter === 'no-outfit') {
+    entries = entries.filter(e => {
+      const k = (e.Besitzer?.Nummer ?? '') + ':' + e.ItemName + ':' + e.CraftName;
+      return !CURSE_OUTFIT_FLAGS[k];
     });
   }
   if (cacheOnly)   entries = entries.filter(e => !!e.IstLSCGCurse);
@@ -2282,6 +2360,10 @@ function renderCurseTab() {
       const k2 = (i.Besitzer?.Nummer ?? '') + ':' + i.ItemName + ':' + i.CraftName;
       return CURSE_FAVOURITES.has(k2);
     }).length;
+    const ownerOutfitCount = owner.items.filter(i => {
+      const k2 = (i.Besitzer?.Nummer ?? '') + ':' + i.ItemName + ':' + i.CraftName;
+      return !!CURSE_OUTFIT_FLAGS[k2];
+    }).length;
 
     block.innerHTML =
       '<div class="curse-owner-hdr" onclick="toggleCurseOwner(\'' + blockId + '\')">'+
@@ -2291,6 +2373,7 @@ function renderCurseTab() {
         (cursedCount ? '<span class="curse-owner-count">🔮 '+cursedCount+'</span>' : '')+
         '<span class="curse-owner-count" style="background:var(--bg3);color:var(--text2)">'+owner.items.length+'</span>'+
         (ownerFavCount ? '<span class="curse-owner-count curse-owner-fav-badge" style="background:rgba(251,191,36,.12);color:#fbbf24;border-color:rgba(251,191,36,.3)">⭐ '+ownerFavCount+'</span>' : '<span class="curse-owner-fav-badge" style="display:none"></span>')+
+        '<span class="curse-owner-count curse-owner-outfit-badge" style="background:rgba(52,211,153,0.12);color:#6ee7b7;border-color:rgba(52,211,153,0.3);'+(!ownerOutfitCount?'display:none':'')+'" title="Als Outfit markierte Items">👗 '+ownerOutfitCount+'</span>'+
         '<button onclick="event.stopPropagation();curseSaveAllAsProfile(\'' + owner.num + '\')"'
           + ' style="margin-left:auto;background:rgba(139,92,246,0.12);border:1px solid rgba(139,92,246,0.3);color:#a78bfa;cursor:pointer;font-size:.68rem;padding:2px 8px;border-radius:4px;white-space:nowrap"'
           + ' title="Alle Curses als Outfit-Profil speichern">💾 Alle speichern</button>'+
@@ -2298,6 +2381,7 @@ function renderCurseTab() {
       '</div>'+
       '<table class="curse-rows"><thead><tr style="background:var(--bg3)">'+
         '<th style="padding:4px 4px;font-size:.63rem;color:var(--text3);text-align:center;font-weight:500" title="Favorit">⭐</th>'+
+        '<th style="padding:4px 4px;font-size:.63rem;color:var(--text3);text-align:center;font-weight:500" title="Als Outfit markiert">👗</th>'+
         '<th style="padding:4px 10px;font-size:.63rem;color:var(--text3);text-align:left;font-weight:500">Name</th>'+
         '<th style="padding:4px 10px;font-size:.63rem;color:var(--text3);text-align:left;font-weight:500">Item</th>'+
         '<th style="padding:4px 10px;font-size:.63rem;color:var(--text3);text-align:left;font-weight:500">Gruppe</th>'+
@@ -2319,10 +2403,11 @@ function renderCurseTab() {
       const comment = CURSE_COMMENTS[dbKey] || '';
       const isLSCG  = entry.IstLSCGCurse;
       const isCursed = entry.IstCursed;
+      const isOutfit = !!CURSE_OUTFIT_FLAGS[dbKey];
 
       const tr = document.createElement('tr');
       const isFav = CURSE_FAVOURITES.has(dbKey);
-    tr.className = 'curse-row' + (isLSCG ? ' lscg' : '') + (isFav ? ' fav' : '');
+    tr.className = 'curse-row' + (isLSCG ? ' lscg' : '') + (isFav ? ' fav' : '') + (isOutfit ? ' outfit-flagged' : '');
       tr.id = rowId;
 
       const lscgText = isLSCG
@@ -2333,6 +2418,11 @@ function renderCurseTab() {
       tr.innerHTML =
         '<td class="fav-cell" onclick="toggleCurseFavourite(\'' + dbKey.replace(/'/g,"&apos;") + '\',this)" title="Favorit">'+
           (isFav ? '⭐' : '<span style="opacity:.25;font-size:.85em">☆</span>')+
+        '</td>'+
+        '<td class="outfit-flag-cell" onclick="toggleCurseOutfitFlag(\'' + dbKey.replace(/'/g,"&apos;") + '\',this)" title="Outfit-Markierung">'+
+          (isOutfit
+            ? '<span class="outfit-flag-pill on">👗 Outfit</span>'
+            : '<span class="outfit-flag-pill">+ Outfit</span>')+
         '</td>'+
         '<td class="cn"><span class="cursor-detail-toggle" onclick="toggleCurseDetail(\'' + detId + '\',\'' + rowId + '\')">▶</span>'+escHtml(entry.CraftName)+(echoTranslate(entry.CraftName)?'<span style="font-size:.58rem;color:#a78bfa;margin-left:4px">('+echoTranslate(entry.CraftName)+')</span>':'')+'</td>'+
         '<td class="item">'+escHtml(entry.ItemName)+(echoTranslate(entry.ItemName)?'<span style="font-size:.58rem;color:var(--text3);margin-left:4px">('+echoTranslate(entry.ItemName)+')</span>':'')+'</td>'+
@@ -2381,31 +2471,8 @@ function renderCurseTab() {
       const detTr = document.createElement('tr');
       detTr.className = 'curse-detail-row';
       detTr.id = detId;
-
-      // LSCG Speed-Editor: erscheint nur bei LSCG-Curses
-      const speedEditorHtml = isLSCG ? (() => {
-        const curseName = lscgEntry?.Name || entry.CraftName || '';
-        const ownerNum  = entry.Besitzer?.Nummer ?? '';
-        const curSpeed  = lscgEntry?.Speed ?? 1;
-        const safeNameB64 = btoa(unescape(encodeURIComponent(curseName)));
-        const safeOwnerNum = Number(ownerNum) || 0;
-        return '<div style="margin-top:10px;padding:8px;background:rgba(139,92,246,0.08);border:1px solid rgba(139,92,246,0.25);border-radius:6px">'
-          + '<div style="font-size:.65rem;font-weight:700;color:#a78bfa;margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em">⚡ LSCG Curse Speed</div>'
-          + '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">'
-          + '<span style="font-size:.68rem;color:var(--text3)">Aktuell: <b style="color:#c4b5fd">' + curSpeed + '</b></span>'
-          + '<input type="number" min="0.1" max="100" step="0.1" value="' + curSpeed + '" id="spd-inp-' + detId + '" '
-          + '  style="width:70px;background:rgba(0,0,0,0.4);border:1px solid rgba(139,92,246,0.4);border-radius:4px;color:#e2e8f0;padding:3px 6px;font-size:.72rem" '
-          + '  title="Speed-Wert (1 = normal, 2 = doppelt so schnell, 0.5 = halb so schnell)">'
-          + '<button onclick="lscgSetSpeed(' + JSON.stringify(safeNameB64) + ',' + safeOwnerNum + ',document.getElementById(' + JSON.stringify('spd-inp-' + detId) + ').value,null)"'
-          + '  style="background:rgba(139,92,246,0.2);border:1px solid rgba(139,92,246,0.4);color:#c4b5fd;border-radius:4px;font-size:.68rem;padding:3px 9px;cursor:pointer">✅ Auf mich</button>'
-          + (_selectedMemberNum ? '<button onclick="lscgSetSpeed(' + JSON.stringify(safeNameB64) + ',' + safeOwnerNum + ',document.getElementById(' + JSON.stringify('spd-inp-' + detId) + ').value,' + _selectedMemberNum + ')"'
-          + '  style="background:rgba(96,165,250,0.15);border:1px solid rgba(96,165,250,0.35);color:#60a5fa;border-radius:4px;font-size:.68rem;padding:3px 9px;cursor:pointer">👥 #' + _selectedMemberNum + '</button>' : '')
-          + '<span style="font-size:.6rem;color:var(--text3)">Ändert nur den Speed im eigenen Player-Objekt</span>'
-          + '</div></div>';
-      })() : '';
-
       detTr.innerHTML =
-        '<td class="curse-detail-cell" colspan="7">'+
+        '<td class="curse-detail-cell" colspan="8">'+
         '<div style="font-size:.63rem;color:var(--text3);margin-bottom:4px">Details für '+escHtml(entry.CraftName)+'</div>'+
         '<div class="curse-detail-grid">'+
         detailFields.map(([label, val]) =>
@@ -2414,9 +2481,7 @@ function renderCurseTab() {
           '<div class="curse-detail-val">'+escHtml(String(val))+'</div>'+
           '</div>'
         ).join('')+
-        '</div>'+
-        speedEditorHtml +
-        '</td>';
+        '</div></td>';
       tbody.appendChild(detTr);
     });
   });
@@ -2448,6 +2513,48 @@ function saveCurseComment(key, val) {
   _saveCurseComments();
 }
 
+function toggleCurseOutfitFlag(dbKey, cellEl) {
+  const wasSet = !!CURSE_OUTFIT_FLAGS[dbKey];
+  if (wasSet) delete CURSE_OUTFIT_FLAGS[dbKey];
+  else CURSE_OUTFIT_FLAGS[dbKey] = true;
+  _saveCurseOutfitFlags();
+  if (cellEl) {
+    const isSet = !wasSet;
+    cellEl.innerHTML = isSet
+      ? '<span class="outfit-flag-pill on">👗 Outfit</span>'
+      : '<span class="outfit-flag-pill">+ Outfit</span>';
+    const row = cellEl.closest('tr');
+    if (row) row.classList.toggle('outfit-flagged', isSet);
+    // Owner-Block Badge aktualisieren
+    const block = cellEl.closest('.curse-owner-block');
+    if (block) {
+      const badge = block.querySelector('.curse-owner-outfit-badge');
+      const cnt = block.querySelectorAll('.curse-row.outfit-flagged').length;
+      if (badge) {
+        badge.textContent = '👗 ' + cnt;
+        badge.style.display = cnt > 0 ? '' : 'none';
+      }
+    }
+  } else {
+    renderCurseTab();
+  }
+}
+
+function curseAutoMarkOutfit() {
+  let marked = 0;
+  for (const [key, comment] of Object.entries(CURSE_COMMENTS)) {
+    if (/outfit/i.test(comment) && !CURSE_OUTFIT_FLAGS[key]) {
+      CURSE_OUTFIT_FLAGS[key] = true;
+      marked++;
+    }
+  }
+  _saveCurseOutfitFlags();
+  if (_activeTab === 'curse') renderCurseTab();
+  showStatus(marked > 0
+    ? '✅ ' + marked + ' Item(s) als Outfit markiert'
+    : 'ℹ️ Keine neuen Kommentare mit „outfit" gefunden', marked > 0 ? 'success' : 'info');
+}
+
 function deleteCurseEntry(dbKey) {
   if (!CURSE_DB[dbKey]) return;
   delete CURSE_DB[dbKey];
@@ -2473,83 +2580,6 @@ function wearCurse(dbKey, targetNum) {
   if (!entry) { showStatus('❌ Eintrag nicht in DB: ' + dbKey, 'error'); return; }
   bcSend({ type: 'WEAR_CURSE', dbKey, targetNum, entry });
   showStatus('⏳ Curse wird angelegt...', 'info');
-}
-
-// ── LSCG Curse Speed ändern ─────────────────────────────────────────────
-// curseName: base64-encoded LSCG-Curse-Name (gegen Sonderzeichen)
-// ownerNum:  MemberNumber des Crafters (für Suche im CursedItems-Array)
-// newSpeed:  neuer Speed-Wert (number)
-// targetNum: null = eigener Player, sonst MemberNumber eines Raum-Spielers
-function lscgSetSpeed(curseNameB64, ownerNum, newSpeed, targetNum) {
-  if (!_connected) { showStatus('❌ Nicht verbunden', 'error'); return; }
-  const speed = parseFloat(newSpeed);
-  if (isNaN(speed) || speed <= 0) { showStatus('❌ Ungültiger Speed-Wert', 'error'); return; }
-
-  const tgtCode  = targetNum ? String(Number(targetNum)) : 'null';
-  const speedB64 = btoa(unescape(encodeURIComponent(String(speed))));
-
-  const code = `(function(){
-  var curseNameB64 = ${JSON.stringify(curseNameB64)};
-  var ownerNum     = ${Number(ownerNum) || 0};
-  var speed        = parseFloat(decodeURIComponent(escape(atob(${JSON.stringify(speedB64)}))));
-  var tgtNum       = ${tgtCode};
-  var curseName    = decodeURIComponent(escape(atob(curseNameB64)));
-
-  // Ziel-Charakter: null = eigener Player, sonst Raum-Spieler
-  var C = tgtNum
-    ? ((window.ChatRoomCharacter||[]).find(function(c){return c.MemberNumber===tgtNum;})||null)
-    : window.Player;
-  if (!C) { console.error('[LSCGSpeed] Ziel nicht gefunden: #' + tgtNum); return; }
-
-  // LSCG speichert CursedItems in C.LSCG.CursedItemModule.CursedItems
-  var cursedItems = C.LSCG?.CursedItemModule?.CursedItems;
-  if (!Array.isArray(cursedItems) || !cursedItems.length) {
-    console.warn('[LSCGSpeed] Keine CursedItems auf', C.Name);
-    return;
-  }
-
-  // Suche nach Name (exakt oder case-insensitiv), optional gefiltert nach Crafter
-  var found = cursedItems.find(function(ci){
-    if (!ci) return false;
-    var nameMatch = ci.Name && ci.Name.toLowerCase() === curseName.toLowerCase();
-    if (!nameMatch) return false;
-    // Falls ownerNum bekannt: auch nach Crafter filtern um richtige Instanz zu treffen
-    if (ownerNum && ci.MemberNumber && ci.MemberNumber !== ownerNum) return false;
-    return true;
-  });
-
-  // Fallback: nur nach Name suchen wenn ownerNum-Filter nichts findet
-  if (!found && ownerNum) {
-    found = cursedItems.find(function(ci){
-      return ci && ci.Name && ci.Name.toLowerCase() === curseName.toLowerCase();
-    });
-  }
-
-  if (!found) {
-    console.warn('[LSCGSpeed] Curse nicht in CursedItems gefunden:', curseName, '(Owner:', ownerNum, ')');
-    console.log('[LSCGSpeed] Verfügbare Curses:', cursedItems.map(function(ci){return ci.Name+'('+ci.MemberNumber+')';}).join(', '));
-    return;
-  }
-
-  var oldSpeed = found.Speed;
-  found.Speed = speed;
-
-  // LSCG intern benachrichtigen damit der neue Speed sofort greift
-  // (LSCG liest Speed beim nächsten Update-Zyklus neu aus dem Objekt)
-  try {
-    if (typeof window.LSCG?.CursedItemModule?.updateCurseSpeed === 'function')
-      window.LSCG.CursedItemModule.updateCurseSpeed(found);
-  } catch(e){}
-
-  // ServerPlayerSync damit der neue Wert auch nach Reconnect erhalten bleibt
-  try { ServerPlayerSync(); } catch(e){}
-  try { ChatRoomCharacterUpdate(C); } catch(e){}
-
-  console.log('[LSCGSpeed] ' + C.Name + ': "' + curseName + '" Speed ' + oldSpeed + ' → ' + speed);
-})();`;
-
-  bcSend({ type: 'EXEC', code });
-  showStatus('⚡ LSCG Speed gesetzt: ' + speed + ' auf ' + (targetNum ? '#' + targetNum : 'Player'), 'success');
 }
 
 // ── Curse → Outfit-Profil speichern ─────────────────────────────────────
@@ -2637,18 +2667,47 @@ function _fetchOutfitAndSave(ownerNum, defaultName, fallbackItems) {
       }
       return;
     }
-    // defaultName already contains "{CraftName} - {OwnerName}" – use it directly
     _doSaveProfile(items.map(_appearanceItemToProfile), defaultName);
   };
 
   bcSend({ type: 'GET_CHAR_APPEARANCE', memberNum: tgtNum, reqId });
   showStatus('⏳ Lese Outfit aus BC…', 'info');
 }
+
+// Scan Outfit Button im Outfit-Tab
+function scanOutfitAndSave() {
+  if (!_connected) { showStatus('❌ Nicht verbunden mit BC', 'error'); return; }
+  const reqId  = 'os_scan_' + Date.now();
+  const tgtNum = _outfitTargetNum ?? null;
+  const defaultName = tgtNum
+    ? ('Scan - ' + (_lastRoomMembers.find(m => m.num === tgtNum)?.name || ('#' + tgtNum)))
+    : 'Scan - Player';
+
+  _pendingOutfitSave[reqId] = function(items) {
+    if (!items?.length) { showStatus('❌ Keine Items erhalten', 'error'); return; }
+    _doSaveProfile(items.map(_appearanceItemToProfile), defaultName);
+    renderProfileList();
+  };
+
+  bcSend({ type: 'GET_CHAR_APPEARANCE', memberNum: tgtNum, reqId });
+  showStatus('⏳ Scanne Outfit aus BC…', 'info');
+}
 // Button: 💾 Profil (pro Curse-Zeile) → "{CraftName} - {OwnerName}"
 function curseSaveAsProfile(rowIdOrDbKey) {
   const dbKey = _curseEntryMap[rowIdOrDbKey] ?? rowIdOrDbKey;
   const entry = CURSE_DB[dbKey];
   if (!entry) { showStatus('❌ Eintrag nicht gefunden', 'error'); return; }
+  // Auto-Flag setzen
+  if (!CURSE_OUTFIT_FLAGS[dbKey]) {
+    CURSE_OUTFIT_FLAGS[dbKey] = true;
+    _saveCurseOutfitFlags();
+    const row = document.getElementById(rowIdOrDbKey);
+    if (row) {
+      row.classList.add('outfit-flagged');
+      const cell = row.querySelector('.outfit-flag-cell');
+      if (cell) cell.innerHTML = '<span class="outfit-flag-pill on">👗 Outfit</span>';
+    }
+  }
   const craftName = entry.CraftName || entry.ItemName || 'Curse';
   const ownerName = entry.Besitzer?.Name || (entry.Besitzer?.Nummer ? '#' + entry.Besitzer.Nummer : 'Player');
   const defaultName = craftName + ' - ' + ownerName;
@@ -2661,7 +2720,13 @@ function curseSaveAllAsProfile(ownerNum) {
     .filter(([, e]) => String(e.Besitzer?.Nummer ?? '') === String(ownerNum))
     .map(([, e]) => e);
   const ownerName = entries[0]?.Besitzer?.Name || ('#' + ownerNum);
-  // Mehrere Items: kein einzelner CraftName sinnvoll → nur OwnerName
+  // Auto-Flag alle Einträge dieses Owners
+  let flagged = 0;
+  for (const e of entries) {
+    const k = (e.Besitzer?.Nummer ?? '') + ':' + e.ItemName + ':' + e.CraftName;
+    if (!CURSE_OUTFIT_FLAGS[k]) { CURSE_OUTFIT_FLAGS[k] = true; flagged++; }
+  }
+  if (flagged > 0) _saveCurseOutfitFlags();
   const defaultName = ownerName + ' Outfit';
   _fetchOutfitAndSave(null, defaultName, entries.map(_curseEntryToProfileItem));
 }
@@ -2788,15 +2853,20 @@ function curseClearAndScan() {
       CURSE_DB         = d.database  ?? {};
       CURSE_LSCG       = d.lscgTable ?? {};
       CURSE_CACHE_LSCG = d.lscgCache ?? {};
-      if (d.favourites) d.favourites.forEach(k => CURSE_FAVOURITES.add(k));
+      if (d.favourites)   d.favourites.forEach(k => CURSE_FAVOURITES.add(k));
+      if (d.outfitFlags && typeof d.outfitFlags === 'object') Object.assign(CURSE_OUTFIT_FLAGS, d.outfitFlags);
       _updateCurseStats();
-      console.log('[BCK-Popup] Curse DB geladen: ' + Object.keys(CURSE_DB).length + ' Crafts');
-      if (document.getElementById('curseBody')) renderCurseTab();
+      console.log('[BCK-Popup] Curse DB geladen: ' + Object.keys(CURSE_DB).length + ' Crafts, ' + Object.keys(CURSE_OUTFIT_FLAGS).length + ' Outfit-Flags');
     }
     const comments = await idbGet('BC_CURSE_COMMENTS_v1');
     if (comments) Object.assign(CURSE_COMMENTS, comments);
     const favs = await idbGet('BC_CURSE_FAV_v1');
     if (Array.isArray(favs)) favs.forEach(k => CURSE_FAVOURITES.add(k));
+    // Fallback: separaten Outfit-Key prüfen (für ältere gespeicherte Daten)
+    const outfitFlags = await idbGet('BC_CURSE_OUTFIT_v1');
+    if (outfitFlags && typeof outfitFlags === 'object') Object.assign(CURSE_OUTFIT_FLAGS, outfitFlags);
+    // Erst rendern nachdem ALLE Daten geladen sind
+    if (document.getElementById('curseBody') && Object.keys(CURSE_DB).length) renderCurseTab();
   } catch(e) { console.warn('[BCK-Popup] Curse IDB load error:', e); }
 })();
 
