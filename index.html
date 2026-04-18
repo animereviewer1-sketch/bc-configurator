@@ -620,6 +620,28 @@ textarea.outfit-code { width: 100%; min-height: 210px; background: rgba(0,0,0,0.
 .profile-new-row { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; }
 .profile-name-input { flex: 1; background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: var(--text); padding: 7px 12px; font-size: 0.83rem; font-family: var(--font-ui); transition: all 0.18s; }
 .profile-name-input:focus { border-color: var(--purple); box-shadow: 0 0 0 3px rgba(139,92,246,0.2); }
+/* Profile groups */
+.profile-group { margin-bottom: 18px; }
+.profile-group-hdr { display: flex; align-items: center; gap: 9px; padding: 7px 12px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.07); border-radius: 10px; cursor: pointer; user-select: none; margin-bottom: 8px; transition: background .13s; }
+.profile-group-hdr:hover { background: rgba(255,255,255,0.04); }
+.profile-group-name { font-size: .82rem; font-weight: 800; color: var(--text); flex: 1; }
+.profile-group-count { font-size: .65rem; background: rgba(139,92,246,0.18); color: #c4b5fd; padding: 2px 8px; border-radius: 99px; font-weight: 800; border: 1px solid rgba(139,92,246,0.3); }
+.profile-group-chevron { color: var(--text3); font-size: .72rem; transition: transform .2s; }
+.profile-group.open .profile-group-chevron { transform: rotate(90deg); }
+.profile-group-body { display: none; }
+.profile-group.open .profile-group-body { display: block; }
+/* Profile row list (not cards) */
+.profile-rows { display: flex; flex-direction: column; gap: 5px; }
+.profile-row { display: flex; align-items: center; gap: 10px; padding: 7px 12px; background: rgba(255,255,255,0.015); border: 1px solid rgba(255,255,255,0.06); border-radius: 8px; transition: border-color .15s; }
+.profile-row:hover { border-color: rgba(139,92,246,0.3); }
+.profile-row-thumb { width: 42px; height: 42px; border-radius: 6px; object-fit: cover; background: rgba(139,92,246,0.1); border: 1px solid rgba(139,92,246,0.2); flex-shrink: 0; }
+.profile-row-thumb-empty { width: 42px; height: 42px; border-radius: 6px; background: rgba(139,92,246,0.08); border: 1px dashed rgba(139,92,246,0.25); flex-shrink: 0; display: flex; align-items: center; justify-content: center; color: rgba(139,92,246,0.4); font-size: 1.1rem; cursor: pointer; }
+.profile-row-thumb-empty:hover { background: rgba(139,92,246,0.15); border-color: rgba(139,92,246,0.5); }
+.profile-row-info { flex: 1; min-width: 0; }
+.profile-row-name { font-size: .82rem; font-weight: 700; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.profile-row-meta { font-size: .65rem; color: var(--text3); }
+.profile-row-fav { background: none; border: none; cursor: pointer; font-size: 1rem; padding: 2px 4px; opacity: .5; transition: opacity .15s; }
+.profile-row-fav:hover, .profile-row-fav.active { opacity: 1; }
 
 /* ═══════════════════════════════════════════════
    STATUS MESSAGES
@@ -670,42 +692,7 @@ textarea.outfit-code { width: 100%; min-height: 210px; background: rgba(0,0,0,0.
 .outfit-code-live { width: 100%; height: 270px; background: rgba(0,0,0,0.55); border: 1px solid rgba(255,255,255,0.09); border-radius: 12px; color: #86efac; font-family: var(--font-mono); font-size: 0.71rem; padding: 12px; resize: vertical; line-height: 1.78; transition: border-color 0.18s; }
 .outfit-code-live:focus { border-color: var(--purple); box-shadow: 0 0 0 3px rgba(139,92,246,0.18); }
 .outfit-empty-hint { color: var(--text3); font-size: 0.86rem; text-align: center; padding: 46px 24px; border: 1px dashed rgba(255,255,255,0.07); border-radius: 14px; line-height: 1.75; }
-.profile-grid { margin-top: 10px; }
-.profile-owner-block { margin-bottom: 10px; border: 1px solid rgba(255,255,255,0.07); border-radius: 11px; overflow: hidden; }
-.profile-owner-hdr { display: flex; align-items: center; gap: 8px; padding: 9px 14px; background: rgba(255,255,255,0.02); cursor: pointer; user-select: none; }
-.profile-owner-hdr:hover { background: rgba(255,255,255,0.04); }
-.profile-owner-name { font-size: 0.82rem; font-weight: 800; color: var(--text); flex: 1; }
-.profile-owner-count { font-size: 0.64rem; background: rgba(139,92,246,0.15); color: #c4b5fd; padding: 2px 8px; border-radius: 99px; font-weight: 800; border: 1px solid rgba(139,92,246,0.28); }
-.profile-owner-chevron { color: var(--text3); font-size: 0.7rem; transition: transform 0.2s; }
-.profile-owner-block.open .profile-owner-chevron { transform: rotate(90deg); }
-.profile-owner-rows { display: none; }
-.profile-owner-block.open .profile-owner-rows { display: block; }
-.profile-row { border-top: 1px solid rgba(255,255,255,0.05); }
-.profile-row-main { display: flex; align-items: center; gap: 8px; padding: 7px 12px; }
-.profile-row-main:hover { background: rgba(139,92,246,0.04); }
-.profile-row-name { flex: 1; font-size: 0.78rem; font-weight: 700; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.profile-row-count { font-size: 0.62rem; color: var(--text3); white-space: nowrap; }
-.profile-row-date { font-size: 0.6rem; color: var(--text3); white-space: nowrap; }
-.profile-row-load { background: rgba(52,211,153,0.12); border: 1px solid rgba(52,211,153,0.3); color: #6ee7b7; border-radius: 6px; padding: 3px 8px; font-size: 0.72rem; cursor: pointer; flex-shrink: 0; }
-.profile-row-load:hover { background: rgba(52,211,153,0.22); }
-.profile-row-edit { background: none; border: 1px solid rgba(255,255,255,0.1); color: var(--text3); border-radius: 6px; padding: 3px 7px; font-size: 0.72rem; cursor: pointer; flex-shrink: 0; }
-.profile-row-edit:hover,.profile-row-edit.active { background: rgba(139,92,246,0.15); border-color: rgba(139,92,246,0.4); color: #c4b5fd; }
-.profile-row-export { background: none; border: none; color: var(--text3); cursor: pointer; font-size: 0.72rem; padding: 3px 5px; flex-shrink: 0; }
-.profile-row-del { background: none; border: none; color: var(--red); cursor: pointer; font-size: 0.75rem; padding: 3px 5px; flex-shrink: 0; }
-.profile-item-list { padding: 6px 12px 10px 12px; background: rgba(0,0,0,0.2); border-top: 1px solid rgba(255,255,255,0.05); display: flex; flex-direction: column; gap: 4px; }
-.profile-edit-name-row { display: flex; align-items: center; gap: 8px; padding: 5px 0 8px; border-bottom: 1px solid rgba(255,255,255,0.07); margin-bottom: 4px; }
-.profile-edit-name-inp { flex: 1; background: rgba(0,0,0,0.4); border: 1px solid rgba(139,92,246,0.35); border-radius: 6px; color: var(--text); padding: 4px 8px; font-size: 0.75rem; font-family: var(--font-ui); }
-.profile-item-row { display: flex; align-items: center; gap: 8px; padding: 4px 6px; border-radius: 6px; background: rgba(255,255,255,0.02); }
-.profile-item-row:hover { background: rgba(255,255,255,0.04); }
-.profile-item-asset { font-size: 0.72rem; font-weight: 700; color: var(--text); min-width: 130px; }
-.profile-item-group { font-size: 0.63rem; color: var(--text3); font-family: var(--font-mono); min-width: 100px; }
-.profile-item-badge { font-size: 0.58rem; padding: 1px 6px; border-radius: 99px; white-space: nowrap; }
-.profile-item-badge.lock { background: rgba(251,113,133,0.1); color: #fb7185; border: 1px solid rgba(251,113,133,0.2); }
-.profile-item-badge.craft { background: rgba(139,92,246,0.1); color: #c4b5fd; border: 1px solid rgba(139,92,246,0.2); }
-.profile-gear-btn { margin-left: auto; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1); color: var(--text3); border-radius: 6px; padding: 2px 7px; font-size: 0.72rem; cursor: pointer; flex-shrink: 0; }
-.profile-gear-btn:hover { background: rgba(139,92,246,0.15); border-color: rgba(139,92,246,0.4); color: #c4b5fd; }
-.profile-gear-btn.nocache { opacity: 0.45; border-style: dashed; }
-.profile-gear-btn.nocache:hover { opacity: 1; background: rgba(251,191,36,0.1); border-color: rgba(251,191,36,0.4); color: #fbbf24; }
+.profile-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px,1fr)); gap: 9px; margin-top: 12px; }
 .section-hdr2 { font-size: 0.7rem; font-weight: 800; color: var(--text2); text-transform: uppercase; letter-spacing: 1.6px; padding-bottom: 9px; border-bottom: 1px solid rgba(255,255,255,0.07); margin-bottom: 13px; display: flex; align-items: center; justify-content: space-between; }
 
 .outfit-search-row { display: flex; gap: 8px; margin-bottom: 12px; align-items: center; }
@@ -1085,11 +1072,6 @@ button { cursor: pointer; }
 
 .curse-row.fav { background: rgba(251,191,36,0.04); }
 .curse-row.fav:hover { background: rgba(251,191,36,0.08); }
-.curse-row td.outfit-flag-cell { text-align: center; vertical-align: middle; cursor: pointer; padding: 7px 4px; user-select: none; white-space: nowrap; }
-.outfit-flag-pill { display: inline-block; padding: 2px 8px; border-radius: 99px; font-size: 0.62rem; font-weight: 700; font-family: var(--font-ui); border: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.03); color: var(--text3); transition: all 0.18s; cursor: pointer; }
-.outfit-flag-pill.on { background: rgba(52,211,153,0.15); border-color: rgba(52,211,153,0.4); color: #6ee7b7; }
-.curse-row.outfit-flagged { background: rgba(52,211,153,0.05); }
-.curse-row.outfit-flagged:hover { background: rgba(52,211,153,0.09); }
 .fav-cell { width: 28px; text-align: center; cursor: pointer; user-select: none; padding: 6px 4px !important; font-size: 1rem; transition: transform .15s; }
 .fav-cell:hover { transform: scale(1.3); }
 
@@ -1455,10 +1437,7 @@ button { cursor: pointer; }
 
       <div class="section-hdr2">
         <span>👗 Outfit Items</span>
-        <div style="display:flex;gap:6px">
-          <button class="btn btn-primary" style="font-size:.65rem;padding:3px 8px" onclick="scanOutfitAndSave()" title="Aktuelles BC-Outfit scannen und als Profil speichern">📷 Scan Outfit</button>
-          <button class="btn btn-red" style="font-size:.65rem;padding:3px 8px" onclick="clearOutfit()">🗑️ Leeren</button>
-        </div>
+        <button class="btn btn-red" style="font-size:.65rem;padding:3px 8px" onclick="clearOutfit()">🗑️ Leeren</button>
       </div>
       <div class="outfit-search-row">
         <input class="outfit-search" id="outfitItemSearch" placeholder="🔍 Item suchen..." oninput="renderOutfitList()">
@@ -1472,8 +1451,8 @@ button { cursor: pointer; }
         <div class="section-hdr2">
           <div style="display:flex;align-items:center;gap:6px"><span>📁 Profile</span><input class="outfit-search" id="profileSearch" placeholder="🔍 Profil suchen..." oninput="renderProfileList()" style="width:150px;font-size:.69rem;padding:3px 8px"></div>
           <div style="display:flex;gap:6px;align-items:center">
-            <button class="btn btn-primary" style="font-size:.68rem;padding:4px 9px" onclick="profilesExportAll()" title="Alle Profile als JSON exportieren">⬇️ Export</button>
-            <button class="btn btn-primary" style="font-size:.68rem;padding:4px 9px" onclick="profilesImport()" title="Profile aus JSON importieren">⬆️ Import</button>
+            <button class="btn btn-primary" style="font-size:.68rem;padding:4px 9px" onclick="profilesExportAll()" title="Alle Profile exportieren">⬇️ Export</button>
+            <button class="btn btn-primary" style="font-size:.68rem;padding:4px 9px" onclick="profilesImport()" title="Profile importieren">⬆️ Import</button>
             <input class="profile-name-input" id="profileNameInput" placeholder="Profilname..." maxlength="40" style="font-size:.72rem;padding:3px 7px">
             <button class="btn btn-green" style="font-size:.68rem;padding:4px 9px" onclick="saveProfile()">💾 Speichern</button>
           </div>
@@ -1512,7 +1491,6 @@ button { cursor: pointer; }
     <button class="btn btn-green" onclick="curseScan()">🔍 Scannen</button>
     <button class="btn btn-green" onclick="curseClearAndScan()" title="Alte Einträge löschen und frisch scannen">🔄 Neu scannen</button>
     <button class="btn btn-primary" id="csAutoScanBtn" onclick="toggleAutoCurseScan()" title="Automatisch alle 30s scannen">⏰ Auto-Scan</button>
-    <button class="btn btn-primary" onclick="curseAutoMarkOutfit()" title="Kommentare mit 'outfit' automatisch als Outfit markieren">📝 Auto-Mark</button>
     <button class="btn btn-primary" onclick="curseExport()">⬇️ Export</button>
     <button class="btn btn-primary" onclick="curseImport()">⬆️ Import</button>
     <button class="btn btn-red" onclick="curseClear()" title="Alle gespeicherten Einträge löschen">🗑️ Leeren</button>
@@ -1535,9 +1513,6 @@ button { cursor: pointer; }
     <span class="filter-chip"    id="fc-lscg"     onclick="setCurseFilter('lscg')"   >🧿 LSCG</span>
     <div class="filter-sep"></div>
     <span class="filter-chip" id="fc-fav" onclick="setCurseFilter('fav')" title="Nur Favoriten">⭐ Favoriten</span>
-    <div class="filter-sep"></div>
-    <span class="filter-chip" id="fc-outfit"    onclick="setCurseFilter('outfit')"    title="Nur Outfits">👗 Outfit</span>
-    <span class="filter-chip" id="fc-no-outfit" onclick="setCurseFilter('no-outfit')" title="Noch kein Outfit">☐ Kein Outfit</span>
     <div class="filter-sep"></div>
     <span class="filter-chip" id="fc-cache" onclick="toggleCacheFilter()" title="Nur Einträge mit LSCG-Daten anzeigen">💾 Im Cache</span>
     <div class="filter-sep"></div>

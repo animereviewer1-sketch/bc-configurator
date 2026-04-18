@@ -1861,26 +1861,160 @@ function deleteProfile(name) {
   renderProfileList();
 }
 
+// ── Profile storage helpers ─────────────────────────────────────────────
+let _profileFavs = new Set();
+try { _profileFavs = new Set(JSON.parse(localStorage.getItem('BC_ProfileFavs_v1') || '[]')); } catch {}
+let _profileThumbs = {};
+try { _profileThumbs = JSON.parse(localStorage.getItem('BC_ProfileThumbs_v1') || '{}'); } catch {}
+// Track open groups
+let _profileGroupsOpen = {};
+try { _profileGroupsOpen = JSON.parse(localStorage.getItem('BC_ProfileGroups_v1') || '{}'); } catch {}
+
+function _saveProfileFavs()   { try { localStorage.setItem('BC_ProfileFavs_v1',   JSON.stringify([..._profileFavs])); } catch {} }
+function _saveProfileThumbs() { try { localStorage.setItem('BC_ProfileThumbs_v1', JSON.stringify(_profileThumbs));    } catch {} }
+function _saveProfileGroups() { try { localStorage.setItem('BC_ProfileGroups_v1', JSON.stringify(_profileGroupsOpen)); } catch {} }
+
+// Extract owner name from profile name "CraftName - OwnerName" → "OwnerName"
+// Falls back to "Sonstige" for non-matching names
+function _profileOwner(name) {
+  const m = name.match(/ - ([^-]+)$/);
+  return m ? m[1].trim() : '📂 Sonstige';
+}
+
+function toggleProfileFav(name) {
+  if (_profileFavs.has(name)) _profileFavs.delete(name);
+  else                          _profileFavs.add(name);
+  _saveProfileFavs();
+  renderProfileList();
+}
+
+function toggleProfileGroup(owner) {
+  _profileGroupsOpen[owner] = !_profileGroupsOpen[owner];
+  _saveProfileGroups();
+  const el = document.getElementById('pg_' + CSS.escape(owner));
+  if (el) el.classList.toggle('open', !!_profileGroupsOpen[owner]);
+}
+
+// Screenshot: captures BC's MainCanvas and stores as thumbnail for the profile
+function profileTakeScreenshot(name) {
+  if (!_connected) { showStatus('❌ Nicht verbunden', 'error'); return; }
+  // Use EXEC to get canvas data URL from BC
+  const code = `(function(){
+    var canvas = document.getElementById('MainCanvas') || document.querySelector('canvas');
+    if (!canvas) { console.error('[Screenshot] Kein Canvas gefunden'); return; }
+    // Crop to character area (center third of canvas, roughly)
+    var w = canvas.width, h = canvas.height;
+    var tmp = document.createElement('canvas');
+    tmp.width = 120; tmp.height = 160;
+    var ctx = tmp.getContext('2d');
+    // Draw scaled-down version
+    ctx.drawImage(canvas, 0, 0, w, h, 0, 0, 120, 160);
+    var dataUrl = tmp.toDataURL('image/jpeg', 0.7);
+    var target = window.opener || window.parent;
+    if (target) target.postMessage({app:'BCKonfigurator', type:'PROFILE_THUMB', name:${JSON.stringify(name)}, dataUrl}, '*');
+  })();`;
+  bcSend({ type: 'EXEC', code });
+  showStatus('📷 Screenshot wird aufgenommen...', 'info');
+}
+
 function renderProfileList() {
   const el = document.getElementById('profileListEl');
+  if (!el) return;
   const q = (document.getElementById('profileSearch')?.value || '').toLowerCase();
-  const keys = Object.keys(PROFILES).filter(k => !q || k.toLowerCase().includes(q));
+  let keys = Object.keys(PROFILES);
+  if (q) keys = keys.filter(k => k.toLowerCase().includes(q));
   if (!keys.length) {
-    el.innerHTML = '<p style="color:var(--text3);font-size:.8rem">Noch keine Profile gespeichert.</p>';
+    el.innerHTML = '<p style="color:var(--text3);font-size:.8rem;grid-column:1/-1">Noch keine Profile gespeichert.</p>';
+    el._profileKeys = [];
     return;
   }
-  el.innerHTML = '<div class="profile-list">' + keys.map((k, idx) => {
-    const p = PROFILES[k];
-    return '<div class="profile-card">'
-      + '<div class="profile-card-name">📁 ' + p.name + '</div>'
-      + '<div class="profile-card-info">' + (p.items?.length ?? 0) + ' Items · ' + (p.date || '') + '</div>'
-      + '<div class="btn-row" style="margin-top:6px">'
-      + '<button class="btn btn-green" style="flex:1;font-size:.68rem" data-pkey="' + idx + '" onclick="loadProfileByIdx(this.dataset.pkey)">📥 Laden</button>'
-      + '<button class="btn btn-primary" style="font-size:.68rem;padding:4px 7px" data-pkey="' + idx + '" onclick="profileExportSingle(this.dataset.pkey)" title="Dieses Profil exportieren">⬇️</button>'
-      + '<button class="btn btn-red" style="font-size:.68rem" data-pkey="' + idx + '" onclick="deleteProfileByIdx(this.dataset.pkey)">🗑️</button>'
-      + '</div></div>';
-  }).join('') + '</div>';
+
+  // Sort: Favs first, then alphabetically by owner, then by name
+  keys.sort((a, b) => {
+    const af = _profileFavs.has(a) ? 0 : 1;
+    const bf = _profileFavs.has(b) ? 0 : 1;
+    if (af !== bf) return af - bf;
+    const ao = _profileOwner(a), bo = _profileOwner(b);
+    if (ao !== bo) return ao.localeCompare(bo);
+    return a.localeCompare(b);
+  });
   el._profileKeys = keys;
+
+  // Group by owner
+  const groups = {};
+  keys.forEach((k, idx) => {
+    const owner = _profileOwner(k);
+    if (!groups[owner]) groups[owner] = [];
+    groups[owner].push({ k, idx });
+  });
+
+  // Favs group first if any
+  const ownerList = Object.keys(groups);
+  // Ensure Sonstige last
+  ownerList.sort((a, b) => {
+    if (a === '📂 Sonstige') return 1;
+    if (b === '📂 Sonstige') return -1;
+    return a.localeCompare(b);
+  });
+
+  el.innerHTML = ownerList.map(owner => {
+    const items = groups[owner];
+    const isOpen = _profileGroupsOpen[owner] !== false; // default open
+    const safeId = 'pg_' + owner.replace(/[^a-zA-Z0-9]/g, '_');
+    const favCount = items.filter(({k}) => _profileFavs.has(k)).length;
+
+    const rows = items.map(({k, idx}) => {
+      const p = PROFILES[k];
+      const isFav = _profileFavs.has(k);
+      const thumb = _profileThumbs[k];
+      // CraftName = part before " - OwnerName"
+      const displayName = k.replace(/ - [^-]+$/, '') || k;
+
+      const thumbHtml = thumb
+        ? `<img class="profile-row-thumb" src="${thumb}" alt="">`
+        : `<div class="profile-row-thumb-empty" data-name="${idx}" onclick="profileTakeScreenshot(window.document.getElementById('profileListEl')._profileKeys[${idx}])" title="📷 Screenshot aufnehmen">📷</div>`;
+
+      return `<div class="profile-row">
+        ${thumbHtml}
+        <div class="profile-row-info">
+          <div class="profile-row-name" title="${escHtml(k)}">${escHtml(displayName)}</div>
+          <div class="profile-row-meta">${p.items?.length ?? 0} Items · ${p.date || ''}</div>
+        </div>
+        <button class="profile-row-fav ${isFav ? 'active' : ''}" data-pkey="${idx}" onclick="toggleProfileFav(document.getElementById('profileListEl')._profileKeys[${idx}])" title="${isFav ? 'Favorit entfernen' : 'Als Favorit markieren'}">${isFav ? '⭐' : '☆'}</button>
+        <button class="btn btn-green" style="font-size:.65rem;padding:3px 8px;white-space:nowrap" data-pkey="${idx}" onclick="loadProfileByIdx(this.dataset.pkey)">📥 Laden</button>
+        <button class="btn btn-primary" style="font-size:.65rem;padding:3px 6px" data-pkey="${idx}" onclick="profileTakeScreenshot(document.getElementById('profileListEl')._profileKeys[${idx}])" title="📷 Screenshot">📷</button>
+        <button class="btn btn-primary" style="font-size:.65rem;padding:3px 6px" data-pkey="${idx}" onclick="profileExportSingle(this.dataset.pkey)" title="Exportieren">⬇️</button>
+        <button class="btn btn-red" style="font-size:.65rem;padding:3px 6px" data-pkey="${idx}" onclick="deleteProfileByIdx(this.dataset.pkey)" title="Löschen">🗑️</button>
+      </div>`;
+    }).join('');
+
+    return `<div class="profile-group ${isOpen ? 'open' : ''}" id="${safeId}">
+      <div class="profile-group-hdr" onclick="toggleProfileGroup(${JSON.stringify(owner)})">
+        <span style="font-size:.85rem">📁</span>
+        <span class="profile-group-name">${escHtml(owner)}</span>
+        ${favCount ? `<span style="font-size:.65rem;color:#fbbf24">⭐ ${favCount}</span>` : ''}
+        <span class="profile-group-count">${items.length}</span>
+        <span class="profile-group-chevron">▶</span>
+      </div>
+      <div class="profile-group-body">
+        <div class="profile-rows">${rows}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function loadProfileByIdx(idx) {
+  const el = document.getElementById('profileListEl');
+  const keys = el._profileKeys;
+  if (!keys || !keys[idx]) return;
+  loadProfile(keys[idx]);
+}
+
+function deleteProfileByIdx(idx) {
+  const el = document.getElementById('profileListEl');
+  const keys = el._profileKeys;
+  if (!keys || !keys[idx]) return;
+  deleteProfile(keys[idx]);
 }
 
 // ── Export / Import ──────────────────────────────────────────────────────
@@ -2298,6 +2432,7 @@ function renderCurseTab() {
       '</div>'+
       '<table class="curse-rows"><thead><tr style="background:var(--bg3)">'+
         '<th style="padding:4px 4px;font-size:.63rem;color:var(--text3);text-align:center;font-weight:500" title="Favorit">⭐</th>'+
+        '<th style="padding:4px 6px;font-size:.63rem;color:var(--text3);text-align:center;font-weight:500" title="Zum Outfit hinzufügen">👗</th>'+
         '<th style="padding:4px 10px;font-size:.63rem;color:var(--text3);text-align:left;font-weight:500">Name</th>'+
         '<th style="padding:4px 10px;font-size:.63rem;color:var(--text3);text-align:left;font-weight:500">Item</th>'+
         '<th style="padding:4px 10px;font-size:.63rem;color:var(--text3);text-align:left;font-weight:500">Gruppe</th>'+
@@ -2333,6 +2468,11 @@ function renderCurseTab() {
       tr.innerHTML =
         '<td class="fav-cell" onclick="toggleCurseFavourite(\'' + dbKey.replace(/'/g,"&apos;") + '\',this)" title="Favorit">'+
           (isFav ? '⭐' : '<span style="opacity:.25;font-size:.85em">☆</span>')+
+        '</td>'+
+        '<td style="text-align:center;vertical-align:middle;padding:4px 4px">'+
+          '<button data-rid="' + rowId + '" onclick="addCurseToOutfit(this.dataset.rid)"'+
+          ' style="background:rgba(52,211,153,0.15);border:1px solid rgba(52,211,153,0.3);color:#34d399;border-radius:4px;font-size:.63rem;padding:2px 6px;cursor:pointer;white-space:nowrap"'+
+          ' title="Item zum Outfit-Builder hinzufügen">👗 Outfit</button>'+
         '</td>'+
         '<td class="cn"><span class="cursor-detail-toggle" onclick="toggleCurseDetail(\'' + detId + '\',\'' + rowId + '\')">▶</span>'+escHtml(entry.CraftName)+(echoTranslate(entry.CraftName)?'<span style="font-size:.58rem;color:#a78bfa;margin-left:4px">('+echoTranslate(entry.CraftName)+')</span>':'')+'</td>'+
         '<td class="item">'+escHtml(entry.ItemName)+(echoTranslate(entry.ItemName)?'<span style="font-size:.58rem;color:var(--text3);margin-left:4px">('+echoTranslate(entry.ItemName)+')</span>':'')+'</td>'+
@@ -2455,6 +2595,58 @@ function deleteCurseEntry(dbKey) {
   _updateCurseStats();
   renderCurseTab();
   showStatus('🗑️ Eintrag gelöscht – kommt beim nächsten Scan wieder', 'info');
+}
+
+// ── Curse zum Outfit-Builder hinzufügen ─────────────────────────────────
+function addCurseToOutfit(rowId) {
+  const dbKey = _curseEntryMap[rowId];
+  if (!dbKey) { showStatus('❌ Eintrag nicht gefunden', 'error'); return; }
+  const entry = CURSE_DB[dbKey];
+  if (!entry) { showStatus('❌ Nicht in DB: ' + dbKey, 'error'); return; }
+
+  let col = entry.Farbe;
+  if (typeof col === 'string' && col.includes(',')) col = col.split(',');
+  if (!Array.isArray(col)) col = col ? [col] : ['#ffffff'];
+
+  const craft = entry.Craft ?? null;
+  let craftStr = '';
+  if (craft && craft.Name) {
+    const craftCol = Array.isArray(col) ? col[0] : col;
+    craftStr = ',\n  {\n    Name: ' + JSON.stringify(craft.Name)
+             + ',\n    Description: ' + JSON.stringify(craft.Description ?? '')
+             + ',\n    Property: ' + JSON.stringify(craft.Property ?? 'Normal')
+             + ',\n    Color: ' + JSON.stringify(craftCol === 'Default' ? '#808080' : craftCol)
+             + ',\n    Lock: "", Item: ' + JSON.stringify(entry.ItemName)
+             + ', Private: ' + (craft.Private ? 'true' : 'false')
+             + ', MemberNumber: Player.MemberNumber,\n  }';
+  }
+
+  // Prüfe ob Gruppe schon im Outfit belegt ist
+  const conflicts = OUTFIT.filter(i => i.group === entry.Gruppe);
+  if (conflicts.length && !confirm('Gruppe "' + entry.Gruppe + '" ist schon belegt. Ersetzen?')) return;
+  OUTFIT = OUTFIT.filter(i => i.group !== entry.Gruppe);
+
+  OUTFIT.push({
+    asset:    entry.ItemName,
+    group:    entry.Gruppe,
+    colors:   col,
+    craft:    craft,
+    craftStr: craftStr,
+    lock:     null,
+    lockParams: { timer:0, combo:'', password:'', relMember:0, relTimer:0 },
+    tr:       {},
+    trStr:    '{}',
+    typeStr:  '',
+    propCode: '',
+    cfg:      {},
+    _fromCurse: true,
+    _craftName: entry.CraftName || entry.ItemName,
+  });
+
+  switchTab('outfit');
+  renderOutfitList();
+  _autoOutfitCode();
+  showStatus('✅ ' + escHtml(entry.CraftName || entry.ItemName) + ' zum Outfit hinzugefügt', 'success');
 }
 
 function wearCurseByData(btn) {
@@ -3036,6 +3228,18 @@ window.addEventListener('message', function(ev) {
     case 'WEAR_CURSE_OK':
       showStatus('\u2705 ' + (ev.data.msg || 'Curse angelegt!'), 'success');
       break;
+
+    case 'PROFILE_THUMB': {
+      const _tn = ev.data.name;
+      const _td = ev.data.dataUrl;
+      if (_tn && _td) {
+        _profileThumbs[_tn] = _td;
+        _saveProfileThumbs();
+        renderProfileList();
+        showStatus('\u{1F4F7} Screenshot gespeichert f\u00fcr "' + _tn + '"', 'success');
+      }
+      break;
+    }
 
     case 'WEAR_CURSE_ERR':
       showStatus('\u274c Curse-Fehler: ' + ev.data.msg, 'error');
