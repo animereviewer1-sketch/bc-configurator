@@ -439,8 +439,7 @@ idbGet('BC_PROFILES_v12').then(d => { if (d && typeof d === 'object' && Object.k
 // ── Profil-Persistenz (async IDB) ────────────────────
 function _saveProfiles() {
   idbSet('BC_PROFILES_v12', PROFILES);
-  // localStorage als Fallback für sehr schnelle Reads beim nächsten Seitenload
-  _saveProfiles();
+  try { localStorage.setItem('BC_PROFILES_v11', JSON.stringify(PROFILES)); } catch(e) {}
 }
 
 
