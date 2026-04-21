@@ -714,20 +714,20 @@ textarea.outfit-code { width: 100%; min-height: 210px; background: rgba(0,0,0,0.
 
 /* Outfit-Item Favoriten-Button */
 .outfit-fav-btn {
-  background: none; border: none; cursor: pointer; font-size: 0.88rem;
-  padding: 3px 5px; border-radius: 5px; opacity: 0.25; flex-shrink: 0;
+  background: none; border: none; cursor: pointer; font-size: 0.95rem;
+  padding: 3px 5px; border-radius: 5px; opacity: 0.3; flex-shrink: 0;
   transition: opacity 0.15s, transform 0.15s; line-height: 1;
 }
-.outfit-fav-btn:hover { opacity: 0.8; transform: scale(1.15); }
+.outfit-fav-btn:hover { opacity: 0.85; transform: scale(1.2); }
 .outfit-fav-btn.fav  { opacity: 1; }
 
 /* Profil Favoriten-Button */
 .profile-fav-btn {
-  background: none; border: none; cursor: pointer; font-size: 0.82rem;
-  padding: 2px 4px; border-radius: 5px; opacity: 0.22; flex-shrink: 0;
+  background: none; border: none; cursor: pointer; font-size: 0.88rem;
+  padding: 2px 4px; border-radius: 5px; opacity: 0.3; flex-shrink: 0;
   transition: opacity 0.15s, transform 0.15s; line-height: 1;
 }
-.profile-fav-btn:hover { opacity: 0.8; transform: scale(1.15); }
+.profile-fav-btn:hover { opacity: 0.85; transform: scale(1.2); }
 .profile-fav-btn.fav  { opacity: 1; }
 
 /* Outfit Filter-Bar */
@@ -1112,29 +1112,44 @@ button { cursor: pointer; }
 .curse-row.outfit-flagged:hover { background: rgba(52,211,153,0.09); }
 
 /* Curse Fav-Button – einheitlich wie outfit-fav-btn */
-.fav-cell { width: 30px; text-align: center; vertical-align: middle; padding: 4px 3px !important; }
-.curse-fav-btn {
-  background: none; border: none; cursor: pointer; font-size: 0.95rem;
-  padding: 3px 4px; border-radius: 5px; opacity: 0.22; flex-shrink: 0;
-  transition: opacity 0.15s, transform 0.15s; line-height: 1; display: inline-block;
+.fav-cell {
+  width: 30px; text-align: center; vertical-align: middle;
+  padding: 4px 2px !important; cursor: pointer; user-select: none;
 }
-.curse-fav-btn:hover { opacity: 0.85; transform: scale(1.2); }
-.curse-fav-btn.fav   { opacity: 1; }
+.fav-cell .curse-fav-btn {
+  background: none; border: none; cursor: pointer; font-size: 1rem;
+  padding: 2px 3px; border-radius: 5px; line-height: 1; display: inline-block;
+  opacity: 0.28; pointer-events: none;   /* Klick geht an TD, Animation per TD:hover */
+  transition: opacity 0.15s, transform 0.15s;
+}
+.fav-cell .curse-fav-btn.fav { opacity: 1; }
+/* Hover-Animation über die TD-Zelle auslösen */
+.fav-cell:hover .curse-fav-btn      { opacity: 0.75; transform: scale(1.25); }
+.fav-cell:hover .curse-fav-btn.fav  { opacity: 1;    transform: scale(1.25); }
 
-/* Curse Outfit-Button – einheitlich wie outfit-fav-btn, aber grün */
-.curse-row td.outfit-flag-cell { width: 60px; text-align: center; vertical-align: middle; padding: 4px 3px !important; }
-.curse-outfit-btn {
-  background: none; border: none; cursor: pointer; font-size: 0.8rem;
-  padding: 3px 7px; border-radius: 99px; opacity: 0.3; flex-shrink: 0;
-  transition: opacity 0.15s, transform 0.15s, background 0.15s, color 0.15s;
-  line-height: 1; display: inline-block; font-weight: 700; font-family: var(--font-ui);
-  border: 1px solid transparent; color: var(--text3);
+/* Curse Outfit-Button – klarer sichtbar, grün wenn aktiv */
+.curse-row td.outfit-flag-cell {
+  width: 64px; text-align: center; vertical-align: middle;
+  padding: 4px 2px !important; cursor: pointer; user-select: none;
 }
-.curse-outfit-btn:hover { opacity: 0.85; transform: scale(1.05); }
-.curse-outfit-btn.on {
-  opacity: 1; background: rgba(52,211,153,0.15); border-color: rgba(52,211,153,0.45);
-  color: #6ee7b7; transform: none;
+.outfit-flag-cell .curse-outfit-btn {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.14);
+  color: var(--text2);
+  cursor: pointer; font-size: 0.68rem; font-weight: 700; font-family: var(--font-ui);
+  padding: 3px 7px; border-radius: 99px; line-height: 1; display: inline-block;
+  pointer-events: none;   /* Klick geht an TD */
+  transition: background 0.15s, border-color 0.15s, color 0.15s, transform 0.15s, opacity 0.15s;
+  white-space: nowrap;
 }
+.outfit-flag-cell .curse-outfit-btn.on {
+  background: rgba(52,211,153,0.15);
+  border-color: rgba(52,211,153,0.5);
+  color: #6ee7b7;
+}
+/* Hover-Animation über TD */
+.outfit-flag-cell:hover .curse-outfit-btn     { transform: scale(1.06); border-color: rgba(255,255,255,0.28); }
+.outfit-flag-cell:hover .curse-outfit-btn.on  { transform: scale(1.06); border-color: rgba(52,211,153,0.7); background: rgba(52,211,153,0.22); }
 
 /* Legacy – falls noch irgendwo referenziert */
 .outfit-flag-pill { display: none; }
