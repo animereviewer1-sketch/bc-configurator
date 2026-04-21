@@ -2269,7 +2269,14 @@ function toggleCurseFavourite(dbKey, cellEl) {
   _saveCurseFavourites();
   if (cellEl) {
     const isFav = !wasFav;
-    cellEl.innerHTML = isFav ? '⭐' : '<span style="opacity:.25;font-size:.85em">☆</span>';
+    // Button-Stil aktualisieren (einheitlich mit outfit-fav-btn)
+    const btn = cellEl.querySelector('.curse-fav-btn');
+    if (btn) {
+      btn.classList.toggle('fav', isFav);
+      btn.title = isFav ? 'Favorit entfernen' : 'Als Favorit markieren';
+    } else {
+      cellEl.innerHTML = '<button class="curse-fav-btn' + (isFav ? ' fav' : '') + '" tabindex="-1">⭐</button>';
+    }
     const row = cellEl.closest('tr');
     if (row) row.classList.toggle('fav', isFav);
     // Fav-Zähler im Owner-Block aktualisieren
@@ -2507,13 +2514,11 @@ function renderCurseTab() {
         : '<span style="color:var(--text3)">–</span>';
 
       tr.innerHTML =
-        '<td class="fav-cell" onclick="toggleCurseFavourite(\'' + dbKey.replace(/'/g,"&apos;") + '\',this)" title="Favorit">'+
-          (isFav ? '⭐' : '<span style="opacity:.25;font-size:.85em">☆</span>')+
+        '<td class="fav-cell" onclick="toggleCurseFavourite(\'' + dbKey.replace(/'/g,"&apos;") + '\',this)" title="' + (isFav ? 'Favorit entfernen' : 'Als Favorit markieren') + '">'+
+          '<button class="curse-fav-btn' + (isFav ? ' fav' : '') + '" tabindex="-1">⭐</button>'+
         '</td>'+
-        '<td class="outfit-flag-cell" onclick="toggleCurseOutfitFlag(\'' + dbKey.replace(/'/g,"&apos;") + '\',this)" title="Outfit-Markierung">'+
-          (isOutfit
-            ? '<span class="outfit-flag-pill on">👗 Outfit</span>'
-            : '<span class="outfit-flag-pill">+ Outfit</span>')+
+        '<td class="outfit-flag-cell" onclick="toggleCurseOutfitFlag(\'' + dbKey.replace(/'/g,"&apos;") + '\',this)" title="' + (isOutfit ? 'Outfit-Markierung entfernen' : 'Als Outfit markieren') + '">'+
+          '<button class="curse-outfit-btn' + (isOutfit ? ' on' : '') + '" tabindex="-1">' + (isOutfit ? '👗 Outfit' : '+ Outfit') + '</button>'+
         '</td>'+
         '<td class="cn"><span class="cursor-detail-toggle" onclick="toggleCurseDetail(\'' + detId + '\',\'' + rowId + '\')">▶</span>'+escHtml(entry.CraftName)+(echoTranslate(entry.CraftName)?'<span style="font-size:.58rem;color:#a78bfa;margin-left:4px">('+echoTranslate(entry.CraftName)+')</span>':'')+'</td>'+
         '<td class="item">'+escHtml(entry.ItemName)+(echoTranslate(entry.ItemName)?'<span style="font-size:.58rem;color:var(--text3);margin-left:4px">('+echoTranslate(entry.ItemName)+')</span>':'')+'</td>'+
@@ -2611,9 +2616,15 @@ function toggleCurseOutfitFlag(dbKey, cellEl) {
   _saveCurseOutfitFlags();
   if (cellEl) {
     const isSet = !wasSet;
-    cellEl.innerHTML = isSet
-      ? '<span class="outfit-flag-pill on">👗 Outfit</span>'
-      : '<span class="outfit-flag-pill">+ Outfit</span>';
+    // Button-Stil aktualisieren (einheitlich mit curse-outfit-btn)
+    const btn = cellEl.querySelector('.curse-outfit-btn');
+    if (btn) {
+      btn.classList.toggle('on', isSet);
+      btn.textContent = isSet ? '👗 Outfit' : '+ Outfit';
+      btn.title = isSet ? 'Outfit-Markierung entfernen' : 'Als Outfit markieren';
+    } else {
+      cellEl.innerHTML = '<button class="curse-outfit-btn' + (isSet ? ' on' : '') + '" tabindex="-1">' + (isSet ? '👗 Outfit' : '+ Outfit') + '</button>';
+    }
     const row = cellEl.closest('tr');
     if (row) row.classList.toggle('outfit-flagged', isSet);
     // Owner-Block Badge aktualisieren

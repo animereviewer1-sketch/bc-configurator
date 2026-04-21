@@ -1108,13 +1108,36 @@ button { cursor: pointer; }
 
 .curse-row.fav { background: rgba(251,191,36,0.04); }
 .curse-row.fav:hover { background: rgba(251,191,36,0.08); }
-.curse-row td.outfit-flag-cell { text-align: center; vertical-align: middle; cursor: pointer; padding: 7px 4px; user-select: none; white-space: nowrap; }
-.outfit-flag-pill { display: inline-block; padding: 2px 8px; border-radius: 99px; font-size: 0.62rem; font-weight: 700; font-family: var(--font-ui); border: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.03); color: var(--text3); transition: all 0.18s; cursor: pointer; }
-.outfit-flag-pill.on { background: rgba(52,211,153,0.15); border-color: rgba(52,211,153,0.4); color: #6ee7b7; }
 .curse-row.outfit-flagged { background: rgba(52,211,153,0.05); }
 .curse-row.outfit-flagged:hover { background: rgba(52,211,153,0.09); }
-.fav-cell { width: 28px; text-align: center; cursor: pointer; user-select: none; padding: 6px 4px !important; font-size: 1rem; transition: transform .15s; }
-.fav-cell:hover { transform: scale(1.3); }
+
+/* Curse Fav-Button – einheitlich wie outfit-fav-btn */
+.fav-cell { width: 30px; text-align: center; vertical-align: middle; padding: 4px 3px !important; }
+.curse-fav-btn {
+  background: none; border: none; cursor: pointer; font-size: 0.95rem;
+  padding: 3px 4px; border-radius: 5px; opacity: 0.22; flex-shrink: 0;
+  transition: opacity 0.15s, transform 0.15s; line-height: 1; display: inline-block;
+}
+.curse-fav-btn:hover { opacity: 0.85; transform: scale(1.2); }
+.curse-fav-btn.fav   { opacity: 1; }
+
+/* Curse Outfit-Button – einheitlich wie outfit-fav-btn, aber grün */
+.curse-row td.outfit-flag-cell { width: 60px; text-align: center; vertical-align: middle; padding: 4px 3px !important; }
+.curse-outfit-btn {
+  background: none; border: none; cursor: pointer; font-size: 0.8rem;
+  padding: 3px 7px; border-radius: 99px; opacity: 0.3; flex-shrink: 0;
+  transition: opacity 0.15s, transform 0.15s, background 0.15s, color 0.15s;
+  line-height: 1; display: inline-block; font-weight: 700; font-family: var(--font-ui);
+  border: 1px solid transparent; color: var(--text3);
+}
+.curse-outfit-btn:hover { opacity: 0.85; transform: scale(1.05); }
+.curse-outfit-btn.on {
+  opacity: 1; background: rgba(52,211,153,0.15); border-color: rgba(52,211,153,0.45);
+  color: #6ee7b7; transform: none;
+}
+
+/* Legacy – falls noch irgendwo referenziert */
+.outfit-flag-pill { display: none; }
 
 .change-added   { color: #6fcf97; }
 .change-updated { color: #f2994a; }
