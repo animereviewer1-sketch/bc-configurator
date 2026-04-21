@@ -1269,7 +1269,7 @@ button { cursor: pointer; }
 <!-- LAYOUT -->
 <div class="layout">
   <div class="sidebar">
-    <input class="sidebar-search" placeholder="🔍 Item suchen..." oninput="renderGroups(this.value)">
+    <input class="sidebar-search" placeholder="🔍 Item suchen..." oninput="_debouncedRenderGroups(this.value)">
     <div id="favSection" class="hidden">
       <div class="fav-hdr">⭐ Favoriten</div>
       <div id="favList" style="margin-bottom:10px"></div>
@@ -1522,7 +1522,7 @@ button { cursor: pointer; }
         </div>
       </div>
       <div class="outfit-search-row">
-        <input class="outfit-search" id="outfitItemSearch" placeholder="🔍 Item suchen..." oninput="renderOutfitList()">
+        <input class="outfit-search" id="outfitItemSearch" placeholder="🔍 Item suchen..." oninput="_debouncedRenderOutfitList()">
       </div>
       <!-- Outfit Filter-Bar -->
       <div class="outfit-filter-bar" id="outfitFilterBar">
@@ -1540,7 +1540,7 @@ button { cursor: pointer; }
         <div class="section-hdr2">
           <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
             <span>📁 Profile</span>
-            <input class="outfit-search" id="profileSearch" placeholder="🔍 Profil suchen..." oninput="renderProfileList()" style="width:140px;font-size:.69rem;padding:3px 8px">
+            <input class="outfit-search" id="profileSearch" placeholder="🔍 Profil suchen..." oninput="_debouncedRenderProfileList()" style="width:140px;font-size:.69rem;padding:3px 8px">
             <span class="filter-chip profile-fc on" data-filter="all" onclick="setProfileFilter('all')" style="font-size:.65rem;padding:3px 9px">Alle</span>
             <span class="filter-chip profile-fc" data-filter="fav" onclick="setProfileFilter('fav')" title="Nur Favoriten" style="font-size:.65rem;padding:3px 9px">⭐ Favs</span>
           </div>
@@ -1601,7 +1601,7 @@ button { cursor: pointer; }
   </div>
   <!-- Filter bar -->
   <div class="curse-filter-bar" id="curseFilterBar">
-    <input class="curse-search" id="curseSearch" placeholder="🔍 Name, Item, Gruppe..." oninput="renderCurseTab()">
+    <input class="curse-search" id="curseSearch" placeholder="🔍 Name, Item, Gruppe..." oninput="_debouncedRenderCurseTab()">
     <div class="filter-sep"></div>
     <span class="filter-chip on" id="fc-all"      onclick="setCurseFilter('all')"     >Alle</span>
     <span class="filter-chip"    id="fc-cursed"   onclick="setCurseFilter('cursed')"  >🔮 Cursed</span>
@@ -1615,7 +1615,7 @@ button { cursor: pointer; }
     <span class="filter-chip" id="fc-cache" onclick="toggleCacheFilter()" title="Nur Einträge mit LSCG-Daten anzeigen">💾 Im Cache</span>
     <div class="filter-sep"></div>
     <div class="slot-filter-wrap">
-      <select class="slot-select" id="slotFilter" onchange="renderCurseTab()">
+      <select class="slot-select" id="slotFilter" onchange="_debouncedRenderCurseTab()">
         <option value="">Alle Slots</option>
       </select>
     </div>
