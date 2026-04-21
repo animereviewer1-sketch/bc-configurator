@@ -1818,6 +1818,9 @@ function generateOutfitCode() {
   const isOther   = _outfitTargetNum !== null;
   const memberNum = _outfitTargetNum ?? 0;
 
+  // Verzögerung pro Item: klein genug für Geschwindigkeit, groß genug um BCX-Rate-Limit zu vermeiden
+  const STEP_MS = 250;
+
   let count = OUTFIT.length;
   let code = '// ═══════════════════════════════════════════\n//  OUTFIT – ' + count + ' Items';
   if (isOther) code += ' → Spieler #' + memberNum;
@@ -1830,33 +1833,34 @@ function generateOutfitCode() {
     code += 'const TARGET = Player;\n\n';
   }
 
-  // ── Schritt 1: Alte Items entfernen ──────────────────────────────────────
-  code += '// ── Schritt 1: Alte Items entfernen ──\n'
+  // ── Schritt 1: Alte Items entfernen (synchron) ────────────────────────────
+  code += '// ── Alte Items entfernen ──\n'
         + 'TARGET.Appearance = TARGET.Appearance.filter(i => i?.Asset?.Group?.AllowNone === false);\n\n';
 
-  // ── Schritt 2: Alle Items synchron anziehen ───────────────────────────────
-  code += '// ── Schritt 2: Alle Items anziehen (synchron) ──\n';
-  OUTFIT.forEach((item) => {
-    code += 'InventoryWear(TARGET, ' + JSON.stringify(item.asset) + ', ' + JSON.stringify(item.group) + ',\n'
-          + '  ' + JSON.stringify(item.colors) + ', 0, null' + (item.craftStr || '') + ');\n';
-  });
-
-  // ── Schritt 3: Alle Properties in EINEM setTimeout setzen + EIN Update ───
-  code += '\n// ── Schritt 3: Properties + 1× ServerUpdate ──\n';
-  code += 'setTimeout(function() {\n';
-
-  OUTFIT.forEach((item) => {
+  // ── Schritt 2: Jedes Item in eigenem setTimeout (gestaffelt) ─────────────
+  // InventoryWear + Properties pro Slot, KEIN CharacterRefresh/Sync pro Item
+  OUTFIT.forEach((item, i) => {
+    const delay = STEP_MS + i * STEP_MS;
+    code += '// ── ' + (i+1) + '. ' + item.asset + ' (' + item.group + ') ──\n';
+    code += 'setTimeout(function() {\n';
+    code += '  InventoryWear(TARGET, ' + JSON.stringify(item.asset) + ', ' + JSON.stringify(item.group) + ',\n'
+          + '    ' + JSON.stringify(item.colors) + ', 0, null' + (item.craftStr || '') + ');\n';
+    // Properties inline (kein separater sub-setTimeout)
     code += _buildItemPropsBlock(item);
+    code += '}, ' + delay + ');\n\n';
   });
 
+  // ── Schritt 3: EIN finales CharacterRefresh + ServerSync ─────────────────
+  const finalDelay = STEP_MS + OUTFIT.length * STEP_MS + 400;
   const syncLine = (isOther && memberNum)
     ? 'ChatRoomCharacterUpdate(TARGET);'
     : 'ServerPlayerAppearanceSync(); ChatRoomCharacterUpdate(TARGET);';
-
+  code += '// ── Finales Update ──\n';
+  code += 'setTimeout(function() {\n';
   code += '  CharacterRefresh(TARGET);\n';
   code += '  ' + syncLine + '\n';
   code += '  console.log("✅ Outfit fertig! ' + count + ' Items");\n';
-  code += '}, 600);\n';
+  code += '}, ' + finalDelay + ');\n';
 
   if (isOther && memberNum) code += '}\n';
 
