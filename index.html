@@ -1219,14 +1219,19 @@ button { cursor: pointer; }
 
 <!-- TOPBAR -->
 <div class="topbar">
-  <h1>🔒 BC Konfigurator <span style="font-weight:400;font-size:.72rem;opacity:.4;-webkit-text-fill-color:#94a3b8;background:none">v12</span> <span id="engineVer" style="font-weight:400;font-size:.72rem;opacity:.4;-webkit-text-fill-color:#94a3b8;background:none"></span></h1>
-  <span class="tbadge" id="connStatus" style="color:#fb7185" title="Verbindungsstatus mit dem Bondage Club">🔴 Nicht verbunden</span>
-  <span class="tbadge" id="playerInfo" style="display:none" title="Aktueller Spieler"></span>
-  <span class="tbadge" id="cacheInfo" title="Geladene Item-Daten">Kein Cache</span>
-  <button class="btn btn-green" id="loadCacheBtn" onclick="loadCacheFromBC()" title="Item-Daten aus dem laufenden Bondage Club Spiel laden">⚡ Aus Spiel laden</button>
-  <button class="btn btn-primary" id="reconnectBtn" onclick="manualReconnect()" title="Verbindung zum Bondage Club neu herstellen">🔄 Verbinden</button>
-  <button class="btn btn-red hidden" id="clearBtn" onclick="clearCache()" title="Cache löschen">🗑 Löschen</button>
-  <div id="statusMsg" class="status-msg hidden"></div>
+  <div class="topbar-brand">
+    <div class="brand-mark">BC</div>
+    <div class="brand-name">Konfigurator<span class="brand-ver" id="engineVer"></span></div>
+  </div>
+  <div class="topbar-right">
+    <span class="tbadge" id="connStatus" style="color:#fb7185" title="Verbindungsstatus mit dem Bondage Club">🔴 Nicht verbunden</span>
+    <span class="tbadge" id="playerInfo" style="display:none" title="Aktueller Spieler"></span>
+    <span class="tbadge" id="cacheInfo" title="Geladene Item-Daten">Kein Cache</span>
+    <button class="btn btn-green" id="loadCacheBtn" onclick="loadCacheFromBC()" title="Item-Daten aus dem laufenden Bondage Club Spiel laden">⚡ Laden</button>
+    <button class="btn btn-primary" id="reconnectBtn" onclick="manualReconnect()" title="Verbindung neu herstellen">🔄 Verbinden</button>
+    <button class="btn btn-red hidden" id="clearBtn" onclick="clearCache()" title="Cache löschen">🗑</button>
+    <div id="statusMsg" class="status-msg hidden"></div>
+  </div>
 </div>
 
 <!-- RAUM-SPIELER -->
