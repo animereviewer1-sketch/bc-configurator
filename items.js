@@ -2918,7 +2918,7 @@ function _doSaveProfile(items, defaultName) {
 }
 
 // Request full Appearance for ownerNum, then call cb(items, charName)
-// Falls back to CURSE_DB-only if not connected
+// Falls back to CURSE_DB-only if not connected OR if BC doesn't respond within 5s
 function _fetchOutfitAndSave(ownerNum, defaultName, fallbackItems) {
   if (!_connected) {
     if (!fallbackItems?.length) { showStatus('❌ Nicht verbunden und keine lokalen Daten', 'error'); return; }
@@ -2930,7 +2930,20 @@ function _fetchOutfitAndSave(ownerNum, defaultName, fallbackItems) {
   const reqId  = 'os_' + Date.now();
   const tgtNum = ownerNum ? Number(ownerNum) : null;
 
+  // Timeout-Fallback: falls BC nicht antwortet → lokale Daten nutzen
+  const timeoutId = setTimeout(() => {
+    if (!_pendingOutfitSave[reqId]) return; // bereits beantwortet
+    delete _pendingOutfitSave[reqId];
+    if (fallbackItems?.length) {
+      showStatus('⚠️ BC hat nicht geantwortet – Fallback auf Curse-Einträge', 'info');
+      _doSaveProfile(fallbackItems, defaultName);
+    } else {
+      showStatus('❌ BC hat nicht geantwortet und keine lokalen Daten', 'error');
+    }
+  }, 5000);
+
   _pendingOutfitSave[reqId] = function(items, charName) {
+    clearTimeout(timeoutId);
     if (!items?.length) {
       if (fallbackItems?.length) {
         showStatus('⚠️ Outfit leer – Fallback auf Curse-Einträge', 'info');
@@ -2984,9 +2997,7 @@ function curseSaveAsProfile(rowIdOrDbKey) {
   const craftName = entry.CraftName || entry.ItemName || 'Curse';
   const ownerName = entry.Besitzer?.Name || (entry.Besitzer?.Nummer ? '#' + entry.Besitzer.Nummer : 'Player');
   const defaultName = craftName + ' - ' + ownerName;
-  // Lokale Daten direkt speichern – kein BC-Request nötig
-  _doSaveProfile([_curseEntryToProfileItem(entry)], defaultName);
-  renderProfileList();
+  _fetchOutfitAndSave(null, defaultName, [_curseEntryToProfileItem(entry)]);
 }
 
 // Button: 💾 Alle speichern (Owner-Header) → "{OwnerName} Outfit" (Sammlung mehrerer Items)
@@ -3007,9 +3018,7 @@ function curseSaveAllAsProfile(ownerNum) {
     _debouncedSaveCurseDB();
   }
   const defaultName = ownerName + ' Outfit';
-  // Lokale Daten direkt speichern – kein BC-Request nötig
-  _doSaveProfile(entries.map(_curseEntryToProfileItem), defaultName);
-  renderProfileList();
+  _fetchOutfitAndSave(null, defaultName, entries.map(_curseEntryToProfileItem));
 }
 
 // ── Export / Import ───────────────────────────────────
