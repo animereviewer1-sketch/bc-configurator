@@ -2984,7 +2984,9 @@ function curseSaveAsProfile(rowIdOrDbKey) {
   const craftName = entry.CraftName || entry.ItemName || 'Curse';
   const ownerName = entry.Besitzer?.Name || (entry.Besitzer?.Nummer ? '#' + entry.Besitzer.Nummer : 'Player');
   const defaultName = craftName + ' - ' + ownerName;
-  _fetchOutfitAndSave(null, defaultName, [_curseEntryToProfileItem(entry)]);
+  // Lokale Daten direkt speichern – kein BC-Request nötig
+  _doSaveProfile([_curseEntryToProfileItem(entry)], defaultName);
+  renderProfileList();
 }
 
 // Button: 💾 Alle speichern (Owner-Header) → "{OwnerName} Outfit" (Sammlung mehrerer Items)
@@ -2992,6 +2994,7 @@ function curseSaveAllAsProfile(ownerNum) {
   const entries = Object.entries(CURSE_DB)
     .filter(([, e]) => String(e.Besitzer?.Nummer ?? '') === String(ownerNum))
     .map(([, e]) => e);
+  if (!entries.length) { showStatus('❌ Keine Einträge für diesen Owner', 'error'); return; }
   const ownerName = entries[0]?.Besitzer?.Name || ('#' + ownerNum);
   // Auto-Flag alle Einträge dieses Owners (einmalig speichern, nicht pro Item)
   let flagged = 0;
@@ -3004,7 +3007,9 @@ function curseSaveAllAsProfile(ownerNum) {
     _debouncedSaveCurseDB();
   }
   const defaultName = ownerName + ' Outfit';
-  _fetchOutfitAndSave(null, defaultName, entries.map(_curseEntryToProfileItem));
+  // Lokale Daten direkt speichern – kein BC-Request nötig
+  _doSaveProfile(entries.map(_curseEntryToProfileItem), defaultName);
+  renderProfileList();
 }
 
 // ── Export / Import ───────────────────────────────────
