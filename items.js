@@ -435,6 +435,18 @@ let baselinePropVals = {};
 let PROFILES = {};
 try { PROFILES = JSON.parse(localStorage.getItem('BC_PROFILES_v11') || '{}'); } catch {}
 
+// ── Outfit-Item Favoriten ─────────────────────────────
+let OUTFIT_FAVS = new Set();
+try { const _of = localStorage.getItem('BC_OUTFIT_FAVS_v1'); if (_of) OUTFIT_FAVS = new Set(JSON.parse(_of)); } catch {}
+
+// ── Profil Favoriten ──────────────────────────────────
+let PROFILE_FAVS = new Set();
+try { const _pf = localStorage.getItem('BC_PROFILE_FAVS_v1'); if (_pf) PROFILE_FAVS = new Set(JSON.parse(_pf)); } catch {}
+
+// ── Filter-Zustände ───────────────────────────────────
+let _outfitFilter  = 'all'; // 'all' | 'fav' | 'group:<name>'
+let _profileFilter = 'all'; // 'all' | 'fav'
+
 
 // ── Init ─────────────────────────────────────────────
 try {
@@ -1597,11 +1609,64 @@ function addToOutfit() {
 }
 
 
+function _outfitFavKey(item) { return (item.group || '') + '::' + (item.asset || ''); }
+
+function toggleOutfitFav(origIdx) {
+  const item = OUTFIT[origIdx];
+  if (!item) return;
+  const k = _outfitFavKey(item);
+  if (OUTFIT_FAVS.has(k)) OUTFIT_FAVS.delete(k);
+  else OUTFIT_FAVS.add(k);
+  try { localStorage.setItem('BC_OUTFIT_FAVS_v1', JSON.stringify([...OUTFIT_FAVS])); } catch {}
+  renderOutfitList();
+}
+
+function setOutfitFilter(f) {
+  _outfitFilter = f;
+  // Chip-UI aktualisieren
+  document.querySelectorAll('.outfit-fc').forEach(el => el.classList.toggle('on', el.dataset.filter === f));
+  renderOutfitList();
+}
+
+function renderOutfitGroups() {
+  // Alle vorhandenen Gruppen für den Gruppen-Filter
+  const groupBar = document.getElementById('outfitGroupChips');
+  if (!groupBar) return;
+  const groups = [...new Set(OUTFIT.map(i => i.group).filter(Boolean))].sort();
+  if (groups.length === 0) { groupBar.innerHTML = ''; return; }
+  groupBar.innerHTML = '';
+  groups.forEach(g => {
+    const chip = document.createElement('span');
+    chip.className = 'filter-chip outfit-fc' + (_outfitFilter === 'group:' + g ? ' on' : '');
+    chip.dataset.filter = 'group:' + g;
+    chip.textContent = g;
+    chip.title = 'Nur ' + g;
+    chip.addEventListener('click', () => setOutfitFilter('group:' + g));
+    groupBar.appendChild(chip);
+  });
+}
+
 function renderOutfitList() {
   const list = document.getElementById('outfitList');
   const q = (document.getElementById('outfitItemSearch')?.value || '').toLowerCase();
-  const visItems = OUTFIT.map((item, i) => ({...item, _origIdx: i}))
-                         .filter(item => !q || item.asset?.toLowerCase().includes(q) || item.group?.toLowerCase().includes(q));
+
+  let visItems = OUTFIT.map((item, i) => ({...item, _origIdx: i}));
+
+  // Textsuche
+  if (q) visItems = visItems.filter(item => item.asset?.toLowerCase().includes(q) || item.group?.toLowerCase().includes(q));
+
+  // Favoriten-Filter
+  if (_outfitFilter === 'fav') visItems = visItems.filter(item => OUTFIT_FAVS.has(_outfitFavKey(item)));
+
+  // Gruppen-Filter
+  if (_outfitFilter.startsWith('group:')) {
+    const grp = _outfitFilter.slice(6);
+    visItems = visItems.filter(item => item.group === grp);
+  }
+
+  // Gruppen-Chips neu zeichnen
+  renderOutfitGroups();
+
   if (!visItems.length) {
     list.innerHTML = OUTFIT.length
       ? '<div class="outfit-empty-hint">🔍 Keine Treffer.</div>'
@@ -1611,12 +1676,14 @@ function renderOutfitList() {
   list.innerHTML = '';
   visItems.forEach(item => {
     const i = item._origIdx;
+    const isFav = OUTFIT_FAVS.has(_outfitFavKey(item));
     const row = document.createElement('div');
     row.className = 'outfit-item-row';
     row.innerHTML = `
+      <button class="outfit-fav-btn${isFav ? ' fav' : ''}" onclick="toggleOutfitFav(${i})" title="${isFav ? 'Favorit entfernen' : 'Als Favorit markieren'}">⭐</button>
       <div style="flex:1">
-        <div class="outfit-item-name">${item.asset}</div>
-        <div class="outfit-item-group">${item.group}${item.lock ? ' | 🔒 '+item.lock : ''}${Object.keys(item.tr||{}).length ? ' | '+item.typeStr : ''}</div>
+        <div class="outfit-item-name">${escHtml(item.asset)}</div>
+        <div class="outfit-item-group">${escHtml(item.group)}${item.lock ? ' | 🔒 '+escHtml(item.lock) : ''}${Object.keys(item.tr||{}).length ? ' | '+escHtml(item.typeStr||'') : ''}</div>
       </div>
       <div style="display:flex;gap:5px;align-items:center">
         <button class="btn btn-primary" style="padding:3px 8px;font-size:.68rem" onclick="moveOutfitItem(${i},-1)">↑</button>
@@ -1797,13 +1864,35 @@ function _profileShortName(name, owner) {
 // ── Profile Edit Mode State ───────────────────────────
 let _profileEditMode = null; // profileName currently in edit mode
 
+function toggleProfileFav(name) {
+  if (PROFILE_FAVS.has(name)) PROFILE_FAVS.delete(name);
+  else PROFILE_FAVS.add(name);
+  try { localStorage.setItem('BC_PROFILE_FAVS_v1', JSON.stringify([...PROFILE_FAVS])); } catch {}
+  renderProfileList();
+}
+
+function setProfileFilter(f) {
+  _profileFilter = f;
+  document.querySelectorAll('.profile-fc').forEach(el => el.classList.toggle('on', el.dataset.filter === f));
+  renderProfileList();
+}
+
 function renderProfileList() {
   const el = document.getElementById('profileListEl');
   if (!el) return;
   const q = (document.getElementById('profileSearch')?.value || '').toLowerCase();
   let keys = Object.keys(PROFILES).filter(k => !q || k.toLowerCase().includes(q));
+
+  // Favoriten-Filter
+  if (_profileFilter === 'fav') keys = keys.filter(k => PROFILE_FAVS.has(k));
+
+  // Filter-Chip-UI aktualisieren
+  document.querySelectorAll('.profile-fc').forEach(chip => chip.classList.toggle('on', chip.dataset.filter === _profileFilter));
+
   if (!keys.length) {
-    el.innerHTML = '<p style="color:var(--text3);font-size:.8rem">Noch keine Profile gespeichert.</p>';
+    el.innerHTML = _profileFilter === 'fav'
+      ? '<p style="color:var(--text3);font-size:.8rem">⭐ Keine Favoriten gespeichert.</p>'
+      : '<p style="color:var(--text3);font-size:.8rem">Noch keine Profile gespeichert.</p>';
     el._profileKeys = [];
     return;
   }
@@ -1856,9 +1945,11 @@ function renderProfileList() {
         editPanel = '<div class="profile-item-list">' + nameInput + itemRows + '</div>';
       }
 
+      const isFav = PROFILE_FAVS.has(name);
       return '<div class="profile-row" id="prow_' + idx + '">'
         + '<div class="profile-row-main">'
         + '<button class="profile-row-load" data-slot="' + slotKey + '" onclick="profileLoadBySlot(this.dataset.slot)" title="Laden">📥</button>'
+        + '<button class="profile-fav-btn' + (isFav ? ' fav' : '') + '" data-pkey="' + idx + '" onclick="toggleProfileFav(_profileNameMap[\'p_\'+this.dataset.pkey])" title="' + (isFav ? 'Favorit entfernen' : 'Als Favorit markieren') + '">⭐</button>'
         + '<span class="profile-row-name">' + escHtml(shortName) + '</span>'
         + '<span class="profile-row-count">' + (p.items?.length ?? 0) + ' Items</span>'
         + '<span class="profile-row-date">' + (p.date || '') + '</span>'
