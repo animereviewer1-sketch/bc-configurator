@@ -1488,6 +1488,78 @@ function buildItemInner({ group, asset, colors, tr, trStr, typeStr, propCode, cr
   return code;
 }
 
+// ── Nur Property-Block eines Items (für Batch-Outfit) ──
+// Gibt Code zurück der INNERHALB eines shared setTimeout läuft:
+// InventoryGet + Farbe + Property + ExtendedItemInit + Lock – OHNE CharacterRefresh/Sync
+function _buildItemPropsBlock({ group, asset, colors, tr, propCode, lock, lockParams,
+                                 overridePriority, layerProperties, difficulty, property }) {
+  const BCX_LOCKS_L = ['LewdCrestPadlock','DeviousPadlock','LuziPadlock'];
+  const REL_LOCKS_L = ['OwnerPadlock','LoversPadlock','MistressPadlock'];
+
+  const fullProp = property ? Object.assign({}, property) : null;
+  const preProp = {};
+  const hasTr = tr && Object.keys(tr).length;
+  if (hasTr) {
+    preProp.TypeRecord = tr;
+    preProp.Type = Object.entries(tr).map(([k,v]) => k+v).join('');
+  }
+  if (fullProp) {
+    for (const [k,v] of Object.entries(fullProp)) {
+      if (k !== 'TypeRecord' && k !== 'Type' && k !== 'OverridePriority' && k !== 'LayerProperties') {
+        preProp[k] = v;
+      }
+    }
+  }
+  const postProp = {};
+  if (fullProp?.OverridePriority != null) postProp.OverridePriority = fullProp.OverridePriority;
+  else if (overridePriority != null)      postProp.OverridePriority = overridePriority;
+  if (fullProp?.LayerProperties)          postProp.LayerProperties  = fullProp.LayerProperties;
+  else if (layerProperties)               postProp.LayerProperties  = layerProperties;
+
+  const hasPreProp  = Object.keys(preProp).length > 0;
+  const hasPostProp = Object.keys(postProp).length > 0;
+  const preB64  = hasPreProp  ? btoa(unescape(encodeURIComponent(JSON.stringify(preProp))))  : null;
+  const postB64 = hasPostProp ? btoa(unescape(encodeURIComponent(JSON.stringify(postProp)))) : null;
+
+  let lockCode = '';
+  if (lock) {
+    const isBcx = BCX_LOCKS_L.includes(lock);
+    const isRel = REL_LOCKS_L.includes(lock);
+    let extra = '';
+    if (lockParams?.timer > 0)    extra += '\n        item.Property.RemoveTimer = Date.now() + ' + lockParams.timer + ';';
+    if (lockParams?.combo)         extra += '\n        item.Property.CombinationNumber = ' + JSON.stringify(lockParams.combo) + ';';
+    if (lockParams?.password)      extra += '\n        item.Property.Password = ' + JSON.stringify(lockParams.password) + ';';
+    if (isRel) {
+      extra += '\n        item.Property.LockMemberNumber = ' + (lockParams?.relMember || 'Player.MemberNumber') + ';';
+      if (lockParams?.relTimer > 0) extra += '\n        item.Property.RemoveTimer = Date.now() + ' + lockParams.relTimer + ';';
+    }
+    const findLock = isBcx
+      ? 'Asset.find(a => a.Name === ' + JSON.stringify(lock) + ' && a.Group?.Name === "ItemMisc") ?? Asset.find(a => a.Name === ' + JSON.stringify(lock) + ')'
+      : 'Asset.find(a => a.Name === ' + JSON.stringify(lock) + ' && a.Group?.Name === "ItemMisc")';
+    lockCode = '\n      const lockAsset = ' + findLock + ';\n'
+      + '      if (lockAsset) {\n        InventoryLock(TARGET, item, { Asset: lockAsset }, Player.MemberNumber, true);'
+      + extra + '\n        CharacterLoadCanvas(TARGET);\n      }';
+  }
+
+  const legacyExtra = (propCode || '')
+    .replace(/\s*item\.Property\s*=\s*item\.Property\s*\?\?\s*\{\};\s*/g, '')
+    .replace(/\s*item\.Property\.(TypeRecord|Type)\s*=.*?;\s*/g, '');
+
+  let c = '    { // ' + asset + ' [' + group + ']\n'
+    + '      const item = InventoryGet(TARGET, ' + JSON.stringify(group) + ');\n'
+    + '      if (item) {\n'
+    + '        item.Color = ' + JSON.stringify(colors) + ';\n'
+    + '        item.Property = item.Property ?? {};\n';
+  if (preB64)  c += '        Object.assign(item.Property, JSON.parse(decodeURIComponent(escape(atob(' + JSON.stringify(preB64) + ')))));\n';
+  if (hasTr)   c += '        try{ExtendedItemInit(TARGET,item,false,false);}catch(e){}\n';
+  if (postB64) c += '        Object.assign(item.Property, JSON.parse(decodeURIComponent(escape(atob(' + JSON.stringify(postB64) + ')))));\n';
+  if (difficulty != null) c += '        item.Difficulty = ' + Number(difficulty) + ';\n';
+  if (legacyExtra.trim()) c += legacyExtra.replace(/^/gm, '        ').trimEnd() + '\n';
+  c += lockCode;
+  c += '\n      }\n    }\n';
+  return c;
+}
+
 // ── Einzelnes Item (mit TARGET-Deklaration + Sync) ──
 function buildItemCode({ group, asset, cfg, colors, tr, trStr, typeStr, propCode, craftStr, lock, lockParams, tightCode, isOther, memberNum }) {
   const inner = buildItemInner({ group, asset, colors, tr, trStr, typeStr, propCode, craftStr, lock, lockParams, tightCode });
@@ -1743,7 +1815,6 @@ function moveOutfitItem(i, d) {
 
 function generateOutfitCode() {
   if (!OUTFIT.length) return;
-  // Outfit-Ziel hat Vorrang; Fallback auf altes OUTFIT[0]-Ziel für Rückwärtskompatibilität
   const isOther   = _outfitTargetNum !== null;
   const memberNum = _outfitTargetNum ?? 0;
 
@@ -1759,21 +1830,33 @@ function generateOutfitCode() {
     code += 'const TARGET = Player;\n\n';
   }
 
-  // Erst ausziehen damit keine alten Items unter dem neuen Outfit bleiben
-  code += '// ── Strip: alte Items entfernen ──\n'
+  // ── Schritt 1: Alte Items entfernen ──────────────────────────────────────
+  code += '// ── Schritt 1: Alte Items entfernen ──\n'
         + 'TARGET.Appearance = TARGET.Appearance.filter(i => i?.Asset?.Group?.AllowNone === false);\n\n';
 
-  OUTFIT.forEach((item, i) => {
-    code += '// ── ' + (i+1) + '. ' + item.asset + ' (' + item.group + ') ──\n';
-    code += buildItemInner({ ...item, isOther, memberNum, delayOffset: 600 + i * 700 });
-    code += '\n\n';
+  // ── Schritt 2: Alle Items synchron anziehen ───────────────────────────────
+  code += '// ── Schritt 2: Alle Items anziehen (synchron) ──\n';
+  OUTFIT.forEach((item) => {
+    code += 'InventoryWear(TARGET, ' + JSON.stringify(item.asset) + ', ' + JSON.stringify(item.group) + ',\n'
+          + '  ' + JSON.stringify(item.colors) + ', 0, null' + (item.craftStr || '') + ');\n';
+  });
+
+  // ── Schritt 3: Alle Properties in EINEM setTimeout setzen + EIN Update ───
+  code += '\n// ── Schritt 3: Properties + 1× ServerUpdate ──\n';
+  code += 'setTimeout(function() {\n';
+
+  OUTFIT.forEach((item) => {
+    code += _buildItemPropsBlock(item);
   });
 
   const syncLine = (isOther && memberNum)
     ? 'ChatRoomCharacterUpdate(TARGET);'
     : 'ServerPlayerAppearanceSync(); ChatRoomCharacterUpdate(TARGET);';
-  const finalDelay = 600 + OUTFIT.length * 700 + 200;
-  code += 'setTimeout(function() { ' + syncLine + ' console.log("✅ Outfit fertig!"); }, ' + finalDelay + ');\n';
+
+  code += '  CharacterRefresh(TARGET);\n';
+  code += '  ' + syncLine + '\n';
+  code += '  console.log("✅ Outfit fertig! ' + count + ' Items");\n';
+  code += '}, 600);\n';
 
   if (isOther && memberNum) code += '}\n';
 
