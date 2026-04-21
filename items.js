@@ -2110,10 +2110,19 @@ function profileExecuteBySlot(slot) {
   const name = _profileNameMap[slot];
   if (!name) return;
   if (!_connected) { showStatus('❌ Nicht verbunden', 'error'); return; }
+
+  // Prüfe ob das Profil Items mit explizitem memberNum hat (anderer Spieler).
+  // Falls nicht → Target auf Player zurücksetzen damit kein zufälliger _outfitTargetNum verwendet wird.
+  const profile = PROFILES[name];
+  const hasExplicitTarget = profile?.items?.some(i => i.isOther && i.memberNum);
+  const savedTarget = _outfitTargetNum;
+  if (!hasExplicitTarget) _outfitTargetNum = null;
+
   loadProfile(name);
   // generateOutfitCode() wurde bereits via _autoOutfitCode() aufgerufen.
   // Kleiner Tick damit das DOM den Code-Wert gesetzt hat.
   setTimeout(() => {
+    _outfitTargetNum = savedTarget; // Target wieder herstellen
     const code = document.getElementById('outfitCode')?.value?.trim();
     if (!code) { showStatus('❌ Kein Code generiert – Cache geladen?', 'error'); return; }
     bcSend({ type: 'EXEC', code: '(function(){\n' + code + '\n})();' });
@@ -2881,16 +2890,39 @@ function _appearanceItemToProfile(item) {
   };
 }
 
-// Fallback: build a single-item profile from a CURSE_DB entry (when offline)
+// Baut ein Profil-Item aus einem CURSE_DB-Eintrag
 function _curseEntryToProfileItem(entry) {
   let col = entry.Farbe;
   if (typeof col === 'string' && col.includes(',')) col = col.split(',');
   if (!Array.isArray(col)) col = col ? [col] : ['#ffffff'];
+
+  // craft-Objekt aufbauen: entweder direkt aus entry.Craft oder aus CraftName
+  let craft = null;
+  if (entry.Craft?.Name) {
+    craft = entry.Craft;
+  } else if (entry.CraftName) {
+    const firstColor = Array.isArray(col) ? col[0] : (col || '#808080');
+    craft = {
+      Name: entry.CraftName,
+      Description: entry.CraftDescription || '',
+      Property: entry.CraftProperty || 'Normal',
+      Color: firstColor === 'Default' ? '#808080' : firstColor,
+      Lock: '',
+      Item: entry.ItemName,
+      Private: true,
+      MemberNumber: entry.Besitzer?.Nummer || 0
+    };
+  }
+
   return {
-    asset: entry.ItemName, group: entry.Gruppe,
-    colors: col, craft: entry.Craft || null,
-    lock: null, tr: {},
-    _fromCurse: true, _craftName: entry.CraftName || entry.ItemName
+    asset:  entry.ItemName,
+    group:  entry.Gruppe,
+    colors: col,
+    craft,
+    lock:   null,
+    tr:     {},
+    label:  entry.CraftName || entry.ItemName,
+    _fromCurse: true,
   };
 }
 
@@ -3001,7 +3033,9 @@ function curseSaveAsProfile(rowIdOrDbKey) {
   const craftName = entry.CraftName || entry.ItemName || 'Curse';
   const ownerName = entry.Besitzer?.Name || (entry.Besitzer?.Nummer ? '#' + entry.Besitzer.Nummer : 'Player');
   const defaultName = craftName + ' - ' + ownerName;
-  _fetchOutfitAndSave(null, defaultName, [_curseEntryToProfileItem(entry)]);
+  // Direkt aus Curse-DB speichern – kein BC-Scan nötig
+  _doSaveProfile([_curseEntryToProfileItem(entry)], defaultName);
+  renderProfileList();
 }
 
 // Button: 💾 Alle speichern (Owner-Header) → "{OwnerName} Outfit" (Sammlung mehrerer Items)
@@ -3011,18 +3045,20 @@ function curseSaveAllAsProfile(ownerNum) {
     .map(([, e]) => e);
   if (!entries.length) { showStatus('❌ Keine Einträge für diesen Owner', 'error'); return; }
   const ownerName = entries[0]?.Besitzer?.Name || ('#' + ownerNum);
-  // Auto-Flag alle Einträge dieses Owners (einmalig speichern, nicht pro Item)
+  // Auto-Flag alle Einträge dieses Owners
   let flagged = 0;
   for (const e of entries) {
     const k = (e.Besitzer?.Nummer ?? '') + ':' + e.ItemName + ':' + e.CraftName;
     if (!CURSE_OUTFIT_FLAGS[k]) { CURSE_OUTFIT_FLAGS[k] = true; flagged++; }
   }
   if (flagged > 0) {
-    idbSet('BC_CURSE_OUTFIT_v1', CURSE_OUTFIT_FLAGS); // direkt, kein _saveCurseDB()
+    idbSet('BC_CURSE_OUTFIT_v1', CURSE_OUTFIT_FLAGS);
     _debouncedSaveCurseDB();
   }
   const defaultName = ownerName + ' Outfit';
-  _fetchOutfitAndSave(null, defaultName, entries.map(_curseEntryToProfileItem));
+  // Direkt alle Items aus Curse-DB speichern – kein BC-Scan nötig
+  _doSaveProfile(entries.map(_curseEntryToProfileItem), defaultName);
+  renderProfileList();
 }
 
 // ── Export / Import ───────────────────────────────────
