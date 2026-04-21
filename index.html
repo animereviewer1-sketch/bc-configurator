@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="de">
+<html lang="de" data-theme="dark" data-radius="default">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -157,29 +157,162 @@ select option:hover {
 @keyframes sectionIn { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
 
 /* ═══════════════════════════════════════════════
+   LIGHT / HIGH-CONTRAST THEMES
+═══════════════════════════════════════════════ */
+[data-theme="light"] {
+  --bg:        #f7f6f3;
+  --bg2:       #ffffff;
+  --bg3:       #f1efea;
+  --bg4:       #e8e6e0;
+  --bg-glass:  rgba(0,0,0,0.02);
+  --bg-hover:  rgba(0,0,0,0.03);
+  --border:    rgba(0,0,0,0.07);
+  --border2:   rgba(0,0,0,0.14);
+  --border-accent: oklch(58% 0.14 50 / 0.35);
+  --accent:        oklch(58% 0.14 50);
+  --accent-hover:  oklch(52% 0.15 50);
+  --accent-soft:   oklch(58% 0.14 50 / 0.10);
+  --accent-line:   oklch(58% 0.14 50 / 0.35);
+  --accent-text:   oklch(44% 0.15 50);
+  --purple:        var(--accent);
+  --purple-bright: var(--accent-hover);
+  --pl:            var(--accent-text);
+  --text:  #18171a;
+  --text2: #5a584f;
+  --text3: #8a887f;
+  --text4: #c3c1b8;
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.06);
+  --shadow-md: 0 4px 16px rgba(0,0,0,0.1), 0 2px 6px rgba(0,0,0,0.06);
+  --shadow-lg: 0 8px 32px rgba(0,0,0,0.12), 0 4px 12px rgba(0,0,0,0.08);
+  color-scheme: light;
+}
+[data-theme="hc"] {
+  --bg:   #000000;
+  --bg2:  #0a0a0a;
+  --bg3:  #111111;
+  --bg4:  #1c1c1c;
+  --border:  rgba(255,255,255,0.22);
+  --border2: rgba(255,255,255,0.40);
+  --accent:        oklch(80% 0.17 62);
+  --accent-hover:  oklch(86% 0.17 62);
+  --accent-soft:   oklch(80% 0.17 62 / 0.22);
+  --accent-line:   oklch(80% 0.17 62 / 0.6);
+  --accent-text:   oklch(88% 0.15 65);
+  --purple:        var(--accent);
+  --purple-bright: var(--accent-hover);
+  --pl:            var(--accent-text);
+  --text:  #ffffff;
+  --text2: #d7d5cf;
+  --text3: #9e9c94;
+  --text4: #555;
+  color-scheme: dark;
+}
+
+/* ── Radius variants ── */
+[data-radius="sharp"] { --r-xs:2px; --r-sm:4px; --r-md:6px; --r-lg:8px; --r-xl:10px; }
+[data-radius="round"]  { --r-xs:8px; --r-sm:14px; --r-md:20px; --r-lg:28px; --r-xl:38px; }
+
+/* ── Light-Theme global overrides ── */
+[data-theme="light"] body { background: var(--bg); color: var(--text); }
+[data-theme="light"] .section { background: var(--bg2); border-color: var(--border); }
+[data-theme="light"] .import-box { background: var(--bg2); border-color: var(--border); }
+[data-theme="light"] .modal { background: var(--bg2); }
+[data-theme="light"] .field input,
+[data-theme="light"] .field select,
+[data-theme="light"] .sub-prop select,
+[data-theme="light"] .sub-prop input,
+[data-theme="light"] .prop-ctrl select,
+[data-theme="light"] .prop-ctrl input {
+  background: var(--bg); border-color: var(--border); color: var(--text);
+}
+[data-theme="light"] textarea.code-out,
+[data-theme="light"] .outfit-code-live { background: var(--bg3); color: #1a6e3c; }
+[data-theme="light"] .sidebar { background: var(--bg2); }
+[data-theme="light"] .sidebar-search { background: var(--bg); border-color: var(--border); color: var(--text); }
+[data-theme="light"] .tab-nav { background: var(--bg2); border-color: var(--border); }
+[data-theme="light"] .tab-btn { color: var(--text3); }
+[data-theme="light"] .tab-btn.active { color: var(--accent-text); border-bottom-color: var(--accent); }
+[data-theme="light"] select option, [data-theme="light"] select optgroup { background: var(--bg2); color: var(--text); }
+[data-theme="light"] ::-webkit-scrollbar-thumb { background: var(--border2); }
+[data-theme="light"] .tweaks-panel { background: var(--bg2); border-color: var(--border); }
+
+/* ═══════════════════════════════════════════════
    TOPBAR
 ═══════════════════════════════════════════════ */
 .topbar {
   background: var(--bg2);
   border-bottom: 1px solid var(--border);
-  padding: 10px 20px;
-  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 0 16px;
+  height: 50px;
+  display: flex; align-items: center; gap: 8px;
   position: sticky; top: 0; z-index: 100;
-  box-shadow: 0 1px 0 rgba(255,255,255,0.04);
+  flex-shrink: 0;
 }
-.topbar h1 {
-  font-size: 1rem; font-weight: 700; letter-spacing: -0.02em; flex-shrink: 0;
-  color: var(--text);
+/* Brand */
+.topbar-brand { display: flex; align-items: center; gap: 9px; flex-shrink: 0; }
+.brand-mark {
+  width: 28px; height: 28px; border-radius: var(--r-sm);
+  background: var(--accent); color: #1a1611;
+  display: grid; place-items: center;
+  font-size: 11px; font-weight: 800; letter-spacing: -0.01em;
+  flex-shrink: 0;
 }
+[data-theme="light"] .brand-mark { color: #fff; }
+.brand-name { font-size: 0.88rem; font-weight: 700; color: var(--text); letter-spacing: -0.01em; white-space: nowrap; }
+.brand-ver  { font-size: 0.68rem; font-weight: 400; color: var(--text3); margin-left: 5px; }
+/* Right side */
+.topbar-right { display: flex; align-items: center; gap: 6px; margin-left: auto; flex-wrap: nowrap; }
+
+/* Topbar icon button (settings) */
+.topbar-icon-btn {
+  width: 32px; height: 32px; border-radius: var(--r-sm);
+  border: none; background: none; color: var(--text3); cursor: pointer;
+  display: grid; place-items: center; transition: background .15s, color .15s; flex-shrink: 0;
+}
+.topbar-icon-btn:hover { background: var(--bg-hover); color: var(--text); }
+.topbar-icon-btn.active { background: var(--accent-soft); color: var(--accent-text); }
 
 .tbadge {
-  font-family: var(--font-mono); font-size: 0.7rem; font-weight: 600;
-  padding: 4px 11px; border-radius: 99px; border: 1px solid; letter-spacing: 0.02em;
+  font-family: var(--font-mono); font-size: 0.68rem; font-weight: 600;
+  padding: 3px 10px; border-radius: 99px; border: 1px solid; letter-spacing: 0.02em;
   background: oklch(72% 0.13 58 / 0.1); border-color: oklch(72% 0.13 58 / 0.3); color: var(--accent-text);
+  white-space: nowrap;
 }
+[data-theme="light"] .tbadge { background: oklch(58% 0.14 50 / 0.08); border-color: oklch(58% 0.14 50 / 0.3); }
 .tbadge.outfit {
   background: rgba(124,45,18,0.25); border-color: rgba(251,146,60,0.35); color: var(--orange);
 }
+
+/* ── Tweaks Panel ── */
+.tweaks-panel {
+  position: fixed; right: 0; top: 50px; bottom: 0;
+  width: 240px; background: var(--bg2); border-left: 1px solid var(--border);
+  padding: 18px 14px; z-index: 90; overflow-y: auto;
+  transform: translateX(100%); transition: transform 0.22s cubic-bezier(0.4,0,0.2,1);
+  display: flex; flex-direction: column; gap: 20px;
+}
+.tweaks-panel.open { transform: translateX(0); box-shadow: -4px 0 24px rgba(0,0,0,0.3); }
+.tweaks-section-title {
+  font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em;
+  color: var(--text3); margin-bottom: 8px;
+}
+.tweaks-btn-group { display: flex; gap: 5px; }
+.tweaks-btn {
+  flex: 1; padding: 7px 6px; border-radius: var(--r-sm); border: 1px solid var(--border);
+  background: var(--bg3); color: var(--text2); font-size: 0.75rem; font-weight: 600;
+  cursor: pointer; transition: all .15s; font-family: var(--font-ui); text-align: center;
+}
+.tweaks-btn:hover { border-color: var(--border2); color: var(--text); }
+.tweaks-btn.on { background: var(--accent-soft); border-color: var(--accent-line); color: var(--accent-text); }
+.accent-swatches { display: flex; gap: 7px; flex-wrap: wrap; }
+.accent-swatch {
+  width: 26px; height: 26px; border-radius: 50%; cursor: pointer;
+  border: 2px solid transparent; transition: transform .15s, border-color .15s;
+}
+.accent-swatch:hover { transform: scale(1.12); }
+.accent-swatch.on { border-color: var(--text); }
+.radius-preview { display: flex; gap: 6px; align-items: center; margin-top: 4px; }
+.radius-demo { width: 32px; height: 20px; background: var(--accent-soft); border: 1px solid var(--accent-line); }
 
 /* ═══════════════════════════════════════════════
    BUTTONS
@@ -673,6 +806,9 @@ textarea.outfit-code { width: 100%; min-height: 210px; background: rgba(0,0,0,0.
 .profile-row-name { flex: 1; font-size: 0.78rem; font-weight: 700; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .profile-row-count { font-size: 0.62rem; color: var(--text3); white-space: nowrap; }
 .profile-row-date { font-size: 0.6rem; color: var(--text3); white-space: nowrap; }
+.profile-row-exec { background: var(--accent); color: #1a1611; border: none; border-radius: 6px; padding: 3px 10px; font-size: 0.72rem; font-weight: 700; cursor: pointer; flex-shrink: 0; transition: background .15s; }
+.profile-row-exec:hover { background: var(--accent-hover); }
+[data-theme="light"] .profile-row-exec { color: #fff; }
 .profile-row-load { background: rgba(52,211,153,0.12); border: 1px solid rgba(52,211,153,0.3); color: #6ee7b7; border-radius: 6px; padding: 3px 8px; font-size: 0.72rem; cursor: pointer; flex-shrink: 0; }
 .profile-row-load:hover { background: rgba(52,211,153,0.22); }
 .profile-row-edit { background: none; border: 1px solid rgba(255,255,255,0.1); color: var(--text3); border-radius: 6px; padding: 3px 7px; font-size: 0.72rem; cursor: pointer; flex-shrink: 0; }
@@ -1231,6 +1367,45 @@ button { cursor: pointer; }
     <button class="btn btn-primary" id="reconnectBtn" onclick="manualReconnect()" title="Verbindung neu herstellen">🔄 Verbinden</button>
     <button class="btn btn-red hidden" id="clearBtn" onclick="clearCache()" title="Cache löschen">🗑</button>
     <div id="statusMsg" class="status-msg hidden"></div>
+    <button class="topbar-icon-btn" id="tweaksBtnToggle" onclick="toggleTweaksPanel()" title="Einstellungen">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+    </button>
+  </div>
+</div>
+
+<!-- TWEAKS PANEL -->
+<div class="tweaks-panel" id="tweaksPanel">
+  <div>
+    <div class="tweaks-section-title">Theme</div>
+    <div class="tweaks-btn-group">
+      <button class="tweaks-btn on" id="tw-dark"  onclick="setTheme('dark')">Dark</button>
+      <button class="tweaks-btn"    id="tw-light" onclick="setTheme('light')">Light</button>
+      <button class="tweaks-btn"    id="tw-hc"    onclick="setTheme('hc')">HC</button>
+    </div>
+  </div>
+  <div>
+    <div class="tweaks-section-title">Accent-Farbe</div>
+    <div class="accent-swatches">
+      <div class="accent-swatch on" data-hue="58"  style="background:oklch(72% 0.13 58)"  onclick="setAccentHue(58)"  title="Amber"></div>
+      <div class="accent-swatch"    data-hue="30"  style="background:oklch(72% 0.13 30)"  onclick="setAccentHue(30)"  title="Orange-Rot"></div>
+      <div class="accent-swatch"    data-hue="160" style="background:oklch(72% 0.13 160)" onclick="setAccentHue(160)" title="Grün"></div>
+      <div class="accent-swatch"    data-hue="195" style="background:oklch(72% 0.13 195)" onclick="setAccentHue(195)" title="Teal"></div>
+      <div class="accent-swatch"    data-hue="265" style="background:oklch(72% 0.13 265)" onclick="setAccentHue(265)" title="Lila"></div>
+      <div class="accent-swatch"    data-hue="220" style="background:oklch(72% 0.13 220)" onclick="setAccentHue(220)" title="Blau"></div>
+    </div>
+  </div>
+  <div>
+    <div class="tweaks-section-title">Eck-Radius</div>
+    <div class="tweaks-btn-group">
+      <button class="tweaks-btn"    id="tw-r-sharp"   onclick="setRadius('sharp')">Eckig</button>
+      <button class="tweaks-btn on" id="tw-r-default"  onclick="setRadius('default')">Normal</button>
+      <button class="tweaks-btn"    id="tw-r-round"   onclick="setRadius('round')">Rund</button>
+    </div>
+    <div class="radius-preview" style="margin-top:10px;gap:8px">
+      <div class="radius-demo" style="border-radius:var(--r-sm)"></div>
+      <div class="radius-demo" style="border-radius:var(--r-md)"></div>
+      <div class="radius-demo" style="border-radius:var(--r-lg)"></div>
+    </div>
   </div>
 </div>
 
@@ -1940,5 +2115,73 @@ button { cursor: pointer; }
   if(window.BOT_ENGINE_VERSION){
     document.getElementById('engineVer').textContent='| Engine v'+window.BOT_ENGINE_VERSION;
   }
+
+  // ══════════════════════════════════════════════
+  //  TWEAKS PANEL — Theme / Accent / Radius
+  // ══════════════════════════════════════════════
+  const _tweaksKey = 'BCK_Tweaks_v1';
+
+  function _loadTweaks() {
+    try {
+      const t = JSON.parse(localStorage.getItem(_tweaksKey) || '{}');
+      if (t.theme)  setTheme(t.theme, true);
+      if (t.hue)    setAccentHue(t.hue, true);
+      if (t.radius) setRadius(t.radius, true);
+    } catch(e) {}
+  }
+
+  function _saveTweaks() {
+    const root = document.documentElement;
+    try {
+      localStorage.setItem(_tweaksKey, JSON.stringify({
+        theme:  root.dataset.theme  || 'dark',
+        hue:    parseInt(root.dataset.accentHue || '58'),
+        radius: root.dataset.radius || 'default'
+      }));
+    } catch(e) {}
+  }
+
+  function toggleTweaksPanel() {
+    const panel = document.getElementById('tweaksPanel');
+    const btn   = document.getElementById('tweaksBtnToggle');
+    panel.classList.toggle('open');
+    btn.classList.toggle('active', panel.classList.contains('open'));
+  }
+
+  function setTheme(t, silent) {
+    document.documentElement.dataset.theme = t;
+    document.querySelectorAll('[id^="tw-dark"],[id^="tw-light"],[id^="tw-hc"]').forEach(b => b.classList.remove('on'));
+    const map = { dark:'tw-dark', light:'tw-light', hc:'tw-hc' };
+    document.getElementById(map[t])?.classList.add('on');
+    if (!silent) _saveTweaks();
+  }
+
+  function setAccentHue(hue, silent) {
+    const root = document.documentElement;
+    root.dataset.accentHue = hue;
+    const theme = root.dataset.theme || 'dark';
+    const L = theme === 'hc' ? '80%' : (theme === 'light' ? '58%' : '72%');
+    const Lhov = theme === 'hc' ? '86%' : (theme === 'light' ? '52%' : '76%');
+    const Ltext = theme === 'hc' ? '88%' : (theme === 'light' ? '44%' : '82%');
+    const C = theme === 'hc' ? '0.17' : (theme === 'light' ? '0.14' : '0.13');
+    root.style.setProperty('--accent',       `oklch(${L} ${C} ${hue})`);
+    root.style.setProperty('--accent-hover', `oklch(${Lhov} ${C} ${hue})`);
+    root.style.setProperty('--accent-soft',  `oklch(${L} ${C} ${hue} / 0.14)`);
+    root.style.setProperty('--accent-line',  `oklch(${L} ${C} ${hue} / 0.35)`);
+    root.style.setProperty('--accent-text',  `oklch(${Ltext} 0.11 ${hue + 4})`);
+    document.querySelectorAll('.accent-swatch').forEach(s => {
+      s.classList.toggle('on', parseInt(s.dataset.hue) === parseInt(hue));
+    });
+    if (!silent) _saveTweaks();
+  }
+
+  function setRadius(r, silent) {
+    document.documentElement.dataset.radius = r;
+    document.querySelectorAll('[id^="tw-r-"]').forEach(b => b.classList.remove('on'));
+    document.getElementById('tw-r-' + r)?.classList.add('on');
+    if (!silent) _saveTweaks();
+  }
+
+  _loadTweaks();
 </script>
 </body>

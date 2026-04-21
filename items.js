@@ -566,7 +566,7 @@ function renderGroups(filter = '') {
     const row = document.createElement('div');
     row.className = 'item-row';
     row.innerHTML = `
-      <button class="item-btn${CURRENT?.asset===n&&CURRENT?.group===g?' active':''}" onclick="selectItem('${g}','${n}')">${n}${echoTranslate(n)?'<span style="display:block;font-size:.57rem;color:#a78bfa;line-height:1.1;pointer-events:none">'+echoTranslate(n)+'</span>':''}</button>
+      <button class="item-btn${CURRENT?.asset===n&&CURRENT?.group===g?' active':''}" onclick="selectItem('${g}','${n}')">${n}${echoTranslate(n)?'<span style="display:block;font-size:.57rem;color:var(--accent-text);line-height:1.1;pointer-events:none">'+echoTranslate(n)+'</span>':''}</button>
       <button class="star-btn fav" onclick="toggleFav('${g}','${n}',event)" title="Favorit entfernen">⭐</button>`;
     favList.appendChild(row);
   });
@@ -591,7 +591,7 @@ function renderGroups(filter = '') {
       const row   = document.createElement('div');
       row.className = 'item-row';
       row.innerHTML = `
-        <button class="item-btn${CURRENT?.asset===name&&CURRENT?.group===group?' active':''}" id="ib_${group}_${name}" onclick="selectItem('${group}','${name}')">${name}${echoTranslate(name)?'<span style="display:block;font-size:.57rem;color:#a78bfa;line-height:1.1;pointer-events:none">'+echoTranslate(name)+'</span>':''}</button>
+        <button class="item-btn${CURRENT?.asset===name&&CURRENT?.group===group?' active':''}" id="ib_${group}_${name}" onclick="selectItem('${group}','${name}')">${name}${echoTranslate(name)?'<span style="display:block;font-size:.57rem;color:var(--accent-text);line-height:1.1;pointer-events:none">'+echoTranslate(name)+'</span>':''}</button>
         <button class="star-btn${isFav?' fav':''}" onclick="toggleFav('${group}','${name}',event)" title="${isFav?'Favorit entfernen':'Zu Favoriten'}">${isFav?'⭐':'☆'}</button>`;
       itemsDiv.appendChild(row);
     });
@@ -1987,7 +1987,8 @@ function renderProfileList() {
       const isFav = PROFILE_FAVS.has(name);
       return '<div class="profile-row" id="prow_' + idx + '">'
         + '<div class="profile-row-main">'
-        + '<button class="profile-row-load" data-slot="' + slotKey + '" onclick="profileLoadBySlot(this.dataset.slot)" title="Laden">📥</button>'
+        + '<button class="profile-row-exec" data-slot="' + slotKey + '" onclick="profileExecuteBySlot(this.dataset.slot)" title="Alle Items laden + sofort ausführen">▶ Ausführen</button>'
+        + '<button class="profile-row-load" data-slot="' + slotKey + '" onclick="profileLoadBySlot(this.dataset.slot)" title="Laden (ohne Ausführen)">📥</button>'
         + '<button class="profile-fav-btn' + (isFav ? ' fav' : '') + '" data-pkey="' + idx + '" onclick="toggleProfileFav(_profileNameMap[\'p_\'+this.dataset.pkey])" title="' + (isFav ? 'Favorit entfernen' : 'Als Favorit markieren') + '">⭐</button>'
         + '<span class="profile-row-name">' + escHtml(shortName) + '</span>'
         + '<span class="profile-row-count">' + (p.items?.length ?? 0) + ' Items</span>'
@@ -2016,6 +2017,22 @@ function renderProfileList() {
 function profileLoadBySlot(slot) {
   const name = _profileNameMap[slot];
   if (name) loadProfile(name);
+}
+
+// Lädt das Profil UND führt den generierten Code sofort einmalig aus
+function profileExecuteBySlot(slot) {
+  const name = _profileNameMap[slot];
+  if (!name) return;
+  if (!_connected) { showStatus('❌ Nicht verbunden', 'error'); return; }
+  loadProfile(name);
+  // generateOutfitCode() wurde bereits via _autoOutfitCode() aufgerufen.
+  // Kleiner Tick damit das DOM den Code-Wert gesetzt hat.
+  setTimeout(() => {
+    const code = document.getElementById('outfitCode')?.value?.trim();
+    if (!code) { showStatus('❌ Kein Code generiert – Cache geladen?', 'error'); return; }
+    bcSend({ type: 'EXEC', code: '(function(){\n' + code + '\n})();' });
+    showStatus('▶ Profil "' + name + '" ausgeführt (' + OUTFIT.length + ' Items)', 'success');
+  }, 60);
 }
 
 function profileToggleEdit(slot) {
@@ -2296,10 +2313,10 @@ function _saveCurseComments() { idbSet('BC_CURSE_COMMENTS_v1', CURSE_COMMENTS); 
 // ── Outfit-Flags ─────────────────────────────────────────────
 let CURSE_OUTFIT_FLAGS = {};  // dbKey → true
 function _saveCurseOutfitFlags() {
-  // Direkt in BC_CURSE_DB_v1 einbetten (atomar mit dem Rest)
-  _saveCurseDB();
-  // Redundant auch separat speichern als Fallback
+  // Nur die kleine Flags-Map speichern – kein volles CURSE_DB-Serialisieren
   idbSet('BC_CURSE_OUTFIT_v1', CURSE_OUTFIT_FLAGS);
+  // Daten bleiben beim nächsten _saveCurseDB()-Aufruf eingebettet
+  _debouncedSaveCurseDB();
 }
 // ── Favoriten ────────────────────────────────────────────────
 let CURSE_FAVOURITES = new Set();
@@ -2352,6 +2369,8 @@ function curseScan() {
 function _saveCurseDB() {
   idbSet('BC_CURSE_DB_v1', {database:CURSE_DB,lscgTable:CURSE_LSCG,lscgCache:CURSE_CACHE_LSCG,favourites:[...CURSE_FAVOURITES],outfitFlags:CURSE_OUTFIT_FLAGS});
 }
+// Debounced: coalesces rapid successive calls (e.g. bulk-flagging) into one write
+const _debouncedSaveCurseDB = _debounce(_saveCurseDB, 1200);
 
 function _handleCurseData(data) {
   if (data.err) { showStatus('❌ Curse-Scan: ' + data.err, 'error'); return; }
@@ -2518,7 +2537,7 @@ function renderCurseTab() {
         (ownerFavCount ? '<span class="curse-owner-count curse-owner-fav-badge" style="background:rgba(251,191,36,.12);color:#fbbf24;border-color:rgba(251,191,36,.3)">\u2B50 ' + ownerFavCount + '</span>' : '<span class="curse-owner-fav-badge" style="display:none"></span>') +
         '<span class="curse-owner-count curse-owner-outfit-badge" style="background:rgba(52,211,153,0.12);color:#6ee7b7;border-color:rgba(52,211,153,0.3);' + (!ownerOutfitCount ? 'display:none' : '') + '" title="Als Outfit markierte Items">\uD83D\uDC57 ' + ownerOutfitCount + '</span>' +
         '<button onclick="event.stopPropagation();curseSaveAllAsProfile(\'' + owner.num + '\')"' +
-          ' style="margin-left:auto;background:rgba(139,92,246,0.12);border:1px solid rgba(139,92,246,0.3);color:#a78bfa;cursor:pointer;font-size:.68rem;padding:2px 8px;border-radius:4px;white-space:nowrap"' +
+          ' style="margin-left:auto;background:oklch(72% 0.13 58 / 0.12);border:1px solid oklch(72% 0.13 58 / 0.3);color:var(--accent-text);cursor:pointer;font-size:.68rem;padding:2px 8px;border-radius:4px;white-space:nowrap"' +
           ' title="Alle Curses als Outfit-Profil speichern">\uD83D\uDCBE Alle speichern</button>' +
         '<span class="curse-owner-chevron">\u25BA</span>' +
       '</div>' +
@@ -2587,7 +2606,7 @@ function _renderCurseOwnerRows(ownerNumStr) {
       '<td class="outfit-flag-cell" onclick="toggleCurseOutfitFlag(\'' + dbKey.replace(/'/g, '&apos;') + '\',this)" title="' + (isOutfit ? 'Outfit-Markierung entfernen' : 'Als Outfit markieren') + '">' +
         '<button class="curse-outfit-btn' + (isOutfit ? ' on' : '') + '" tabindex="-1">' + (isOutfit ? '\uD83D\uDC57 Outfit' : '+ Outfit') + '</button>' +
       '</td>' +
-      '<td class="cn"><span class="cursor-detail-toggle" onclick="toggleCurseDetail(\'' + detId + '\',\'' + rowId + '\')">\u25BA</span>' + escHtml(entry.CraftName) + (echoTranslate(entry.CraftName) ? '<span style="font-size:.58rem;color:#a78bfa;margin-left:4px">(' + echoTranslate(entry.CraftName) + ')</span>' : '') + '</td>' +
+      '<td class="cn"><span class="cursor-detail-toggle" onclick="toggleCurseDetail(\'' + detId + '\',\'' + rowId + '\')">\u25BA</span>' + escHtml(entry.CraftName) + (echoTranslate(entry.CraftName) ? '<span style="font-size:.58rem;color:var(--accent-text);margin-left:4px">(' + echoTranslate(entry.CraftName) + ')</span>' : '') + '</td>' +
       '<td class="item">' + escHtml(entry.ItemName) + (echoTranslate(entry.ItemName) ? '<span style="font-size:.58rem;color:var(--text3);margin-left:4px">(' + echoTranslate(entry.ItemName) + ')</span>' : '') + '</td>' +
       '<td class="grp">' + escHtml(entry.Gruppe) + '</td>' +
       '<td class="badges">' +
@@ -2603,7 +2622,7 @@ function _renderCurseOwnerRows(ownerNumStr) {
       '<td class="actions">' +
         '<button class="curse-apply-btn" data-rid="' + rowId + '" data-tgt="" onclick="wearCurseByData(this)" title="Auf mich anwenden">\uD83D\uDC64</button>' +
         (_selectedMemberNum ? '<button class="curse-apply-btn other" data-rid="' + rowId + '" data-tgt="' + _selectedMemberNum + '" onclick="wearCurseByData(this)" title="Auf #' + _selectedMemberNum + '">\uD83D\uDC65 #' + _selectedMemberNum + '</button>' : '') +
-        '<button data-rid="' + rowId + '" onclick="curseSaveAsProfile(this.dataset.rid)" style="background:rgba(139,92,246,0.12);border:1px solid rgba(139,92,246,0.3);color:#a78bfa;cursor:pointer;font-size:.72rem;padding:2px 6px;border-radius:4px;margin-left:2px" title="Als Outfit-Profil speichern">\uD83D\uDCBE Profil</button>' +
+        '<button data-rid="' + rowId + '" onclick="curseSaveAsProfile(this.dataset.rid)" style="background:oklch(72% 0.13 58 / 0.12);border:1px solid oklch(72% 0.13 58 / 0.3);color:var(--accent-text);cursor:pointer;font-size:.72rem;padding:2px 6px;border-radius:4px;margin-left:2px" title="Als Outfit-Profil speichern">\uD83D\uDCBE Profil</button>' +
         '<button onclick="deleteCurseEntry(\'' + dbKey.replace(/\x27/g, '&apos;') + '\')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.8rem;padding:2px 5px;margin-left:2px" title="Eintrag löschen">\u2715</button>' +
       '</td>';
 
@@ -2892,13 +2911,16 @@ function curseSaveAllAsProfile(ownerNum) {
     .filter(([, e]) => String(e.Besitzer?.Nummer ?? '') === String(ownerNum))
     .map(([, e]) => e);
   const ownerName = entries[0]?.Besitzer?.Name || ('#' + ownerNum);
-  // Auto-Flag alle Einträge dieses Owners
+  // Auto-Flag alle Einträge dieses Owners (einmalig speichern, nicht pro Item)
   let flagged = 0;
   for (const e of entries) {
     const k = (e.Besitzer?.Nummer ?? '') + ':' + e.ItemName + ':' + e.CraftName;
     if (!CURSE_OUTFIT_FLAGS[k]) { CURSE_OUTFIT_FLAGS[k] = true; flagged++; }
   }
-  if (flagged > 0) _saveCurseOutfitFlags();
+  if (flagged > 0) {
+    idbSet('BC_CURSE_OUTFIT_v1', CURSE_OUTFIT_FLAGS); // direkt, kein _saveCurseDB()
+    _debouncedSaveCurseDB();
+  }
   const defaultName = ownerName + ' Outfit';
   _fetchOutfitAndSave(null, defaultName, entries.map(_curseEntryToProfileItem));
 }
