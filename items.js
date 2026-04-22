@@ -69,8 +69,14 @@ function _debounce(fn, delay) {
     timer = setTimeout(() => { timer = null; fn.apply(this, args); }, delay);
   };
 }
-const _debouncedSaveCurseDB    = _debounce(function() { _saveCurseDB(); }, 1200);
-const _debouncedRenderCurseTab = _debounce(function() { renderCurseTab(); }, 220);
+const _debouncedSaveCurseDB      = _debounce(function() { _saveCurseDB(); }, 1200);
+const _debouncedRenderCurseTab   = _debounce(function() { renderCurseTab(); }, 220);
+const _debouncedRenderOutfitList = _debounce(function() { renderOutfitList(); }, 160);
+const _debouncedRenderProfileList= _debounce(function() { renderProfileList(); }, 160);
+function _debouncedRenderGroups(val) {
+  clearTimeout(_debouncedRenderGroups._t);
+  _debouncedRenderGroups._t = setTimeout(() => renderGroups(val), 160);
+}
 
 // Echo's Clothing Extension – Chinesisch → Englisch Lookup
 // Quelle: Echo_Extension_CN_Items.docx
@@ -1660,39 +1666,106 @@ function moveOutfitItem(i, d) {
 
 function generateOutfitCode() {
   if (!OUTFIT.length) return;
-  // Outfit-Ziel hat Vorrang; Fallback auf altes OUTFIT[0]-Ziel für Rückwärtskompatibilität
   const isOther   = _outfitTargetNum !== null;
   const memberNum = _outfitTargetNum ?? 0;
 
-  let count = OUTFIT.length;
-  let code = '// ═══════════════════════════════════════════\n//  OUTFIT – ' + count + ' Items';
-  if (isOther) code += ' → Spieler #' + memberNum;
+  let code = '// ═══════════════════════════════════════════\n//  OUTFIT – ' + OUTFIT.length + ' Items';
+  if (isOther) code += ' \u2192 Spieler #' + memberNum;
   code += '\n// ═══════════════════════════════════════════\n';
 
+  // TARGET
   if (isOther && memberNum) {
     code += 'const TARGET = ChatRoomCharacter.find(c => c.MemberNumber === ' + memberNum + ');\n'
-          + 'if (!TARGET) { console.error("❌ Spieler #' + memberNum + ' nicht im Raum!"); } else {\n\n';
+          + 'if (!TARGET) { console.error("\u274C Spieler #' + memberNum + ' nicht im Raum!"); throw new Error("TARGET"); }\n';
   } else {
-    code += 'const TARGET = Player;\n\n';
+    code += 'const TARGET = Player;\n';
   }
 
-  // Erst ausziehen damit keine alten Items unter dem neuen Outfit bleiben
-  code += '// ── Strip: alte Items entfernen ──\n'
-        + 'TARGET.Appearance = TARGET.Appearance.filter(i => i?.Asset?.Group?.AllowNone === false);\n\n';
+  // Strip + helper
+  code += '// \u2500\u2500 Strip \u2500\u2500\n'
+        + 'TARGET.Appearance = TARGET.Appearance.filter(i => i?.Asset?.Group?.AllowNone === false);\n'
+        + '// \u2500\u2500 Helper \u2500\u2500\n'
+        + 'function _ws(name,grp,col,preB64,ext,diff){\n'
+        + '  InventoryWear(TARGET,name,grp,col,0,null);\n'
+        + '  const it=InventoryGet(TARGET,grp);\n'
+        + '  if(!it)return console.error("\u274C "+name);\n'
+        + '  it.Color=col; it.Property=it.Property??{};\n'
+        + '  if(preB64)Object.assign(it.Property,JSON.parse(decodeURIComponent(escape(atob(preB64)))));\n'
+        + '  if(ext)try{ExtendedItemInit(TARGET,it,false,false);}catch(e){}\n'
+        + '  it.Difficulty=diff??0;\n'
+        + '}\n'
+        + '// \u2500\u2500 Items \u2500\u2500\n';
+
+  const BCX_LOCKS_L = ['LewdCrestPadlock','DeviousPadlock','LuziPadlock'];
+  const REL_LOCKS_L = ['OwnerPadlock','LoversPadlock','MistressPadlock'];
 
   OUTFIT.forEach((item, i) => {
-    code += '// ── ' + (i+1) + '. ' + item.asset + ' (' + item.group + ') ──\n';
-    code += buildItemInner({ ...item, isOther, memberNum, delayOffset: 600 + i * 700 });
-    code += '\n\n';
+    const { group, asset, colors, tr, property, overridePriority, layerProperties, difficulty, lock, lockParams } = item;
+
+    // Pre-props: TypeRecord + all non-visual properties
+    const preProp = {};
+    const fullProp = property ? Object.assign({}, property) : null;
+    const hasTr = tr && Object.keys(tr).length;
+    if (hasTr) { preProp.TypeRecord = tr; preProp.Type = Object.entries(tr).map(([k,v]) => k+v).join(''); }
+    if (fullProp) {
+      for (const [k,v] of Object.entries(fullProp)) {
+        if (k !== 'TypeRecord' && k !== 'Type' && k !== 'OverridePriority' && k !== 'LayerProperties') preProp[k] = v;
+      }
+    }
+    // Post-props: OverridePriority + LayerProperties (must apply AFTER ExtendedItemInit)
+    const postProp = {};
+    if (fullProp?.OverridePriority != null) postProp.OverridePriority = fullProp.OverridePriority;
+    else if (overridePriority != null)      postProp.OverridePriority = overridePriority;
+    if (fullProp?.LayerProperties)          postProp.LayerProperties  = fullProp.LayerProperties;
+    else if (layerProperties)               postProp.LayerProperties  = layerProperties;
+
+    const hasPreProp  = Object.keys(preProp).length > 0;
+    const hasPostProp = Object.keys(postProp).length > 0;
+    const preB64  = hasPreProp  ? btoa(unescape(encodeURIComponent(JSON.stringify(preProp))))  : null;
+    const postB64 = hasPostProp ? btoa(unescape(encodeURIComponent(JSON.stringify(postProp)))) : null;
+
+    code += '// ' + (i+1) + '. ' + asset + ' (' + group + ')\n';
+    code += '_ws(' + JSON.stringify(asset) + ',' + JSON.stringify(group) + ','
+          + JSON.stringify(colors) + ','
+          + (preB64 ? JSON.stringify(preB64) : 'null') + ','
+          + (hasTr ? 'true' : 'false') + ','
+          + (difficulty ?? 0) + ');\n';
+
+    // Post-props (OverridePriority / LayerProperties)
+    if (hasPostProp) {
+      code += 'Object.assign(InventoryGet(TARGET,' + JSON.stringify(group) + ').Property,'
+            + 'JSON.parse(decodeURIComponent(escape(atob(' + JSON.stringify(postB64) + ')))));\n';
+    }
+
+    // Lock (synchronous)
+    if (lock) {
+      const isBcx = BCX_LOCKS_L.includes(lock);
+      const isRel = REL_LOCKS_L.includes(lock);
+      const findLock = isBcx
+        ? 'Asset.find(a=>a.Name===' + JSON.stringify(lock) + '&&a.Group?.Name==="ItemMisc")??Asset.find(a=>a.Name===' + JSON.stringify(lock) + ')'
+        : 'Asset.find(a=>a.Name===' + JSON.stringify(lock) + '&&a.Group?.Name==="ItemMisc")';
+      code += '{\n  const _li=InventoryGet(TARGET,' + JSON.stringify(group) + ');\n'
+            + '  const _la=' + findLock + ';\n'
+            + '  if(_la&&_li){\n    InventoryLock(TARGET,_li,{Asset:_la},Player.MemberNumber,true);\n';
+      if (lockParams?.timer > 0)    code += '    _li.Property.RemoveTimer=Date.now()+' + lockParams.timer + ';\n';
+      if (lockParams?.combo)         code += '    _li.Property.CombinationNumber=' + JSON.stringify(lockParams.combo) + ';\n';
+      if (lockParams?.password)      code += '    _li.Property.Password=' + JSON.stringify(lockParams.password) + ';\n';
+      if (isRel) {
+        code += '    _li.Property.LockMemberNumber=' + (lockParams?.relMember || 'Player.MemberNumber') + ';\n';
+        if (lockParams?.relTimer > 0) code += '    _li.Property.RemoveTimer=Date.now()+' + lockParams.relTimer + ';\n';
+      }
+      code += '  }\n}\n';
+    }
+    code += '\n';
   });
 
+  // Single refresh + deferred sync
   const syncLine = (isOther && memberNum)
-    ? 'ChatRoomCharacterUpdate(TARGET);'
-    : 'ServerPlayerAppearanceSync(); ChatRoomCharacterUpdate(TARGET);';
-  const finalDelay = 600 + OUTFIT.length * 700 + 200;
-  code += 'setTimeout(function() { ' + syncLine + ' console.log("✅ Outfit fertig!"); }, ' + finalDelay + ');\n';
-
-  if (isOther && memberNum) code += '}\n';
+    ? '  ChatRoomCharacterUpdate(TARGET);'
+    : '  ServerPlayerAppearanceSync();\n  ChatRoomCharacterUpdate(TARGET);';
+  code += '// \u2500\u2500 Refresh \u2500\u2500\nCharacterRefresh(TARGET);\n'
+        + '// \u2500\u2500 Sync nach 2s \u2500\u2500\n'
+        + 'setTimeout(()=>{\n' + syncLine + '\n  console.log("\u2705 Outfit fertig!");\n},2000);\n';
 
   document.getElementById('outfitCode').value = code;
 }
