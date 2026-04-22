@@ -2304,6 +2304,7 @@ function _handleCurseData(data) {
 let _curseFilter  = 'all';  // 'all' | 'cursed' | 'lscg' | 'fav' | 'outfit' | 'no-outfit'
 let _pendingExport = false;
 let _curseEntryMap = {};    // rowId → dbKey, for safe onclick
+let _curseOwnerData = {};   // ownerNum → { name, num, items[] } — für Lazy Row Rendering
 
 function toggleCacheFilter() {
   const el = document.getElementById('fc-cache');
@@ -2390,12 +2391,16 @@ function renderCurseTab() {
 
   // Group by owner (skip entries without Besitzer)
   const byOwner = {};
+  _curseOwnerData = {};  // Reset Lazy-Cache
+  _curseEntryMap  = {};  // Reset Row-Map
   entries.forEach((e, idx) => {
     if (!e?.Besitzer?.Nummer) return;
     const key = e.Besitzer.Nummer + ':' + e.Besitzer.Name;
     if (!byOwner[key]) byOwner[key] = { name: e.Besitzer.Name, num: e.Besitzer.Nummer, items: [] };
     byOwner[key].items.push({ ...e, _idx: idx });
   });
+  // Store for lazy rendering
+  Object.values(byOwner).forEach(o => { _curseOwnerData[o.num] = o; });
 
   // Remove existing owner blocks and rebuild
   body.querySelectorAll('.curse-owner-block').forEach(b => b.remove());
@@ -2448,99 +2453,116 @@ function renderCurseTab() {
 
     body.appendChild(block);
 
-    const tbody = document.getElementById('cb_' + owner.num);
-    owner.items.forEach((entry, rowIdx) => {
-      if (!entry?.Besitzer?.Nummer) return;
-      const dbKey = entry.Besitzer.Nummer + ':' + entry.ItemName + ':' + entry.CraftName;
-      const rowId = 'cr_' + owner.num + '_' + rowIdx;
-      const detId = 'cd_' + owner.num + '_' + rowIdx;
-      const comment = CURSE_COMMENTS[dbKey] || '';
-      const isLSCG  = entry.IstLSCGCurse;
-      const isCursed = entry.IstCursed;
-      const isOutfit = !!CURSE_OUTFIT_FLAGS[dbKey];
-
-      const tr = document.createElement('tr');
-      const isFav = CURSE_FAVOURITES.has(dbKey);
-    tr.className = 'curse-row' + (isLSCG ? ' lscg' : '') + (isFav ? ' fav' : '') + (isOutfit ? ' outfit-flagged' : '');
-      tr.id = rowId;
-
-      const lscgText = isLSCG
-        ? '<span class="curse-detail-badge lscg" title="' + (entry.LSCGAusCache ? 'Aus Cache' : 'Live') + '">'
-          + (entry.LSCGAusCache ? '💾' : '✅') + '</span> ' + escHtml(entry.LSCG?.Name || '?')
-        : '<span style="color:var(--text3)">–</span>';
-
-      tr.innerHTML =
-        '<td class="fav-cell" onclick="toggleCurseFavourite(\'' + dbKey.replace(/'/g,"&apos;") + '\',this)" title="Favorit">'+
-          '<button class="curse-fav-btn' + (isFav ? ' fav' : '') + '" style="pointer-events:none">⭐</button>'+
-        '</td>'+
-        '<td class="outfit-flag-cell" onclick="toggleCurseOutfitFlag(\'' + dbKey.replace(/'/g,"&apos;") + '\',this)" title="Outfit-Markierung">'+
-          '<button class="curse-outfit-btn' + (isOutfit ? ' on' : '') + '" style="pointer-events:none">' + (isOutfit ? '👗 Outfit' : '+ Outfit') + '</button>'+
-        '</td>'+
-        '<td class="cn"><span class="cursor-detail-toggle" onclick="toggleCurseDetail(\'' + detId + '\',\'' + rowId + '\')">▶</span>'+escHtml(entry.CraftName)+(echoTranslate(entry.CraftName)?'<span style="font-size:.58rem;color:#a78bfa;margin-left:4px">('+echoTranslate(entry.CraftName)+')</span>':'')+'</td>'+
-        '<td class="item">'+escHtml(entry.ItemName)+(echoTranslate(entry.ItemName)?'<span style="font-size:.58rem;color:var(--text3);margin-left:4px">('+echoTranslate(entry.ItemName)+')</span>':'')+'</td>'+
-        '<td class="grp">'+escHtml(entry.Gruppe)+'</td>'+
-        '<td class="badges">'+
-          (isCursed ? '<span class="curse-detail-badge cursed">🔮</span>' : '')+
-          (entry.Private ? '<span class="curse-detail-badge">🔒</span>' : '')+
-          (entry.Property ? '<span class="curse-detail-badge">'+escHtml(entry.Property)+'</span>' : '')+
-        '</td>'+
-        '<td class="lscg-col">'+lscgText+'</td>'+
-        '<td style="text-align:center;vertical-align:middle">'+
-          (isLSCG ? '<span title="'+(entry.LSCGAusCache ? 'Aus LSCG-Cache' : 'Live-Daten')+'" style="font-size:1rem;cursor:default">'+(entry.LSCGAusCache ? '✅' : '🟢')+'</span>' : '<span style="color:var(--text3)">–</span>')+
-        '</td>'+
-        '<td class="comment-col"><textarea class="curse-comment-input" placeholder="Notiz..." '+
-          'data-rowid="' + rowId + '" onchange="saveCurseCommentById(this.dataset.rowid,this.value)">'+escHtml(comment)+'</textarea></td>'+
-        '<td class="actions">'+
-          (function(){ _curseEntryMap[rowId] = dbKey; return ''; })()+
-          '<button class="curse-apply-btn" data-rid="' + rowId + '" data-tgt="" onclick="wearCurseByData(this)" title="Auf mich anwenden">👤</button>'+
-          (_selectedMemberNum ? '<button class="curse-apply-btn other" data-rid="' + rowId + '" data-tgt="' + _selectedMemberNum + '" onclick="wearCurseByData(this)" title="Auf #'+_selectedMemberNum+'">👥 #'+_selectedMemberNum+'</button>' : '')+
-          '<button data-rid="' + rowId + '" onclick="curseSaveAsProfile(this.dataset.rid)"'
-          + ' style="background:rgba(139,92,246,0.12);border:1px solid rgba(139,92,246,0.3);color:#a78bfa;cursor:pointer;font-size:.72rem;padding:2px 6px;border-radius:4px;margin-left:2px"'
-          + ' title="Als Outfit-Profil speichern">💾 Profil</button>'+
-          '<button onclick="deleteCurseEntry(\'' + dbKey.replace(/\x27/g,"&apos;") + '\')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.8rem;padding:2px 5px;margin-left:2px" title="Eintrag l\xc3�schen (kommt beim n\xc3�chsten Scan wieder)">✕</button>'+
-        '</td>';
-
-      tbody.appendChild(tr);
-
-      // Detail row
-      const lscgEntry = entry.LSCG;
-      const detailFields = [
-        ['Beschreibung', entry.Description || '–'],
-        ['Farbe', entry.Farbe || '–'],
-        ['Property', entry.Property || '–'],
-        ['Private', entry.Private ? 'Ja' : 'Nein'],
-        ['Zuletzt', entry.ZuletztGesehen],
-        ...(isLSCG ? [
-          ['LSCG Name', lscgEntry?.Name || '–'],
-          ['Outfit Key', lscgEntry?.OutfitKey || '–'],
-          ['Speed', lscgEntry?.Speed ?? '–'],
-          ['Enabled', lscgEntry?.Enabled ? 'Ja' : 'Nein'],
-          ['Inexhaustable', lscgEntry?.Inexhaustable ? 'Ja' : 'Nein'],
-          ['Aus Cache', entry.LSCGAusCache ? 'Ja 💾' : 'Nein ✅'],
-        ] : []),
-      ];
-
-      const detTr = document.createElement('tr');
-      detTr.className = 'curse-detail-row';
-      detTr.id = detId;
-      detTr.innerHTML =
-        '<td class="curse-detail-cell" colspan="8">'+
-        '<div style="font-size:.63rem;color:var(--text3);margin-bottom:4px">Details für '+escHtml(entry.CraftName)+'</div>'+
-        '<div class="curse-detail-grid">'+
-        detailFields.map(([label, val]) =>
-          '<div class="curse-detail-field">'+
-          '<div class="curse-detail-label">'+label+'</div>'+
-          '<div class="curse-detail-val">'+escHtml(String(val))+'</div>'+
-          '</div>'
-        ).join('')+
-        '</div></td>';
-      tbody.appendChild(detTr);
-    });
+    // Lazy: Rows nur für bereits offene Blöcke sofort rendern
+    if (wasOpen) _renderCurseOwnerRows(owner.num);
   });
 }
 
+// ── Lazy Row Renderer: füllt tbody eines Owner-Blocks ────────
+function _renderCurseOwnerRows(ownerNum) {
+  const tbody = document.getElementById('cb_' + ownerNum);
+  if (!tbody) return;
+  if (tbody.dataset.rendered === '1') return; // bereits gerendert
+  const owner = _curseOwnerData[ownerNum];
+  if (!owner) return;
+
+  const frag = document.createDocumentFragment();
+
+  owner.items.forEach((entry, rowIdx) => {
+    if (!entry?.Besitzer?.Nummer) return;
+    const dbKey   = entry.Besitzer.Nummer + ':' + entry.ItemName + ':' + entry.CraftName;
+    const rowId   = 'cr_' + owner.num + '_' + rowIdx;
+    const detId   = 'cd_' + owner.num + '_' + rowIdx;
+    const comment = CURSE_COMMENTS[dbKey] || '';
+    const isLSCG  = entry.IstLSCGCurse;
+    const isCursed = entry.IstCursed;
+    const isOutfit = !!CURSE_OUTFIT_FLAGS[dbKey];
+    const isFav    = CURSE_FAVOURITES.has(dbKey);
+
+    _curseEntryMap[rowId] = dbKey;
+
+    const lscgText = isLSCG
+      ? '<span class="curse-detail-badge lscg" title="' + (entry.LSCGAusCache ? 'Aus Cache' : 'Live') + '">'
+        + (entry.LSCGAusCache ? '\uD83D\uDCBE' : '\u2705') + '</span> ' + escHtml(entry.LSCG?.Name || '?')
+      : '<span style="color:var(--text3)">\u2013</span>';
+
+    const tr = document.createElement('tr');
+    tr.className = 'curse-row' + (isLSCG ? ' lscg' : '') + (isFav ? ' fav' : '') + (isOutfit ? ' outfit-flagged' : '');
+    tr.id = rowId;
+    tr.innerHTML =
+      '<td class="fav-cell" onclick="toggleCurseFavourite(\'' + dbKey.replace(/'/g,"&apos;") + '\',this)" title="Favorit">'
+      + '<button class="curse-fav-btn' + (isFav ? ' fav' : '') + '" style="pointer-events:none">\u2B50</button>'
+      + '</td>'
+      + '<td class="outfit-flag-cell" onclick="toggleCurseOutfitFlag(\'' + dbKey.replace(/'/g,"&apos;") + '\',this)" title="Outfit-Markierung">'
+      + '<button class="curse-outfit-btn' + (isOutfit ? ' on' : '') + '" style="pointer-events:none">' + (isOutfit ? '\uD83D\uDC57 Outfit' : '+ Outfit') + '</button>'
+      + '</td>'
+      + '<td class="cn"><span class="cursor-detail-toggle" onclick="toggleCurseDetail(\'' + detId + '\',\'' + rowId + '\')">\u25B6</span>' + escHtml(entry.CraftName) + (echoTranslate(entry.CraftName) ? '<span style="font-size:.58rem;color:#a78bfa;margin-left:4px">(' + echoTranslate(entry.CraftName) + ')</span>' : '') + '</td>'
+      + '<td class="item">' + escHtml(entry.ItemName) + (echoTranslate(entry.ItemName) ? '<span style="font-size:.58rem;color:var(--text3);margin-left:4px">(' + echoTranslate(entry.ItemName) + ')</span>' : '') + '</td>'
+      + '<td class="grp">' + escHtml(entry.Gruppe) + '</td>'
+      + '<td class="badges">'
+      + (isCursed ? '<span class="curse-detail-badge cursed">\uD83D\uDD2E</span>' : '')
+      + (entry.Private ? '<span class="curse-detail-badge">\uD83D\uDD12</span>' : '')
+      + (entry.Property ? '<span class="curse-detail-badge">' + escHtml(entry.Property) + '</span>' : '')
+      + '</td>'
+      + '<td class="lscg-col">' + lscgText + '</td>'
+      + '<td style="text-align:center;vertical-align:middle">'
+      + (isLSCG ? '<span title="' + (entry.LSCGAusCache ? 'Aus LSCG-Cache' : 'Live-Daten') + '" style="font-size:1rem;cursor:default">' + (entry.LSCGAusCache ? '\u2705' : '\uD83D\uDFE2') + '</span>' : '<span style="color:var(--text3)">\u2013</span>')
+      + '</td>'
+      + '<td class="comment-col"><textarea class="curse-comment-input" placeholder="Notiz..." data-rowid="' + rowId + '" onchange="saveCurseCommentById(this.dataset.rowid,this.value)">' + escHtml(comment) + '</textarea></td>'
+      + '<td class="actions">'
+      + '<button class="curse-apply-btn" data-rid="' + rowId + '" data-tgt="" onclick="wearCurseByData(this)" title="Auf mich anwenden">\uD83D\uDC64</button>'
+      + (_selectedMemberNum ? '<button class="curse-apply-btn other" data-rid="' + rowId + '" data-tgt="' + _selectedMemberNum + '" onclick="wearCurseByData(this)" title="Auf #' + _selectedMemberNum + '">\uD83D\uDC65 #' + _selectedMemberNum + '</button>' : '')
+      + '<button data-rid="' + rowId + '" onclick="curseSaveAsProfile(this.dataset.rid)" style="background:rgba(139,92,246,0.12);border:1px solid rgba(139,92,246,0.3);color:#a78bfa;cursor:pointer;font-size:.72rem;padding:2px 6px;border-radius:4px;margin-left:2px" title="Als Outfit-Profil speichern">\uD83D\uDCBE Profil</button>'
+      + '<button onclick="deleteCurseEntry(\'' + dbKey.replace(/'/g,"&apos;") + '\')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.8rem;padding:2px 5px;margin-left:2px" title="L\u00f6schen">\u2715</button>'
+      + '</td>';
+
+    frag.appendChild(tr);
+
+    // Detail-Zeile
+    const lscgEntry = entry.LSCG;
+    const detailFields = [
+      ['Beschreibung', entry.Description || '\u2013'],
+      ['Farbe', entry.Farbe || '\u2013'],
+      ['Property', entry.Property || '\u2013'],
+      ['Private', entry.Private ? 'Ja' : 'Nein'],
+      ['Zuletzt', entry.ZuletztGesehen],
+      ...(isLSCG ? [
+        ['LSCG Name', lscgEntry?.Name || '\u2013'],
+        ['Outfit Key', lscgEntry?.OutfitKey || '\u2013'],
+        ['Speed', lscgEntry?.Speed ?? '\u2013'],
+        ['Enabled', lscgEntry?.Enabled ? 'Ja' : 'Nein'],
+        ['Inexhaustable', lscgEntry?.Inexhaustable ? 'Ja' : 'Nein'],
+        ['Aus Cache', entry.LSCGAusCache ? 'Ja \uD83D\uDCBE' : 'Nein \u2705'],
+      ] : []),
+    ];
+    const detTr = document.createElement('tr');
+    detTr.className = 'curse-detail-row';
+    detTr.id = detId;
+    detTr.innerHTML =
+      '<td class="curse-detail-cell" colspan="8">'
+      + '<div style="font-size:.63rem;color:var(--text3);margin-bottom:4px">Details f\u00fcr ' + escHtml(entry.CraftName) + '</div>'
+      + '<div class="curse-detail-grid">'
+      + detailFields.map(([label, val]) =>
+          '<div class="curse-detail-field">'
+          + '<div class="curse-detail-label">' + label + '</div>'
+          + '<div class="curse-detail-val">' + escHtml(String(val)) + '</div>'
+          + '</div>'
+        ).join('')
+      + '</div></td>';
+    frag.appendChild(detTr);
+  });
+
+  tbody.appendChild(frag);
+  tbody.dataset.rendered = '1';
+}
+
 function toggleCurseOwner(id) {
-  document.getElementById(id)?.classList.toggle('open');
+  const block = document.getElementById(id);
+  if (!block) return;
+  const wasOpen = block.classList.contains('open');
+  block.classList.toggle('open');
+  // Lazy: Rows beim ersten Öffnen rendern
+  if (!wasOpen) _renderCurseOwnerRows(id.replace('co_', ''));
 }
 
 function toggleCurseDetail(detId, rowId) {
