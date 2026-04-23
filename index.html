@@ -886,7 +886,7 @@ textarea.outfit-code { width: 100%; min-height: 210px; background: rgba(0,0,0,0.
 .curse-stat span { font-weight: 700; color: var(--accent-text, oklch(82% 0.1 62)); }
 
 /* ── Body ───────────────────────────────────── */
-.curse-body { padding: 14px 18px; overflow-y: auto; overflow-x: auto; max-height: calc(100vh - 130px); }
+.curse-body { padding: 0 18px 18px; overflow-y: auto; overflow-x: auto; max-height: calc(100vh - 130px); }
 
 /* ── Filter bar ─────────────────────────────── */
 .curse-filter-bar {
@@ -952,7 +952,7 @@ textarea.outfit-code { width: 100%; min-height: 210px; background: rgba(0,0,0,0.
   margin-bottom: 10px;
   border: 1px solid rgba(255,255,255,0.08);
   border-radius: var(--radius-md, 12px);
-  overflow: hidden;
+  overflow: clip;          /* clip (not hidden) — clips to border-radius but avoids new stacking context */
   transition: border-color 0.18s, box-shadow 0.18s;
   background: rgba(255,255,255,0.01);
 }
@@ -1003,6 +1003,7 @@ textarea.outfit-code { width: 100%; min-height: 210px; background: rgba(0,0,0,0.
   grid-template-columns: 28px 80px 170px 155px 110px 82px 115px 52px 155px 1fr;
   align-content: start;
   min-width: 900px;
+  padding-top: 10px;                     /* space between sticky header and first owner block */
 }
 
 /* Single shared column-header row (injected once above all owner blocks) */
@@ -1010,13 +1011,12 @@ textarea.outfit-code { width: 100%; min-height: 210px; background: rgba(0,0,0,0.
   grid-column: 1 / -1;
   display: grid;
   grid-template-columns: subgrid;
-  background: var(--bg3);
-  border-bottom: 1px solid rgba(255,255,255,0.08);
-  margin-bottom: 6px;
-  border-radius: var(--radius-md, 12px) var(--radius-md, 12px) 0 0;
+  background: var(--bg2, #111115);       /* solid background so scrolled rows don't bleed through */
+  border-bottom: 1px solid rgba(255,255,255,0.10);
+  padding: 8px 0 4px;                    /* vertical breathing room instead of margin */
   position: sticky;
   top: 0;
-  z-index: 4;
+  z-index: 20;                           /* above all owner block stacking contexts */
 }
 .cg-hdr {
   padding: 5px 10px;
