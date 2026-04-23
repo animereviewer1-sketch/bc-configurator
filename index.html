@@ -998,7 +998,31 @@ textarea.outfit-code { width: 100%; min-height: 210px; background: rgba(0,0,0,0.
 
 /* ── Table ──────────────────────────────────── */
 .curse-rows { display: none; }
-.curse-owner-block.open .curse-rows { display: table; width: 100%; border-collapse: collapse; }
+.curse-owner-block.open .curse-rows {
+  display: table;
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;   /* ← alle Tabellen teilen exakt dieselben Breiten */
+}
+/* ── Feste Spaltenbreiten via th:nth-child ──────────────
+   Reihenfolge: ⭐ | 👗Outfit | Name | Item | Gruppe | Flags | LSCG | Cache | Kommentar | Aktionen */
+.curse-rows th:nth-child(1)  { width: 28px;  }   /* fav       */
+.curse-rows th:nth-child(2)  { width: 80px;  }   /* outfit    */
+.curse-rows th:nth-child(3)  { width: 170px; }   /* name / cn */
+.curse-rows th:nth-child(4)  { width: 160px; }   /* item      */
+.curse-rows th:nth-child(5)  { width: 110px; }   /* gruppe    */
+.curse-rows th:nth-child(6)  { width: 80px;  }   /* flags     */
+.curse-rows th:nth-child(7)  { width: 120px; }   /* lscg      */
+.curse-rows th:nth-child(8)  { width: 52px;  }   /* cache     */
+.curse-rows th:nth-child(9)  { width: 160px; }   /* kommentar */
+.curse-rows th:nth-child(10) { width: auto;  }   /* aktionen  */
+/* Overflow in allen Zellen abschneiden, kein Umbruch bei fester Breite */
+.curse-rows td { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Ausnahmen: Name darf bold bleiben, Kommentar-Textarea braucht normal wrap */
+.curse-row td.cn      { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: unset; }
+.curse-row td.item    { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.curse-row td.comment-col { white-space: normal; overflow: visible; min-width: unset; }
+.curse-row td.actions { white-space: nowrap; overflow: visible; }
 
 /* Row — activity-item-inspired */
 .curse-row { border-top: 1px solid rgba(255,255,255,0.05); transition: background 0.12s; }
@@ -1010,12 +1034,12 @@ textarea.outfit-code { width: 100%; min-height: 210px; background: rgba(0,0,0,0.
 .curse-row.outfit-flagged { background: rgba(52,211,153,0.04); }
 .curse-row.outfit-flagged:hover { background: rgba(52,211,153,0.08); }
 
-.curse-row td.cn { color: var(--text); font-weight: 600; min-width: 130px; }
+.curse-row td.cn { color: var(--text); font-weight: 600; }
 .curse-row td.item { color: var(--text2); font-family: var(--font-mono); font-size: 0.68rem; }
 .curse-row td.grp { color: var(--text3); font-size: 0.64rem; font-family: var(--font-mono); }
 .curse-row td.badges { white-space: nowrap; }
 .curse-row td.lscg-col { color: #34d399; font-size: 0.66rem; }
-.curse-row td.comment-col { min-width: 160px; }
+.curse-row td.comment-col { }
 .curse-row td.actions { white-space: nowrap; }
 
 /* Comment textarea */
