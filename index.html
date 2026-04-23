@@ -1004,25 +1004,13 @@ textarea.outfit-code { width: 100%; min-height: 210px; background: rgba(0,0,0,0.
   border-collapse: collapse;
   table-layout: fixed;   /* ← alle Tabellen teilen exakt dieselben Breiten */
 }
-/* ── Feste Spaltenbreiten via th:nth-child ──────────────
-   Reihenfolge: ⭐ | 👗Outfit | Name | Item | Gruppe | Flags | LSCG | Cache | Kommentar | Aktionen */
-.curse-rows th:nth-child(1)  { width: 28px;  }   /* fav       */
-.curse-rows th:nth-child(2)  { width: 80px;  }   /* outfit    */
-.curse-rows th:nth-child(3)  { width: 170px; }   /* name / cn */
-.curse-rows th:nth-child(4)  { width: 160px; }   /* item      */
-.curse-rows th:nth-child(5)  { width: 110px; }   /* gruppe    */
-.curse-rows th:nth-child(6)  { width: 80px;  }   /* flags     */
-.curse-rows th:nth-child(7)  { width: 120px; }   /* lscg      */
-.curse-rows th:nth-child(8)  { width: 52px;  }   /* cache     */
-.curse-rows th:nth-child(9)  { width: 160px; }   /* kommentar */
-.curse-rows th:nth-child(10) { width: auto;  }   /* aktionen  */
-/* Overflow in allen Zellen abschneiden, kein Umbruch bei fester Breite */
-.curse-rows td { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-/* Ausnahmen: Name darf bold bleiben, Kommentar-Textarea braucht normal wrap */
-.curse-row td.cn      { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: unset; }
-.curse-row td.item    { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.curse-row td.comment-col { white-space: normal; overflow: visible; min-width: unset; }
-.curse-row td.actions { white-space: nowrap; overflow: visible; }
+/* Spaltenbreiten via <colgroup> in items.js gesetzt — kein CSS nötig.
+   Overflow-Schutz damit langer Content nicht die Spalten aufsprengt */
+.curse-rows td          { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.curse-row td.cn        { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.curse-row td.item      { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.curse-row td.comment-col { white-space: normal; overflow: visible; }
+.curse-row td.actions   { white-space: nowrap; overflow: visible; }
 
 /* Row — activity-item-inspired */
 .curse-row { border-top: 1px solid rgba(255,255,255,0.05); transition: background 0.12s; }

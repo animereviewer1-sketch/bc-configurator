@@ -2511,18 +2511,32 @@ function renderCurseTab() {
           + ' title="Alle Curses als Outfit-Profil speichern">💾 Alle speichern</button>'+
         '<span class="curse-owner-chevron">▶</span>'+
       '</div>'+
-      '<table class="curse-rows"><thead><tr style="background:var(--bg3)">'+
-        '<th style="padding:4px 4px;font-size:.63rem;color:var(--text3);text-align:center;font-weight:500" title="Favorit">⭐</th>'+
-        '<th style="padding:4px 4px;font-size:.63rem;color:var(--text3);text-align:center;font-weight:500" title="Als Outfit markiert">👗</th>'+
-        '<th style="padding:4px 10px;font-size:.63rem;color:var(--text3);text-align:left;font-weight:500">Name</th>'+
-        '<th style="padding:4px 10px;font-size:.63rem;color:var(--text3);text-align:left;font-weight:500">Item</th>'+
-        '<th style="padding:4px 10px;font-size:.63rem;color:var(--text3);text-align:left;font-weight:500">Gruppe</th>'+
-        '<th style="padding:4px 10px;font-size:.63rem;color:var(--text3);text-align:left;font-weight:500">Flags</th>'+
-        '<th style="padding:4px 10px;font-size:.63rem;color:var(--text3);text-align:left;font-weight:500">LSCG</th>'+
-        '<th style="padding:4px 10px;font-size:.63rem;color:var(--text3);text-align:center;font-weight:500;white-space:nowrap">Cache</th>'+
-        '<th style="padding:4px 10px;font-size:.63rem;color:var(--text3);text-align:left;font-weight:500;min-width:160px">Kommentar</th>'+
-        '<th style="padding:4px 10px;font-size:.63rem;color:var(--text3);text-align:left;font-weight:500">Aktionen</th>'+
-      '</tr></thead><tbody id="cb_'+owner.num+'"></tbody></table>';
+      // Spaltenbreiten: ⭐|👗Outfit|Name|Item|Gruppe|Flags|LSCG|Cache|Kommentar|Aktionen
+      '<table class="curse-rows" style="table-layout:fixed;width:100%">'+
+        '<colgroup>'+
+          '<col style="width:28px">'+
+          '<col style="width:80px">'+
+          '<col style="width:170px">'+
+          '<col style="width:155px">'+
+          '<col style="width:110px">'+
+          '<col style="width:82px">'+
+          '<col style="width:115px">'+
+          '<col style="width:52px">'+
+          '<col style="width:155px">'+
+          '<col>'+   /* Aktionen: restlicher Platz */
+        '</colgroup>'+
+        '<thead><tr style="background:var(--bg3)">'+
+          '<th style="padding:4px 4px;font-size:.63rem;color:var(--text3);text-align:center;font-weight:500" title="Favorit">⭐</th>'+
+          '<th style="padding:4px 4px;font-size:.63rem;color:var(--text3);text-align:center;font-weight:500" title="Als Outfit markiert">👗</th>'+
+          '<th style="padding:4px 10px;font-size:.63rem;color:var(--text3);text-align:left;font-weight:500">Name</th>'+
+          '<th style="padding:4px 10px;font-size:.63rem;color:var(--text3);text-align:left;font-weight:500">Item</th>'+
+          '<th style="padding:4px 10px;font-size:.63rem;color:var(--text3);text-align:left;font-weight:500">Gruppe</th>'+
+          '<th style="padding:4px 10px;font-size:.63rem;color:var(--text3);text-align:left;font-weight:500">Flags</th>'+
+          '<th style="padding:4px 10px;font-size:.63rem;color:var(--text3);text-align:left;font-weight:500">LSCG</th>'+
+          '<th style="padding:4px 10px;font-size:.63rem;color:var(--text3);text-align:center;font-weight:500">Cache</th>'+
+          '<th style="padding:4px 10px;font-size:.63rem;color:var(--text3);text-align:left;font-weight:500">Kommentar</th>'+
+          '<th style="padding:4px 10px;font-size:.63rem;color:var(--text3);text-align:left;font-weight:500">Aktionen</th>'+
+        '</tr></thead><tbody id="cb_'+owner.num+'"></tbody></table>';
 
     body.appendChild(block);
 
