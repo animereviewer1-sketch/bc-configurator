@@ -2490,6 +2490,7 @@ function renderCurseTab() {
     '<div class="cg-hdr">Flags</div>'+
     '<div class="cg-hdr">LSCG</div>'+
     '<div class="cg-hdr center">Cache</div>'+
+    '<div class="cg-hdr"></div>'+
     '<div class="cg-hdr">Kommentar</div>'+
     '<div class="cg-hdr">Aktionen</div>';
   body.appendChild(colHeaders);
@@ -2586,6 +2587,7 @@ function _renderCurseOwnerRows(ownerNum) {
       + '<div class="cg-cache">'
       + (isLSCG ? '<span title="' + (entry.LSCGAusCache ? 'Aus LSCG-Cache' : 'Live-Daten') + '" style="font-size:1rem;cursor:default">' + (entry.LSCGAusCache ? '\u2705' : '\uD83D\uDFE2') + '</span>' : '<span style="color:var(--text3)">\u2013</span>')
       + '</div>'
+      + '<div class="cg-spacer"></div>'
       + '<div class="cg-comment"><textarea class="curse-comment-input" placeholder="Notiz..." data-rowid="' + rowId + '" onchange="saveCurseCommentById(this.dataset.rowid,this.value)">' + escHtml(comment) + '</textarea></div>'
       + '<div class="cg-actions">'
       + '<button class="curse-apply-btn" data-rid="' + rowId + '" data-tgt="" onclick="wearCurseByData(this)" title="Auf mich anwenden">\uD83D\uDC64</button>'
