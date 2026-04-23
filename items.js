@@ -2413,8 +2413,9 @@ function _updateCurseStats() {
 
 // ── Render Curse Tab ──────────────────────────────────
 function renderCurseTab() {
-  const body   = document.getElementById('curseBody');
-  const empty  = document.getElementById('curseEmpty');
+  const body      = document.getElementById('curseBody');
+  const colHdrEl  = document.getElementById('curseColHdr');
+  const empty     = document.getElementById('curseEmpty');
   if (!body) return;
 
   // ── Apply filters ──
@@ -2475,25 +2476,28 @@ function renderCurseTab() {
   // Store for lazy rendering
   Object.values(byOwner).forEach(o => { _curseOwnerData[o.num] = o; });
 
-  // Remove existing owner blocks and col-headers, then rebuild
-  body.querySelectorAll('.curse-owner-block, .curse-col-headers').forEach(b => b.remove());
+  // Remove existing owner blocks from body (col-headers live in #curseColHdr, separate element)
+  body.querySelectorAll('.curse-owner-block').forEach(b => b.remove());
 
-  // Inject single global column header row (shared across all owner blocks)
-  const colHeaders = document.createElement('div');
-  colHeaders.className = 'curse-col-headers';
-  colHeaders.innerHTML =
-    '<div class="cg-hdr center" title="Favorit">⭐</div>'+
-    '<div class="cg-hdr center" title="Als Outfit markiert">👗</div>'+
-    '<div class="cg-hdr">Name</div>'+
-    '<div class="cg-hdr">Item</div>'+
-    '<div class="cg-hdr">Gruppe</div>'+
-    '<div class="cg-hdr">Flags</div>'+
-    '<div class="cg-hdr">LSCG</div>'+
-    '<div class="cg-hdr center">Cache</div>'+
-    '<div class="cg-hdr"></div>'+
-    '<div class="cg-hdr">Kommentar</div>'+
-    '<div class="cg-hdr">Aktionen</div>';
-  body.appendChild(colHeaders);
+  // Inject/refresh column header row into the fixed header container above the scroll body
+  if (colHdrEl) {
+    colHdrEl.innerHTML = '';
+    const colHeaders = document.createElement('div');
+    colHeaders.className = 'curse-col-headers';
+    colHeaders.innerHTML =
+      '<div class="cg-hdr center" title="Favorit">⭐</div>'+
+      '<div class="cg-hdr center" title="Als Outfit markiert">👗</div>'+
+      '<div class="cg-hdr">Name</div>'+
+      '<div class="cg-hdr">Item</div>'+
+      '<div class="cg-hdr">Gruppe</div>'+
+      '<div class="cg-hdr">Flags</div>'+
+      '<div class="cg-hdr">LSCG</div>'+
+      '<div class="cg-hdr center">Cache</div>'+
+      '<div class="cg-hdr"></div>'+
+      '<div class="cg-hdr">Kommentar</div>'+
+      '<div class="cg-hdr">Aktionen</div>';
+    colHdrEl.appendChild(colHeaders);
+  }
 
   Object.entries(byOwner).forEach(([ownerKey, owner]) => {
     const blockId = 'co_' + owner.num;
