@@ -1919,6 +1919,24 @@ function renderProfileList() {
     byOwner[owner].push({ name: k, idx });
   });
 
+  // Baue Name→ID-Map aus CURSE_DB für live #ID-Anzeige
+  const _ownerIdMap = {};
+  for (const e of Object.values(CURSE_DB)) {
+    const n = e.Besitzer?.Name?.trim();
+    const id = e.Besitzer?.Nummer ? String(e.Besitzer.Nummer) : null;
+    if (n && id && !_ownerIdMap[n]) _ownerIdMap[n] = id;
+  }
+  // Gibt den Owner-Label zurück, ergänzt #ID wenn bekannt und noch nicht vorhanden
+  function _ownerLabel(owner) {
+    if (/#\d{4,}/.test(owner)) return escHtml(owner); // bereits angereichert
+    // Basis-Name = alles vor einem evtl. " #..." Suffix
+    const baseName = owner.replace(/\s*#\d+.*$/, '').trim();
+    const id = _ownerIdMap[baseName];
+    return id
+      ? escHtml(baseName) + ' <span style="color:var(--text3);font-size:.6rem;font-family:var(--font-mono)">#' + id + '</span>'
+      : escHtml(owner);
+  }
+
   const html = Object.entries(byOwner).map(([owner, profiles]) => {
     const blockId = 'pb_' + owner.replace(/[^a-zA-Z0-9]/g, '_');
     const wasOpen = document.getElementById(blockId)?.classList.contains('open');
@@ -1963,7 +1981,6 @@ function renderProfileList() {
         + '<span class="profile-row-count">' + (p.items?.length ?? 0) + ' Items</span>'
         + '<span class="profile-row-date">' + (p.date || '') + '</span>'
         + '<button class="profile-row-edit' + (isEdit ? ' active' : '') + '" data-slot="' + slotKey + '" onclick="profileToggleEdit(this.dataset.slot)" title="Bearbeiten">✏️</button>'
-        + '<button class="profile-row-export" data-pkey="' + idx + '" onclick="profileExportSingle(this.dataset.pkey)" title="Exportieren">⬇️</button>'
         + '<button class="profile-row-del" data-pkey="' + idx + '" onclick="deleteProfileByIdx(this.dataset.pkey)" title="Löschen">✕</button>'
         + '</div>'
         + editPanel
@@ -1972,7 +1989,7 @@ function renderProfileList() {
 
     return '<div class="profile-owner-block' + ((wasOpen !== false) ? ' open' : '') + '" id="' + blockId + '">'
       + '<div class="profile-owner-hdr" onclick="document.getElementById(\'' + blockId + '\').classList.toggle(\'open\')">'
-      + '<span class="profile-owner-name">' + escHtml(owner) + '</span>'
+      + '<span class="profile-owner-name">' + _ownerLabel(owner) + '</span>'
       + '<span class="profile-owner-count">' + profiles.length + '</span>'
       + '<span class="profile-owner-chevron">▶</span>'
       + '</div>'
@@ -2082,7 +2099,9 @@ function profilesExportAll() {
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = 'BC_Profile_' + new Date().toISOString().slice(0, 10) + '.json';
+  document.body.appendChild(a);
   a.click();
+  document.body.removeChild(a);
   URL.revokeObjectURL(a.href);
   showStatus('✅ ' + count + ' Profile exportiert', 'success');
 }
@@ -2907,11 +2926,14 @@ function _tryFinishExport() {
     comments: CURSE_COMMENTS,
   };
   _exportLscgCache = null; _exportCraftCache = null;
-  const blob = new Blob([JSON.stringify(payload, null, 2)], {type:'application/json'});
+  const blob = new Blob([JSON.stringify(payload)], {type:'application/json'});
   const url  = URL.createObjectURL(blob);
   const a    = document.createElement('a');
   a.href = url; a.download = 'CurseScanner_' + new Date().toISOString().slice(0,10) + '.json';
-  a.click(); URL.revokeObjectURL(url);
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
   showStatus('✅ Export: ' + Object.keys(mergedCraft).length + ' Crafts, ' + Object.keys(mergedLscg).length + ' LSCG-Cache-Einträge', 'success');
 }
 
@@ -3613,32 +3635,47 @@ function enrichProfileNamesWithIDs() {
 
 // ── Komplett-Backup Export / Import ──────────────────────────────────────────
 function exportAllData() {
-  const payload = {
-    _meta: {
-      exportedAt: new Date().toISOString(),
-      version: 1,
-      tool: 'BC Konfigurator',
-      counts: {
-        profiles:  Object.keys(PROFILES).length,
-        curseDB:   Object.keys(CURSE_DB).length,
-        lscgCache: Object.keys(CURSE_CACHE_LSCG).length,
-      }
-    },
-    profiles:      PROFILES,
-    curseDatabase: CURSE_DB,
-    lscgTable:     CURSE_LSCG,
-    lscgCache:     CURSE_CACHE_LSCG,
-    curseComments: CURSE_COMMENTS,
-    curseOutfitFlags: CURSE_OUTFIT_FLAGS,
-    curseFavourites:  [...CURSE_FAVOURITES],
-  };
-  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = 'BC_Konfigurator_Backup_' + new Date().toISOString().slice(0, 10) + '.json';
-  a.click();
-  URL.revokeObjectURL(a.href);
-  showStatus('✅ Komplett-Backup erstellt', 'success');
+  try {
+    const profileCount = Object.keys(PROFILES).length;
+    const curseCount   = Object.keys(CURSE_DB).length;
+    if (!profileCount && !curseCount) {
+      showStatus('⚠️ Keine Daten zum Exportieren (Profile & Curse-DB leer)', 'info');
+      return;
+    }
+    const payload = {
+      _meta: {
+        exportedAt: new Date().toISOString(),
+        version:    1,
+        tool:       'BC Konfigurator',
+        counts: {
+          profiles:  profileCount,
+          curseDB:   curseCount,
+          lscgCache: Object.keys(CURSE_CACHE_LSCG).length,
+        }
+      },
+      profiles:         PROFILES,
+      curseDatabase:    CURSE_DB,
+      lscgTable:        CURSE_LSCG,
+      lscgCache:        CURSE_CACHE_LSCG,
+      curseComments:    CURSE_COMMENTS,
+      curseOutfitFlags: CURSE_OUTFIT_FLAGS,
+      curseFavourites:  [...CURSE_FAVOURITES],
+    };
+    // Kein pretty-print — bei 27k Einträgen deutlich schneller
+    const json = JSON.stringify(payload);
+    const blob = new Blob([json], { type: 'application/json' });
+    const a    = document.createElement('a');
+    a.href     = URL.createObjectURL(blob);
+    a.download = 'BC_Backup_' + new Date().toISOString().slice(0, 10) + '.json';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(a.href);
+    showStatus('✅ Backup: ' + profileCount + ' Profile, ' + curseCount + ' Curse-Einträge', 'success');
+  } catch(err) {
+    showStatus('❌ Export fehlgeschlagen: ' + err.message, 'error');
+    console.error('[exportAllData]', err);
+  }
 }
 
 function importAllData() {
