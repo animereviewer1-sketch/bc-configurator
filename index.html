@@ -337,6 +337,12 @@ select option:hover {
 }
 .btn-green:hover { box-shadow: 0 4px 20px rgba(5,150,105,0.5); filter: brightness(1.1); }
 .btn-green:disabled { opacity: 0.4; cursor: not-allowed; filter: none; box-shadow: none; }
+.btn-yellow {
+  background: linear-gradient(135deg, #78350f, #d97706);
+  color: #fff; box-shadow: 0 2px 12px rgba(217,119,6,0.3);
+}
+.btn-yellow:hover { box-shadow: 0 4px 20px rgba(217,119,6,0.5); filter: brightness(1.1); }
+.btn-yellow:disabled { opacity: 0.4; cursor: not-allowed; filter: none; box-shadow: none; }
 
 .btn-red {
   background: linear-gradient(135deg, #7f1d1d, #dc2626);
@@ -1599,6 +1605,14 @@ button { cursor: pointer; }
 .oi-title { font-size:.85rem; font-weight:800; color:var(--text); letter-spacing:.02em; margin-right:4px; }
 .oi-toolbar-actions { display:flex; align-items:center; gap:7px; flex-wrap:wrap; }
 
+.oi-body-wrap {
+  display:flex; align-items:center; gap:6px;
+}
+.oi-body-status {
+  font-size:.65rem; color:var(--text3); white-space:nowrap;
+  font-family:var(--font-mono);
+}
+
 .oi-delay-wrap {
   display:flex; align-items:center; gap:5px;
   font-size:.72rem; color:var(--text2);
@@ -2507,7 +2521,7 @@ button { cursor: pointer; }
 <script src="bot-data.js"></script>
 <script src="bot-ui.js"></script>
 <script src="bot-engine.js"></script>
-<script src="outfit-import.js?v=4"></script>
+<script src="outfit-import.js?v=6"></script>
 <script>
   // Engine-Version in Topbar anzeigen
   if(window.BOT_ENGINE_VERSION){
@@ -2597,6 +2611,10 @@ button { cursor: pointer; }
           <span style="font-size:.65rem;color:var(--text3)">Delay</span>
           <input type="number" id="oiDelayInput" class="oi-delay-inp" value="3" min="1" max="60"
                  onchange="oiSetDelay(this.value * 1000)" title="Sekunden zwischen Ausführungen"> s
+        </div>
+        <div class="oi-body-wrap" title="Aktuellen Charakter-Körper als Basis speichern">
+          <button class="btn btn-yellow" onclick="oiSaveBodyBase()" title="Körper des aktuellen Modells als Standard speichern">🧍 Körper speichern</button>
+          <span id="oiBodyStatus" class="oi-body-status">–</span>
         </div>
         <button class="btn btn-primary" id="oiSeqBtn"  onclick="oiStartSequential()" title="Alle sequenziell ausführen">▶▶ Sequenziell</button>
         <button class="btn btn-red"     id="oiStopBtn" onclick="oiStopSequential()"  style="display:none" title="Sequenz stoppen">⏹ Stop</button>
