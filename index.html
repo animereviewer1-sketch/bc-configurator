@@ -1082,7 +1082,6 @@ textarea.outfit-code { width: 100%; min-height: 210px; background: rgba(0,0,0,0.
   transition: background 0.12s;
 }
 .cg-row:hover { background: rgba(255,255,255,0.025); }
-.cg-row.lscg { background: rgba(52,211,153,0.03); }
 .cg-row.fav { background: rgba(251,191,36,0.04); }
 .cg-row.fav:hover { background: rgba(251,191,36,0.08); }
 .cg-row.outfit-flagged { background: rgba(52,211,153,0.05); }
@@ -1215,6 +1214,46 @@ textarea.outfit-code { width: 100%; min-height: 210px; background: rgba(0,0,0,0.
 }
 .curse-detail-badge.lscg { background: rgba(52,211,153,0.08); color: #34d399; border-color: rgba(52,211,153,0.15); }
 .curse-detail-badge.cursed { background: var(--accent-soft, oklch(72% 0.13 58 / 0.1)); color: var(--accent-text, oklch(82% 0.1 62)); border-color: var(--accent-line, oklch(72% 0.13 58 / 0.2)); }
+.curse-detail-badge.neu { background: rgba(99,102,241,0.1); color: #a5b4fc; border-color: rgba(99,102,241,0.25); font-size: .6rem; }
+
+/* ── Filter Dropdown ─────────────────────────── */
+.curse-filter-btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 4px 11px;
+  border-radius: var(--radius-sm, 8px);
+  border: 1px solid rgba(255,255,255,0.09);
+  background: rgba(255,255,255,0.03);
+  color: var(--text3);
+  font-size: 0.71rem;
+  cursor: pointer; user-select: none;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+  white-space: nowrap; font-weight: 600; font-family: var(--font-ui);
+  position: relative;
+}
+.curse-filter-btn:hover { background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.15); color: var(--text2); }
+.curse-filter-btn.active { border-color: var(--accent-line, oklch(72% 0.13 58 / 0.45)); background: var(--accent-soft, oklch(72% 0.13 58 / 0.12)); color: var(--accent-text, oklch(82% 0.1 62)); }
+.curse-filter-count { display: inline-flex; align-items: center; justify-content: center; background: var(--accent-line, oklch(72% 0.13 58 / 0.5)); color: #fff; border-radius: 9px; font-size: .6rem; min-width: 16px; height: 16px; padding: 0 4px; margin-left: 2px; }
+.curse-filter-panel {
+  display: none; position: absolute; top: calc(100% + 6px); left: 0; z-index: 120;
+  background: var(--bg2, #1a1a2e); border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 10px; padding: 10px 0; min-width: 190px;
+  box-shadow: 0 8px 28px rgba(0,0,0,0.45);
+}
+.curse-filter-panel.open { display: block; }
+.cfp-section { padding: 2px 14px 6px; }
+.cfp-label { font-size: .58rem; font-weight: 700; letter-spacing: .06em; color: var(--text3); text-transform: uppercase; margin-bottom: 5px; }
+.cfp-divider { height: 1px; background: rgba(255,255,255,0.07); margin: 4px 0; }
+.cfp-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 5px 14px;
+  font-size: .72rem; color: var(--text2);
+  cursor: pointer; user-select: none;
+  border-radius: 0; transition: background 0.12s;
+}
+.cfp-row:hover { background: rgba(255,255,255,0.04); }
+.cfp-row input[type=checkbox] { accent-color: var(--accent-text, oklch(82% 0.1 62)); width: 13px; height: 13px; cursor: pointer; flex-shrink: 0; }
+.cfp-row.outfit-row input[type=checkbox] { accent-color: #34d399; }
+.cfp-wrap { position: relative; }
 
 /* ── Misc ───────────────────────────────────── */
 .cursor-detail-toggle { cursor: pointer; color: var(--text3); font-size: 0.68rem; margin-right: 6px; transition: transform 0.15s; display: inline-block; }
@@ -2204,14 +2243,26 @@ document.write('<scr'+'ipt src="items.js?_='+_cbv+'"><\/scr'+'ipt>');
   <div class="curse-filter-bar" id="curseFilterBar">
     <input class="curse-search" id="curseSearch" placeholder="🔍 Name, Item, Gruppe..." oninput="_debouncedRenderCurseTab()">
     <div class="filter-sep"></div>
-    <span class="filter-chip on" id="fc-all"      onclick="setCurseFilter('all')"     >Alle</span>
-    <span class="filter-chip"    id="fc-cursed"   onclick="setCurseFilter('cursed')"  >🔮 Cursed</span>
-    <span class="filter-chip"    id="fc-lscg"     onclick="setCurseFilter('lscg')"   >🧿 LSCG</span>
-    <div class="filter-sep"></div>
-    <span class="filter-chip" id="fc-fav" onclick="setCurseFilter('fav')" title="Nur Favoriten">⭐ Favoriten</span>
-    <div class="filter-sep"></div>
-    <span class="filter-chip" id="fc-outfit"    onclick="setCurseFilter('outfit')"    title="Nur Outfits">👗 Outfit</span>
-    <span class="filter-chip" id="fc-no-outfit" onclick="setCurseFilter('no-outfit')" title="Noch kein Outfit">☐ Kein Outfit</span>
+    <!-- Filter dropdown -->
+    <div class="cfp-wrap" id="cfpWrap">
+      <button class="curse-filter-btn" id="cfpBtn" onclick="toggleCurseFilterPanel(event)">
+        🎛 Filter <span class="curse-filter-count" id="cfpCount" style="display:none">0</span> ▾
+      </button>
+      <div class="curse-filter-panel" id="cfpPanel">
+        <div class="cfp-section">
+          <div class="cfp-label">Status</div>
+          <label class="cfp-row"><input type="checkbox" id="fcb-neu"    onchange="toggleCurseFilter('neu')"    > 🆕 Neu (kein Outfit)</label>
+          <label class="cfp-row"><input type="checkbox" id="fcb-cursed" onchange="toggleCurseFilter('cursed')" > 🔮 Cursed</label>
+          <label class="cfp-row"><input type="checkbox" id="fcb-fav"    onchange="toggleCurseFilter('fav')"    > ⭐ Favoriten</label>
+        </div>
+        <div class="cfp-divider"></div>
+        <div class="cfp-section">
+          <div class="cfp-label">Outfit</div>
+          <label class="cfp-row outfit-row"><input type="checkbox" id="fcb-outfit"    onchange="toggleCurseFilter('outfit')"    > 👗 Hat Outfit</label>
+          <label class="cfp-row outfit-row"><input type="checkbox" id="fcb-no-outfit" onchange="toggleCurseFilter('no-outfit')" > ☐ Kein Outfit</label>
+        </div>
+      </div>
+    </div>
     <div class="filter-sep"></div>
     <span class="filter-chip" id="fc-cache" onclick="toggleCacheFilter()" title="Nur Einträge mit LSCG-Daten anzeigen">💾 Im Cache</span>
     <div class="filter-sep"></div>
