@@ -235,13 +235,14 @@ function _oiBuildExecCode(code) {
       try {
         const arr = JSON.parse(dec);
         if (Array.isArray(arr)) {
-          // Optimaler Pfad: Array bereits dekodiert → direkt an BC schicken
+          // Optimaler Pfad: Array hier dekodiert → Player.Appearance direkt setzen
+          // ServerPlayerInventoryLoad existiert nicht im eval-Scope von BC.
           const safeJson = JSON.stringify(arr);
           return `(function(){
   try {
     var _a=${safeJson};
-    ServerPlayerInventoryLoad(_a);
-    CharacterRefresh(Player,true,false);
+    Player.Appearance = _a;
+    CharacterRefresh(Player, true, false);
   } catch(_e){ console.error('[OI] Apply fail:',_e.message); }
 })();`;
         }
