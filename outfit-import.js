@@ -235,14 +235,30 @@ function _oiBuildExecCode(code) {
       try {
         const arr = JSON.parse(dec);
         if (Array.isArray(arr)) {
-          // Optimaler Pfad: Array hier dekodiert → Player.Appearance direkt setzen
-          // ServerPlayerInventoryLoad existiert nicht im eval-Scope von BC.
+          // Optimaler Pfad: Array hier dekodiert → live Asset-Referenzen via AssetGet rekonstruieren.
+          // Player.Appearance braucht echte Asset-Objekte aus BCs Asset-DB, keine serialisierten.
           const safeJson = JSON.stringify(arr);
           return `(function(){
   try {
-    var _a=${safeJson};
-    Player.Appearance = _a;
-    CharacterRefresh(Player, true, false);
+    var _raw=${safeJson};
+    var _app=[];
+    for(var i=0;i<_raw.length;i++){
+      var _it=_raw[i];
+      // Serialisiertes Format: entweder {Group,Name,...} oder {Asset:{Group,Name},...}
+      var _grp=_it.Group||(_it.Asset&&_it.Asset.Group);
+      var _nam=_it.Name||(_it.Asset&&_it.Asset.Name);
+      if(!_grp||!_nam) continue;
+      var _asset=AssetGet(Player.AssetFamily,_grp,_nam);
+      if(!_asset) continue;
+      var _ni={Asset:_asset};
+      if(_it.Color!==undefined) _ni.Color=_it.Color;
+      if(_it.Difficulty!==undefined) _ni.Difficulty=_it.Difficulty;
+      if(_it.Property) _ni.Property=_it.Property;
+      if(_it.Craft) _ni.Craft=_it.Craft;
+      _app.push(_ni);
+    }
+    Player.Appearance=_app;
+    CharacterRefresh(Player,true,false);
   } catch(_e){ console.error('[OI] Apply fail:',_e.message); }
 })();`;
         }
