@@ -2495,7 +2495,7 @@ function renderCurseTab() {
       '<div class="cg-hdr center">Cache</div>'+
       '<div class="cg-hdr"></div>'+
       '<div class="cg-hdr">Kommentar</div>'+
-      '<div class="cg-hdr">Aktionen</div>';
+      '<div class="cg-hdr right">Aktionen</div>';
     colHdrEl.appendChild(colHeaders);
   }
 

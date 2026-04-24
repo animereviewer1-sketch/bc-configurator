@@ -1002,8 +1002,12 @@ textarea.outfit-code { width: 100%; min-height: 210px; background: rgba(0,0,0,0.
 #curseColHdr {
   flex-shrink: 0;
   min-width: 1100px;
+  width: 100%;
   background: var(--bg2, #111115);
   border-bottom: 1px solid rgba(255,255,255,0.10);
+  position: sticky;
+  top: 0;
+  z-index: 10;
 }
 
 /* Scrollable row body — only vertical scroll here */
@@ -1019,6 +1023,7 @@ textarea.outfit-code { width: 100%; min-height: 210px; background: rgba(0,0,0,0.
   grid-template-columns: 28px 72px 140px 130px 90px 65px 90px 40px 1fr 200px auto;
   align-content: start;
   min-width: 1100px;
+  width: 100%;
   padding-top: 8px;
 }
 
@@ -1027,6 +1032,7 @@ textarea.outfit-code { width: 100%; min-height: 210px; background: rgba(0,0,0,0.
   display: grid;
   grid-template-columns: 28px 72px 140px 130px 90px 65px 90px 40px 1fr 200px auto;
   min-width: 1100px;
+  width: 100%;
   padding: 6px 0 5px;
 }
 .cg-hdr {
@@ -1038,6 +1044,7 @@ textarea.outfit-code { width: 100%; min-height: 210px; background: rgba(0,0,0,0.
   overflow: hidden;
 }
 .cg-hdr.center { text-align: center; padding: 5px 4px; }
+.cg-hdr.right  { text-align: right; padding: 5px 12px 5px 4px; justify-self: end; }
 
 /* Owner block — spans all columns, provides subgrid to children */
 .curse-owner-block {
@@ -1062,8 +1069,8 @@ textarea.outfit-code { width: 100%; min-height: 210px; background: rgba(0,0,0,0.
   grid-column: 1 / -1;
   display: grid;
   grid-template-columns: subgrid;
-  min-height: 36px;
-  align-items: center;
+  min-height: 42px;
+  align-items: start;
   border-top: 1px solid rgba(255,255,255,0.05);
   transition: background 0.12s;
 }
@@ -1075,38 +1082,43 @@ textarea.outfit-code { width: 100%; min-height: 210px; background: rgba(0,0,0,0.
 .cg-row.outfit-flagged:hover { background: rgba(52,211,153,0.09); }
 .cg-row.expanded .cursor-detail-toggle { transform: rotate(90deg); }
 
-/* All cells share base padding + overflow clipping */
+/* All cells share base padding — text wraps by default */
 .cg-row > div {
-  padding: 8px 10px;
+  padding: 10px 10px;
   font-size: 0.74rem;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
   min-width: 0;
-  align-self: center;
+  align-self: start;
+  padding-top: 11px;
+  word-break: break-word;
+  white-space: normal;
+  line-height: 1.45;
 }
 
 /* Named cell overrides */
 .cg-fav {
   text-align: center !important;
-  padding: 4px 2px !important;
+  padding: 10px 2px !important;
   cursor: pointer;
   user-select: none;
+  align-self: start;
 }
 .cg-outfit {
   text-align: center !important;
-  padding: 4px 4px !important;
+  padding: 9px 4px !important;
   cursor: pointer;
   user-select: none;
+  align-self: start;
 }
-.cg-name { color: var(--text); font-weight: 600; }
-.cg-item { color: var(--text2); font-family: var(--font-mono); font-size: 0.68rem; }
-.cg-grp  { color: var(--text3); font-size: 0.64rem; font-family: var(--font-mono); }
+.cg-name { color: var(--text); font-weight: 600; white-space: normal; }
+.cg-item { color: var(--text2); font-family: var(--font-mono); font-size: 0.68rem; white-space: normal; word-break: break-all; }
+.cg-grp  { color: var(--text3); font-size: 0.64rem; font-family: var(--font-mono); white-space: normal; }
 .cg-flags { white-space: nowrap !important; }
-.cg-lscg  { color: #34d399; font-size: 0.66rem; }
-.cg-cache { text-align: center !important; }
-.cg-comment { white-space: normal !important; overflow: visible !important; padding: 6px 8px !important; }
-.cg-actions { white-space: nowrap !important; overflow: visible !important; }
+.cg-lscg  { color: #34d399; font-size: 0.66rem; white-space: nowrap; }
+.cg-cache { text-align: center !important; white-space: nowrap; }
+.cg-spacer { white-space: normal; }
+.cg-comment { white-space: normal !important; overflow: visible !important; padding: 8px 8px !important; }
+.cg-actions { white-space: nowrap !important; overflow: visible !important; justify-self: end; padding-right: 12px !important; }
 
 /* Fav button */
 .cg-fav .curse-fav-btn {
