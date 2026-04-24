@@ -244,21 +244,32 @@ function _oiBuildExecCode(code) {
     var _app=[];
     for(var i=0;i<_raw.length;i++){
       var _it=_raw[i];
-      // Serialisiertes Format: entweder {Group,Name,...} oder {Asset:{Group,Name},...}
-      var _grp=_it.Group||(_it.Asset&&_it.Asset.Group);
-      var _nam=_it.Name||(_it.Asset&&_it.Asset.Name);
-      if(!_grp||!_nam) continue;
-      var _asset=AssetGet(Player.AssetFamily,_grp,_nam);
-      if(!_asset) continue;
-      var _ni={Asset:_asset};
-      if(_it.Color!==undefined) _ni.Color=_it.Color;
-      if(_it.Difficulty!==undefined) _ni.Difficulty=_it.Difficulty;
-      if(_it.Property) _ni.Property=_it.Property;
-      if(_it.Craft) _ni.Craft=_it.Craft;
+      // Unterstützt drei Formate:
+      // 1. Gepackt:     { Group: "String",        Name: "String" }
+      // 2. Live/Serial: { Asset: { Group: {Name:"String"}, Name: "String" } }
+      // 3. Mixed:       { Group: "String", Asset: { Name: "String" } }
+      var _rawGrp = _it.Group || (_it.Asset && _it.Asset.Group);
+      var _grp = (_rawGrp && typeof _rawGrp === 'object') ? _rawGrp.Name : _rawGrp;
+      var _nam = _it.Name || (_it.Asset && _it.Asset.Name);
+      if (!_grp || !_nam) continue;
+      var _asset = AssetGet(Player.AssetFamily, _grp, _nam);
+      // Asset muss existieren und vollständig definiert sein (inkl. Group-Referenz)
+      if (!_asset || !_asset.Group) continue;
+      var _ni = { Asset: _asset };
+      if (_it.Color !== undefined)     _ni.Color      = _it.Color;
+      if (_it.Difficulty !== undefined) _ni.Difficulty = _it.Difficulty;
+      if (_it.Property)                _ni.Property   = _it.Property;
+      if (_it.Craft)                   _ni.Craft      = _it.Craft;
       _app.push(_ni);
     }
-    Player.Appearance=_app;
-    CharacterRefresh(Player,true,false);
+    Player.Appearance = _app;
+    // CharacterRefresh separat abfangen – Fehler kommen oft aus Mod-Hooks,
+    // nicht aus dem Kernccode. Das Outfit wurde trotzdem angewendet.
+    try {
+      CharacterRefresh(Player, true, false);
+    } catch(_re) {
+      console.warn('[OI] CharacterRefresh Warnung (oft Mod-Hook):', _re.message);
+    }
   } catch(_e){ console.error('[OI] Apply fail:',_e.message); }
 })();`;
         }
