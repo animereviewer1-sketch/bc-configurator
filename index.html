@@ -2150,7 +2150,11 @@ button { cursor: pointer; }
 <!-- /tab-outfit -->
 
 
-<script src="items.js"></script>
+<script>
+// Cache-Buster: jede Seite lädt immer die aktuelle JS-Version (kein Browser-Cache)
+var _cbv = Date.now();
+document.write('<scr'+'ipt src="items.js?_='+_cbv+'"><\/scr'+'ipt>');
+</script>
 
 
 
@@ -2515,13 +2519,15 @@ button { cursor: pointer; }
 </div>
 
 
-<script src="money.js"></script>
-<script src="rank.js"></script>
-<script src="shop.js"></script>
-<script src="bot-data.js"></script>
-<script src="bot-ui.js"></script>
-<script src="bot-engine.js"></script>
-<script src="outfit-import.js?v=7"></script>
+<script>
+document.write('<scr'+'ipt src="money.js?_='+_cbv+'"><\/scr'+'ipt>');
+document.write('<scr'+'ipt src="rank.js?_='+_cbv+'"><\/scr'+'ipt>');
+document.write('<scr'+'ipt src="shop.js?_='+_cbv+'"><\/scr'+'ipt>');
+document.write('<scr'+'ipt src="bot-data.js?_='+_cbv+'"><\/scr'+'ipt>');
+document.write('<scr'+'ipt src="bot-ui.js?_='+_cbv+'"><\/scr'+'ipt>');
+document.write('<scr'+'ipt src="bot-engine.js?_='+_cbv+'"><\/scr'+'ipt>');
+document.write('<scr'+'ipt src="outfit-import.js?_='+_cbv+'"><\/scr'+'ipt>');
+</script>
 <script>
   // Engine-Version in Topbar anzeigen
   if(window.BOT_ENGINE_VERSION){
