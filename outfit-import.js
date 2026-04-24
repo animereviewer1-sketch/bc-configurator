@@ -204,35 +204,79 @@ function oiAddManual() {
 }
 
 // ── Execution ─────────────────────────────────────────────────────────
+// Detektiert den Typ eines Outfit-Strings
+function _oiDetectType(code) {
+  // LZString base64: alphanumerisch + typische LZ-Endzeichen, kein Leerzeichen/Semikolon
+  if (/^[A-Za-z0-9+/=]{20,}$/.test(code.trim())) return 'lzbase64';
+  // LZString URI-encoded: wie base64 aber mit - statt + und ohne =
+  if (/^[A-Za-z0-9\-_.~]{20,}$/.test(code.trim())) return 'lzuri';
+  // Sieht nach JS-Code aus
+  return 'js';
+}
+
 function _oiBuildExecCode(code) {
-  // Erzeugt BC-Ausführungscode:
-  // 1. Versucht LZString.decompressFromBase64 → JSON.parse → Appearance anwenden
-  // 2. Fallback: roher JS-Code
-  return `(function(){
-  var _code=${JSON.stringify(code)};
-  try {
-    if(typeof LZString!=='undefined'){
-      var _d=LZString.decompressFromBase64(_code);
-      if(_d){
-        var _a=JSON.parse(_d);
-        if(Array.isArray(_a)){
-          ServerPlayerInventoryLoad(_a);
-          CharacterRefresh(Player,true,false);
-          return;
-        }
-      }
+  // ── Strategie: Dekomprimierung HIER im Konfigurator-Kontext (LZString verfügbar),
+  //    dann bereits dekodiertes Array als einfachen ServerPlayerInventoryLoad-Aufruf senden.
+  //    BC selbst braucht kein LZString mehr.
+
+  const trimmed = code.trim();
+  const type = _oiDetectType(trimmed);
+
+  // Versuche LZString.decompressFromBase64
+  if ((type === 'lzbase64' || type === 'lzuri') && typeof LZString !== 'undefined') {
+    let dec = null;
+    try { dec = LZString.decompressFromBase64(trimmed); } catch(e) {}
+    // Falls base64 scheitert, URI-Variante versuchen
+    if (!dec) {
+      try { dec = LZString.decompressFromEncodedURIComponent(trimmed); } catch(e) {}
     }
-  } catch(_e){ console.warn('[OI] LZString fail:',_e.message); }
-  // Fallback: als JS-Code ausführen
-  try { (new Function(_code))(); } catch(_e2){ console.error('[OI] Exec fail:',_e2.message); }
+
+    if (dec) {
+      try {
+        const arr = JSON.parse(dec);
+        if (Array.isArray(arr)) {
+          // Optimaler Pfad: Array bereits dekodiert → direkt an BC schicken
+          const safeJson = JSON.stringify(arr);
+          return `(function(){
+  try {
+    var _a=${safeJson};
+    ServerPlayerInventoryLoad(_a);
+    CharacterRefresh(Player,true,false);
+  } catch(_e){ console.error('[OI] Apply fail:',_e.message); }
 })();`;
+        }
+        // dec ist ein String aber kein Array – als JS ausführen
+        if (typeof dec === 'string') {
+          return `(function(){ try { ${dec} } catch(_e){ console.error('[OI] Exec fail:',_e.message); } })();`;
+        }
+      } catch(e) {
+        console.warn('[OI] JSON.parse nach Dekomprimierung fehlgeschlagen:', e.message);
+      }
+    } else {
+      console.warn('[OI] LZString-Dekomprimierung ergab null – Code wird als JS behandelt');
+    }
+  }
+
+  // Fallback: als rohen JS-Code senden (nur sinnvoll wenn code wirklich JS ist)
+  return `(function(){ try { ${trimmed} } catch(_e){ console.error('[OI] Exec fail:',_e.message); } })();`;
 }
 
 function oiExecuteOne(idx) {
   if (!_connected) { showStatus('❌ Nicht mit BC verbunden', 'error'); return; }
   const item = OI_LIST[idx];
   if (!item) return;
-  bcSend({ type: 'EXEC', code: _oiBuildExecCode(item.code) });
+
+  // Code im Konfigurator-Kontext aufbauen (LZString wird hier dekomprimiert)
+  let execCode;
+  try {
+    execCode = _oiBuildExecCode(item.code);
+  } catch(e) {
+    showStatus('❌ Code-Fehler: ' + e.message, 'error');
+    console.error('[OI] _oiBuildExecCode Fehler:', e);
+    return;
+  }
+
+  bcSend({ type: 'EXEC', code: execCode });
 
   // Visuelles Feedback
   document.getElementById('oir_' + idx)?.classList.add('oi-flash');
