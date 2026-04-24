@@ -3527,3 +3527,166 @@ function selectRoomMember(num) {
   renderProfileList();
   startPingRetry();
 })();
+
+// ── UserID-Anreicherung ───────────────────────────────────────────────────────
+// Ergänzt fehlende #IDs in Profil- und Outfit-Namen basierend auf Curse/Craft-DB
+function enrichProfileNamesWithIDs() {
+  // 1. Spielername → Nummer aus CURSE_DB aufbauen
+  const nameToNum = {};
+  for (const entry of Object.values(CURSE_DB)) {
+    const n  = entry.Besitzer?.Name?.trim();
+    const id = entry.Besitzer?.Nummer ? String(entry.Besitzer.Nummer) : null;
+    if (n && id && !nameToNum[n]) nameToNum[n] = id;
+  }
+
+  if (!Object.keys(nameToNum).length) {
+    showStatus('❌ Keine Spielerdaten in Craft/Curse-DB – bitte zuerst scannen', 'error');
+    return;
+  }
+
+  // Namen nach Länge absteigend sortieren (Partial-Match vermeiden)
+  const playerNames = Object.keys(nameToNum).sort((a, b) => b.length - a.length);
+
+  function _enrichOne(key) {
+    // Bereits vollständig mit #ID? → überspringen
+    if (/#\d{4,}/.test(key)) return key;
+
+    // Muster 1: "CraftName - Ada"  →  "CraftName - Ada #219508"
+    const dashIdx = key.lastIndexOf(' - ');
+    if (dashIdx !== -1) {
+      const prefix = key.slice(0, dashIdx);
+      const owner  = key.slice(dashIdx + 3).trim();
+      if (!/#\d{4,}/.test(owner) && nameToNum[owner]) {
+        return prefix + ' - ' + owner + ' #' + nameToNum[owner];
+      }
+    }
+
+    // Muster 2: "Ada Outfit", "Ada #219508 Outfit" usw. → "Ada #219508 Outfit"
+    for (const pName of playerNames) {
+      if (key === pName) {
+        return pName + ' #' + nameToNum[pName];
+      }
+      if (key.startsWith(pName + ' ') && !/#\d{4,}/.test(key.slice(0, pName.length + 1))) {
+        return pName + ' #' + nameToNum[pName] + key.slice(pName.length);
+      }
+    }
+
+    return key; // kein Treffer
+  }
+
+  const oldKeys  = Object.keys(PROFILES);
+  const changes  = [];
+  const newProfiles = {};
+
+  for (const key of oldKeys) {
+    const newKey = _enrichOne(key);
+    const profile = PROFILES[key];
+    newProfiles[newKey] = { ...profile, name: newKey };
+    if (newKey !== key) changes.push({ from: key, to: newKey });
+  }
+
+  if (!changes.length) {
+    showStatus('ℹ️ Alle Profile bereits angereichert (oder kein Treffer)', 'info');
+    return;
+  }
+
+  // Anwenden
+  Object.keys(PROFILES).forEach(k => delete PROFILES[k]);
+  Object.assign(PROFILES, newProfiles);
+  _saveProfiles();
+  renderProfileList();
+
+  // Vorschau im Panel anzeigen
+  const box = document.getElementById('enrichPreviewBox');
+  if (box) {
+    box.style.display = 'block';
+    box.innerHTML = changes.map(c =>
+      '<div style="margin-bottom:4px;padding-bottom:4px;border-bottom:1px solid var(--border)">'
+      + '<div style="color:var(--text3);text-decoration:line-through">' + escHtml(c.from) + '</div>'
+      + '<div style="color:var(--green)">→ ' + escHtml(c.to) + '</div>'
+      + '</div>'
+    ).join('');
+  }
+
+  showStatus('✅ ' + changes.length + ' von ' + oldKeys.length + ' Profilen angereichert', 'success');
+}
+
+// ── Komplett-Backup Export / Import ──────────────────────────────────────────
+function exportAllData() {
+  const payload = {
+    _meta: {
+      exportedAt: new Date().toISOString(),
+      version: 1,
+      tool: 'BC Konfigurator',
+      counts: {
+        profiles:  Object.keys(PROFILES).length,
+        curseDB:   Object.keys(CURSE_DB).length,
+        lscgCache: Object.keys(CURSE_CACHE_LSCG).length,
+      }
+    },
+    profiles:      PROFILES,
+    curseDatabase: CURSE_DB,
+    lscgTable:     CURSE_LSCG,
+    lscgCache:     CURSE_CACHE_LSCG,
+    curseComments: CURSE_COMMENTS,
+    curseOutfitFlags: CURSE_OUTFIT_FLAGS,
+    curseFavourites:  [...CURSE_FAVOURITES],
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'BC_Konfigurator_Backup_' + new Date().toISOString().slice(0, 10) + '.json';
+  a.click();
+  URL.revokeObjectURL(a.href);
+  showStatus('✅ Komplett-Backup erstellt', 'success');
+}
+
+function importAllData() {
+  const inp = document.createElement('input');
+  inp.type = 'file'; inp.accept = '.json';
+  inp.onchange = e => {
+    const r = new FileReader();
+    r.onload = ev => {
+      try {
+        const d = JSON.parse(ev.target.result);
+        if (!d._meta) {
+          showStatus('❌ Keine gültige Backup-Datei', 'error');
+          return;
+        }
+        if (!confirm(
+          'Komplett-Backup vom ' + d._meta.exportedAt?.slice(0, 10) + ' einspielen?\n'
+          + 'Profile: ' + Object.keys(d.profiles ?? {}).length + '\n'
+          + 'Curse-Einträge: ' + Object.keys(d.curseDatabase ?? {}).length + '\n\n'
+          + 'Bestehende Daten werden zusammengeführt.'
+        )) return;
+
+        // Profile zusammenführen
+        if (d.profiles) {
+          for (const [name, profile] of Object.entries(d.profiles)) {
+            if (!PROFILES[name]) PROFILES[name] = profile;
+          }
+          _saveProfiles();
+        }
+
+        // Curse-DB zusammenführen
+        if (d.curseDatabase) { Object.assign(CURSE_DB, d.curseDatabase); }
+        if (d.lscgTable)     { Object.assign(CURSE_LSCG, d.lscgTable); }
+        if (d.lscgCache)     { Object.assign(CURSE_CACHE_LSCG, d.lscgCache); }
+        if (d.curseComments) { Object.assign(CURSE_COMMENTS, d.curseComments); _saveCurseComments(); }
+        if (d.curseOutfitFlags) { Object.assign(CURSE_OUTFIT_FLAGS, d.curseOutfitFlags); _saveCurseOutfitFlags(); }
+        if (d.curseFavourites)  { d.curseFavourites.forEach(k => CURSE_FAVOURITES.add(k)); _saveCurseFavourites(); }
+
+        if (d.curseDatabase) _saveCurseDB();
+
+        renderProfileList();
+        if (_activeTab === 'curse') renderCurseTab();
+
+        showStatus('✅ Backup eingespielt: '
+          + Object.keys(PROFILES).length + ' Profile, '
+          + Object.keys(CURSE_DB).length + ' Curse-Einträge', 'success');
+      } catch(err) { showStatus('❌ Import fehlgeschlagen: ' + err.message, 'error'); }
+    };
+    r.readAsText(e.target.files[0]);
+  };
+  inp.click();
+}
