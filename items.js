@@ -2010,6 +2010,19 @@ function profileExecuteBySlot(slot) {
   const name = _profileNameMap[slot];
   if (!name) return;
   if (!_connected) { showStatus('❌ Nicht verbunden', 'error'); return; }
+  const p = PROFILES[name];
+  // Handle raw outfit code profiles (from Outfit Import)
+  if (p?._outfitCode) {
+    if (typeof _oiBuildExecCode === 'function') {
+      bcSend({ type: 'EXEC', code: _oiBuildExecCode(p._outfitCode) });
+    } else {
+      // Fallback if outfit-import.js not loaded yet
+      bcSend({ type: 'EXEC', code: '(function(){ try { var _d=LZString.decompressFromBase64(' + JSON.stringify(p._outfitCode) + '); var _a=JSON.parse(_d); if(Array.isArray(_a)){ ServerPlayerInventoryLoad(_a); CharacterRefresh(Player,true,false); } } catch(e){ console.error("[OI]",e); } })();' });
+    }
+    showStatus('▶ Outfit-Code "' + name + '" ausgeführt', 'success');
+    return;
+  }
+  // Normal profile execution
   loadProfile(name);
   setTimeout(() => {
     const code = document.getElementById('outfitCode')?.value?.trim();
@@ -2213,17 +2226,18 @@ function deleteProfileByIdx(idx) {
 let _activeTab = 'items';
 function switchTab(tab) {
   _activeTab = tab;
-  ['items','outfit','curse','bot','log','money','events','rank','shop'].forEach(t => {
+  ['items','outfit','curse','bot','log','money','events','rank','shop','outfit-import'].forEach(t => {
     document.getElementById('tab-'+t)?.classList.toggle('active', t===tab);
     document.getElementById('tab-'+t+'-btn')?.classList.toggle('active', t===tab);
   });
-  if (tab === 'outfit') { renderOutfitList(); renderOutfitMemberChips(); renderProfileList(); _autoOutfitCode(); }
-  if (tab === 'curse')  { renderCurseTab(); }
-  if (tab === 'bot')    { renderBotTab(); }
-  if (tab === 'log')    { renderLogTab(); }
-  if (tab === 'money')  { renderMoneyTab(); }
-  if (tab === 'rank')   { renderRankTab(); }
-  if (tab === 'shop')   { renderShopTab(); }
+  if (tab === 'outfit')        { renderOutfitList(); renderOutfitMemberChips(); renderProfileList(); _autoOutfitCode(); }
+  if (tab === 'curse')         { renderCurseTab(); }
+  if (tab === 'bot')           { renderBotTab(); }
+  if (tab === 'log')           { renderLogTab(); }
+  if (tab === 'money')         { renderMoneyTab(); }
+  if (tab === 'rank')          { renderRankTab(); }
+  if (tab === 'shop')          { renderShopTab(); }
+  if (tab === 'outfit-import') { renderOutfitImportTab(); }
 
 }
 

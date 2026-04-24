@@ -7,6 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&family=Inter:wght@400;500&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js"></script>
   <style>
 
 :root {
@@ -1585,6 +1586,132 @@ button { cursor: pointer; }
 .as-act-row { display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-top:5px; }
 .as-act-label { font-size:.6rem; color:var(--text3); white-space:nowrap; }
 
+/* ═══════════════════════════════════════════════════
+   OUTFIT IMPORT TAB
+═══════════════════════════════════════════════════ */
+.oi-wrap { display:flex; flex-direction:column; height:100%; overflow:hidden; }
+
+.oi-toolbar {
+  display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+  padding:10px 14px; background:var(--bg2);
+  border-bottom:1px solid rgba(255,255,255,0.07); flex-shrink:0;
+}
+.oi-title { font-size:.85rem; font-weight:800; color:var(--text); letter-spacing:.02em; margin-right:4px; }
+.oi-toolbar-actions { display:flex; align-items:center; gap:7px; flex-wrap:wrap; }
+
+.oi-delay-wrap {
+  display:flex; align-items:center; gap:5px;
+  font-size:.72rem; color:var(--text2);
+}
+.oi-delay-wrap input {
+  width:48px; text-align:center;
+  background:var(--bg4); border:1px solid rgba(255,255,255,0.1);
+  border-radius:6px; padding:4px 6px;
+  color:var(--text); font-size:.76rem;
+}
+
+/* Progress bar */
+.oi-progress {
+  display:flex; align-items:center; gap:10px;
+  padding:7px 14px; background:var(--bg3);
+  border-bottom:1px solid rgba(255,255,255,0.06); flex-shrink:0;
+}
+.oi-bar-track {
+  flex:1; height:6px; background:rgba(255,255,255,0.08);
+  border-radius:3px; overflow:hidden;
+}
+.oi-bar-fill {
+  height:100%; width:0%; background:var(--accent);
+  border-radius:3px; transition:width 0.3s ease;
+}
+.oi-progress-info { font-size:.7rem; color:var(--text2); white-space:nowrap; min-width:90px; text-align:right; }
+
+/* Drop zone / list container */
+.oi-dropzone {
+  flex:1; overflow-y:auto; position:relative;
+  border:2px dashed transparent;
+  transition:border-color 0.2s, background 0.2s;
+}
+.oi-dropzone.oi-drag {
+  border-color:var(--accent);
+  background:rgba(var(--accent-raw, 251 146 60) / 0.05);
+}
+.oi-list { padding:6px 8px; display:flex; flex-direction:column; gap:4px; }
+
+.oi-drop-hint {
+  position:absolute; bottom:14px; left:50%; transform:translateX(-50%);
+  font-size:.7rem; color:var(--text3);
+  text-align:center; white-space:nowrap;
+  display:flex; flex-direction:column; align-items:center; gap:4px;
+  pointer-events:none;
+}
+.oi-inline-btn {
+  background:none; border:none; color:var(--accent); cursor:pointer;
+  font-size:.7rem; text-decoration:underline; padding:0;
+  pointer-events:all;
+}
+
+/* Empty state */
+.oi-empty {
+  text-align:center; padding:60px 20px;
+  color:var(--text3); font-size:.82rem; line-height:1.7;
+}
+
+/* Row */
+.oi-row {
+  display:grid;
+  grid-template-columns:32px 1fr auto;
+  align-items:start; gap:0;
+  background:var(--bg3); border:1px solid rgba(255,255,255,0.06);
+  border-radius:8px; padding:8px 8px 8px 4px;
+  transition:background 0.15s, border-color 0.15s;
+}
+.oi-row:hover { background:var(--bg4); border-color:rgba(255,255,255,0.12); }
+
+.oi-row-num {
+  text-align:center; font-size:.68rem; color:var(--text3);
+  font-family:var(--font-mono); padding-top:2px; user-select:none;
+}
+
+.oi-row-body { display:flex; flex-direction:column; gap:2px; min-width:0; }
+.oi-row-label { font-size:.78rem; font-weight:700; color:var(--text); line-height:1.3; }
+.oi-row-preview { font-size:.69rem; color:var(--text2); line-height:1.4; word-break:break-word; margin-top:1px; }
+.oi-row-meta { font-size:.63rem; color:var(--text3); margin-top:3px; }
+
+.oi-row-actions {
+  display:flex; align-items:flex-start; gap:3px; padding-top:1px;
+}
+.oi-btn {
+  display:inline-flex; align-items:center; justify-content:center;
+  width:26px; height:26px; border-radius:6px; border:none; cursor:pointer;
+  font-size:.8rem; transition:background 0.15s, transform 0.1s; flex-shrink:0;
+}
+.oi-btn:active { transform:scale(.92); }
+.oi-btn-exec { background:rgba(52,211,153,0.15); color:#34d399; }
+.oi-btn-exec:hover { background:rgba(52,211,153,0.30); }
+.oi-btn-save { background:rgba(251,191,36,0.12); color:#fbbf24; }
+.oi-btn-save:hover { background:rgba(251,191,36,0.25); }
+.oi-btn-edit { background:rgba(148,163,184,0.10); color:var(--text2); }
+.oi-btn-edit:hover { background:rgba(148,163,184,0.22); }
+.oi-btn-del { background:rgba(251,113,133,0.10); color:#fb7185; }
+.oi-btn-del:hover { background:rgba(251,113,133,0.25); }
+
+/* Active / done states for sequential execution */
+.oi-row.oi-active {
+  background:rgba(var(--accent-raw, 251 146 60) / 0.12) !important;
+  border-color:var(--accent) !important;
+}
+.oi-row.oi-active .oi-row-num { color:var(--accent); font-weight:800; }
+.oi-row.oi-done { opacity:.45; }
+.oi-row.oi-done .oi-row-num::after { content:' ✓'; color:#34d399; }
+
+/* Flash animation on single execute */
+@keyframes oi-flash-anim {
+  0%   { background:rgba(52,211,153,0.30); border-color:#34d399; }
+  100% { background:var(--bg3); border-color:rgba(255,255,255,0.06); }
+}
+.oi-row.oi-flash { animation:oi-flash-anim 0.6s ease-out forwards; }
+
 </style>
 </head>
 <body>
@@ -1695,8 +1822,9 @@ button { cursor: pointer; }
   <button class="tab-btn"        id="tab-bot-btn"    onclick="switchTab('bot')">🤖 Bot</button>
   <button class="tab-btn"        id="tab-log-btn"    onclick="switchTab('log')">📋 Logs</button>
   <button class="tab-btn"        id="tab-money-btn"  onclick="switchTab('money')">💰 Money</button>
-  <button class="tab-btn"        id="tab-rank-btn"   onclick="switchTab('rank')">🏆 Rang</button>
-  <button class="tab-btn"        id="tab-shop-btn"   onclick="switchTab('shop')">🛒 Shop</button>
+  <button class="tab-btn"        id="tab-rank-btn"          onclick="switchTab('rank')">🏆 Rang</button>
+  <button class="tab-btn"        id="tab-shop-btn"          onclick="switchTab('shop')">🛒 Shop</button>
+  <button class="tab-btn"        id="tab-outfit-import-btn" onclick="switchTab('outfit-import')">📥 Outfit Import</button>
 </div>
 
 <!-- TAB 1: ITEM MANAGER -->
@@ -2379,6 +2507,7 @@ button { cursor: pointer; }
 <script src="bot-data.js"></script>
 <script src="bot-ui.js"></script>
 <script src="bot-engine.js"></script>
+<script src="outfit-import.js"></script>
 <script>
   // Engine-Version in Topbar anzeigen
   if(window.BOT_ENGINE_VERSION){
@@ -2453,4 +2582,49 @@ button { cursor: pointer; }
 
   _loadTweaks();
 </script>
+
+<!-- ══ TAB: OUTFIT IMPORT ════════════════════════════════════════════ -->
+<div id="tab-outfit-import" class="tab-pane">
+  <div class="oi-wrap">
+
+    <!-- ── Toolbar ── -->
+    <div class="oi-toolbar">
+      <span class="oi-title">📥 Outfit Import</span>
+      <div class="oi-toolbar-actions">
+        <button class="btn btn-green" onclick="oiOpenFilePicker()" title=".txt Datei importieren">📂 .txt laden</button>
+        <button class="btn btn-primary" onclick="oiAddManual()" title="Code manuell einfügen">✏️ Manuell</button>
+        <div class="oi-delay-wrap" title="Verzögerung zwischen sequenziellen Ausführungen">
+          <span style="font-size:.65rem;color:var(--text3)">Delay</span>
+          <input type="number" id="oiDelayInput" class="oi-delay-inp" value="3" min="1" max="60"
+                 onchange="oiSetDelay(this.value * 1000)" title="Sekunden zwischen Ausführungen"> s
+        </div>
+        <button class="btn btn-primary" id="oiSeqBtn"  onclick="oiStartSequential()" title="Alle sequenziell ausführen">▶▶ Sequenziell</button>
+        <button class="btn btn-red"     id="oiStopBtn" onclick="oiStopSequential()"  style="display:none" title="Sequenz stoppen">⏹ Stop</button>
+        <button class="btn btn-red"     onclick="oiClearAll()" title="Alle Einträge löschen">🗑️ Alle löschen</button>
+      </div>
+    </div>
+
+    <!-- ── Progress bar ── -->
+    <div id="oiProgressBar" style="display:none" class="oi-progress">
+      <div class="oi-bar-track"><div class="oi-bar-fill"></div></div>
+      <span id="oiProgressInfo" class="oi-progress-info"></span>
+    </div>
+
+    <!-- ── Drop Zone / List ── -->
+    <div class="oi-dropzone" id="oiDropZone"
+         ondragover="_oiDragOver(event)"
+         ondragleave="_oiDragLeave(event)"
+         ondrop="_oiDrop(event)">
+      <div id="oiListEl" class="oi-list"></div>
+      <div class="oi-drop-hint" id="oiDropHint">
+        <span style="font-size:2rem">📂</span>
+        <span>.txt Datei hier ablegen oder <button class="oi-inline-btn" onclick="oiOpenFilePicker()">auswählen</button></span>
+        <span style="font-size:.68rem;color:var(--text3)">Jede Zeile = ein Outfit-Code (LZString oder JS)</span>
+      </div>
+    </div>
+
+  </div>
+</div>
+<!-- /tab-outfit-import -->
+
 </body>
