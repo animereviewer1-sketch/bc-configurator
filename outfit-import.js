@@ -26,8 +26,9 @@ async function _oiLoad() {
 async function _oiLoadBodyBase() {
   try {
     const d = await idbGet(OI_BODY_BASE_KEY);
-    if (Array.isArray(d) && d.length) {
-      _oiBodyBase = d;
+    // Neues Format: { savedInBcContext: true }
+    if (d && d.savedInBcContext) {
+      _oiBodyBase = true;
       _oiRenderBodyStatus();
     }
   } catch(e) { console.warn('[OI] BodyBase load error', e); }
@@ -41,60 +42,64 @@ function _oiSave() {
 function _oiRenderBodyStatus() {
   const el = document.getElementById('oiBodyStatus');
   if (!el) return;
-  if (_oiBodyBase && _oiBodyBase.length) {
-    el.textContent = '✓ ' + _oiBodyBase.length + ' Gruppen';
+  if (_oiBodyBase) {
+    el.textContent = '✓ aktiv';
     el.style.color  = 'var(--accent)';
-    el.title        = 'Körper-Standard aktiv – ' + _oiBodyBase.length + ' Gruppen gespeichert';
+    el.title        = 'Körper-Standard gespeichert (in BC localStorage)';
   } else {
     el.textContent = 'kein Standard';
     el.style.color  = 'var(--text3)';
-    el.title        = 'Kein Körper-Standard gespeichert';
+    el.title        = 'Kein Körper-Standard – bei Outfit-Wechsel wird der letzte Körper benutzt';
   }
 }
 
-// ── Body Base speichern ───────────────────────────────────────────────
-// Körper-Gruppen die IMMER vom aktuellen Charakter behalten werden
-const _OI_BODY_GROUPS = new Set([
-  'BodyFull','BodyUpper','BodyLower',
-  'Head','Blush','Fluids',
-  'Eyes','Eyes2','Eyebrows','EyesShadow','Mouth',
-  'HairFront','HairBack',
-  'HairAccessory1','HairAccessory2','HairAccessory3',
-  'Nails','TailStraps','AnimalEars','Wings',
-]);
-
+// ── Body Base speichern via EXEC ──────────────────────────────────────
+// GET_CHAR_APPEARANCE gibt nur Curse-Items zurück, nicht die volle Appearance.
+// Stattdessen: EXEC liest Player.Appearance direkt und speichert Körper-Gruppen
+// in BCs eigenem localStorage + window.__OI_BODY_BASE (Session-Cache).
 function oiSaveBodyBase() {
   if (!_connected) { showStatus('❌ Nicht mit BC verbunden', 'error'); return; }
-  if (!_myMemberNumber) { showStatus('❌ Spieler-Nummer unbekannt – kurz warten', 'error'); return; }
 
-  const reqId = 'oibody_' + Date.now();
-  _pendingOutfitSave[reqId] = function(items) {
-    // items: [{asset, group, colors, craft, lock, property, difficulty, …}]
-    const bodyItems = items
-      .filter(i => _OI_BODY_GROUPS.has(i.group))
-      .map(i => ({
-        Name:       i.asset,
-        Group:      i.group,
-        Color:      i.colors ?? 'Default',
-        Property:   i.property  ?? undefined,
-        Difficulty: i.difficulty ?? undefined,
-        Craft:      i.craft      ?? undefined,
-      }));
+  const bodyGrpList = [
+    'BodyFull','BodyUpper','BodyLower',
+    'Head','Blush','Fluids',
+    'Eyes','Eyes2','Eyebrows','EyesShadow','Mouth',
+    'HairFront','HairBack',
+    'HairAccessory1','HairAccessory2','HairAccessory3',
+    'Nails','TailStraps','AnimalEars','Wings',
+  ];
 
-    if (!bodyItems.length) {
-      showStatus('⚠️ Keine Körper-Gruppen gefunden', 'info');
-      return;
-    }
+  const execCode = `(function(){
+  var _bg=${JSON.stringify(bodyGrpList.reduce((o,g)=>(o[g]=1,o),{}))};
+  try {
+    var _items = Player.Appearance
+      .filter(function(item){
+        return item.Asset && item.Asset.Group && _bg[item.Asset.Group.Name];
+      })
+      .map(function(item){
+        return {
+          Name:       item.Asset.Name,
+          Group:      item.Asset.Group.Name,
+          Color:      item.Color,
+          Property:   item.Property   || undefined,
+          Difficulty: item.Difficulty || undefined,
+          Craft:      item.Craft      || undefined
+        };
+      });
+    window.__OI_BODY_BASE = _items;
+    try { localStorage.setItem('__OI_BODY_BASE_v1', JSON.stringify(_items)); } catch(e) {}
+    console.log('[OI] Körper-Standard gespeichert:', _items.length, 'Gruppen');
+  } catch(e) { console.error('[OI] Körper-Speichern fehlgeschlagen:', e.message); }
+})();`;
 
-    _oiBodyBase = bodyItems;
-    idbSet(OI_BODY_BASE_KEY, _oiBodyBase)
-      .catch(e => console.warn('[OI] BodyBase save error', e));
-    _oiRenderBodyStatus();
-    showStatus('✅ Körper-Standard gespeichert (' + bodyItems.length + ' Gruppen)', 'success');
-  };
+  bcSend({ type: 'EXEC', code: execCode });
 
-  bcSend({ type: 'GET_CHAR_APPEARANCE', memberNum: _myMemberNumber, reqId });
-  showStatus('⏳ Körper-Daten werden geladen…', 'info');
+  // Optimistisches UI-Update (EXEC liefert keine Antwort zurück)
+  _oiBodyBase = true;
+  idbSet(OI_BODY_BASE_KEY, { savedInBcContext: true })
+    .catch(e => console.warn('[OI] BodyBase flag save error', e));
+  _oiRenderBodyStatus();
+  showStatus('✅ Körper-Standard gespeichert', 'success');
 }
 
 // ── LZString decompression (self-contained subset) ───────────────────
@@ -311,9 +316,7 @@ function _oiBuildExecCode(code) {
         if (Array.isArray(arr)) {
           // Optimaler Pfad: Array hier dekodiert → live Asset-Referenzen via AssetGet rekonstruieren.
           // Player.Appearance braucht echte Asset-Objekte aus BCs Asset-DB, keine serialisierten.
-          const safeJson     = JSON.stringify(arr);
-          // Gespeicherten Körper-Standard in den Exec-Code einbetten (null = Fallback auf Player.Appearance)
-          const bodyBaseJson = _oiBodyBase ? JSON.stringify(_oiBodyBase) : 'null';
+          const safeJson = JSON.stringify(arr);
           return `(function(){
   try {
     var _raw=${safeJson};
@@ -343,31 +346,40 @@ function _oiBuildExecCode(code) {
     }
 
     // ── 3. Körper-Basis ermitteln ──────────────────────────────────────
-    // Priorität: gespeicherter Standard > aktueller Player.Appearance-Körper
-    var _savedBase=${bodyBaseJson};
+    // Priorität: gespeicherter Standard (in BC localStorage / window) > aktueller Player.Appearance-Körper
+    var _bodyGrps={'BodyFull':1,'BodyUpper':1,'BodyLower':1,
+      'Head':1,'Blush':1,'Fluids':1,'Eyes':1,'Eyes2':1,
+      'Eyebrows':1,'EyesShadow':1,'Mouth':1,
+      'HairFront':1,'HairBack':1,'HairAccessory1':1,
+      'HairAccessory2':1,'HairAccessory3':1,
+      'Nails':1,'TailStraps':1,'AnimalEars':1,'Wings':1};
+
+    // Session-Cache laden (window.__OI_BODY_BASE) oder aus localStorage
+    var _savedBase = window.__OI_BODY_BASE || null;
+    if (!_savedBase) {
+      try {
+        var _ls = localStorage.getItem('__OI_BODY_BASE_v1');
+        if (_ls) { _savedBase = JSON.parse(_ls); window.__OI_BODY_BASE = _savedBase; }
+      } catch(e) {}
+    }
+
     var _baseItems=[];
-    if(_savedBase){
+    if (_savedBase && _savedBase.length) {
       // Gespeicherten Körper verwenden (konstante Basis für alle Outfits)
-      for(var k=0;k<_savedBase.length;k++){
+      for (var k=0; k<_savedBase.length; k++) {
         var _bb=_savedBase[k];
-        if(_outfitGrps[_bb.Group]) continue; // Outfit überschreibt diese Gruppe
+        if (_outfitGrps[_bb.Group]) continue;
         var _ba=AssetGet(Player.AssetFamily,_bb.Group,_bb.Name);
-        if(!_ba||!_ba.Group) continue;
+        if (!_ba||!_ba.Group) continue;
         var _bni={Asset:_ba};
-        if(_bb.Color!==undefined)      _bni.Color=_bb.Color;
-        if(_bb.Difficulty!==undefined)  _bni.Difficulty=_bb.Difficulty;
-        if(_bb.Property)                _bni.Property=_bb.Property;
-        if(_bb.Craft)                   _bni.Craft=_bb.Craft;
+        if (_bb.Color!==undefined)      _bni.Color=_bb.Color;
+        if (_bb.Difficulty!==undefined)  _bni.Difficulty=_bb.Difficulty;
+        if (_bb.Property)                _bni.Property=_bb.Property;
+        if (_bb.Craft)                   _bni.Craft=_bb.Craft;
         _baseItems.push(_bni);
       }
     } else {
       // Fallback: Körper-Gruppen aus aktuellem Player.Appearance
-      var _bodyGrps={'BodyFull':1,'BodyUpper':1,'BodyLower':1,
-        'Head':1,'Blush':1,'Fluids':1,'Eyes':1,'Eyes2':1,
-        'Eyebrows':1,'EyesShadow':1,'Mouth':1,
-        'HairFront':1,'HairBack':1,'HairAccessory1':1,
-        'HairAccessory2':1,'HairAccessory3':1,
-        'Nails':1,'TailStraps':1,'AnimalEars':1,'Wings':1};
       _baseItems=Player.Appearance.filter(function(item){
         var g=item.Asset&&item.Asset.Group&&item.Asset.Group.Name;
         return g&&_bodyGrps[g]&&!_outfitGrps[g];
