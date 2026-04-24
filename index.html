@@ -1644,6 +1644,37 @@ button { cursor: pointer; }
       <div class="radius-demo" style="border-radius:var(--r-lg)"></div>
     </div>
   </div>
+
+  <div style="border-top:1px solid var(--border);padding-top:16px">
+    <div class="tweaks-section-title">📦 Craft &amp; Curse</div>
+    <div class="tweaks-btn-group">
+      <button class="tweaks-btn" onclick="curseExport()" title="Curse-Datenbank exportieren">⬇️ Export</button>
+      <button class="tweaks-btn" onclick="curseImport()" title="Curse-Datenbank importieren">⬆️ Import</button>
+    </div>
+  </div>
+
+  <div>
+    <div class="tweaks-section-title">👗 Outfit &amp; Profile</div>
+    <div class="tweaks-btn-group">
+      <button class="tweaks-btn" onclick="profilesExportAll()" title="Alle Profile exportieren">⬇️ Export</button>
+      <button class="tweaks-btn" onclick="profilesImport()" title="Profile importieren">⬆️ Import</button>
+    </div>
+  </div>
+
+  <div>
+    <div class="tweaks-section-title">🔗 UserID anreichern</div>
+    <div style="font-size:.64rem;color:var(--text3);line-height:1.5;margin-bottom:8px">Ergänzt #ID in Outfit- &amp; Profilnamen aus Craft/Curse-Daten.<br><span style="color:var(--text2)">Ada → Ada #219508</span></div>
+    <button class="tweaks-btn" style="width:100%;margin-bottom:6px" onclick="enrichProfileNamesWithIDs()">✨ Namen anreichern</button>
+    <div id="enrichPreviewBox" style="display:none;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r-sm);padding:8px;font-size:.62rem;color:var(--text2);max-height:160px;overflow-y:auto;margin-top:4px"></div>
+  </div>
+
+  <div>
+    <div class="tweaks-section-title">💾 Komplett-Backup</div>
+    <div class="tweaks-btn-group">
+      <button class="tweaks-btn" onclick="exportAllData()" title="Alle Daten in einer Datei sichern">⬇️ Alles</button>
+      <button class="tweaks-btn" onclick="importAllData()" title="Komplett-Backup einlesen">⬆️ Restore</button>
+    </div>
+  </div>
 </div>
 
 <!-- RAUM-SPIELER -->
