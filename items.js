@@ -1872,6 +1872,53 @@ function deleteProfile(name) {
 // ── Profile name map for safe event binding ───────────
 const _profileNameMap = {}; // slotKey → profileName
 
+// ── Profil-Duplikat-Erkennung ─────────────────────────
+function _profileFingerprint(p) {
+  if (!p) return '';
+  // Outfit-Code Profile: Code-String als Fingerprint
+  if (p._outfitCode) return 'oc:' + p._outfitCode.trim();
+  // Normal-Profile: sortierte Group/Asset-Paare
+  const items = (p.items || []).slice()
+    .sort((a, b) => (a.group || '').localeCompare(b.group || '') || (a.asset || '').localeCompare(b.asset || ''));
+  return items.map(i => (i.group || '') + '/' + (i.asset || '')).join('|');
+}
+
+function _getProfileDuplicates() {
+  // Gibt Map<fingerprint → [name, ...]> zurück (nur Gruppen mit >1 Eintrag)
+  const fpMap = new Map();
+  Object.entries(PROFILES).forEach(([name, p]) => {
+    const fp = _profileFingerprint(p);
+    if (!fp) return;
+    if (!fpMap.has(fp)) fpMap.set(fp, []);
+    fpMap.get(fp).push(name);
+  });
+  const dupeGroups = new Map();
+  fpMap.forEach((names, fp) => { if (names.length > 1) dupeGroups.set(fp, names); });
+  return dupeGroups;
+}
+
+function removeProfileDuplicates() {
+  const dupeGroups = _getProfileDuplicates();
+  if (!dupeGroups.size) { showStatus('✅ Keine Duplikate gefunden', 'success'); return; }
+  let removed = 0;
+  dupeGroups.forEach(names => {
+    // Ersten behalten, Rest löschen
+    names.slice(1).forEach(n => { delete PROFILES[n]; removed++; });
+  });
+  _saveProfiles();
+  renderProfileList();
+  showStatus('🗑️ ' + removed + ' doppelte' + (removed !== 1 ? ' Profile' : 's Profil') + ' entfernt', 'success');
+}
+
+function _profileDupSet() {
+  // Gibt Set aller Profilnamen zurück die Duplikate sind (nicht die Ersten)
+  const dupeSet = new Set();
+  _getProfileDuplicates().forEach(names => {
+    names.slice(1).forEach(n => dupeSet.add(n));
+  });
+  return dupeSet;
+}
+
 function _profileSortKey(name) {
   // Split on " - " or "- " (with or without leading space)
   const parts = name.split(/\s*-\s+/);
@@ -1937,6 +1984,13 @@ function renderProfileList() {
       : escHtml(owner);
   }
 
+  // Duplikate berechnen (nur die "späteren" Kopien markieren)
+  const _dupProfileSet = _profileDupSet();
+  const _dupGroupMap = new Map(); // name → [siblings] für Tooltip
+  _getProfileDuplicates().forEach(names => {
+    names.forEach(n => _dupGroupMap.set(n, names));
+  });
+
   const html = Object.entries(byOwner).map(([owner, profiles]) => {
     const blockId = 'pb_' + owner.replace(/[^a-zA-Z0-9]/g, '_');
     const wasOpen = document.getElementById(blockId)?.classList.contains('open');
@@ -1946,6 +2000,8 @@ function renderProfileList() {
       const shortName = _profileShortName(name, owner);
       const isEdit = _profileEditMode === name;
       const slotKey = 'p_' + idx;
+      const isDup = _dupProfileSet.has(name);
+      const dupSiblings = isDup ? (_dupGroupMap.get(name) || []).filter(n => n !== name).map(n => escHtml(n)).join(', ') : '';
 
       // Edit panel: name input + item rows
       let editPanel = '';
@@ -1972,12 +2028,12 @@ function renderProfileList() {
       }
 
       const isFav = PROFILE_FAVS.has(name);
-      return '<div class="profile-row" id="prow_' + idx + '">'
+      return '<div class="profile-row' + (isDup ? ' profile-row-dup' : '') + '" id="prow_' + idx + '">'
         + '<div class="profile-row-main">'
         + '<button class="profile-row-exec" data-slot="' + slotKey + '" onclick="profileExecuteBySlot(this.dataset.slot)" title="Alle Items laden + sofort ausführen">▶ Ausführen</button>'
         + '<button class="profile-row-load" data-slot="' + slotKey + '" onclick="profileLoadBySlot(this.dataset.slot)" title="Laden (ohne Ausführen)">📥</button>'
         + '<button class="profile-fav-btn' + (isFav ? ' fav' : '') + '" data-pkey="' + idx + '" onclick="toggleProfileFav(_profileNameMap[\'p_\'+this.dataset.pkey])" title="' + (isFav ? 'Favorit entfernen' : 'Als Favorit markieren') + '">⭐</button>'
-        + '<span class="profile-row-name">' + escHtml(shortName) + '</span>'
+        + '<span class="profile-row-name">' + escHtml(shortName) + (isDup ? ' <span class="profile-dup-badge" title="Duplikat von: ' + dupSiblings + '">DUP</span>' : '') + '</span>'
         + '<span class="profile-row-count">' + (p.items?.length ?? 0) + ' Items</span>'
         + '<span class="profile-row-date">' + (p.date || '') + '</span>'
         + '<button class="profile-row-edit' + (isEdit ? ' active' : '') + '" data-slot="' + slotKey + '" onclick="profileToggleEdit(this.dataset.slot)" title="Bearbeiten">✏️</button>'
@@ -1998,6 +2054,18 @@ function renderProfileList() {
   }).join('');
 
   el.innerHTML = html;
+
+  // Duplikat-Button ein-/ausblenden
+  const dupBtn = document.getElementById('profileDupBtn');
+  if (dupBtn) {
+    const dupCount = _dupProfileSet.size;
+    if (dupCount > 0) {
+      dupBtn.textContent = '⚠️ ' + dupCount + ' Duplikat' + (dupCount !== 1 ? 'e' : '') + ' entfernen';
+      dupBtn.style.display = '';
+    } else {
+      dupBtn.style.display = 'none';
+    }
+  }
 }
 
 function profileLoadBySlot(slot) {

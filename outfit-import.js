@@ -132,6 +132,37 @@ function _oiPreview(code) {
   return '📝 ' + code.slice(0, 80) + (code.length > 80 ? '…' : '');
 }
 
+// ── Duplikat-Erkennung ────────────────────────────────────────────────
+function _oiDuplicateInfo() {
+  // Gibt {dupIndices: Set, firstOf: Map<code→idx>} zurück
+  const codeMap = new Map(); // code → first index
+  const dupIndices = new Set();
+  OI_LIST.forEach((item, i) => {
+    const key = item.code.trim();
+    if (codeMap.has(key)) {
+      dupIndices.add(i); // alles nach dem ersten ist ein Duplikat
+    } else {
+      codeMap.set(key, i);
+    }
+  });
+  return { dupIndices, count: dupIndices.size };
+}
+
+function oiRemoveDuplicates() {
+  const before = OI_LIST.length;
+  const seen = new Set();
+  OI_LIST = OI_LIST.filter(item => {
+    const key = item.code.trim();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  const removed = before - OI_LIST.length;
+  _oiSave();
+  renderOutfitImportTab();
+  showStatus('🗑️ ' + removed + ' Duplikat' + (removed !== 1 ? 'e' : '') + ' entfernt', 'success');
+}
+
 // ── Rendering ─────────────────────────────────────────────────────────
 function renderOutfitImportTab() {
   const el = document.getElementById('oiListEl');
@@ -143,16 +174,20 @@ function renderOutfitImportTab() {
       + '<div style="font-size:.72rem;color:var(--text3);margin-top:6px">Lade eine <code>.txt</code>-Datei hoch – jede Zeile ein Outfit-Code.</div>'
       + '</div>';
     _oiUpdateProgress();
+    _oiUpdateDupBtn(0);
     return;
   }
+
+  const { dupIndices, count } = _oiDuplicateInfo();
 
   el.innerHTML = OI_LIST.map((item, i) => {
     const isActive = _oiSeqRunning && _oiSeqIdx === i;
     const isDone   = _oiSeqRunning && _oiSeqIdx > i;
-    return `<div class="oi-row${isActive ? ' oi-active' : ''}${isDone ? ' oi-done' : ''}" id="oir_${i}">
+    const isDup    = dupIndices.has(i);
+    return `<div class="oi-row${isActive ? ' oi-active' : ''}${isDone ? ' oi-done' : ''}${isDup ? ' oi-dup' : ''}" id="oir_${i}">
       <div class="oi-row-num">${i + 1}</div>
       <div class="oi-row-body">
-        <div class="oi-row-label" id="oilabel_${i}">${escHtml(item.label || 'Outfit ' + (i+1))}</div>
+        <div class="oi-row-label" id="oilabel_${i}">${escHtml(item.label || 'Outfit ' + (i+1))}${isDup ? ' <span class="oi-dup-badge">DUP</span>' : ''}</div>
         <div class="oi-row-preview">${escHtml(_oiPreview(item.code))}</div>
         <div class="oi-row-meta">${item.date || ''} &nbsp;·&nbsp; ${item.code.length} Zeichen</div>
       </div>
@@ -166,6 +201,18 @@ function renderOutfitImportTab() {
   }).join('');
 
   _oiUpdateProgress();
+  _oiUpdateDupBtn(count);
+}
+
+function _oiUpdateDupBtn(count) {
+  const btn = document.getElementById('oiDupBtn');
+  if (!btn) return;
+  if (count > 0) {
+    btn.textContent = '⚠️ ' + count + ' Duplikat' + (count !== 1 ? 'e' : '') + ' entfernen';
+    btn.style.display = 'inline-flex';
+  } else {
+    btn.style.display = 'none';
+  }
 }
 
 function _oiUpdateProgress() {
