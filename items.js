@@ -1910,14 +1910,21 @@ function removeProfileDuplicates() {
   showStatus('🗑️ ' + removed + ' doppelte' + (removed !== 1 ? ' Profile' : 's Profil') + ' entfernt', 'success');
 }
 
-function _profileDupSet() {
-  // Gibt Set aller Profilnamen zurück die Duplikate sind (nicht die Ersten)
-  const dupeSet = new Set();
+function _profileDupSets() {
+  // Gibt {dupSet, orgSet} zurück
+  // orgSet: erstes Vorkommen einer Gruppe (hat Kopien)
+  // dupSet: alle weiteren Vorkommen
+  const dupSet = new Set();
+  const orgSet = new Set();
   _getProfileDuplicates().forEach(names => {
-    names.slice(1).forEach(n => dupeSet.add(n));
+    orgSet.add(names[0]);
+    names.slice(1).forEach(n => dupSet.add(n));
   });
-  return dupeSet;
+  return { dupSet, orgSet };
 }
+
+// Compat-Alias für bestehende Aufrufe
+function _profileDupSet() { return _profileDupSets().dupSet; }
 
 function _profileSortKey(name) {
   // Split on " - " or "- " (with or without leading space)
@@ -1984,9 +1991,9 @@ function renderProfileList() {
       : escHtml(owner);
   }
 
-  // Duplikate berechnen (nur die "späteren" Kopien markieren)
-  const _dupProfileSet = _profileDupSet();
-  const _dupGroupMap = new Map(); // name → [siblings] für Tooltip
+  // Duplikate berechnen: ORG = Original (erstes), DUP = Kopien
+  const { dupSet: _dupProfileSet, orgSet: _orgProfileSet } = _profileDupSets();
+  const _dupGroupMap = new Map(); // name → [alle siblings] für Tooltip
   _getProfileDuplicates().forEach(names => {
     names.forEach(n => _dupGroupMap.set(n, names));
   });
@@ -2001,7 +2008,10 @@ function renderProfileList() {
       const isEdit = _profileEditMode === name;
       const slotKey = 'p_' + idx;
       const isDup = _dupProfileSet.has(name);
-      const dupSiblings = isDup ? (_dupGroupMap.get(name) || []).filter(n => n !== name).map(n => escHtml(n)).join(', ') : '';
+      const isOrg = _orgProfileSet.has(name);
+      const dupSiblings = (isDup || isOrg)
+        ? (_dupGroupMap.get(name) || []).filter(n => n !== name).map(n => escHtml(n)).join(', ')
+        : '';
 
       // Edit panel: name input + item rows
       let editPanel = '';
@@ -2028,12 +2038,17 @@ function renderProfileList() {
       }
 
       const isFav = PROFILE_FAVS.has(name);
-      return '<div class="profile-row' + (isDup ? ' profile-row-dup' : '') + '" id="prow_' + idx + '">'
+      const profileBadge = isDup
+        ? ' <span class="profile-dup-badge" title="Kopie von: ' + dupSiblings + '">DUP</span>'
+        : isOrg
+        ? ' <span class="profile-org-badge" title="Original – Kopien: ' + dupSiblings + '">ORG</span>'
+        : '';
+      return '<div class="profile-row' + (isDup ? ' profile-row-dup' : isOrg ? ' profile-row-org' : '') + '" id="prow_' + idx + '">'
         + '<div class="profile-row-main">'
         + '<button class="profile-row-exec" data-slot="' + slotKey + '" onclick="profileExecuteBySlot(this.dataset.slot)" title="Alle Items laden + sofort ausführen">▶ Ausführen</button>'
         + '<button class="profile-row-load" data-slot="' + slotKey + '" onclick="profileLoadBySlot(this.dataset.slot)" title="Laden (ohne Ausführen)">📥</button>'
         + '<button class="profile-fav-btn' + (isFav ? ' fav' : '') + '" data-pkey="' + idx + '" onclick="toggleProfileFav(_profileNameMap[\'p_\'+this.dataset.pkey])" title="' + (isFav ? 'Favorit entfernen' : 'Als Favorit markieren') + '">⭐</button>'
-        + '<span class="profile-row-name">' + escHtml(shortName) + (isDup ? ' <span class="profile-dup-badge" title="Duplikat von: ' + dupSiblings + '">DUP</span>' : '') + '</span>'
+        + '<span class="profile-row-name">' + escHtml(shortName) + profileBadge + '</span>'
         + '<span class="profile-row-count">' + (p.items?.length ?? 0) + ' Items</span>'
         + '<span class="profile-row-date">' + (p.date || '') + '</span>'
         + '<button class="profile-row-edit' + (isEdit ? ' active' : '') + '" data-slot="' + slotKey + '" onclick="profileToggleEdit(this.dataset.slot)" title="Bearbeiten">✏️</button>'

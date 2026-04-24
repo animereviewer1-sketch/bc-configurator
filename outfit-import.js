@@ -134,18 +134,26 @@ function _oiPreview(code) {
 
 // ── Duplikat-Erkennung ────────────────────────────────────────────────
 function _oiDuplicateInfo() {
-  // Gibt {dupIndices: Set, firstOf: Map<code→idx>} zurück
+  // Gibt {dupIndices, orgIndices, count} zurück
+  // orgIndices: erstes Vorkommen eines Codes der auch anderswo auftaucht
+  // dupIndices: alle weiteren Vorkommen desselben Codes
   const codeMap = new Map(); // code → first index
   const dupIndices = new Set();
   OI_LIST.forEach((item, i) => {
     const key = item.code.trim();
     if (codeMap.has(key)) {
-      dupIndices.add(i); // alles nach dem ersten ist ein Duplikat
+      dupIndices.add(i);
     } else {
       codeMap.set(key, i);
     }
   });
-  return { dupIndices, count: dupIndices.size };
+  // Originals = erste Vorkommen die mindestens ein Duplikat haben
+  const orgIndices = new Set();
+  dupIndices.forEach(i => {
+    const firstIdx = codeMap.get(OI_LIST[i].code.trim());
+    if (firstIdx !== undefined) orgIndices.add(firstIdx);
+  });
+  return { dupIndices, orgIndices, count: dupIndices.size };
 }
 
 function oiRemoveDuplicates() {
@@ -178,16 +186,20 @@ function renderOutfitImportTab() {
     return;
   }
 
-  const { dupIndices, count } = _oiDuplicateInfo();
+  const { dupIndices, orgIndices, count } = _oiDuplicateInfo();
 
   el.innerHTML = OI_LIST.map((item, i) => {
     const isActive = _oiSeqRunning && _oiSeqIdx === i;
     const isDone   = _oiSeqRunning && _oiSeqIdx > i;
     const isDup    = dupIndices.has(i);
-    return `<div class="oi-row${isActive ? ' oi-active' : ''}${isDone ? ' oi-done' : ''}${isDup ? ' oi-dup' : ''}" id="oir_${i}">
+    const isOrg    = orgIndices.has(i);
+    const badge    = isDup ? ' <span class="oi-dup-badge">DUP</span>'
+                   : isOrg ? ' <span class="oi-org-badge">ORG</span>'
+                   : '';
+    return `<div class="oi-row${isActive ? ' oi-active' : ''}${isDone ? ' oi-done' : ''}${isDup ? ' oi-dup' : ''}${isOrg ? ' oi-org' : ''}" id="oir_${i}">
       <div class="oi-row-num">${i + 1}</div>
       <div class="oi-row-body">
-        <div class="oi-row-label" id="oilabel_${i}">${escHtml(item.label || 'Outfit ' + (i+1))}${isDup ? ' <span class="oi-dup-badge">DUP</span>' : ''}</div>
+        <div class="oi-row-label" id="oilabel_${i}">${escHtml(item.label || 'Outfit ' + (i+1))}${badge}</div>
         <div class="oi-row-preview">${escHtml(_oiPreview(item.code))}</div>
         <div class="oi-row-meta">${item.date || ''} &nbsp;·&nbsp; ${item.code.length} Zeichen</div>
       </div>

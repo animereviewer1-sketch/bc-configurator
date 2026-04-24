@@ -1719,23 +1719,28 @@ button { cursor: pointer; }
 .oi-row.oi-done { opacity:.45; }
 .oi-row.oi-done .oi-row-num::after { content:' ✓'; color:#34d399; }
 
-/* Duplikat-Rows */
+/* ── Duplikat / Original Badges – Outfit Import ── */
 .oi-row.oi-dup { border-color:rgba(251,113,133,0.35); background:rgba(251,113,133,0.05); }
-.oi-row.oi-dup:hover { border-color:rgba(251,113,133,0.6); background:rgba(251,113,133,0.10); }
+.oi-row.oi-dup:hover { border-color:rgba(251,113,133,0.55); background:rgba(251,113,133,0.10); }
+.oi-row.oi-org { border-color:rgba(251,191,36,0.30); background:rgba(251,191,36,0.04); }
+.oi-row.oi-org:hover { border-color:rgba(251,191,36,0.55); background:rgba(251,191,36,0.09); }
 
-.oi-dup-badge {
+.oi-dup-badge, .oi-org-badge {
   display:inline-block; font-size:.55rem; font-weight:800; letter-spacing:.06em;
-  background:rgba(251,113,133,0.2); color:#fb7185; border:1px solid rgba(251,113,133,0.4);
   border-radius:4px; padding:1px 5px; vertical-align:middle; margin-left:5px;
 }
+.oi-dup-badge { background:rgba(251,113,133,0.2); color:#fb7185; border:1px solid rgba(251,113,133,0.4); }
+.oi-org-badge { background:rgba(251,191,36,0.15); color:#fbbf24; border:1px solid rgba(251,191,36,0.4); }
 
-/* Profil-Duplikat-Badge & Row */
-.profile-dup-badge {
+/* ── Duplikat / Original Badges – Profile ── */
+.profile-dup-badge, .profile-org-badge {
   display:inline-block; font-size:.55rem; font-weight:800; letter-spacing:.06em;
-  background:rgba(251,113,133,0.2); color:#fb7185; border:1px solid rgba(251,113,133,0.4);
   border-radius:4px; padding:1px 5px; vertical-align:middle; margin-left:5px; cursor:help;
 }
+.profile-dup-badge { background:rgba(251,113,133,0.2); color:#fb7185; border:1px solid rgba(251,113,133,0.4); }
+.profile-org-badge { background:rgba(251,191,36,0.15); color:#fbbf24; border:1px solid rgba(251,191,36,0.4); }
 .profile-row-dup { border-left:3px solid rgba(251,113,133,0.5) !important; }
+.profile-row-org { border-left:3px solid rgba(251,191,36,0.5) !important; }
 
 /* Flash animation on single execute */
 @keyframes oi-flash-anim {
