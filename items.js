@@ -469,6 +469,22 @@ let PROFILE_FAVS = new Set();
 try { PROFILE_FAVS = new Set(JSON.parse(localStorage.getItem('BC_PROFILE_FAVS_v1') || '[]')); } catch {}
 let _profileFilter = 'all'; // 'all' | 'fav'
 
+// ── Profile Alt-Owner ─────────────────────────────────
+// Speichert Owner-Namen die als "alt/veraltet" markiert sind
+let PROFILE_ALT_OWNERS = new Set();
+(async () => {
+  const d = await idbGet('BC_PROFILE_ALT_OWNERS_v1');
+  if (Array.isArray(d)) { PROFILE_ALT_OWNERS = new Set(d); }
+})();
+function _saveProfileAltOwners() { idbSet('BC_PROFILE_ALT_OWNERS_v1', [...PROFILE_ALT_OWNERS]); }
+
+function toggleProfileAltOwner(owner) {
+  if (PROFILE_ALT_OWNERS.has(owner)) PROFILE_ALT_OWNERS.delete(owner);
+  else PROFILE_ALT_OWNERS.add(owner);
+  _saveProfileAltOwners();
+  renderProfileList();
+}
+
 // ── Init ─────────────────────────────────────────────
 try {
   const fav = localStorage.getItem('BC_FAVORITES_v9');
@@ -2026,14 +2042,17 @@ function renderProfileList() {
     if (n && id && !_ownerIdMap[n]) _ownerIdMap[n] = id;
   }
   // Gibt den Owner-Label zurück, ergänzt #ID wenn bekannt und noch nicht vorhanden
+  // Wenn der Owner als Alt markiert ist, wird "(old)" angehängt
   function _ownerLabel(owner) {
-    if (/#\d{4,}/.test(owner)) return escHtml(owner); // bereits angereichert
+    const isAlt = PROFILE_ALT_OWNERS.has(owner);
+    const altTag = isAlt ? ' <span style="color:var(--accent-red,#e55);font-size:.6rem;font-weight:600;border:1px solid currentColor;border-radius:3px;padding:0 3px;vertical-align:middle">(old)</span>' : '';
+    if (/#\d{4,}/.test(owner)) return escHtml(owner) + altTag; // bereits angereichert
     // Basis-Name = alles vor einem evtl. " #..." Suffix
     const baseName = owner.replace(/\s*#\d+.*$/, '').trim();
     const id = _ownerIdMap[baseName];
-    return id
+    return (id
       ? escHtml(baseName) + ' <span style="color:var(--text3);font-size:.6rem;font-family:var(--font-mono)">#' + id + '</span>'
-      : escHtml(owner);
+      : escHtml(owner)) + altTag;
   }
 
   // Duplikate berechnen: ORG = Original (erstes), DUP = Kopien
@@ -2121,9 +2140,11 @@ function renderProfileList() {
         + '</div>';
     }).join('');
 
+    const isAltOwner = PROFILE_ALT_OWNERS.has(owner);
     return '<div class="profile-owner-block' + ((wasOpen !== false) ? ' open' : '') + '" id="' + blockId + '">'
       + '<div class="profile-owner-hdr" onclick="document.getElementById(\'' + blockId + '\').classList.toggle(\'open\')">'
       + '<span class="profile-owner-name">' + _ownerLabel(owner) + '</span>'
+      + '<button class="profile-alt-btn' + (isAltOwner ? ' active' : '') + '" onclick="event.stopPropagation();toggleProfileAltOwner(\'' + escAttr(owner) + '\')" title="Als Alt/Veraltet markieren">' + (isAltOwner ? '🔴 Alt' : '🔘 Alt') + '</button>'
       + '<span class="profile-owner-count">' + profiles.length + '</span>'
       + '<span class="profile-owner-chevron">▶</span>'
       + '</div>'
@@ -3382,6 +3403,16 @@ function toggleCurseOutfitFlag(dbKey, cellEl) {
   } else {
     renderCurseTab();
   }
+}
+
+function clearAllOutfitFlags() {
+  const count = Object.keys(CURSE_OUTFIT_FLAGS).length;
+  if (count === 0) { showStatus('ℹ️ Keine Outfit-Tags vorhanden', 'info'); return; }
+  if (!confirm('Alle ' + count + ' Outfit-Tags löschen? Das kann nicht rückgängig gemacht werden.')) return;
+  CURSE_OUTFIT_FLAGS = {};
+  _saveCurseOutfitFlags();
+  if (_activeTab === 'curse') renderCurseTab();
+  showStatus('✅ Alle ' + count + ' Outfit-Tags gelöscht', 'success');
 }
 
 function curseAutoMarkOutfit() {
