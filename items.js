@@ -1784,7 +1784,16 @@ function generateOutfitCode() {
   const BCX_LOCKS_L = ['LewdCrestPadlock','DeviousPadlock','LuziPadlock'];
   const REL_LOCKS_L = ['OwnerPadlock','LoversPadlock','MistressPadlock'];
 
-  OUTFIT.forEach((item, i) => {
+  // Standard BC hair groups must be applied LAST so mods like 新前発_Luzi
+  // (which internally reset HairFront/HairBack when worn) can't overwrite them.
+  const _stdHairLast = new Set(['HairFront','HairBack','HairSide','HairFront2','HairBack2']);
+  const _sortedOutfit = [...OUTFIT].sort((a, b) => {
+    const aLast = _stdHairLast.has(a.group);
+    const bLast = _stdHairLast.has(b.group);
+    return aLast === bLast ? 0 : aLast ? 1 : -1;
+  });
+
+  _sortedOutfit.forEach((item, i) => {
     const { group, asset, colors, tr, property, overridePriority, layerProperties, difficulty, lock, lockParams, _bodyOnly } = item;
 
     // Pre-props: TypeRecord + all non-visual properties
@@ -1860,7 +1869,7 @@ function generateOutfitCode() {
   // so ONE combined sync after a short pause avoids BC rate-limit.
   // Standard-Haar Fallback: bei TARGET=Player fehlende Haargruppen aus DEFAULT_HAIR wiederherstellen
   if (!isOther && Object.keys(DEFAULT_HAIR).length) {
-    const profileGroups = new Set(OUTFIT.map(i => i.group));
+    const profileGroups = new Set(_sortedOutfit.map(i => i.group));
     const fallbacks = Object.entries(DEFAULT_HAIR)
       .filter(([g]) => !profileGroups.has(g)) // nur Gruppen die das Profil nicht selbst setzt
       .map(([g, v]) => [g, v.name, v.colors]);
