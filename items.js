@@ -1705,7 +1705,7 @@ function generateOutfitCode() {
   const REL_LOCKS_L = ['OwnerPadlock','LoversPadlock','MistressPadlock'];
 
   OUTFIT.forEach((item, i) => {
-    const { group, asset, colors, tr, property, overridePriority, layerProperties, difficulty, lock, lockParams } = item;
+    const { group, asset, colors, tr, property, overridePriority, layerProperties, difficulty, lock, lockParams, _bodyOnly } = item;
 
     // Pre-props: TypeRecord + all non-visual properties
     const preProp = {};
@@ -1729,17 +1729,29 @@ function generateOutfitCode() {
     const preB64  = hasPreProp  ? btoa(unescape(encodeURIComponent(JSON.stringify(preProp))))  : null;
     const postB64 = hasPostProp ? btoa(unescape(encodeURIComponent(JSON.stringify(postProp)))) : null;
 
-    code += '// ' + (i+1) + '. ' + asset + ' (' + group + ')\n';
-    code += '_ws(' + JSON.stringify(asset) + ',' + JSON.stringify(group) + ','
-          + JSON.stringify(colors) + ','
-          + (preB64 ? JSON.stringify(preB64) : 'null') + ','
-          + (hasTr ? 'true' : 'false') + ','
-          + (difficulty ?? 0) + ');\n';
+    code += '// ' + (i+1) + '. ' + asset + ' (' + group + ')' + (_bodyOnly ? ' [Körper-Eigenschaft]' : '') + '\n';
 
-    // Post-props (OverridePriority / LayerProperties)
-    if (hasPostProp) {
-      code += 'Object.assign(InventoryGet(TARGET,' + JSON.stringify(group) + ').Property,'
-            + 'JSON.parse(decodeURIComponent(escape(atob(' + JSON.stringify(postB64) + ')))));\n';
+    if (_bodyOnly) {
+      // Body-group slot: item already exists (AllowNone===false), just patch properties
+      const allProp = Object.assign({}, preProp, postProp);
+      if (Object.keys(allProp).length > 0) {
+        const allB64 = btoa(unescape(encodeURIComponent(JSON.stringify(allProp))));
+        code += '{\n  const _bi=InventoryGet(TARGET,' + JSON.stringify(group) + ');\n'
+              + '  if(_bi){_bi.Property=_bi.Property??{};Object.assign(_bi.Property,JSON.parse(decodeURIComponent(escape(atob(' + JSON.stringify(allB64) + ')))));\n'
+              + '  try{CharacterRefreshSource(_bi,TARGET,false);}catch(e){}}\n}\n';
+      }
+    } else {
+      code += '_ws(' + JSON.stringify(asset) + ',' + JSON.stringify(group) + ','
+            + JSON.stringify(colors) + ','
+            + (preB64 ? JSON.stringify(preB64) : 'null') + ','
+            + (hasTr ? 'true' : 'false') + ','
+            + (difficulty ?? 0) + ');\n';
+
+      // Post-props (OverridePriority / LayerProperties)
+      if (hasPostProp) {
+        code += 'Object.assign(InventoryGet(TARGET,' + JSON.stringify(group) + ').Property,'
+              + 'JSON.parse(decodeURIComponent(escape(atob(' + JSON.stringify(postB64) + ')))));\n';
+      }
     }
 
     // Lock (synchronous)
@@ -2117,12 +2129,25 @@ function uploadProfileScreenshot(pname) {
     if (!file) return;
     const reader = new FileReader();
     reader.onload = (e) => {
-      PROFILE_SCREENSHOTS[name] = e.target.result;
-      _saveProfileScreenshots();
-      renderProfileList();
-      // Refresh modal if open on same profile
-      const mod = document.getElementById('profileModal');
-      if (mod?.classList.contains('open') && _profileModalName === name) _renderProfileModal(name);
+      // Resize to max 520×693 (4:3 aspect, 2× card size for retina) before storing
+      const imgEl = new Image();
+      imgEl.onload = () => {
+        const MAX_W = 520, MAX_H = 693;
+        let w = imgEl.naturalWidth, h = imgEl.naturalHeight;
+        const scale = Math.min(1, MAX_W / w, MAX_H / h);
+        w = Math.round(w * scale);
+        h = Math.round(h * scale);
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(imgEl, 0, 0, w, h);
+        PROFILE_SCREENSHOTS[name] = canvas.toDataURL('image/jpeg', 0.88);
+        _saveProfileScreenshots();
+        renderProfileList();
+        // Refresh modal if open on same profile
+        const mod = document.getElementById('profileModal');
+        if (mod?.classList.contains('open') && _profileModalName === name) _renderProfileModal(name);
+      };
+      imgEl.src = e.target.result;
     };
     reader.readAsDataURL(file);
   };
@@ -2655,8 +2680,11 @@ function _saveCurseDB() {
   idbSet('BC_CURSE_DB_v1', {database:CURSE_DB,lscgTable:CURSE_LSCG,lscgCache:CURSE_CACHE_LSCG,favourites:[...CURSE_FAVOURITES],outfitFlags:CURSE_OUTFIT_FLAGS});
 }
 
+let _curseDBFresh = false; // true once BC sends live data — prevents IDB startup overwrite
+
 function _handleCurseData(data) {
   if (data.err) { showStatus('❌ Curse-Scan: ' + data.err, 'error'); return; }
+  _curseDBFresh = true;
   const prevDB = {...CURSE_DB};
   CURSE_DB         = data.database    ?? {};
   CURSE_LSCG       = data.lscgTable   ?? {};
@@ -3472,13 +3500,19 @@ function curseClearAndScan() {
     }
     const d = await idbGet('BC_CURSE_DB_v1');
     if (d) {
-      CURSE_DB         = d.database  ?? {};
-      CURSE_LSCG       = d.lscgTable ?? {};
-      CURSE_CACHE_LSCG = d.lscgCache ?? {};
+      // Guard: if BC already sent live CURSE_DATA before IDB resolved, don't overwrite it
+      if (!_curseDBFresh) {
+        CURSE_DB         = d.database  ?? {};
+        CURSE_LSCG       = d.lscgTable ?? {};
+        CURSE_CACHE_LSCG = d.lscgCache ?? {};
+        _updateCurseStats();
+        console.log('[BCK-Popup] Curse DB geladen: ' + Object.keys(CURSE_DB).length + ' Crafts, ' + Object.keys(CURSE_OUTFIT_FLAGS).length + ' Outfit-Flags');
+      } else {
+        console.log('[BCK-Popup] Curse IDB übersprungen – Live-Daten von BC bereits vorhanden');
+      }
+      // Always restore favourites + outfitFlags from IDB (they merge, don't overwrite)
       if (d.favourites)   d.favourites.forEach(k => CURSE_FAVOURITES.add(k));
       if (d.outfitFlags && typeof d.outfitFlags === 'object') Object.assign(CURSE_OUTFIT_FLAGS, d.outfitFlags);
-      _updateCurseStats();
-      console.log('[BCK-Popup] Curse DB geladen: ' + Object.keys(CURSE_DB).length + ' Crafts, ' + Object.keys(CURSE_OUTFIT_FLAGS).length + ' Outfit-Flags');
     }
     const comments = await idbGet('BC_CURSE_COMMENTS_v1');
     if (comments) Object.assign(CURSE_COMMENTS, comments);
