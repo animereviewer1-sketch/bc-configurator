@@ -2276,14 +2276,22 @@ function _renderDefaultHairList() {
     el.innerHTML = '<span style="color:var(--text3);font-size:.72rem;font-style:italic">Keine Standard-Haare gesetzt</span>';
     return;
   }
-  el.innerHTML = keys.map(g =>
-    '<span style="display:inline-flex;align-items:center;gap:4px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:2px 8px;font-size:.7rem;margin:2px 2px">'
-    + '<span style="color:var(--text2);max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + g + '">' + g + '</span>'
-    + '<span style="color:var(--text4)">→</span>'
-    + '<span style="color:var(--accent-text)">' + (DEFAULT_HAIR[g].name) + '</span>'
-    + '<button onclick="removeDefaultHairGroup(\'' + g.replace(/\\/g,'\\\\').replace(/'/g,"\\'") + '\')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:10px;padding:0 2px;line-height:1">✕</button>'
-    + '</span>'
-  ).join('');
+  el.innerHTML = keys.map(g => {
+    const entry = DEFAULT_HAIR[g];
+    const cols = Array.isArray(entry.colors) ? entry.colors : (entry.colors ? [entry.colors] : []);
+    // Build color swatches – skip 'Default' entries (no real color to show)
+    const swatches = cols
+      .filter(c => c && c !== 'Default')
+      .map(c => '<span style="display:inline-block;width:10px;height:10px;border-radius:2px;border:1px solid rgba(255,255,255,.25);background:' + escHtml(c) + ';flex-shrink:0" title="' + escHtml(c) + '"></span>')
+      .join('');
+    return '<span style="display:inline-flex;align-items:center;gap:4px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:2px 8px;font-size:.7rem;margin:2px 2px">'
+      + '<span style="color:var(--text2);max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + escHtml(g) + '">' + escHtml(g) + '</span>'
+      + '<span style="color:var(--text4)">→</span>'
+      + '<span style="color:var(--accent-text)">' + escHtml(entry.name) + '</span>'
+      + (swatches ? '<span style="display:inline-flex;gap:2px;align-items:center">' + swatches + '</span>' : '')
+      + '<button onclick="removeDefaultHairGroup(\'' + g.replace(/\\/g,'\\\\').replace(/'/g,"\\'") + '\')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:10px;padding:0 2px;line-height:1">✕</button>'
+      + '</span>';
+  }).join('');
 }
 
 function removeDefaultHairGroup(gn) {
