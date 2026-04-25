@@ -2074,13 +2074,19 @@ function renderProfileList() {
         : '<span class="pc-tag">Profil</span>';
 
       // Use data-slot + data-strip-owner for the modal click — avoids inline JSON escaping issues
+      // Thumb click: open modal if screenshot exists, else capture
+      const thumbClick = img
+        ? '_openProfileCard(this.dataset.slot,this.dataset.stripOwner)'
+        : 'event.stopPropagation();captureProfileScreenshot(this.dataset.slot)';
+      const thumbHint = img ? '<span class="pc-zoom">🔍</span>' : '<span class="pc-capture-hint">📸</span>';
+
       return '<div class="pc' + (isEdit ? ' pc-edit-active' : '') + '" id="prow_' + idx + '">'
-        + '<div class="pc-thumb" data-slot="' + slotKey + '" data-strip-owner="' + escHtml(blockId) + '" onclick="_openProfileCard(this.dataset.slot,this.dataset.stripOwner)">'
+        + '<div class="pc-thumb" data-slot="' + slotKey + '" data-strip-owner="' + escHtml(blockId) + '" onclick="' + thumbClick + '">'
         + thumbContent
         + dupBadge
         + '<button class="pc-fav' + (isFav ? ' on' : '') + '" data-pkey="' + idx + '" onclick="event.stopPropagation();toggleProfileFav(_profileNameMap[\'p_\'+this.dataset.pkey])" title="Favorit">'
         + (isFav ? '⭐' : '☆') + '</button>'
-        + '<span class="pc-zoom">🔍</span>'
+        + thumbHint
         + '</div>'
         + '<div class="pc-name" title="' + escHtml(name) + '">' + escHtml(shortName) + '</div>'
         + '<div class="pc-meta">' + (p.items?.length ?? 0) + ' Items · ' + (p.date || '') + '</div>'
@@ -2117,9 +2123,49 @@ function renderProfileList() {
   }
 }
 
-// ── Profile Screenshot Upload ─────────────────────────
+// ── Profile Screenshot: Canvas-Capture via BC ────────
+const _pendingScreenshot = {}; // reqId → profileName
+
+function captureProfileScreenshot(pname) {
+  const name = _profileNameMap[pname] || pname;
+  if (!name || !PROFILES[name]) return;
+  if (!_connected) { showStatus('❌ Nicht verbunden mit BC', 'error'); return; }
+  const reqId = 'ss_' + Date.now();
+  _pendingScreenshot[reqId] = name;
+  bcSend({ type: 'CAPTURE_SCREENSHOT', reqId });
+  showStatus('📸 Screenshot wird aufgenommen…', 'info');
+}
+
+// Called from postMessage handler when BC responds with SCREENSHOT_DATA
+function _handleScreenshotData(data) {
+  const name = _pendingScreenshot[data.reqId];
+  delete _pendingScreenshot[data.reqId];
+  if (!name) return;
+  if (data.err) { showStatus('❌ Screenshot: ' + data.err, 'error'); return; }
+  if (!data.data) { showStatus('❌ Screenshot: Keine Daten', 'error'); return; }
+
+  // Resize to max 520×693 before storing (keeps file small)
+  const imgEl = new Image();
+  imgEl.onload = () => {
+    const MAX_W = 520, MAX_H = 1040;
+    let w = imgEl.naturalWidth, h = imgEl.naturalHeight;
+    const scale = Math.min(1, MAX_W / w, MAX_H / h);
+    w = Math.round(w * scale); h = Math.round(h * scale);
+    const canvas = document.createElement('canvas');
+    canvas.width = w; canvas.height = h;
+    canvas.getContext('2d').drawImage(imgEl, 0, 0, w, h);
+    PROFILE_SCREENSHOTS[name] = canvas.toDataURL('image/jpeg', 0.88);
+    _saveProfileScreenshots();
+    renderProfileList();
+    showStatus('✅ Screenshot gespeichert für "' + name + '"', 'success');
+    const mod = document.getElementById('profileModal');
+    if (mod?.classList.contains('open') && _profileModalName === name) _renderProfileModal(name);
+  };
+  imgEl.src = data.data;
+}
+
+// ── Fallback: Screenshot manuell hochladen ────────────
 function uploadProfileScreenshot(pname) {
-  // pname may be a slot key ('p_N') or a real profile name
   const name = _profileNameMap[pname] || pname;
   if (!name || !PROFILES[name]) return;
   const inp = document.createElement('input');
@@ -2129,21 +2175,18 @@ function uploadProfileScreenshot(pname) {
     if (!file) return;
     const reader = new FileReader();
     reader.onload = (e) => {
-      // Resize to max 520×693 (4:3 aspect, 2× card size for retina) before storing
       const imgEl = new Image();
       imgEl.onload = () => {
-        const MAX_W = 520, MAX_H = 693;
+        const MAX_W = 520, MAX_H = 1040;
         let w = imgEl.naturalWidth, h = imgEl.naturalHeight;
         const scale = Math.min(1, MAX_W / w, MAX_H / h);
-        w = Math.round(w * scale);
-        h = Math.round(h * scale);
+        w = Math.round(w * scale); h = Math.round(h * scale);
         const canvas = document.createElement('canvas');
         canvas.width = w; canvas.height = h;
         canvas.getContext('2d').drawImage(imgEl, 0, 0, w, h);
         PROFILE_SCREENSHOTS[name] = canvas.toDataURL('image/jpeg', 0.88);
         _saveProfileScreenshots();
         renderProfileList();
-        // Refresh modal if open on same profile
         const mod = document.getElementById('profileModal');
         if (mod?.classList.contains('open') && _profileModalName === name) _renderProfileModal(name);
       };
@@ -2232,11 +2275,13 @@ function _renderProfileModal(name) {
     imgPanel.insertBefore(ph, imgPanel.firstChild);
   }
 
-  // Upload / remove buttons
-  const uploadBtn = document.getElementById('pmodUploadBtn');
-  const removeBtn = document.getElementById('pmodRemoveBtn');
-  if (uploadBtn) uploadBtn.dataset.pname = name;
-  if (removeBtn) { removeBtn.dataset.pname = name; removeBtn.style.display = img ? '' : 'none'; }
+  // Screenshot / upload / remove buttons
+  const captureBtn = document.getElementById('pmodCaptureBtn');
+  const uploadBtn  = document.getElementById('pmodUploadBtn');
+  const removeBtn  = document.getElementById('pmodRemoveBtn');
+  if (captureBtn) captureBtn.dataset.pname = name;
+  if (uploadBtn)  uploadBtn.dataset.pname  = name;
+  if (removeBtn)  { removeBtn.dataset.pname = name; removeBtn.style.display = img ? '' : 'none'; }
 
   // Fav button
   const favBtn = document.getElementById('pmodFavBtn');
@@ -3778,6 +3823,10 @@ window.addEventListener('message', function(ev) {
       _cb(ev.data.items ?? [], ev.data.name ?? '');
       break;
     }
+
+    case 'SCREENSHOT_DATA':
+      _handleScreenshotData(ev.data);
+      break;
   }
 });
 

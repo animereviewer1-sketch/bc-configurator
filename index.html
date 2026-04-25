@@ -943,6 +943,15 @@ textarea.outfit-code { width: 100%; min-height: 210px; background: rgba(0,0,0,0.
   pointer-events: none;
 }
 .pc-thumb:hover .pc-zoom { opacity: 0.9; }
+.pc-capture-hint {
+  position: absolute; bottom: 0; left: 0; right: 0;
+  text-align: center; padding: 10px 0 8px;
+  font-size: 22px;
+  background: linear-gradient(transparent, rgba(0,0,0,0.5));
+  opacity: 0; transition: opacity .15s;
+  pointer-events: none;
+}
+.pc-thumb:hover .pc-capture-hint { opacity: 1; }
 
 .pc-edit-active .pc-thumb { border-color: var(--accent-line); box-shadow: 0 0 0 2px oklch(72% 0.13 58 / 0.25); }
 
@@ -2506,10 +2515,13 @@ button { cursor: pointer; }
         </div>
         <button class="pmod-close" onclick="closeProfileModal()">✕</button>
       </div>
-      <!-- Screenshot upload -->
-      <div>
-        <button class="pmod-upload-btn" id="pmodUploadBtn" onclick="uploadProfileScreenshot(this.dataset.pname)">📷 Screenshot hochladen</button>
-        <button class="pmod-remove-btn" id="pmodRemoveBtn" onclick="removeProfileScreenshot(this.dataset.pname)" style="margin-top:5px;display:none">✕ Screenshot entfernen</button>
+      <!-- Screenshot -->
+      <div style="display:flex;flex-direction:column;gap:5px">
+        <button class="pmod-upload-btn" id="pmodCaptureBtn" onclick="captureProfileScreenshot(this.dataset.pname)">📸 Screenshot aus BC aufnehmen</button>
+        <div style="display:flex;gap:5px">
+          <button class="pmod-upload-btn" id="pmodUploadBtn" onclick="uploadProfileScreenshot(this.dataset.pname)" style="font-size:0.7rem;padding:5px 10px;flex:1">📁 Datei hochladen</button>
+          <button class="pmod-remove-btn" id="pmodRemoveBtn" onclick="removeProfileScreenshot(this.dataset.pname)" style="display:none;flex:1">✕ Entfernen</button>
+        </div>
       </div>
       <!-- Detail grid -->
       <div class="pmod-detail">
