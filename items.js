@@ -2331,11 +2331,21 @@ function captureDefaultHair() {
 //
 // Hinweis: 'Default' als Farbwert wird NICHT verwendet – InventoryWear akzeptiert das nicht
 // und würde das Item unsichtbar/ungültig machen, was dann den Standard-Haar-Fallback auslöst.
+// HairColor-Gruppen niemals in keepHairGroups – die Farbe muss immer explizit gesetzt werden,
+// sonst behält der Zielcharakter seine eigene Haarfarbe (statt der Quell-Farbe).
+const _HAIR_COLOR_GROUP_NAMES = new Set(['HairColor','HairColorAccessory','HairColorUnder']);
+
 function _applyHairBaseline(items) {
   if (!Object.keys(DEFAULT_HAIR).length) return { filteredItems: items, keepHairGroups: [] };
   const filteredItems = [];
   const keepHairGroups = [];
   for (const item of items) {
+    // Farb-Overlay-Gruppen immer in Profil aufnehmen – nie als "unverändert" werten,
+    // damit die Ziel-Figur die korrekte Haarfarbe bekommt (auch bei Cross-Char-Anwendung).
+    if (_HAIR_COLOR_GROUP_NAMES.has(item.group)) {
+      filteredItems.push(item);
+      continue;
+    }
     const baseline = DEFAULT_HAIR[item.group];
     if (!baseline) { filteredItems.push(item); continue; }
     const sameName   = baseline.name === item.asset;
