@@ -3151,6 +3151,16 @@ function curseImport() {
   inp.click();
 }
 
+function curseResetNeuTimestamps() {
+  const entries = Object.values(CURSE_DB);
+  if (!entries.length) { showStatus('ℹ️ Keine Einträge vorhanden', 'info'); return; }
+  let count = 0;
+  entries.forEach(e => { if (e.ZuletztGescannt) { delete e.ZuletztGescannt; count++; } });
+  _saveCurseDB();
+  if (_activeTab === 'curse') renderCurseTab();
+  showStatus('🗑️ ' + count + ' Neu-Timestamps gelöscht', 'success');
+}
+
 function curseClear() {
   const total = Object.keys(CURSE_DB).length;
   if (!total) { showStatus('ℹ️ Datenbank ist bereits leer', 'info'); return; }
