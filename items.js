@@ -467,7 +467,7 @@ function _saveProfileScreenshots() { idbSet('BC_PROFILE_SCREENSHOTS_v1', PROFILE
 // ── Profile Favoriten ─────────────────────────────────
 let PROFILE_FAVS = new Set();
 try { PROFILE_FAVS = new Set(JSON.parse(localStorage.getItem('BC_PROFILE_FAVS_v1') || '[]')); } catch {}
-let _profileFilter = 'all'; // 'all' | 'fav'
+let _profileFilter = 'all'; // 'all' | 'fav' | 'noold'
 
 // ── Profile Alt-Owner ─────────────────────────────────
 // Speichert Owner-Namen die als "alt/veraltet" markiert sind
@@ -2072,6 +2072,8 @@ function renderProfileList() {
   let keys = Object.keys(PROFILES).filter(k => !q || k.toLowerCase().includes(q));
   // Favoriten-Filter
   if (_profileFilter === 'fav') keys = keys.filter(k => PROFILE_FAVS.has(k));
+  // (old) ausblenden – alle Profile deren Owner "(old)" im Namen hat
+  if (_profileFilter === 'noold') keys = keys.filter(k => !/\(old\)/i.test(_profileOwnerOf(k)));
   document.querySelectorAll('.profile-fc').forEach(chip => chip.classList.toggle('on', chip.dataset.filter === _profileFilter));
   if (!keys.length) {
     el.innerHTML = '<p style="color:var(--text3);font-size:.8rem">Noch keine Profile gespeichert.</p>';
@@ -2103,15 +2105,21 @@ function renderProfileList() {
   // Gibt den Owner-Label zurück, ergänzt #ID wenn bekannt und noch nicht vorhanden
   // Wenn der Owner als Alt markiert ist, wird "(old)" angehängt
   function _ownerLabel(owner) {
-    const isAlt = PROFILE_ALT_OWNERS.has(owner);
-    const altTag = isAlt ? ' <span style="color:var(--accent-red,#e55);font-size:.6rem;font-weight:600;border:1px solid currentColor;border-radius:3px;padding:0 3px;vertical-align:middle">(old)</span>' : '';
-    if (/#\d{4,}/.test(owner)) return escHtml(owner) + altTag; // bereits angereichert
-    // Basis-Name = alles vor einem evtl. " #..." Suffix und "(old)"-Tag
+    // Ist alt wenn: manuell im Set ODER "(old)" steckt bereits im Namen
+    const isAlt = PROFILE_ALT_OWNERS.has(owner) || /\(old\)/i.test(owner);
+    const altBadge = ' <span style="color:#e55;font-size:.6rem;font-weight:700;border:1px solid #e55;border-radius:3px;padding:0 3px;vertical-align:middle;opacity:.9">(old)</span>';
+    if (/#\d{4,}/.test(owner)) {
+      // Bereits angereichert (hat #ID drin) – nur Badge anhängen wenn alt
+      return escHtml(owner) + (isAlt ? altBadge : '');
+    }
+    // Basis-Name ohne #ID-Suffix und ohne (old)-Tag → für CURSE_DB-Lookup
     const baseName = owner.replace(/\s*#\d+.*$/, '').replace(/\s*\(old\)\s*$/i, '').trim();
+    const displayName = owner.replace(/\s*\(old\)\s*$/i, '').trim(); // für Anzeige ohne doppeltes (old)
     const id = _ownerIdMap[baseName];
-    return (id
-      ? escHtml(baseName) + (isAlt ? ' <span style="color:var(--accent-red,#e55);font-size:.6rem;font-weight:600">(old)</span>' : '') + ' <span style="color:var(--text3);font-size:.6rem;font-family:var(--font-mono)">#' + id + '</span>'
-      : escHtml(owner)) + (id ? '' : altTag);
+    if (id) {
+      return escHtml(displayName) + (isAlt ? altBadge : '') + ' <span style="color:var(--text3);font-size:.6rem;font-family:var(--font-mono)">#' + id + '</span>';
+    }
+    return escHtml(owner) + (isAlt && !/\(old\)/i.test(owner) ? altBadge : '');
   }
 
   // Duplikate berechnen: ORG = Original (erstes), DUP = Kopien
@@ -2199,7 +2207,7 @@ function renderProfileList() {
         + '</div>';
     }).join('');
 
-    const isAltOwner = PROFILE_ALT_OWNERS.has(owner);
+    const isAltOwner = PROFILE_ALT_OWNERS.has(owner) || /\(old\)/i.test(owner);
     return '<div class="profile-owner-block' + ((wasOpen !== false) ? ' open' : '') + '" id="' + blockId + '">'
       + '<div class="profile-owner-hdr" onclick="document.getElementById(\'' + blockId + '\').classList.toggle(\'open\')">'
       + '<span class="profile-owner-name">' + _ownerLabel(owner) + '</span>'
