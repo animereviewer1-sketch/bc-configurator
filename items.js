@@ -2318,8 +2318,10 @@ function captureDefaultHair() {
 
 // Filtert Items gegen DEFAULT_HAIR-Baseline:
 //  • Gleiches Modell + gleiche Farbe  → aus Profil entfernen, Gruppe in keepHairGroups (Strip schont sie)
-//  • Anderes Modell,  gleiche Farbe   → aufnehmen mit color='Default' (Zielperson behält ihre Farbe)
-//  • Andere Farbe (egal ob Modell)    → aufnehmen mit konkreter Farbe
+//  • Alles andere (Modell oder Farbe geändert) → komplett mit echten Farben aufnehmen
+//
+// Hinweis: 'Default' als Farbwert wird NICHT verwendet – InventoryWear akzeptiert das nicht
+// und würde das Item unsichtbar/ungültig machen, was dann den Standard-Haar-Fallback auslöst.
 function _applyHairBaseline(items) {
   if (!Object.keys(DEFAULT_HAIR).length) return { filteredItems: items, keepHairGroups: [] };
   const filteredItems = [];
@@ -2330,11 +2332,11 @@ function _applyHairBaseline(items) {
     const sameName   = baseline.name === item.asset;
     const sameColors = _colorsEqual(baseline.colors, item.colors);
     if (sameName && sameColors) {
-      keepHairGroups.push(item.group); // unverändert → Strip schonen
-    } else if (!sameName && sameColors) {
-      filteredItems.push(Object.assign({}, item, { colors: 'Default' })); // neues Modell, eigene Farbe
+      // Exakt unverändert → Strip schont diese Gruppe, Profil braucht sie nicht
+      keepHairGroups.push(item.group);
     } else {
-      filteredItems.push(item); // Farbe geändert → komplett übernehmen
+      // Modell oder Farbe vom Curse verändert → komplett mit echten Farben speichern
+      filteredItems.push(item);
     }
   }
   return { filteredItems, keepHairGroups };
