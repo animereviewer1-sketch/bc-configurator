@@ -2412,6 +2412,12 @@ function _saveCurseOutfitFlags() {
   // Vollständige CurseDB debounced speichern (27k Items, teuer)
   _debouncedSaveCurseDB();
 }
+// ── Gruppen-Overrides ────────────────────────────────────────
+let CURSE_GRUPPE_OVERRIDES = {};  // dbKey → string (manuell gesetzter Gruppe-Name)
+function _saveCurseGruppeOverrides() { idbSet('BC_CURSE_GRUPPE_v1', CURSE_GRUPPE_OVERRIDES); }
+function _getEffectiveGruppe(entry, dbKey) {
+  return CURSE_GRUPPE_OVERRIDES[dbKey] || entry.Gruppe || 'UNBEKANNT';
+}
 // ── Favoriten ────────────────────────────────────────────────
 let CURSE_FAVOURITES = new Set();
 function _saveCurseFavourites() { idbSet('BC_CURSE_FAV_v1', [...CURSE_FAVOURITES]); }
@@ -2583,9 +2589,20 @@ function _populateSlotFilter() {
   const sel = document.getElementById('slotFilter');
   if (!sel) return;
   const current = sel.value;
-  const slots = [...new Set(Object.values(CURSE_DB).map(e => e.Gruppe).filter(Boolean))].sort();
+  // Use effective gruppe (override wins)
+  const slots = [...new Set(
+    Object.entries(CURSE_DB).map(([k, e]) => _getEffectiveGruppe(e, k)).filter(Boolean)
+  )].sort((a, b) => {
+    if (a === 'UNBEKANNT') return -1;  // UNBEKANNT zuerst
+    if (b === 'UNBEKANNT') return 1;
+    return a.localeCompare(b);
+  });
+  const unknownCount = Object.entries(CURSE_DB).filter(([k,e]) => _getEffectiveGruppe(e,k) === 'UNBEKANNT').length;
   sel.innerHTML = '<option value="">Alle Slots</option>' +
-    slots.map(s => '<option value="' + s + '"' + (s === current ? ' selected' : '') + '>' + s + '</option>').join('');
+    slots.map(s => {
+      const label = s === 'UNBEKANNT' ? '⚠️ UNBEKANNT (' + unknownCount + ')' : s;
+      return '<option value="' + s + '"' + (s === current ? ' selected' : '') + '>' + label + '</option>';
+    }).join('');
 }
 
 function _updateCurseStats() {
@@ -2624,7 +2641,10 @@ function renderCurseTab() {
     return !CURSE_OUTFIT_FLAGS[k];
   });
   if (cacheOnly)   entries = entries.filter(e => !!e.IstLSCGCurse);
-  if (slotFilter)  entries = entries.filter(e => e.Gruppe === slotFilter);
+  if (slotFilter)  entries = entries.filter(e => {
+    const k2 = (e.Besitzer?.Nummer ?? '') + ':' + e.ItemName + ':' + e.CraftName;
+    return _getEffectiveGruppe(e, k2) === slotFilter;
+  });
   if (searchTerm)  entries = entries.filter(e =>
     e.CraftName?.toLowerCase().includes(searchTerm) ||
     e.ItemName?.toLowerCase().includes(searchTerm)  ||
@@ -2762,7 +2782,14 @@ function _renderCurseOwnerRows(ownerNum) {
       + '</div>'
       + '<div class="cg-name"><span class="cursor-detail-toggle" onclick="toggleCurseDetail(\'' + detId + '\',\'' + rowId + '\')">\u25B6</span>' + escHtml(entry.CraftName) + (echoTranslate(entry.CraftName) ? '<span style="font-size:.58rem;color:#a78bfa;margin-left:4px">(' + echoTranslate(entry.CraftName) + ')</span>' : '') + '</div>'
       + '<div class="cg-item">' + escHtml(entry.ItemName) + (echoTranslate(entry.ItemName) ? '<span style="font-size:.58rem;color:var(--text3);margin-left:4px">(' + echoTranslate(entry.ItemName) + ')</span>' : '') + '</div>'
-      + '<div class="cg-grp">' + escHtml(entry.Gruppe) + '</div>'
+      + (function(){
+          const _eg = _getEffectiveGruppe(entry, dbKey);
+          const _unk = _eg === 'UNBEKANNT';
+          const _ovr = !!CURSE_GRUPPE_OVERRIDES[dbKey];
+          return '<div class="cg-grp' + (_unk ? ' grp-unknown' : '') + '" onclick="_openCurseGruppeEditor(\'' + dbKey.replace(/'/g,"&apos;") + '\',this)" title="Klicken zum Bearbeiten">'
+            + escHtml(_eg) + (_unk ? ' <span class="grp-edit-hint">✏️</span>' : (_ovr ? ' <span class="grp-edit-hint" title="Manuell gesetzt">📌</span>' : ''))
+            + '</div>';
+        })()
       + '<div class="cg-flags">'
       + (isCursed ? '<span class="curse-detail-badge cursed">\uD83D\uDD2E</span>' : '')
       + (entry.Private ? '<span class="curse-detail-badge">\uD83D\uDD12</span>' : '')
@@ -3151,6 +3178,71 @@ function curseImport() {
   inp.click();
 }
 
+// ── Gruppen-Editor ───────────────────────────────────────────
+function _openCurseGruppeEditor(dbKey, cellEl) {
+  // Falls schon ein Editor offen ist, schließen
+  if (cellEl.querySelector('.grp-editor')) { _closeGruppeEditor(dbKey, cellEl); return; }
+
+  const entry = CURSE_DB[dbKey];
+  if (!entry) return;
+  const current = _getEffectiveGruppe(entry, dbKey);
+
+  // Alle bekannten Gruppen als Vorschlagsliste (ohne UNBEKANNT)
+  const knownGroups = [...new Set(
+    Object.entries(CURSE_DB).map(([k,e]) => _getEffectiveGruppe(e,k)).filter(g => g && g !== 'UNBEKANNT')
+  )].sort();
+
+  cellEl.innerHTML =
+    '<div class="grp-editor" onclick="event.stopPropagation()">'
+    + '<select id="grp-sel-' + dbKey.replace(/[^a-z0-9]/gi,'_') + '" onchange="this.nextElementSibling.value=this.value" style="margin-bottom:2px">'
+    + '<option value="">— Gruppe wählen —</option>'
+    + knownGroups.map(g => '<option value="' + escHtml(g) + '"' + (g === current ? ' selected' : '') + '>' + escHtml(g) + '</option>').join('')
+    + '</select>'
+    + '<input type="text" placeholder="Oder eigene Gruppe eingeben..." value="' + (current !== 'UNBEKANNT' ? escHtml(current) : '') + '" />'
+    + '<div class="grp-editor-btns">'
+    + '<button class="grp-save-btn" onclick="_saveGruppeFromEditor(\'' + dbKey.replace(/'/g,"&apos;") + '\',this.closest(\'.cg-grp\'))">✓ Speichern</button>'
+    + '<button class="grp-cancel-btn" onclick="_closeGruppeEditor(\'' + dbKey.replace(/'/g,"&apos;") + '\',this.closest(\'.cg-grp\'))">✕</button>'
+    + '</div>'
+    + '</div>';
+}
+
+function _saveGruppeFromEditor(dbKey, cellEl) {
+  const editor = cellEl.querySelector('.grp-editor');
+  if (!editor) return;
+  const input  = editor.querySelector('input');
+  const value  = (input?.value || '').trim();
+  if (!value) { showStatus('⚠️ Bitte eine Gruppe eingeben', 'info'); return; }
+  setCurseGruppe(dbKey, value, cellEl);
+}
+
+function _closeGruppeEditor(dbKey, cellEl) {
+  const entry = CURSE_DB[dbKey];
+  if (!entry) return;
+  const eg  = _getEffectiveGruppe(entry, dbKey);
+  const unk = eg === 'UNBEKANNT';
+  const ovr = !!CURSE_GRUPPE_OVERRIDES[dbKey];
+  cellEl.className = 'cg-grp' + (unk ? ' grp-unknown' : '');
+  cellEl.innerHTML = escHtml(eg) + (unk ? ' <span class="grp-edit-hint">✏️</span>' : (ovr ? ' <span class="grp-edit-hint" title="Manuell gesetzt">📌</span>' : ''));
+}
+
+function setCurseGruppe(dbKey, value, cellEl) {
+  if (value && value !== 'UNBEKANNT') {
+    CURSE_GRUPPE_OVERRIDES[dbKey] = value;
+  } else {
+    delete CURSE_GRUPPE_OVERRIDES[dbKey];
+  }
+  _saveCurseGruppeOverrides();
+  // DOM aktualisieren
+  if (cellEl) {
+    const unk = value === 'UNBEKANNT' || !value;
+    const ovr = !unk;
+    cellEl.className = 'cg-grp' + (unk ? ' grp-unknown' : '');
+    cellEl.innerHTML = escHtml(value || 'UNBEKANNT') + (unk ? ' <span class="grp-edit-hint">✏️</span>' : (ovr ? ' <span class="grp-edit-hint" title="Manuell gesetzt">📌</span>' : ''));
+  }
+  _populateSlotFilter();
+  showStatus('✅ Gruppe gesetzt: ' + value, 'success');
+}
+
 function curseResetNeuTimestamps() {
   const entries = Object.values(CURSE_DB);
   if (!entries.length) { showStatus('ℹ️ Keine Einträge vorhanden', 'info'); return; }
@@ -3218,6 +3310,9 @@ function curseClearAndScan() {
     // Fallback: separaten Outfit-Key prüfen (für ältere gespeicherte Daten)
     const outfitFlags = await idbGet('BC_CURSE_OUTFIT_v1');
     if (outfitFlags && typeof outfitFlags === 'object') Object.assign(CURSE_OUTFIT_FLAGS, outfitFlags);
+    // Gruppen-Overrides laden
+    const gruppeOverrides = await idbGet('BC_CURSE_GRUPPE_v1');
+    if (gruppeOverrides && typeof gruppeOverrides === 'object') Object.assign(CURSE_GRUPPE_OVERRIDES, gruppeOverrides);
     // Erst rendern nachdem ALLE Daten geladen sind
     if (document.getElementById('curseBody') && Object.keys(CURSE_DB).length) renderCurseTab();
   } catch(e) { console.warn('[BCK-Popup] Curse IDB load error:', e); }
