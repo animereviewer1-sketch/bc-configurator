@@ -2932,7 +2932,11 @@ function wearCurse(dbKey, targetNum) {
   if (!_connected) { showStatus('❌ Nicht verbunden', 'error'); return; }
   const entry = CURSE_DB[dbKey] ?? null;
   if (!entry) { showStatus('❌ Eintrag nicht in DB: ' + dbKey, 'error'); return; }
-  bcSend({ type: 'WEAR_CURSE', dbKey, targetNum, entry });
+  // Gruppen-Override anwenden, damit BC die korrekte Gruppe bekommt
+  const effectiveEntry = CURSE_GRUPPE_OVERRIDES[dbKey]
+    ? { ...entry, Gruppe: CURSE_GRUPPE_OVERRIDES[dbKey] }
+    : entry;
+  bcSend({ type: 'WEAR_CURSE', dbKey, targetNum, entry: effectiveEntry });
   showStatus('⏳ Curse wird angelegt...', 'info');
 }
 
