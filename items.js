@@ -2133,7 +2133,24 @@ function captureProfileScreenshot(pname) {
   if (!_connected) { showStatus('❌ Nicht verbunden mit BC', 'error'); return; }
   const reqId = 'ss_' + Date.now();
   _pendingScreenshot[reqId] = name;
-  bcSend({ type: 'CAPTURE_SCREENSHOT', reqId });
+
+  // Send via EXEC so it works with any loader.js version (no new message type needed).
+  // rAF ensures we read the canvas buffer during an active render frame.
+  const code = '(function(){'
+    + 'requestAnimationFrame(function(){'
+    + 'try{'
+    + 'var _cv=Array.from(document.querySelectorAll("canvas")).reduce(function(a,b){return a.width*a.height>=b.width*b.height?a:b;});'
+    + 'var _tc=document.createElement("canvas");_tc.width=500;_tc.height=1000;'
+    + '_tc.getContext("2d",{willReadFrequently:true}).drawImage(_cv,250,0,500,1000,0,0,500,1000);'
+    + 'var _d=_tc.toDataURL("image/jpeg",0.92);'
+    + 'window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"SCREENSHOT_DATA",reqId:' + JSON.stringify(reqId) + ',data:_d},"*");'
+    + '}catch(e){'
+    + 'window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"SCREENSHOT_DATA",reqId:' + JSON.stringify(reqId) + ',err:e.message},"*");'
+    + '}'
+    + '});'
+    + '})();';
+
+  bcSend({ type: 'EXEC', code }, true); // silent=true, eigene Statusmeldung folgt
   showStatus('📸 Screenshot wird aufgenommen…', 'info');
 }
 
