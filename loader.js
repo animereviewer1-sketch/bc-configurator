@@ -789,13 +789,12 @@ window.CurseScanner = (() => {
             const _ALWAYS_SKIP = new Set([
               'Eyes','Eyes2','EyesColor','EyesColor2',
               'Blush','Emoticon','Fluids','ExpressionFull',
-              // Pure colour groups – never capture (popup baseline handles colour via item.Color)
-              'HairColor','HairColorAccessory','HairColorUnder',
             ]);
             const _BODY_PROP_GROUPS = new Set([
               'BodyUpper','BodyLower','BodyMarkings','Head','Mouth',
             ]);
             // Hair colour overlay groups – include only if curse wrote props or explicit Color
+            // (not in _ALWAYS_SKIP so this check actually runs)
             const _HAIR_COLOR_GROUPS = new Set([
               'HairColor','HairColorAccessory','HairColorUnder',
             ]);
