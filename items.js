@@ -2463,6 +2463,9 @@ function _handleCurseData(data) {
   CURSE_DB         = data.database    ?? {};
   CURSE_LSCG       = data.lscgTable   ?? {};
   CURSE_CACHE_LSCG = data.lscgCache   ?? {};
+  // Stamp every scanned entry with the current time (enables "Neu within 1h" logic)
+  const _now = Date.now();
+  Object.values(CURSE_DB).forEach(e => { e.ZuletztGescannt = _now; });
   _updateCurseStats();
   _populateSlotFilter();
   if (_activeTab === 'curse') renderCurseTab();
@@ -2490,8 +2493,8 @@ function _handleCurseData(data) {
 
 
 // ── CURSE FILTER STATE ───────────────────────────────
-const _curseActiveFilters = new Set();  // 'neu' | 'cursed' | 'fav'
-let _curseOutfitFilter = null;          // null | 'outfit' | 'no-outfit'
+// Multi-select; mutual exclusion: outfit ↔ {neu, no-outfit}
+const _curseActiveFilters = new Set();  // 'neu' | 'cursed' | 'fav' | 'outfit' | 'no-outfit'
 let _pendingExport = false;
 let _curseEntryMap = {};    // rowId → dbKey, for safe onclick
 let _curseOwnerData = {};   // ownerNum → { name, num, items[] } — für Lazy Row Rendering
@@ -2522,24 +2525,22 @@ function toggleCurseFilterPanel(e) {
   }
 }
 
+// Neu = scanned within the last hour
+function _isNeu(entry) {
+  return !!(entry.ZuletztGescannt && Date.now() - entry.ZuletztGescannt < 3600000);
+}
+
 function toggleCurseFilter(key) {
-  if (key === 'outfit' || key === 'no-outfit') {
-    // mutual exclusive pair
-    if (_curseOutfitFilter === key) {
-      _curseOutfitFilter = null;
-    } else {
-      _curseOutfitFilter = key;
-      // selecting 'outfit' removes 'neu' (neu implies no outfit — contradictory)
-      if (key === 'outfit') _curseActiveFilters.delete('neu');
-    }
+  if (_curseActiveFilters.has(key)) {
+    _curseActiveFilters.delete(key);
   } else {
-    // multi-select: neu, cursed, fav
-    if (_curseActiveFilters.has(key)) {
-      _curseActiveFilters.delete(key);
-    } else {
-      _curseActiveFilters.add(key);
-      // selecting 'neu' deactivates 'outfit' filter (neu = no outfit, contradicts outfit)
-      if (key === 'neu') _curseOutfitFilter = null;
+    _curseActiveFilters.add(key);
+    // Mutual exclusion: outfit ↔ {neu, no-outfit}
+    if (key === 'outfit') {
+      _curseActiveFilters.delete('neu');
+      _curseActiveFilters.delete('no-outfit');
+    } else if (key === 'neu' || key === 'no-outfit') {
+      _curseActiveFilters.delete('outfit');
     }
   }
   _syncCurseFilterUI();
@@ -2547,25 +2548,28 @@ function toggleCurseFilter(key) {
 }
 
 function _syncCurseFilterUI() {
-  // Sync checkboxes
-  const keys = ['neu','cursed','fav'];
-  keys.forEach(k => {
-    const el = document.getElementById('fcb-' + k);
-    if (el) el.checked = _curseActiveFilters.has(k);
+  const hasOutfit   = _curseActiveFilters.has('outfit');
+  const hasNeuOrNO  = _curseActiveFilters.has('neu') || _curseActiveFilters.has('no-outfit');
+
+  ['neu','cursed','fav','outfit','no-outfit'].forEach(k => {
+    const cb = document.getElementById('fcb-' + k);
+    if (cb) cb.checked = _curseActiveFilters.has(k);
+    // Grey out mutually exclusive options (not the checked ones)
+    const row = document.getElementById('cfpl-' + k);
+    if (row) {
+      let disabled = false;
+      if (k === 'outfit'   && hasNeuOrNO && !hasOutfit) disabled = true;
+      if ((k === 'neu' || k === 'no-outfit') && hasOutfit) disabled = true;
+      row.classList.toggle('cfp-disabled', disabled);
+    }
   });
-  ['outfit','no-outfit'].forEach(k => {
-    const el = document.getElementById('fcb-' + k);
-    if (el) el.checked = _curseOutfitFilter === k;
-  });
-  // Update badge count on button
-  const total = _curseActiveFilters.size + (_curseOutfitFilter ? 1 : 0);
+
+  // Badge count
+  const total   = _curseActiveFilters.size;
   const countEl = document.getElementById('cfpCount');
   const btnEl   = document.getElementById('cfpBtn');
-  if (countEl) {
-    countEl.textContent = total;
-    countEl.style.display = total > 0 ? '' : 'none';
-  }
-  if (btnEl) btnEl.classList.toggle('active', total > 0);
+  if (countEl) { countEl.textContent = total; countEl.style.display = total > 0 ? '' : 'none'; }
+  if (btnEl)   btnEl.classList.toggle('active', total > 0);
 }
 
 function _populateSlotFilter() {
@@ -2598,31 +2602,20 @@ function renderCurseTab() {
   const cacheOnly  = document.getElementById('fc-cache')?.classList.contains('on') ?? false;
 
   let entries = Object.values(CURSE_DB);
-  if (_curseActiveFilters.has('cursed')) entries = entries.filter(e => !!e.IstCursed);
-  if (_curseActiveFilters.has('fav')) {
-    entries = entries.filter(e => {
-      const k = (e.Besitzer?.Nummer ?? '') + ':' + e.ItemName + ':' + e.CraftName;
-      return CURSE_FAVOURITES.has(k);
-    });
-  }
-  if (_curseActiveFilters.has('neu')) {
-    entries = entries.filter(e => {
-      const k = (e.Besitzer?.Nummer ?? '') + ':' + e.ItemName + ':' + e.CraftName;
-      return !CURSE_OUTFIT_FLAGS[k];
-    });
-  }
-  if (_curseOutfitFilter === 'outfit') {
-    entries = entries.filter(e => {
-      const k = (e.Besitzer?.Nummer ?? '') + ':' + e.ItemName + ':' + e.CraftName;
-      return !!CURSE_OUTFIT_FLAGS[k];
-    });
-  }
-  if (_curseOutfitFilter === 'no-outfit') {
-    entries = entries.filter(e => {
-      const k = (e.Besitzer?.Nummer ?? '') + ':' + e.ItemName + ':' + e.CraftName;
-      return !CURSE_OUTFIT_FLAGS[k];
-    });
-  }
+  if (_curseActiveFilters.has('cursed'))   entries = entries.filter(e => !!e.IstCursed);
+  if (_curseActiveFilters.has('fav'))      entries = entries.filter(e => {
+    const k = (e.Besitzer?.Nummer ?? '') + ':' + e.ItemName + ':' + e.CraftName;
+    return CURSE_FAVOURITES.has(k);
+  });
+  if (_curseActiveFilters.has('neu'))      entries = entries.filter(e => _isNeu(e));
+  if (_curseActiveFilters.has('outfit'))   entries = entries.filter(e => {
+    const k = (e.Besitzer?.Nummer ?? '') + ':' + e.ItemName + ':' + e.CraftName;
+    return !!CURSE_OUTFIT_FLAGS[k];
+  });
+  if (_curseActiveFilters.has('no-outfit')) entries = entries.filter(e => {
+    const k = (e.Besitzer?.Nummer ?? '') + ':' + e.ItemName + ':' + e.CraftName;
+    return !CURSE_OUTFIT_FLAGS[k];
+  });
   if (cacheOnly)   entries = entries.filter(e => !!e.IstLSCGCurse);
   if (slotFilter)  entries = entries.filter(e => e.Gruppe === slotFilter);
   if (searchTerm)  entries = entries.filter(e =>
@@ -2672,6 +2665,7 @@ function renderCurseTab() {
       '<div class="cg-hdr">Flags</div>'+
       '<div class="cg-hdr">LSCG</div>'+
       '<div class="cg-hdr center">Cache</div>'+
+      '<div class="cg-hdr center">Neu</div>'+
       '<div class="cg-hdr"></div>'+
       '<div class="cg-hdr">Kommentar</div>'+
       '<div class="cg-hdr right">Aktionen</div>';
@@ -2740,7 +2734,7 @@ function _renderCurseOwnerRows(ownerNum) {
     const isCursed = entry.IstCursed;
     const isOutfit = !!CURSE_OUTFIT_FLAGS[dbKey];
     const isFav    = CURSE_FAVOURITES.has(dbKey);
-    const isNeu    = !isOutfit;
+    const isNeu    = _isNeu(entry);
 
     _curseEntryMap[rowId] = dbKey;
 
@@ -2763,7 +2757,6 @@ function _renderCurseOwnerRows(ownerNum) {
       + '<div class="cg-item">' + escHtml(entry.ItemName) + (echoTranslate(entry.ItemName) ? '<span style="font-size:.58rem;color:var(--text3);margin-left:4px">(' + echoTranslate(entry.ItemName) + ')</span>' : '') + '</div>'
       + '<div class="cg-grp">' + escHtml(entry.Gruppe) + '</div>'
       + '<div class="cg-flags">'
-      + (isNeu ? '<span class="curse-detail-badge neu">Neu</span>' : '')
       + (isCursed ? '<span class="curse-detail-badge cursed">\uD83D\uDD2E</span>' : '')
       + (entry.Private ? '<span class="curse-detail-badge">\uD83D\uDD12</span>' : '')
       + (entry.Property ? '<span class="curse-detail-badge">' + escHtml(entry.Property) + '</span>' : '')
@@ -2772,6 +2765,7 @@ function _renderCurseOwnerRows(ownerNum) {
       + '<div class="cg-cache">'
       + (isLSCG ? '<span title="' + (entry.LSCGAusCache ? 'Aus LSCG-Cache' : 'Live-Daten') + '" style="font-size:1rem;cursor:default">' + (entry.LSCGAusCache ? '\u2705' : '\uD83D\uDFE2') + '</span>' : '<span style="color:var(--text3)">\u2013</span>')
       + '</div>'
+      + '<div class="cg-neu">' + (isNeu ? '<span class="neu-badge">Neu</span>' : '') + '</div>'
       + '<div class="cg-spacer"></div>'
       + '<div class="cg-comment"><textarea class="curse-comment-input" placeholder="Notiz..." data-rowid="' + rowId + '" onchange="saveCurseCommentById(this.dataset.rowid,this.value)">' + escHtml(comment) + '</textarea></div>'
       + '<div class="cg-actions">'
@@ -2863,20 +2857,6 @@ function toggleCurseOutfitFlag(dbKey, cellEl) {
     const row = cellEl.closest('.cg-row');
     if (row) {
       row.classList.toggle('outfit-flagged', isSet);
-      // Update Neu badge
-      const flagsDiv = row.querySelector('.cg-flags');
-      if (flagsDiv) {
-        let neuBadge = flagsDiv.querySelector('.curse-detail-badge.neu');
-        if (!isSet && !neuBadge) {
-          // Add Neu badge
-          const nb = document.createElement('span');
-          nb.className = 'curse-detail-badge neu';
-          nb.textContent = 'Neu';
-          flagsDiv.insertBefore(nb, flagsDiv.firstChild);
-        } else if (isSet && neuBadge) {
-          neuBadge.remove();
-        }
-      }
     }
     // Owner-Block Badge aktualisieren
     const block = cellEl.closest('.curse-owner-block');

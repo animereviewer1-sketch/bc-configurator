@@ -1027,9 +1027,9 @@ textarea.outfit-code { width: 100%; min-height: 210px; background: rgba(0,0,0,0.
 
 #curseBody {
   display: grid;
-  grid-template-columns: 28px 72px 140px 130px 90px 65px 90px 40px 1fr 200px auto;
+  grid-template-columns: 28px 72px 140px 130px 90px 65px 90px 40px 50px 1fr 200px auto;
   align-content: start;
-  min-width: 1100px;
+  min-width: 1150px;
   width: 100%;
   padding-top: 8px;
 }
@@ -1037,8 +1037,8 @@ textarea.outfit-code { width: 100%; min-height: 210px; background: rgba(0,0,0,0.
 /* Column header row — child of #curseColHdr (outside scroll) */
 .curse-col-headers {
   display: grid;
-  grid-template-columns: 28px 72px 140px 130px 90px 65px 90px 40px 1fr 200px auto;
-  min-width: 1100px;
+  grid-template-columns: 28px 72px 140px 130px 90px 65px 90px 40px 50px 1fr 200px auto;
+  min-width: 1150px;
   width: 100%;
   padding: 6px 0 5px;
 }
@@ -1122,6 +1122,14 @@ textarea.outfit-code { width: 100%; min-height: 210px; background: rgba(0,0,0,0.
 .cg-flags { white-space: nowrap !important; }
 .cg-lscg  { color: #34d399; font-size: 0.66rem; white-space: nowrap; }
 .cg-cache { text-align: center !important; white-space: nowrap; }
+.cg-neu   { text-align: center !important; white-space: nowrap; padding: 9px 4px !important; }
+.cg-neu .neu-badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  background: rgba(99,102,241,0.15); color: #a5b4fc;
+  border: 1px solid rgba(99,102,241,0.3);
+  border-radius: 4px; font-size: .58rem; font-weight: 700;
+  padding: 1px 5px; white-space: nowrap;
+}
 .cg-spacer { white-space: normal; }
 .cg-comment { white-space: normal !important; overflow: visible !important; padding: 8px 8px !important; }
 .cg-actions { white-space: nowrap !important; overflow: visible !important; justify-self: end; padding-right: 12px !important; }
@@ -1214,7 +1222,7 @@ textarea.outfit-code { width: 100%; min-height: 210px; background: rgba(0,0,0,0.
 }
 .curse-detail-badge.lscg { background: rgba(52,211,153,0.08); color: #34d399; border-color: rgba(52,211,153,0.15); }
 .curse-detail-badge.cursed { background: var(--accent-soft, oklch(72% 0.13 58 / 0.1)); color: var(--accent-text, oklch(82% 0.1 62)); border-color: var(--accent-line, oklch(72% 0.13 58 / 0.2)); }
-.curse-detail-badge.neu { background: rgba(99,102,241,0.1); color: #a5b4fc; border-color: rgba(99,102,241,0.25); font-size: .6rem; }
+/* .curse-detail-badge.neu — removed: Neu is now its own cg-neu column */
 
 /* ── Filter Dropdown ─────────────────────────── */
 .curse-filter-btn {
@@ -1252,7 +1260,7 @@ textarea.outfit-code { width: 100%; min-height: 210px; background: rgba(0,0,0,0.
 }
 .cfp-row:hover { background: rgba(255,255,255,0.04); }
 .cfp-row input[type=checkbox] { accent-color: var(--accent-text, oklch(82% 0.1 62)); width: 13px; height: 13px; cursor: pointer; flex-shrink: 0; }
-.cfp-row.outfit-row input[type=checkbox] { accent-color: #34d399; }
+.cfp-row.cfp-disabled { opacity: 0.38; pointer-events: none; }
 .cfp-wrap { position: relative; }
 
 /* ── Misc ───────────────────────────────────── */
@@ -2250,16 +2258,11 @@ document.write('<scr'+'ipt src="items.js?_='+_cbv+'"><\/scr'+'ipt>');
       </button>
       <div class="curse-filter-panel" id="cfpPanel">
         <div class="cfp-section">
-          <div class="cfp-label">Status</div>
-          <label class="cfp-row"><input type="checkbox" id="fcb-neu"    onchange="toggleCurseFilter('neu')"    > 🆕 Neu (kein Outfit)</label>
-          <label class="cfp-row"><input type="checkbox" id="fcb-cursed" onchange="toggleCurseFilter('cursed')" > 🔮 Cursed</label>
-          <label class="cfp-row"><input type="checkbox" id="fcb-fav"    onchange="toggleCurseFilter('fav')"    > ⭐ Favoriten</label>
-        </div>
-        <div class="cfp-divider"></div>
-        <div class="cfp-section">
-          <div class="cfp-label">Outfit</div>
-          <label class="cfp-row outfit-row"><input type="checkbox" id="fcb-outfit"    onchange="toggleCurseFilter('outfit')"    > 👗 Hat Outfit</label>
-          <label class="cfp-row outfit-row"><input type="checkbox" id="fcb-no-outfit" onchange="toggleCurseFilter('no-outfit')" > ☐ Kein Outfit</label>
+          <label class="cfp-row" id="cfpl-neu"     ><input type="checkbox" id="fcb-neu"      onchange="toggleCurseFilter('neu')"      > 🆕 Neu</label>
+          <label class="cfp-row" id="cfpl-cursed"  ><input type="checkbox" id="fcb-cursed"   onchange="toggleCurseFilter('cursed')"   > 🔮 Cursed</label>
+          <label class="cfp-row" id="cfpl-fav"     ><input type="checkbox" id="fcb-fav"      onchange="toggleCurseFilter('fav')"      > ⭐ Favoriten</label>
+          <label class="cfp-row" id="cfpl-outfit"  ><input type="checkbox" id="fcb-outfit"   onchange="toggleCurseFilter('outfit')"   > 👗 Outfit</label>
+          <label class="cfp-row" id="cfpl-no-outfit"><input type="checkbox" id="fcb-no-outfit" onchange="toggleCurseFilter('no-outfit')"> ☐ Kein Outfit</label>
         </div>
       </div>
     </div>
