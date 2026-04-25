@@ -2755,6 +2755,7 @@ function _renderCurseOwnerRows(ownerNum) {
     const rowId   = 'cr_' + owner.num + '_' + rowIdx;
     const detId   = 'cd_' + owner.num + '_' + rowIdx;
     const comment = CURSE_COMMENTS[dbKey] || '';
+    const isLSCG   = entry.IstLSCGCurse;
     const isCursed = entry.IstCursed;
     const isOutfit = !!CURSE_OUTFIT_FLAGS[dbKey];
     const isFav    = CURSE_FAVOURITES.has(dbKey);
