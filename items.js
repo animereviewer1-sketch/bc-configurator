@@ -3361,10 +3361,6 @@ function _doSaveProfile(items, defaultName) {
   try {
     _saveProfiles();
     showStatus('✅ Profil "' + trimmed + '" gespeichert (' + items.length + ' Items) – nutzbar in Bot-Triggern!', 'success');
-    // Auto-Screenshot: Charakter sieht gerade so aus → sofort aufnehmen
-    if (_connected) {
-      setTimeout(() => captureProfileScreenshot(trimmed), 600);
-    }
   } catch(e) { showStatus('❌ Speichern fehlgeschlagen: ' + e.message, 'error'); }
 }
 
