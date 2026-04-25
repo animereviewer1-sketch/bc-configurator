@@ -804,6 +804,9 @@ textarea.outfit-code { width: 100%; min-height: 210px; background: rgba(0,0,0,0.
 .profile-owner-name { font-size: 0.82rem; font-weight: 800; color: var(--text); flex: 1; }
 .profile-owner-count { font-size: 0.64rem; background: oklch(72% 0.13 58 / 0.15); color: oklch(82% 0.1 62); padding: 2px 8px; border-radius: 99px; font-weight: 800; border: 1px solid oklch(72% 0.13 58 / 0.28); }
 .profile-owner-chevron { color: var(--text3); font-size: 0.7rem; transition: transform 0.2s; }
+.profile-alt-btn { background: transparent; border: 1px solid rgba(255,255,255,0.12); border-radius: 6px; color: var(--text3); font-size: 0.62rem; padding: 2px 7px; cursor: pointer; white-space: nowrap; transition: all .15s; }
+.profile-alt-btn:hover { border-color: rgba(230,80,80,0.5); color: #e55; }
+.profile-alt-btn.active { border-color: rgba(230,80,80,0.6); color: #e55; background: rgba(230,80,80,0.08); }
 .profile-owner-block.open .profile-owner-chevron { transform: rotate(90deg); }
 .profile-owner-rows { display: none; }
 .profile-owner-block.open .profile-owner-rows { display: block; }
@@ -2588,6 +2591,7 @@ document.write('<scr'+'ipt src="items.js?_='+_cbv+'"><\/scr'+'ipt>');
     <button class="btn btn-green" onclick="curseClearAndScan()" title="Alte Einträge löschen und frisch scannen">🔄 Neu scannen</button>
     <button class="btn btn-primary" id="csAutoScanBtn" onclick="toggleAutoCurseScan()" title="Automatisch alle 30s scannen">⏰ Auto-Scan</button>
     <button class="btn btn-primary" onclick="curseAutoMarkOutfit()" title="Kommentare mit 'outfit' automatisch als Outfit markieren">📝 Auto-Mark</button>
+    <button class="btn btn-red" onclick="clearAllOutfitFlags()" title="Alle Outfit-Tags von allen Items entfernen – zum Neu-Anfangen">🗑️ Outfit-Tags leeren</button>
     <button class="btn btn-red" onclick="curseClear()" title="Alle gespeicherten Einträge löschen">🗑️ Leeren</button>
     <div class="curse-stats">
       <div class="curse-stat">Crafts: <span id="csStat-total">0</span></div>
