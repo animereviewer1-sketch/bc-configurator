@@ -2196,6 +2196,21 @@ function removeDefaultHairGroup(gn) {
   showStatus('🗑️ Haargruppe entfernt: ' + gn, 'info');
 }
 
+function toggleDefaultHairPanel() {
+  const el = document.getElementById('defaultHairPanel');
+  if (!el) return;
+  const open = el.style.display !== 'none';
+  el.style.display = open ? 'none' : 'flex';
+}
+
+function clearDefaultHair() {
+  if (!confirm('Alle Standard-Haare zurücksetzen?')) return;
+  DEFAULT_HAIR = {};
+  _saveDefaultHairIDB();
+  _renderDefaultHairList();
+  showStatus('🗑️ Standard-Haare geleert', 'info');
+}
+
 // Scannt aktuellen Charakter und speichert Haargruppen als Baseline
 function captureDefaultHair() {
   if (!_connected) { showStatus('❌ Nicht verbunden mit BC', 'error'); return; }
