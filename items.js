@@ -2770,10 +2770,10 @@ function _renderCurseOwnerRows(ownerNum) {
     tr.className = 'cg-row' + (isFav ? ' fav' : '') + (isOutfit ? ' outfit-flagged' : '');
     tr.id = rowId;
     tr.innerHTML =
-      '<div class="cg-fav" onclick="toggleCurseFavourite(\'' + dbKey.replace(/'/g,"&apos;") + '\',this)" title="Favorit">'
+      '<div class="cg-fav" data-dbkey="' + escHtml(dbKey) + '" onclick="toggleCurseFavourite(this.dataset.dbkey,this)" title="Favorit">'
       + '<button class="curse-fav-btn' + (isFav ? ' fav' : '') + '" style="pointer-events:none">\u2B50</button>'
       + '</div>'
-      + '<div class="cg-outfit" onclick="toggleCurseOutfitFlag(\'' + dbKey.replace(/'/g,"&apos;") + '\',this)" title="Outfit-Markierung">'
+      + '<div class="cg-outfit" data-dbkey="' + escHtml(dbKey) + '" onclick="toggleCurseOutfitFlag(this.dataset.dbkey,this)" title="Outfit-Markierung">'
       + '<button class="curse-outfit-btn' + (isOutfit ? ' on' : '') + '" style="pointer-events:none">' + (isOutfit ? '\uD83D\uDC57 Outfit' : '+ Outfit') + '</button>'
       + '</div>'
       + '<div class="cg-name"><span class="cursor-detail-toggle" onclick="toggleCurseDetail(\'' + detId + '\',\'' + rowId + '\')">\u25B6</span>' + escHtml(entry.CraftName) + (echoTranslate(entry.CraftName) ? '<span style="font-size:.58rem;color:#a78bfa;margin-left:4px">(' + echoTranslate(entry.CraftName) + ')</span>' : '') + '</div>'
@@ -2793,7 +2793,7 @@ function _renderCurseOwnerRows(ownerNum) {
       + '<button class="curse-apply-btn" data-rid="' + rowId + '" data-tgt="" onclick="wearCurseByData(this)" title="Auf mich anwenden">\uD83D\uDC64</button>'
       + (_selectedMemberNum ? '<button class="curse-apply-btn other" data-rid="' + rowId + '" data-tgt="' + _selectedMemberNum + '" onclick="wearCurseByData(this)" title="Auf #' + _selectedMemberNum + '">\uD83D\uDC65 #' + _selectedMemberNum + '</button>' : '')
       + '<button data-rid="' + rowId + '" onclick="curseSaveAsProfile(this.dataset.rid)" style="background:rgba(139,92,246,0.12);border:1px solid rgba(139,92,246,0.3);color:#a78bfa;cursor:pointer;font-size:.72rem;padding:2px 6px;border-radius:4px;margin-left:2px" title="Als Outfit-Profil speichern">\uD83D\uDCBE Profil</button>'
-      + '<button onclick="deleteCurseEntry(\'' + dbKey.replace(/'/g,"&apos;") + '\')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.8rem;padding:2px 5px;margin-left:2px" title="L\u00f6schen">\u2715</button>'
+      + '<button data-dbkey="' + escHtml(dbKey) + '" onclick="deleteCurseEntry(this.dataset.dbkey)" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.8rem;padding:2px 5px;margin-left:2px" title="L\u00f6schen">\u2715</button>'
       + '</div>';
 
     frag.appendChild(tr);
