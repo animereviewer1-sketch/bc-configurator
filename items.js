@@ -2144,7 +2144,7 @@ function renderProfileList() {
     return '<div class="profile-owner-block' + ((wasOpen !== false) ? ' open' : '') + '" id="' + blockId + '">'
       + '<div class="profile-owner-hdr" onclick="document.getElementById(\'' + blockId + '\').classList.toggle(\'open\')">'
       + '<span class="profile-owner-name">' + _ownerLabel(owner) + '</span>'
-      + '<button class="profile-alt-btn' + (isAltOwner ? ' active' : '') + '" onclick="event.stopPropagation();toggleProfileAltOwner(\'' + escAttr(owner) + '\')" title="Als Alt/Veraltet markieren">' + (isAltOwner ? '🔴 Alt' : '🔘 Alt') + '</button>'
+      + '<button class="profile-alt-btn' + (isAltOwner ? ' active' : '') + '" onclick="event.stopPropagation();toggleProfileAltOwner(\'' + owner.replace(/\\/g,'\\\\').replace(/'/g,"\\'") + '\')" title="Als Alt/Veraltet markieren – Name bekommt (old) Markierung">' + (isAltOwner ? '🔴 (old)' : '🔘 (old)') + '</button>'
       + '<span class="profile-owner-count">' + profiles.length + '</span>'
       + '<span class="profile-owner-chevron">▶</span>'
       + '</div>'
