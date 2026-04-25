@@ -802,6 +802,12 @@ window.CurseScanner = (() => {
             const _HAIR_COLOR_GROUPS = new Set([
               'HairColor','HairColorAccessory','HairColorUnder',
             ]);
+            // Hair model groups – AllowNone===false in BC so they'd normally be skipped,
+            // but we MUST capture them: the curse stores its colour change directly on
+            // HairFront/HairBack, and Standard-Haare needs their default colour too.
+            const _HAIR_MODEL_GROUPS = new Set([
+              'HairFront','HairBack','HairSide','HairFront2','HairBack2',
+            ]);
 
             const _PROP_SKIP = new Set([
               'LockedBy','LockMemberNumber','RemoveTimer','Password','CombinationNumber',
@@ -819,6 +825,9 @@ window.CurseScanner = (() => {
                   const relevantKeys = Object.keys(prop).filter(k => !_PROP_SKIP.has(k));
                   return relevantKeys.length > 0;
                 }
+                // Hair model groups: always capture – AllowNone===false would otherwise skip them,
+                // but the curse colour is stored directly on these items.
+                if (_HAIR_MODEL_GROUPS.has(gn)) return true;
                 // Hair colour groups: include if Color is set (curse may have changed it)
                 if (_HAIR_COLOR_GROUPS.has(gn)) {
                   const prop = item.Property ?? {};
