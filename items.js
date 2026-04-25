@@ -485,6 +485,65 @@ function toggleProfileAltOwner(owner) {
   renderProfileList();
 }
 
+// Benennt ALLE Profile um, indem " (old)" an den Owner-Teil des Namens angehängt wird.
+// Danach erscheinen neue Profile desselben Chars als separate Einträge.
+function markAllProfilesOld() {
+  const keys = Object.keys(PROFILES);
+  if (!keys.length) { showStatus('ℹ️ Keine Profile vorhanden', 'info'); return; }
+
+  // Sammle alle die noch kein (old) haben
+  const toRename = [];
+  for (const name of keys) {
+    const parts = name.split(/\s*-\s+/);
+    if (parts.length < 2) continue; // kein Owner-Suffix → überspringen
+    const owner = parts[parts.length - 1].trim();
+    if (/\(old\)/i.test(owner)) continue; // bereits markiert
+    const prefix = parts.slice(0, -1).join(' - ');
+    const newName = prefix + ' - ' + owner + ' (old)';
+    toRename.push({ oldName: name, newName, oldOwner: owner, newOwner: owner + ' (old)' });
+  }
+
+  if (!toRename.length) { showStatus('ℹ️ Alle Profile bereits mit (old) markiert', 'info'); return; }
+  if (!confirm('Alle ' + toRename.length + ' Profile umbenennen?\n\nDer Owner-Name bekommt "(old)" als Zusatz. Neue Profile desselben Chars werden dann als separate Einträge gespeichert.')) return;
+
+  const ownersMoved = new Set();
+  for (const { oldName, newName, oldOwner, newOwner } of toRename) {
+    // Profil-Daten kopieren + Name intern aktualisieren
+    const profileData = PROFILES[oldName];
+    PROFILES[newName] = Object.assign({}, profileData, { name: newName });
+    delete PROFILES[oldName];
+
+    // Screenshot migrieren
+    if (PROFILE_SCREENSHOTS[oldName]) {
+      PROFILE_SCREENSHOTS[newName] = PROFILE_SCREENSHOTS[oldName];
+      delete PROFILE_SCREENSHOTS[oldName];
+    }
+
+    // Favorit migrieren
+    if (PROFILE_FAVS.has(oldName)) {
+      PROFILE_FAVS.delete(oldName);
+      PROFILE_FAVS.add(newName);
+    }
+
+    ownersMoved.add(oldOwner);
+  }
+
+  // Alt-Owner-Markierungen ebenfalls migrieren
+  for (const o of ownersMoved) {
+    if (PROFILE_ALT_OWNERS.has(o)) {
+      PROFILE_ALT_OWNERS.delete(o);
+      PROFILE_ALT_OWNERS.add(o + ' (old)');
+    }
+  }
+
+  _saveProfiles();
+  _saveProfileScreenshots();
+  try { localStorage.setItem('BC_PROFILE_FAVS_v1', JSON.stringify([...PROFILE_FAVS])); } catch {}
+  _saveProfileAltOwners();
+  renderProfileList();
+  showStatus('✅ ' + toRename.length + ' Profile → "(old)" im Namen eingetragen', 'success');
+}
+
 // ── Init ─────────────────────────────────────────────
 try {
   const fav = localStorage.getItem('BC_FAVORITES_v9');

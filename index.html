@@ -2473,6 +2473,7 @@ button { cursor: pointer; }
             <button class="btn btn-primary" id="profileSlideshowBtn" onclick="toggleProfileSlideshow()" title="Alle Profile ohne Screenshot im 5s-Takt ausführen und fotografieren" style="font-size:.65rem;padding:3px 9px">📸 Auto-Screenshot</button>
             <button class="btn btn-red" id="profileDupBtn" onclick="removeProfileDuplicates()" title="Doppelte Profile entfernen (erstes Vorkommen bleibt)" style="display:none;font-size:.65rem;padding:3px 9px">⚠️ Duplikate entfernen</button>
             <button class="btn btn-primary" onclick="toggleDefaultHairPanel()" title="Standard-Haare festlegen – wird beim Profil-Speichern als Baseline genutzt" style="font-size:.65rem;padding:3px 9px">💇 Standard-Haare</button>
+            <button class="btn btn-red" onclick="markAllProfilesOld()" title="Alle Profile umbenennen: Owner bekommt '(old)' im Namen – neue Profile werden danach als eigene Einträge gespeichert" style="font-size:.65rem;padding:3px 9px">🗂️ Alle → (old)</button>
           </div>
           <div style="display:flex;gap:6px;align-items:center">
             <input class="profile-name-input" id="profileNameInput" placeholder="Profilname..." maxlength="40" style="font-size:.72rem;padding:3px 7px">
