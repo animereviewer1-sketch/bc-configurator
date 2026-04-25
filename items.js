@@ -459,6 +459,11 @@ function _saveProfiles() {
   try { localStorage.setItem('BC_PROFILES_v11', JSON.stringify(PROFILES)); } catch(e) {}
 }
 
+// ── Profile Screenshots (base64, per Profil-Name) ─────
+let PROFILE_SCREENSHOTS = {};
+idbGet('BC_PROFILE_SCREENSHOTS_v1').then(d => { if (d && typeof d === 'object') Object.assign(PROFILE_SCREENSHOTS, d); });
+function _saveProfileScreenshots() { idbSet('BC_PROFILE_SCREENSHOTS_v1', PROFILE_SCREENSHOTS); }
+
 // ── Profile Favoriten ─────────────────────────────────
 let PROFILE_FAVS = new Set();
 try { PROFILE_FAVS = new Set(JSON.parse(localStorage.getItem('BC_PROFILE_FAVS_v1') || '[]')); } catch {}
@@ -1865,6 +1870,8 @@ function loadProfile(name) {
 function deleteProfile(name) {
   if (!confirm('Profil "' + name + '" löschen?')) return;
   delete PROFILES[name];
+  // Screenshot cleanup
+  if (PROFILE_SCREENSHOTS[name]) { delete PROFILE_SCREENSHOTS[name]; _saveProfileScreenshots(); }
     _saveProfiles();
   renderProfileList();
 }
@@ -2001,60 +2008,75 @@ function renderProfileList() {
   const html = Object.entries(byOwner).map(([owner, profiles]) => {
     const blockId = 'pb_' + owner.replace(/[^a-zA-Z0-9]/g, '_');
     const wasOpen = document.getElementById(blockId)?.classList.contains('open');
+    const stripNames = profiles.map(p => p.name); // for modal prev/next
 
-    const rows = profiles.map(({ name, idx }) => {
+    // Build the edit panel for whichever card (if any) is in edit mode
+    let editPanel = '';
+    const editEntry = profiles.find(({ name }) => _profileEditMode === name);
+    if (editEntry) {
+      const { name, idx } = editEntry;
+      const p = PROFILES[name];
+      const slotKey = 'p_' + idx;
+      const nameInput = '<div class="profile-edit-name-row">'
+        + '<label style="font-size:.62rem;color:var(--text3)">Profilname:</label>'
+        + '<input class="profile-edit-name-inp" id="pedit_name_' + idx + '" value="' + escHtml(name) + '" maxlength="60">'
+        + '<button class="profile-gear-btn" data-slot="' + slotKey + '" onclick="profileRename(this.dataset.slot)" title="Umbenennen">💾 Speichern</button>'
+        + '</div>';
+      const itemRows = (p.items || []).map((item, iIdx) => {
+        const hasCfg = !!CACHE[item.group]?.[item.asset];
+        return '<div class="profile-item-row" id="pirow_' + idx + '_' + iIdx + '">'
+          + '<span class="profile-item-asset">' + escHtml(item.asset) + '</span>'
+          + '<span class="profile-item-group">' + escHtml(item.group) + '</span>'
+          + (item.lock ? '<span class="profile-item-badge lock">🔒 ' + escHtml(item.lock) + '</span>' : '')
+          + (item.craft?.Name ? '<span class="profile-item-badge craft">✏️ ' + escHtml(item.craft.Name) + '</span>' : '')
+          + '<button class="profile-gear-btn' + (!hasCfg ? ' nocache' : '') + '" data-slot="' + slotKey + '" data-iidx="' + iIdx + '" onclick="profileOpenInItemManager(this.dataset.slot,this.dataset.iidx)" title="' + (hasCfg ? 'Im Item Manager öffnen' : 'Zur Gruppe navigieren (nicht im Cache)') + '">⚙️</button>'
+          + '<button class="profile-row-del" data-slot="' + slotKey + '" data-iidx="' + iIdx + '" onclick="profileDeleteItem(this.dataset.slot,this.dataset.iidx)" title="Item entfernen" style="margin-left:4px">✕</button>'
+          + '</div>';
+      }).join('');
+      editPanel = '<div class="pc-edit-panel"><div class="profile-item-list">' + nameInput + itemRows + '</div></div>';
+    }
+
+    // Build card strip
+    const cards = profiles.map(({ name, idx }) => {
       const p = PROFILES[name];
       const shortName = _profileShortName(name, owner);
-      const isEdit = _profileEditMode === name;
       const slotKey = 'p_' + idx;
+      const isFav = PROFILE_FAVS.has(name);
+      const isEdit = _profileEditMode === name;
       const isDup = _dupProfileSet.has(name);
       const isOrg = _orgProfileSet.has(name);
+      const img = PROFILE_SCREENSHOTS[name];
+      const letter = escHtml((shortName[0] || '?').toUpperCase());
+
+      const thumbContent = img
+        ? '<img src="' + escHtml(img) + '" alt="">'
+        : '<div class="pc-placeholder">' + letter + '</div>';
+
       const dupSiblings = (isDup || isOrg)
         ? (_dupGroupMap.get(name) || []).filter(n => n !== name).map(n => escHtml(n)).join(', ')
         : '';
-
-      // Edit panel: name input + item rows
-      let editPanel = '';
-      if (isEdit) {
-        const nameInput = '<div class="profile-edit-name-row">'
-          + '<label style="font-size:.62rem;color:var(--text3)">Profilname:</label>'
-          + '<input class="profile-edit-name-inp" id="pedit_name_' + idx + '" value="' + escHtml(name) + '" maxlength="60">'
-          + '<button class="profile-gear-btn" onclick="profileRename(\'' + slotKey + '\')" title="Umbenennen">💾 Speichern</button>'
-          + '</div>';
-
-        const itemRows = (p.items || []).map((item, iIdx) => {
-          const hasCfg = !!CACHE[item.group]?.[item.asset];
-          return '<div class="profile-item-row" id="pirow_' + idx + '_' + iIdx + '">'
-            + '<span class="profile-item-asset">' + escHtml(item.asset) + '</span>'
-            + '<span class="profile-item-group">' + escHtml(item.group) + '</span>'
-            + (item.lock ? '<span class="profile-item-badge lock">🔒 ' + escHtml(item.lock) + '</span>' : '')
-            + (item.craft?.Name ? '<span class="profile-item-badge craft">✏️ ' + escHtml(item.craft.Name) + '</span>' : '')
-            + '<button class="profile-gear-btn' + (!hasCfg ? ' nocache' : '') + '" data-slot="' + slotKey + '" data-iidx="' + iIdx + '" onclick="profileOpenInItemManager(this.dataset.slot,this.dataset.iidx)" title="' + (hasCfg ? 'Im Item Manager öffnen' : 'Zur Gruppe navigieren (nicht im Cache)') + '">⚙️</button>'
-            + '<button class="profile-row-del" data-slot="' + slotKey + '" data-iidx="' + iIdx + '" onclick="profileDeleteItem(this.dataset.slot,this.dataset.iidx)" title="Item entfernen" style="margin-left:4px">✕</button>'
-            + '</div>';
-        }).join('');
-
-        editPanel = '<div class="profile-item-list">' + nameInput + itemRows + '</div>';
-      }
-
-      const isFav = PROFILE_FAVS.has(name);
-      const profileBadge = isDup
-        ? ' <span class="profile-dup-badge" title="Kopie von: ' + dupSiblings + '">DUP</span>'
+      const dupBadge = isDup
+        ? '<span class="pc-tag" title="Kopie von: ' + dupSiblings + '">DUP</span>'
         : isOrg
-        ? ' <span class="profile-org-badge" title="Original – Kopien: ' + dupSiblings + '">ORG</span>'
-        : '';
-      return '<div class="profile-row' + (isDup ? ' profile-row-dup' : isOrg ? ' profile-row-org' : '') + '" id="prow_' + idx + '">'
-        + '<div class="profile-row-main">'
-        + '<button class="profile-row-exec" data-slot="' + slotKey + '" onclick="profileExecuteBySlot(this.dataset.slot)" title="Alle Items laden + sofort ausführen">▶ Ausführen</button>'
-        + '<button class="profile-row-load" data-slot="' + slotKey + '" onclick="profileLoadBySlot(this.dataset.slot)" title="Laden (ohne Ausführen)">📥</button>'
-        + '<button class="profile-fav-btn' + (isFav ? ' fav' : '') + '" data-pkey="' + idx + '" onclick="toggleProfileFav(_profileNameMap[\'p_\'+this.dataset.pkey])" title="' + (isFav ? 'Favorit entfernen' : 'Als Favorit markieren') + '">⭐</button>'
-        + '<span class="profile-row-name">' + escHtml(shortName) + profileBadge + '</span>'
-        + '<span class="profile-row-count">' + (p.items?.length ?? 0) + ' Items</span>'
-        + '<span class="profile-row-date">' + (p.date || '') + '</span>'
-        + '<button class="profile-row-edit' + (isEdit ? ' active' : '') + '" data-slot="' + slotKey + '" onclick="profileToggleEdit(this.dataset.slot)" title="Bearbeiten">✏️</button>'
-        + '<button class="profile-row-del" data-pkey="' + idx + '" onclick="deleteProfileByIdx(this.dataset.pkey)" title="Löschen">✕</button>'
+        ? '<span class="pc-tag" title="Original – Kopien: ' + dupSiblings + '">ORG</span>'
+        : '<span class="pc-tag">Profil</span>';
+
+      // Use data-slot + data-strip-owner for the modal click — avoids inline JSON escaping issues
+      return '<div class="pc' + (isEdit ? ' pc-edit-active' : '') + '" id="prow_' + idx + '">'
+        + '<div class="pc-thumb" data-slot="' + slotKey + '" data-strip-owner="' + escHtml(blockId) + '" onclick="_openProfileCard(this.dataset.slot,this.dataset.stripOwner)">'
+        + thumbContent
+        + dupBadge
+        + '<button class="pc-fav' + (isFav ? ' on' : '') + '" data-pkey="' + idx + '" onclick="event.stopPropagation();toggleProfileFav(_profileNameMap[\'p_\'+this.dataset.pkey])" title="Favorit">'
+        + (isFav ? '⭐' : '☆') + '</button>'
+        + '<span class="pc-zoom">🔍</span>'
         + '</div>'
-        + editPanel
+        + '<div class="pc-name" title="' + escHtml(name) + '">' + escHtml(shortName) + '</div>'
+        + '<div class="pc-meta">' + (p.items?.length ?? 0) + ' Items · ' + (p.date || '') + '</div>'
+        + '<div class="pc-actions">'
+        + '<button class="pc-btn primary" data-slot="' + slotKey + '" onclick="profileExecuteBySlot(this.dataset.slot)" title="Laden + ausführen">▶ Run</button>'
+        + '<button class="pc-btn' + (isFav ? ' fav-on' : '') + '" data-pkey="' + idx + '" onclick="toggleProfileFav(_profileNameMap[\'p_\'+this.dataset.pkey])" title="Favorit">⭐</button>'
+        + '<button class="pc-btn' + (isEdit ? ' edit-on' : '') + '" data-slot="' + slotKey + '" onclick="profileToggleEdit(this.dataset.slot)" title="Bearbeiten">✏️</button>'
+        + '</div>'
         + '</div>';
     }).join('');
 
@@ -2064,7 +2086,7 @@ function renderProfileList() {
       + '<span class="profile-owner-count">' + profiles.length + '</span>'
       + '<span class="profile-owner-chevron">▶</span>'
       + '</div>'
-      + '<div class="profile-owner-rows">' + rows + '</div>'
+      + '<div class="profile-owner-rows"><div class="profile-strip">' + cards + '</div>' + editPanel + '</div>'
       + '</div>';
   }).join('');
 
@@ -2082,6 +2104,174 @@ function renderProfileList() {
     }
   }
 }
+
+// ── Profile Screenshot Upload ─────────────────────────
+function uploadProfileScreenshot(pname) {
+  // pname may be a slot key ('p_N') or a real profile name
+  const name = _profileNameMap[pname] || pname;
+  if (!name || !PROFILES[name]) return;
+  const inp = document.createElement('input');
+  inp.type = 'file'; inp.accept = 'image/*';
+  inp.onchange = () => {
+    const file = inp.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      PROFILE_SCREENSHOTS[name] = e.target.result;
+      _saveProfileScreenshots();
+      renderProfileList();
+      // Refresh modal if open on same profile
+      const mod = document.getElementById('profileModal');
+      if (mod?.classList.contains('open') && _profileModalName === name) _renderProfileModal(name);
+    };
+    reader.readAsDataURL(file);
+  };
+  inp.click();
+}
+
+function removeProfileScreenshot(pname) {
+  const name = _profileNameMap[pname] || pname;
+  if (!name) return;
+  delete PROFILE_SCREENSHOTS[name];
+  _saveProfileScreenshots();
+  renderProfileList();
+  const mod = document.getElementById('profileModal');
+  if (mod?.classList.contains('open') && _profileModalName === name) _renderProfileModal(name);
+}
+
+// ── Profile Modal ─────────────────────────────────────
+// Resolves strip sibling names from the DOM (avoids inline JSON in onclick)
+function _openProfileCard(slotKey, blockId) {
+  // Collect all .pc-thumb elements in the same strip owner block
+  const block = document.getElementById(blockId);
+  const thumbs = block ? Array.from(block.querySelectorAll('.pc-thumb[data-slot]')) : [];
+  const stripNames = thumbs.map(th => _profileNameMap[th.dataset.slot]).filter(Boolean);
+  openProfileModal(slotKey, stripNames.length ? stripNames : null);
+}
+
+let _profileModalNames = []; // names in current strip
+let _profileModalIdx   = 0;
+let _profileModalSlot  = null; // 'p_N'
+let _profileModalName  = null; // real name
+
+function openProfileModal(slotOrName, stripNamesOrJson) {
+  // stripNamesOrJson can be a JS array or a JSON string
+  if (stripNamesOrJson) {
+    const arr = typeof stripNamesOrJson === 'string' ? JSON.parse(stripNamesOrJson) : stripNamesOrJson;
+    _profileModalNames = arr;
+  }
+  // Resolve name from slot or direct name
+  const name = _profileNameMap[slotOrName] || slotOrName;
+  _profileModalIdx = Math.max(0, _profileModalNames.indexOf(name));
+  _profileModalName = _profileModalNames[_profileModalIdx] || name;
+  // Find slot
+  const slotIdx = Object.entries(_profileNameMap).find(([,v]) => v === _profileModalName)?.[0];
+  _profileModalSlot = slotIdx || slotOrName;
+  _renderProfileModal(_profileModalName);
+  document.getElementById('profileModal').classList.add('open');
+}
+
+function _renderProfileModal(name) {
+  const p = PROFILES[name];
+  if (!p) return;
+  _profileModalName = name;
+  const slotEntry = Object.entries(_profileNameMap).find(([,v]) => v === name);
+  _profileModalSlot = slotEntry ? slotEntry[0] : null;
+
+  const owner = _profileOwnerOf(name);
+  const shortName = _profileShortName(name, owner);
+  const isFav = PROFILE_FAVS.has(name);
+  const img = PROFILE_SCREENSHOTS[name];
+  const idx = _profileModalIdx;
+  const total = _profileModalNames.length;
+
+  // Title / sub
+  document.getElementById('pmodTitle').textContent = shortName;
+  document.getElementById('pmodSub').textContent = (p.items?.length ?? 0) + ' Items · ' + (p.date || '—');
+  document.getElementById('pmodItemCount').textContent = (p.items?.length ?? 0);
+  document.getElementById('pmodDate').textContent = p.date || '—';
+  document.getElementById('pmodOwner').textContent = owner;
+
+  // Image
+  const imgPanel = document.getElementById('pmodImgPanel');
+  // Remove old img if any
+  imgPanel.querySelectorAll('img,.pmod-img-placeholder').forEach(el => el.remove());
+  if (img) {
+    const imgEl = document.createElement('img');
+    imgEl.src = img;
+    imgPanel.insertBefore(imgEl, imgPanel.firstChild);
+  } else {
+    const ph = document.createElement('div');
+    ph.className = 'pmod-img-placeholder';
+    ph.textContent = (shortName[0] || '?').toUpperCase();
+    imgPanel.insertBefore(ph, imgPanel.firstChild);
+  }
+
+  // Upload / remove buttons
+  const uploadBtn = document.getElementById('pmodUploadBtn');
+  const removeBtn = document.getElementById('pmodRemoveBtn');
+  if (uploadBtn) uploadBtn.dataset.pname = name;
+  if (removeBtn) { removeBtn.dataset.pname = name; removeBtn.style.display = img ? '' : 'none'; }
+
+  // Fav button
+  const favBtn = document.getElementById('pmodFavBtn');
+  if (favBtn) { favBtn.textContent = (isFav ? '⭐ Favorit' : '☆ Favorit'); favBtn.classList.toggle('fav-on', isFav); }
+
+  // Nav visibility
+  const prevBtn = document.getElementById('pmodPrev');
+  const nextBtn = document.getElementById('pmodNext');
+  if (prevBtn) prevBtn.style.display = idx > 0 ? '' : 'none';
+  if (nextBtn) nextBtn.style.display = idx < total - 1 ? '' : 'none';
+}
+
+function closeProfileModal() {
+  document.getElementById('profileModal')?.classList.remove('open');
+}
+
+function profileModalPrev() {
+  if (_profileModalIdx > 0) {
+    _profileModalIdx--;
+    _profileModalName = _profileModalNames[_profileModalIdx];
+    const slotEntry = Object.entries(_profileNameMap).find(([,v]) => v === _profileModalName);
+    _profileModalSlot = slotEntry ? slotEntry[0] : null;
+    _renderProfileModal(_profileModalName);
+  }
+}
+function profileModalNext() {
+  if (_profileModalIdx < _profileModalNames.length - 1) {
+    _profileModalIdx++;
+    _profileModalName = _profileModalNames[_profileModalIdx];
+    const slotEntry = Object.entries(_profileNameMap).find(([,v]) => v === _profileModalName);
+    _profileModalSlot = slotEntry ? slotEntry[0] : null;
+    _renderProfileModal(_profileModalName);
+  }
+}
+function _pmodToggleFav() {
+  if (_profileModalName) {
+    toggleProfileFav(_profileModalName);
+    _renderProfileModal(_profileModalName);
+  }
+}
+function _pmodOpenEdit() {
+  closeProfileModal();
+  if (_profileModalSlot) profileToggleEdit(_profileModalSlot);
+}
+function _pmodDelete() {
+  if (!_profileModalName) return;
+  const pkey = Object.keys(_profileNameMap).find(k => _profileNameMap[k] === _profileModalName);
+  if (!pkey) return;
+  closeProfileModal();
+  deleteProfileByIdx(pkey.replace('p_', ''));
+}
+
+// Keyboard navigation for modal
+document.addEventListener('keydown', (e) => {
+  const mod = document.getElementById('profileModal');
+  if (!mod?.classList.contains('open')) return;
+  if (e.key === 'Escape') closeProfileModal();
+  else if (e.key === 'ArrowLeft') profileModalPrev();
+  else if (e.key === 'ArrowRight') profileModalNext();
+});
 
 function profileLoadBySlot(slot) {
   const name = _profileNameMap[slot];
@@ -2146,6 +2336,8 @@ function profileRename(slot) {
   if (PROFILES[newName] && !confirm('Name "' + newName + '" existiert bereits. Überschreiben?')) return;
   PROFILES[newName] = { ...PROFILES[oldName], name: newName };
   delete PROFILES[oldName];
+  // Migrate screenshot to new name
+  if (PROFILE_SCREENSHOTS[oldName]) { PROFILE_SCREENSHOTS[newName] = PROFILE_SCREENSHOTS[oldName]; delete PROFILE_SCREENSHOTS[oldName]; _saveProfileScreenshots(); }
   _profileEditMode = newName;
     _saveProfiles();
   showStatus('✅ Profil umbenannt → "' + newName + '"', 'success');

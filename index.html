@@ -860,6 +860,245 @@ textarea.outfit-code { width: 100%; min-height: 210px; background: rgba(0,0,0,0.
 .profile-fav-btn:hover { opacity: 0.85; transform: scale(1.2); }
 .profile-fav-btn.fav  { opacity: 1; }
 
+/* ── Profile Card Strip ────────────────────────────── */
+.profile-strip {
+  display: flex; gap: 14px;
+  padding: 14px 18px 16px;
+  overflow-x: auto;
+  scroll-snap-type: x proximity;
+  scrollbar-width: thin;
+}
+.profile-strip::-webkit-scrollbar { height: 5px; }
+.profile-strip::-webkit-scrollbar-track { background: transparent; }
+.profile-strip::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 99px; }
+
+.pc { flex: 0 0 130px; display: flex; flex-direction: column; scroll-snap-align: start; }
+
+.pc-thumb {
+  position: relative;
+  width: 130px; height: 174px;
+  border-radius: var(--r-md);
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  overflow: hidden;
+  cursor: pointer;
+  transition: border-color .15s, transform .15s, box-shadow .15s;
+  display: grid; place-items: center;
+}
+.pc-thumb:hover {
+  border-color: var(--accent-line);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+.pc-thumb img { width: 100%; height: 100%; object-fit: cover; transition: transform .25s ease; }
+.pc-thumb:hover img { transform: scale(1.04); }
+
+.pc-placeholder {
+  display: grid; place-items: center;
+  width: 100%; height: 100%;
+  color: var(--text3);
+  background: linear-gradient(135deg, var(--bg3), var(--bg4));
+  font-family: var(--font-mono); font-size: 30px; font-weight: 600;
+}
+
+.pc-fav {
+  position: absolute; top: 7px; right: 7px;
+  width: 24px; height: 24px;
+  display: grid; place-items: center;
+  border-radius: 99px;
+  background: rgba(0,0,0,0.6);
+  backdrop-filter: blur(6px);
+  color: #fff; font-size: 12px;
+  border: none; cursor: pointer;
+  opacity: 0.8; transition: all .12s;
+}
+.pc-fav:hover { opacity: 1; transform: scale(1.1); }
+.pc-fav.on { color: var(--yellow); opacity: 1; }
+
+.pc-tag {
+  position: absolute; top: 7px; left: 7px;
+  font-size: 8.5px; font-weight: 700;
+  padding: 2px 6px; border-radius: 99px;
+  background: rgba(0,0,0,0.6);
+  backdrop-filter: blur(6px);
+  color: rgba(255,255,255,0.85);
+  letter-spacing: 0.05em; text-transform: uppercase;
+  pointer-events: none;
+}
+
+.pc-zoom {
+  position: absolute; bottom: 7px; right: 7px;
+  width: 20px; height: 20px;
+  display: grid; place-items: center;
+  border-radius: 5px;
+  background: rgba(0,0,0,0.6);
+  backdrop-filter: blur(6px);
+  color: #fff; font-size: 11px;
+  opacity: 0; transition: opacity .12s;
+  pointer-events: none;
+}
+.pc-thumb:hover .pc-zoom { opacity: 0.9; }
+
+.pc-edit-active .pc-thumb { border-color: var(--accent-line); box-shadow: 0 0 0 2px oklch(72% 0.13 58 / 0.25); }
+
+.pc-name {
+  font-size: 11.5px; font-weight: 700;
+  color: var(--text);
+  margin-top: 7px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.pc-meta {
+  font-family: var(--font-mono);
+  font-size: 9.5px; color: var(--text3);
+  margin-top: 1px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.pc-actions {
+  display: grid; grid-template-columns: 1fr 1fr 1fr;
+  gap: 3px; margin-top: 6px;
+}
+.pc-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: 4px 3px;
+  font-size: 10px; font-weight: 700;
+  border-radius: 5px;
+  background: var(--bg3); border: 1px solid var(--border);
+  color: var(--text2); cursor: pointer;
+  transition: all .12s; white-space: nowrap;
+}
+.pc-btn:hover { border-color: var(--border2); color: var(--text); background: var(--bg4); }
+.pc-btn.primary { background: var(--accent); border-color: var(--accent); color: #1a1611; }
+.pc-btn.primary:hover { background: var(--accent-hover); }
+[data-theme="light"] .pc-btn.primary { color: #fff; }
+.pc-btn.fav-on { color: var(--yellow); border-color: rgba(251,191,36,0.4); background: rgba(251,191,36,0.12); }
+.pc-btn.edit-on { background: oklch(72% 0.13 58 / 0.15); border-color: oklch(72% 0.13 58 / 0.4); color: oklch(82% 0.1 62); }
+.pc-btn.del-btn { color: var(--red); }
+.pc-btn.del-btn:hover { background: rgba(251,113,133,0.12); border-color: rgba(251,113,133,0.35); }
+
+/* Edit panel below the strip */
+.pc-edit-panel {
+  margin: 0 14px 14px;
+  background: rgba(0,0,0,0.2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  overflow: hidden;
+}
+
+/* Profile Screenshot Modal */
+.pmod-backdrop {
+  position: fixed; inset: 0;
+  background: rgba(8,8,10,0.84);
+  backdrop-filter: blur(10px);
+  display: none;
+  align-items: center; justify-content: center;
+  padding: 24px;
+  z-index: 300;
+}
+.pmod-backdrop.open { display: flex; }
+.pmod {
+  background: var(--bg2);
+  border: 1px solid var(--border2);
+  border-radius: var(--r-lg);
+  width: min(860px, 100%);
+  max-height: 88vh;
+  display: grid;
+  grid-template-columns: 340px 1fr;
+  overflow: hidden;
+  box-shadow: var(--shadow-lg);
+  animation: popIn .22s cubic-bezier(0.2,0.9,0.3,1.2);
+}
+@keyframes popIn { from{transform:scale(.95);opacity:0} to{transform:scale(1);opacity:1} }
+
+.pmod-img {
+  background: var(--bg3);
+  display: grid; place-items: center;
+  position: relative;
+  border-right: 1px solid var(--border);
+  overflow: hidden; min-height: 300px;
+}
+.pmod-img img { width: 100%; height: 100%; object-fit: cover; }
+.pmod-img-placeholder {
+  width: 100%; height: 100%;
+  display: grid; place-items: center;
+  font-family: var(--font-mono); font-size: 52px;
+  color: var(--text4); font-weight: 600;
+  background: linear-gradient(135deg, var(--bg3), var(--bg4));
+}
+.pmod-nav {
+  position: absolute; top: 50%; transform: translateY(-50%);
+  width: 32px; height: 32px;
+  display: grid; place-items: center;
+  border-radius: 99px;
+  background: rgba(0,0,0,0.6);
+  backdrop-filter: blur(8px);
+  color: #fff; border: none; cursor: pointer;
+  transition: all .12s; font-size: 14px;
+}
+.pmod-nav:hover { background: rgba(0,0,0,0.82); }
+.pmod-prev { left: 10px; }
+.pmod-next { right: 10px; }
+
+.pmod-body {
+  padding: 20px 22px;
+  overflow-y: auto;
+  display: flex; flex-direction: column;
+  gap: 14px;
+}
+.pmod-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.pmod-title { font-size: 17px; font-weight: 800; letter-spacing: -0.02em; line-height: 1.3; }
+.pmod-sub { font-family: var(--font-mono); font-size: 10.5px; color: var(--text3); margin-top: 3px; }
+.pmod-close {
+  width: 26px; height: 26px; display: grid; place-items: center;
+  border-radius: 6px; color: var(--text3); cursor: pointer;
+  border: none; background: none; font-size: 14px; flex-shrink: 0;
+}
+.pmod-close:hover { background: var(--bg-hover); color: var(--text); }
+.pmod-upload-btn {
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  padding: 8px 14px; border-radius: var(--r-sm);
+  background: var(--bg3); border: 1px dashed var(--border2);
+  color: var(--text2); font-size: 0.77rem; font-weight: 700;
+  cursor: pointer; width: 100%;
+  transition: all .15s;
+}
+.pmod-upload-btn:hover { border-color: var(--accent-line); color: var(--accent-text); background: var(--accent-soft); }
+.pmod-remove-btn {
+  display: flex; align-items: center; justify-content: center; gap: 5px;
+  padding: 5px 10px; border-radius: var(--r-sm);
+  background: none; border: 1px solid rgba(251,113,133,0.25);
+  color: var(--red); font-size: 0.72rem; font-weight: 600;
+  cursor: pointer; width: 100%;
+  transition: all .15s;
+}
+.pmod-remove-btn:hover { background: rgba(251,113,133,0.1); border-color: rgba(251,113,133,0.5); }
+.pmod-detail {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+.pmod-dcell {
+  background: var(--bg3); border: 1px solid var(--border);
+  border-radius: 7px; padding: 8px 10px;
+}
+.pmod-dcell-label { font-size: 9.5px; color: var(--text3); font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }
+.pmod-dcell-value { font-size: 12.5px; font-weight: 700; color: var(--text); margin-top: 2px; }
+.pmod-actions { display: flex; flex-direction: column; gap: 6px; }
+.pmod-act-row { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.pmod-act-btn {
+  display: flex; align-items: center; justify-content: center; gap: 5px;
+  padding: 8px 12px; border-radius: var(--r-sm);
+  font-size: 0.78rem; font-weight: 700;
+  border: 1px solid var(--border); background: var(--bg3);
+  color: var(--text2); cursor: pointer;
+  transition: all .15s;
+}
+.pmod-act-btn:hover { border-color: var(--border2); color: var(--text); background: var(--bg4); }
+.pmod-act-btn.primary { background: var(--accent); border-color: var(--accent); color: #1a1611; }
+.pmod-act-btn.primary:hover { background: var(--accent-hover); }
+[data-theme="light"] .pmod-act-btn.primary { color: #fff; }
+.pmod-act-btn.fav-on { color: var(--yellow); border-color: rgba(251,191,36,0.4); background: rgba(251,191,36,0.12); }
+.pmod-act-btn.danger { color: var(--red); border-color: rgba(251,113,133,0.2); }
+.pmod-act-btn.danger:hover { background: rgba(251,113,133,0.1); border-color: rgba(251,113,133,0.4); }
+
 /* Outfit Filter-Bar */
 .outfit-filter-bar {
   display: flex; align-items: center; gap: 7px; margin-bottom: 10px; flex-wrap: wrap;
@@ -2240,6 +2479,59 @@ button { cursor: pointer; }
 </div>
 <!-- /tab-outfit -->
 
+<!-- ── Profile Screenshot Modal ── -->
+<div class="pmod-backdrop" id="profileModal" onclick="if(event.target===this)closeProfileModal()">
+  <div class="pmod">
+    <!-- Image panel -->
+    <div class="pmod-img" id="pmodImgPanel">
+      <div class="pmod-img-placeholder" id="pmodPlaceholder">?</div>
+      <button class="pmod-nav pmod-prev" id="pmodPrev" onclick="profileModalPrev()">◀</button>
+      <button class="pmod-nav pmod-next" id="pmodNext" onclick="profileModalNext()">▶</button>
+    </div>
+    <!-- Detail panel -->
+    <div class="pmod-body">
+      <div class="pmod-head">
+        <div>
+          <div class="pmod-title" id="pmodTitle">—</div>
+          <div class="pmod-sub" id="pmodSub">—</div>
+        </div>
+        <button class="pmod-close" onclick="closeProfileModal()">✕</button>
+      </div>
+      <!-- Screenshot upload -->
+      <div>
+        <button class="pmod-upload-btn" id="pmodUploadBtn" onclick="uploadProfileScreenshot(this.dataset.pname)">📷 Screenshot hochladen</button>
+        <button class="pmod-remove-btn" id="pmodRemoveBtn" onclick="removeProfileScreenshot(this.dataset.pname)" style="margin-top:5px;display:none">✕ Screenshot entfernen</button>
+      </div>
+      <!-- Detail grid -->
+      <div class="pmod-detail">
+        <div class="pmod-dcell">
+          <div class="pmod-dcell-label">Items</div>
+          <div class="pmod-dcell-value" id="pmodItemCount">—</div>
+        </div>
+        <div class="pmod-dcell">
+          <div class="pmod-dcell-label">Datum</div>
+          <div class="pmod-dcell-value" id="pmodDate">—</div>
+        </div>
+        <div class="pmod-dcell" style="grid-column:1/-1">
+          <div class="pmod-dcell-label">Besitzer</div>
+          <div class="pmod-dcell-value" id="pmodOwner">—</div>
+        </div>
+      </div>
+      <!-- Action buttons -->
+      <div class="pmod-actions">
+        <div class="pmod-act-row">
+          <button class="pmod-act-btn primary" id="pmodExecBtn" onclick="profileExecuteBySlot(_profileModalSlot)">▶ Ausführen</button>
+          <button class="pmod-act-btn" id="pmodLoadBtn" onclick="profileLoadBySlot(_profileModalSlot)">📥 Laden</button>
+        </div>
+        <div class="pmod-act-row">
+          <button class="pmod-act-btn" id="pmodFavBtn" onclick="_pmodToggleFav()">⭐ Favorit</button>
+          <button class="pmod-act-btn" id="pmodEditBtn" onclick="_pmodOpenEdit()">✏️ Bearbeiten</button>
+        </div>
+        <button class="pmod-act-btn danger" id="pmodDelBtn" onclick="_pmodDelete()">🗑️ Profil löschen</button>
+      </div>
+    </div>
+  </div>
+</div>
 
 <script>
 // Cache-Buster: jede Seite lädt immer die aktuelle JS-Version (kein Browser-Cache)
