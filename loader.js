@@ -716,10 +716,14 @@ window.CurseScanner = (() => {
 
 
   // ── PostMessage Listener ───────────────────────────────
-  if (!window.__BCK_LISTENER__) {
-    window.__BCK_LISTENER__ = true;
+  // Always replace the old listener so re-running the bookmarklet picks up new code
+  if (window.__BCK_LISTENER_FN__) {
+    window.removeEventListener('message', window.__BCK_LISTENER_FN__);
+    BCK.info('Alter Listener entfernt – wird durch neue Version ersetzt');
+  }
+  window.__BCK_LISTENER__ = true;
 
-    window.addEventListener('message', function (ev) {
+  window.__BCK_LISTENER_FN__ = function (ev) {
       // FIX: Validate origin - only accept messages from the known popup URL
       // This prevents arbitrary pages from executing EXEC commands in the BC context
       if (!ev.data || ev.data.app !== APP) return;
@@ -1015,10 +1019,9 @@ window.CurseScanner = (() => {
           break;
         }
       }
-    });
-
+    };
+    window.addEventListener('message', window.__BCK_LISTENER_FN__);
     console.log('[BC-Konfigurator] Listener aktiv ✅');
-  }
 
   // ── BCX Ausgehende Whisper blockieren ────────────────────────────────
   // Priorität 9999 → läuft nach BCX, verwirft alle ausgehenden BCX-Whisper.
