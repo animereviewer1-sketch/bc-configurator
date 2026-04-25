@@ -2154,6 +2154,81 @@ function captureProfileScreenshot(pname) {
   showStatus('📸 Screenshot wird aufgenommen…', 'info');
 }
 
+// ── Auto-Screenshot Slideshow ─────────────────────────
+let _slideshowTimer  = null;
+let _slideshowQueue  = [];
+let _slideshowTotal  = 0;
+
+function toggleProfileSlideshow() {
+  if (_slideshowTimer !== null || _slideshowQueue.length) {
+    _stopProfileSlideshow();
+    showStatus('⏹ Auto-Screenshot gestoppt', 'info');
+    return;
+  }
+  _startProfileSlideshow();
+}
+
+function _startProfileSlideshow() {
+  if (!_connected) { showStatus('❌ Nicht verbunden mit BC', 'error'); return; }
+  // Alle Profile ohne Screenshot sammeln
+  _slideshowQueue = Object.keys(PROFILES).filter(n => !PROFILE_SCREENSHOTS[n]);
+  _slideshowTotal  = _slideshowQueue.length;
+  if (!_slideshowTotal) {
+    showStatus('✅ Alle Profile haben bereits einen Screenshot', 'info');
+    return;
+  }
+  const btn = document.getElementById('profileSlideshowBtn');
+  if (btn) { btn.textContent = '⏹ Stop (' + _slideshowTotal + ')'; btn.classList.add('btn-red'); btn.classList.remove('btn-primary'); }
+  showStatus('📸 Auto-Screenshot gestartet – ' + _slideshowTotal + ' Profile', 'info');
+  _runNextSlideshow();
+}
+
+function _runNextSlideshow() {
+  if (!_slideshowQueue.length) {
+    _stopProfileSlideshow();
+    showStatus('✅ Auto-Screenshot fertig – alle Screenshots generiert!', 'success');
+    return;
+  }
+  const name = _slideshowQueue.shift();
+  const remaining = _slideshowQueue.length;
+  const done = _slideshowTotal - remaining;
+  // Profil ausführen (lädt Outfit in BC)
+  const p = PROFILES[name];
+  if (p && _connected) {
+    if (p._outfitCode) {
+      if (typeof _oiBuildExecCode === 'function') {
+        bcSend({ type: 'EXEC', code: _oiBuildExecCode(p._outfitCode) }, true);
+      } else {
+        bcSend({ type: 'EXEC', code: '(function(){try{var _d=LZString.decompressFromBase64(' + JSON.stringify(p._outfitCode) + ');var _a=JSON.parse(_d);if(Array.isArray(_a)){ServerPlayerInventoryLoad(_a);CharacterRefresh(Player,true,false);}}catch(e){}})();' }, true);
+      }
+      // Screenshot nach Render-Pause
+      setTimeout(() => captureProfileScreenshot(name), 1800);
+    } else {
+      loadProfile(name);
+      setTimeout(() => {
+        const code = document.getElementById('outfitCode')?.value?.trim();
+        if (code) bcSend({ type: 'EXEC', code: '(function(){\n' + code + '\n})();' }, true);
+        // Screenshot nach Outfit-Sync (1.2s) + Render-Puffer
+        setTimeout(() => captureProfileScreenshot(name), 2800);
+      }, 60);
+    }
+    showStatus('📸 (' + done + '/' + _slideshowTotal + ') "' + name + '" – noch ' + remaining + ' übrig', 'info');
+    // Button-Counter aktualisieren
+    const btn = document.getElementById('profileSlideshowBtn');
+    if (btn) btn.textContent = '⏹ Stop (' + remaining + ')';
+  }
+  _slideshowTimer = setTimeout(_runNextSlideshow, 5000);
+}
+
+function _stopProfileSlideshow() {
+  clearTimeout(_slideshowTimer);
+  _slideshowTimer = null;
+  _slideshowQueue = [];
+  _slideshowTotal = 0;
+  const btn = document.getElementById('profileSlideshowBtn');
+  if (btn) { btn.textContent = '📸 Auto-Screenshot'; btn.classList.remove('btn-red'); btn.classList.add('btn-primary'); }
+}
+
 // Called from postMessage handler when BC responds with SCREENSHOT_DATA
 function _handleScreenshotData(data) {
   const name = _pendingScreenshot[data.reqId];

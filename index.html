@@ -2466,6 +2466,7 @@ button { cursor: pointer; }
             <input class="outfit-search" id="profileSearch" placeholder="🔍 Profil suchen..." oninput="_debouncedRenderProfileList()" style="width:140px;font-size:.69rem;padding:3px 8px">
             <span class="filter-chip profile-fc on" data-filter="all" onclick="setProfileFilter('all')" style="font-size:.65rem;padding:3px 9px">Alle</span>
             <span class="filter-chip profile-fc" data-filter="fav" onclick="setProfileFilter('fav')" title="Nur Favoriten" style="font-size:.65rem;padding:3px 9px">⭐ Favs</span>
+            <button class="btn btn-primary" id="profileSlideshowBtn" onclick="toggleProfileSlideshow()" title="Alle Profile ohne Screenshot im 5s-Takt ausführen und fotografieren" style="font-size:.65rem;padding:3px 9px">📸 Auto-Screenshot</button>
             <button class="btn btn-red" id="profileDupBtn" onclick="removeProfileDuplicates()" title="Doppelte Profile entfernen (erstes Vorkommen bleibt)" style="display:none;font-size:.65rem;padding:3px 9px">⚠️ Duplikate entfernen</button>
           </div>
           <div style="display:flex;gap:6px;align-items:center">
