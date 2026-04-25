@@ -2390,6 +2390,10 @@ function profileExecuteBySlot(slot) {
     if (!code) { showStatus('❌ Kein Code generiert – Cache geladen?', 'error'); return; }
     bcSend({ type: 'EXEC', code: '(function(){\n' + code + '\n})();' });
     showStatus('▶ Profil "' + name + '" ausgeführt (' + OUTFIT.length + ' Items)', 'success');
+    // Auto-Screenshot falls noch keiner vorhanden – warten bis BC den Outfit gerendert hat
+    if (!PROFILE_SCREENSHOTS[name]) {
+      setTimeout(() => captureProfileScreenshot(name), 2800);
+    }
   }, 60);
 }
 
@@ -3282,6 +3286,10 @@ function _doSaveProfile(items, defaultName) {
   try {
     _saveProfiles();
     showStatus('✅ Profil "' + trimmed + '" gespeichert (' + items.length + ' Items) – nutzbar in Bot-Triggern!', 'success');
+    // Auto-Screenshot: Charakter sieht gerade so aus → sofort aufnehmen
+    if (_connected) {
+      setTimeout(() => captureProfileScreenshot(trimmed), 600);
+    }
   } catch(e) { showStatus('❌ Speichern fehlgeschlagen: ' + e.message, 'error'); }
 }
 
