@@ -2463,9 +2463,16 @@ function _handleCurseData(data) {
   CURSE_DB         = data.database    ?? {};
   CURSE_LSCG       = data.lscgTable   ?? {};
   CURSE_CACHE_LSCG = data.lscgCache   ?? {};
-  // Stamp every scanned entry with the current time (enables "Neu within 1h" logic)
+  // Stamp only truly new entries with the current time (enables "Neu within 1h" logic).
+  // Existing entries keep their old ZuletztGescannt so the badge expires naturally.
   const _now = Date.now();
-  Object.values(CURSE_DB).forEach(e => { e.ZuletztGescannt = _now; });
+  Object.keys(CURSE_DB).forEach(k => {
+    if (!prevDB[k]) {
+      CURSE_DB[k].ZuletztGescannt = _now;          // new → mark as Neu
+    } else if (prevDB[k].ZuletztGescannt) {
+      CURSE_DB[k].ZuletztGescannt = prevDB[k].ZuletztGescannt; // keep existing timestamp
+    }
+  });
   _updateCurseStats();
   _populateSlotFilter();
   if (_activeTab === 'curse') renderCurseTab();
