@@ -1691,7 +1691,7 @@ function generateOutfitCode() {
         + 'TARGET.Appearance = TARGET.Appearance.filter(i => i?.Asset?.Group?.AllowNone === false);\n'
         + '// \u2500\u2500 Helper \u2500\u2500\n'
         + 'function _ws(name,grp,col,preB64,ext,diff){\n'
-        + '  InventoryWear(TARGET,name,grp,col,0,null);\n'
+        + '  InventoryWear(TARGET,name,grp,col,0,null,null,false);\n'
         + '  const it=InventoryGet(TARGET,grp);\n'
         + '  if(!it)return console.error("\u274C "+name);\n'
         + '  it.Color=col; it.Property=it.Property??{};\n'
@@ -1776,13 +1776,17 @@ function generateOutfitCode() {
     code += '\n';
   });
 
-  // Single refresh + deferred sync
+  // Single refresh + deferred sync \u2014 all items applied with push=false above,
+  // so ONE combined sync after a short pause avoids BC rate-limit.
   const syncLine = (isOther && memberNum)
     ? '  ChatRoomCharacterUpdate(TARGET);'
     : '  ServerPlayerAppearanceSync();\n  ChatRoomCharacterUpdate(TARGET);';
-  code += '// \u2500\u2500 Refresh \u2500\u2500\nCharacterRefresh(TARGET);\n'
-        + '// \u2500\u2500 Sync nach 2s \u2500\u2500\n'
-        + 'setTimeout(()=>{\n' + syncLine + '\n  console.log("\u2705 Outfit fertig!");\n},2000);\n';
+  code += '// \u2500\u2500 Einmaliger Refresh + Sync \u2500\u2500\n'
+        + 'CharacterRefresh(TARGET,false,false);\n'   // local visual refresh, no push
+        + 'setTimeout(()=>{\n'
+        + syncLine + '\n'
+        + '  console.log("\u2705 Outfit fertig!");\n'
+        + '},1200);\n';
 
   document.getElementById('outfitCode').value = code;
 }
@@ -3264,6 +3268,8 @@ function _doSaveProfile(items, defaultName) {
   try {
     _saveProfiles();
     showStatus('✅ Profil "' + trimmed + '" gespeichert (' + items.length + ' Items) – nutzbar in Bot-Triggern!', 'success');
+    // Direkt nach dem Speichern Screenshot vom BC-Canvas aufnehmen
+    if (_connected) captureProfileScreenshot(trimmed);
   } catch(e) { showStatus('❌ Speichern fehlgeschlagen: ' + e.message, 'error'); }
 }
 
