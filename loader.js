@@ -795,6 +795,10 @@ window.CurseScanner = (() => {
             const _BODY_PROP_GROUPS = new Set([
               'BodyUpper','BodyLower','BodyMarkings','Head','Mouth',
             ]);
+            // Hair colour overlay groups – include only if curse wrote props or explicit Color
+            const _HAIR_COLOR_GROUPS = new Set([
+              'HairColor','HairColorAccessory','HairColorUnder',
+            ]);
 
             const _PROP_SKIP = new Set([
               'LockedBy','LockMemberNumber','RemoveTimer','Password','CombinationNumber',

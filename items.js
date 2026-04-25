@@ -2106,12 +2106,12 @@ function renderProfileList() {
     const isAlt = PROFILE_ALT_OWNERS.has(owner);
     const altTag = isAlt ? ' <span style="color:var(--accent-red,#e55);font-size:.6rem;font-weight:600;border:1px solid currentColor;border-radius:3px;padding:0 3px;vertical-align:middle">(old)</span>' : '';
     if (/#\d{4,}/.test(owner)) return escHtml(owner) + altTag; // bereits angereichert
-    // Basis-Name = alles vor einem evtl. " #..." Suffix
-    const baseName = owner.replace(/\s*#\d+.*$/, '').trim();
+    // Basis-Name = alles vor einem evtl. " #..." Suffix und "(old)"-Tag
+    const baseName = owner.replace(/\s*#\d+.*$/, '').replace(/\s*\(old\)\s*$/i, '').trim();
     const id = _ownerIdMap[baseName];
     return (id
-      ? escHtml(baseName) + ' <span style="color:var(--text3);font-size:.6rem;font-family:var(--font-mono)">#' + id + '</span>'
-      : escHtml(owner)) + altTag;
+      ? escHtml(baseName) + (isAlt ? ' <span style="color:var(--accent-red,#e55);font-size:.6rem;font-weight:600">(old)</span>' : '') + ' <span style="color:var(--text3);font-size:.6rem;font-family:var(--font-mono)">#' + id + '</span>'
+      : escHtml(owner)) + (id ? '' : altTag);
   }
 
   // Duplikate berechnen: ORG = Original (erstes), DUP = Kopien
