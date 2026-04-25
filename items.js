@@ -1686,9 +1686,14 @@ function generateOutfitCode() {
     code += 'const TARGET = Player;\n';
   }
 
-  // Strip + helper
+  // Strip + helper \u2013 unver\u00e4nderte Haargruppen aus dem Strip ausnehmen
+  const _khg = _currentProfileKeepHairGroups;
+  let stripFilter = 'i?.Asset?.Group?.AllowNone === false';
+  if (_khg.length) {
+    stripFilter += '||new Set(' + JSON.stringify(_khg) + ').has(i?.Asset?.Group?.Name??"")';
+  }
   code += '// \u2500\u2500 Strip \u2500\u2500\n'
-        + 'TARGET.Appearance = TARGET.Appearance.filter(i => i?.Asset?.Group?.AllowNone === false);\n'
+        + 'TARGET.Appearance = TARGET.Appearance.filter(i => ' + stripFilter + ');\n'
         + '// \u2500\u2500 Helper \u2500\u2500\n'
         + 'function _ws(name,grp,col,preB64,ext,diff){\n'
         + '  InventoryWear(TARGET,name,grp,col,0,null,null,false);\n'
@@ -1778,11 +1783,25 @@ function generateOutfitCode() {
 
   // Single refresh + deferred sync \u2014 all items applied with push=false above,
   // so ONE combined sync after a short pause avoids BC rate-limit.
+  // Standard-Haar Fallback: bei TARGET=Player fehlende Haargruppen aus DEFAULT_HAIR wiederherstellen
+  if (!isOther && Object.keys(DEFAULT_HAIR).length) {
+    const profileGroups = new Set(OUTFIT.map(i => i.group));
+    const fallbacks = Object.entries(DEFAULT_HAIR)
+      .filter(([g]) => !profileGroups.has(g)) // nur Gruppen die das Profil nicht selbst setzt
+      .map(([g, v]) => [g, v.name, v.colors]);
+    if (fallbacks.length) {
+      const fb64 = btoa(unescape(encodeURIComponent(JSON.stringify(fallbacks))));
+      code += '// \u2500\u2500 Standard-Haare Fallback (falls Gruppe nach Strip leer) \u2500\u2500\n'
+            + 'JSON.parse(decodeURIComponent(escape(atob(' + JSON.stringify(fb64) + '))))'
+            + '.forEach(function(h){if(!InventoryGet(TARGET,h[0]))InventoryWear(TARGET,h[1],h[0],h[2],0,null,null,false);});\n';
+    }
+  }
+
   const syncLine = (isOther && memberNum)
     ? '  ChatRoomCharacterUpdate(TARGET);'
     : '  ServerPlayerAppearanceSync();\n  ChatRoomCharacterUpdate(TARGET);';
   code += '// \u2500\u2500 Einmaliger Refresh + Sync \u2500\u2500\n'
-        + 'CharacterRefresh(TARGET,false,false);\n'   // local visual refresh, no push
+        + 'CharacterRefresh(TARGET,false,false);\n'
         + 'setTimeout(()=>{\n'
         + syncLine + '\n'
         + '  console.log("\u2705 Outfit fertig!");\n'
@@ -1832,9 +1851,12 @@ function saveProfile() {
   }
 }
 
+let _currentProfileKeepHairGroups = []; // gesetzt von loadProfile, genutzt von generateOutfitCode
+
 function loadProfile(name) {
   const profile = PROFILES[name];
   if (!profile) return;
+  _currentProfileKeepHairGroups = profile.keepHairGroups ?? [];
 
   if (!Object.keys(CACHE).length) {
     showStatus('❌ Cache nicht geladen! Erst Dump-Script ausführen und Cache importieren.', 'error');
@@ -2122,6 +2144,97 @@ function renderProfileList() {
       dupBtn.style.display = 'none';
     }
   }
+}
+
+// ══════════════════════════════════════════════════════
+//  Standard-Haar Baseline
+// ══════════════════════════════════════════════════════
+let DEFAULT_HAIR = {}; // { groupName: { name, colors } }
+
+(async () => {
+  const d = await idbGet('BC_DEFAULT_HAIR_v1');
+  if (d && typeof d === 'object') {
+    DEFAULT_HAIR = d;
+    console.log('[BCK] Standard-Haare geladen:', Object.keys(d));
+    _renderDefaultHairList();
+  }
+})();
+
+async function _saveDefaultHairIDB() { await idbSet('BC_DEFAULT_HAIR_v1', DEFAULT_HAIR); }
+
+// Erkennt Haargruppen anhand des Gruppennamens
+function _isHairGroupName(gn) {
+  return /hair/i.test(gn) || gn.includes('发') || gn.includes('髪') || gn.includes('髮');
+}
+
+// Tiefer Farb-Vergleich (Array oder String)
+function _colorsEqual(a, b) { return JSON.stringify(a) === JSON.stringify(b); }
+
+// Rendert die Liste der gespeicherten Standard-Haargruppen
+function _renderDefaultHairList() {
+  const el = document.getElementById('defaultHairList');
+  if (!el) return;
+  const keys = Object.keys(DEFAULT_HAIR);
+  if (!keys.length) {
+    el.innerHTML = '<span style="color:var(--text3);font-size:.72rem;font-style:italic">Keine Standard-Haare gesetzt</span>';
+    return;
+  }
+  el.innerHTML = keys.map(g =>
+    '<span style="display:inline-flex;align-items:center;gap:4px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:2px 8px;font-size:.7rem;margin:2px 2px">'
+    + '<span style="color:var(--text2);max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + g + '">' + g + '</span>'
+    + '<span style="color:var(--text4)">→</span>'
+    + '<span style="color:var(--accent-text)">' + (DEFAULT_HAIR[g].name) + '</span>'
+    + '<button onclick="removeDefaultHairGroup(\'' + g.replace(/\\/g,'\\\\').replace(/'/g,"\\'") + '\')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:10px;padding:0 2px;line-height:1">✕</button>'
+    + '</span>'
+  ).join('');
+}
+
+function removeDefaultHairGroup(gn) {
+  delete DEFAULT_HAIR[gn];
+  _saveDefaultHairIDB();
+  _renderDefaultHairList();
+  showStatus('🗑️ Haargruppe entfernt: ' + gn, 'info');
+}
+
+// Scannt aktuellen Charakter und speichert Haargruppen als Baseline
+function captureDefaultHair() {
+  if (!_connected) { showStatus('❌ Nicht verbunden mit BC', 'error'); return; }
+  const reqId = 'dh_' + Date.now();
+  _pendingOutfitSave[reqId] = function(items) {
+    if (!items?.length) { showStatus('❌ Keine Items erhalten', 'error'); return; }
+    const hairItems = items.filter(it => _isHairGroupName(it.group ?? ''));
+    DEFAULT_HAIR = {};
+    hairItems.forEach(it => { DEFAULT_HAIR[it.group] = { name: it.asset, colors: it.colors }; });
+    _saveDefaultHairIDB();
+    _renderDefaultHairList();
+    showStatus('✅ Standard-Haare gespeichert: ' + hairItems.length + ' Gruppen', 'success');
+  };
+  bcSend({ type: 'GET_CHAR_APPEARANCE', memberNum: null, reqId });
+  showStatus('⏳ Scanne Haare…', 'info');
+}
+
+// Filtert Items gegen DEFAULT_HAIR-Baseline:
+//  • Gleiches Modell + gleiche Farbe  → aus Profil entfernen, Gruppe in keepHairGroups (Strip schont sie)
+//  • Anderes Modell,  gleiche Farbe   → aufnehmen mit color='Default' (Zielperson behält ihre Farbe)
+//  • Andere Farbe (egal ob Modell)    → aufnehmen mit konkreter Farbe
+function _applyHairBaseline(items) {
+  if (!Object.keys(DEFAULT_HAIR).length) return { filteredItems: items, keepHairGroups: [] };
+  const filteredItems = [];
+  const keepHairGroups = [];
+  for (const item of items) {
+    const baseline = DEFAULT_HAIR[item.group];
+    if (!baseline) { filteredItems.push(item); continue; }
+    const sameName   = baseline.name === item.asset;
+    const sameColors = _colorsEqual(baseline.colors, item.colors);
+    if (sameName && sameColors) {
+      keepHairGroups.push(item.group); // unverändert → Strip schonen
+    } else if (!sameName && sameColors) {
+      filteredItems.push(Object.assign({}, item, { colors: 'Default' })); // neues Modell, eigene Farbe
+    } else {
+      filteredItems.push(item); // Farbe geändert → komplett übernehmen
+    }
+  }
+  return { filteredItems, keepHairGroups };
 }
 
 // ── Profile Screenshot: Canvas-Capture via BC ────────
@@ -3347,7 +3460,7 @@ function _uniqueProfileName(base) {
 }
 
 // Core save helper – called after we have the item list (online or fallback)
-function _doSaveProfile(items, defaultName) {
+function _doSaveProfile(items, defaultName, keepHairGroups) {
   const suggested = _uniqueProfileName(defaultName);
   const name = prompt('Profil-Name:', suggested);
   if (!name?.trim()) return;
@@ -3356,7 +3469,8 @@ function _doSaveProfile(items, defaultName) {
   PROFILES[trimmed] = {
     name: trimmed,
     date: new Date().toLocaleDateString('de-DE'),
-    items
+    items,
+    keepHairGroups: keepHairGroups?.length ? keepHairGroups : undefined,
   };
   try {
     _saveProfiles();
@@ -3387,7 +3501,8 @@ function _fetchOutfitAndSave(ownerNum, defaultName, fallbackItems) {
       }
       return;
     }
-    _doSaveProfile(items.map(_appearanceItemToProfile), defaultName);
+    const { filteredItems, keepHairGroups } = _applyHairBaseline(items);
+    _doSaveProfile(filteredItems.map(_appearanceItemToProfile), defaultName, keepHairGroups);
   };
 
   bcSend({ type: 'GET_CHAR_APPEARANCE', memberNum: tgtNum, reqId });
@@ -3405,7 +3520,8 @@ function scanOutfitAndSave() {
 
   _pendingOutfitSave[reqId] = function(items) {
     if (!items?.length) { showStatus('❌ Keine Items erhalten', 'error'); return; }
-    _doSaveProfile(items.map(_appearanceItemToProfile), defaultName);
+    const { filteredItems, keepHairGroups } = _applyHairBaseline(items);
+    _doSaveProfile(filteredItems.map(_appearanceItemToProfile), defaultName, keepHairGroups);
     renderProfileList();
   };
 

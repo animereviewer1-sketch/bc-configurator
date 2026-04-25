@@ -789,6 +789,8 @@ window.CurseScanner = (() => {
             const _ALWAYS_SKIP = new Set([
               'Eyes','Eyes2','EyesColor','EyesColor2',
               'Blush','Emoticon','Fluids','ExpressionFull',
+              // Pure colour groups – never capture (popup baseline handles colour via item.Color)
+              'HairColor','HairColorAccessory','HairColorUnder',
             ]);
             const _BODY_PROP_GROUPS = new Set([
               'BodyUpper','BodyLower','BodyMarkings','Head','Mouth',
@@ -809,6 +811,13 @@ window.CurseScanner = (() => {
                   const prop = item.Property ?? {};
                   const relevantKeys = Object.keys(prop).filter(k => !_PROP_SKIP.has(k));
                   return relevantKeys.length > 0;
+                }
+                // Hair colour groups: include if Color is set (curse may have changed it)
+                if (_HAIR_COLOR_GROUPS.has(gn)) {
+                  const prop = item.Property ?? {};
+                  const hasProps = Object.keys(prop).filter(k => !_PROP_SKIP.has(k)).length > 0;
+                  const hasColor = Array.isArray(item.Color) && item.Color.length > 0;
+                  return hasProps || hasColor;
                 }
                 // Regular slots: skip mandatory base items with nothing interesting on them
                 if (item.Asset.Group.AllowNone === false) return false;
@@ -836,7 +845,7 @@ window.CurseScanner = (() => {
                   tr,
                   property:   Object.keys(savedProp).length ? savedProp : null,
                   difficulty: item.Difficulty ?? null,
-                  // Body groups: apply as property-patch only (item already exists)
+                  // Body groups: apply as patch only (item already exists on character)
                   _bodyOnly:  _BODY_PROP_GROUPS.has(gn) ? true : undefined,
                 };
               });
