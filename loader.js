@@ -651,8 +651,13 @@ window.CurseScanner = (() => {
 
   installLSCGHook();
 
-  function injectEntry(key, entry) {
-    if (!database[key]) database[key] = { ...entry, _injected: true };
+  function injectEntry(key, entry, force) {
+    if (!database[key]) {
+      database[key] = { ...entry, _injected: true };
+    } else if (force) {
+      // Merge: keep existing data, overwrite with incoming fields (e.g. corrected Gruppe)
+      Object.assign(database[key], entry, { _injected: true });
+    }
   }
 
   function loadDatabase(extDb) {
@@ -884,9 +889,9 @@ window.CurseScanner = (() => {
         case 'WEAR_CURSE': {
           BCK.info('WEAR_CURSE key=' + ev.data.dbKey + ' target=' + ev.data.targetNum);
           try {
-            // Inject entry from popup if local DB empty (browser switch / restart)
+            // Always inject/update entry from popup — ensures corrected Gruppe overrides local DB
             if (ev.data.entry) {
-              window.CurseScanner.injectEntry(ev.data.dbKey, ev.data.entry);
+              window.CurseScanner.injectEntry(ev.data.dbKey, ev.data.entry, true);
             }
             let result;
             if (ev.data.targetNum != null) {
