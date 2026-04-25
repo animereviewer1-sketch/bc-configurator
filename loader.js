@@ -857,25 +857,32 @@ window.CurseScanner = (() => {
         }
 
         case 'CAPTURE_SCREENSHOT': {
-          // Capture a crop of the BC game canvas and return it as a base64 data-URL.
-          // Crop: x=250, y=0, w=500, h=1000 (character centre, same as user's bookmarklet)
-          try {
-            const _sc = document.querySelector('canvas');
-            if (!_sc) throw new Error('Kein Canvas im BC-Tab gefunden');
-            const _sx = ev.data.x ?? 250, _sy = ev.data.y ?? 0,
-                  _sw = ev.data.w ?? 500, _sh = ev.data.h ?? 1000;
-            const _tc = document.createElement('canvas');
-            _tc.width = _sw; _tc.height = _sh;
-            _tc.getContext('2d', { willReadFrequently: true })
-               .drawImage(_sc, _sx, _sy, _sw, _sh, 0, 0, _sw, _sh);
-            const _dataUrl = _tc.toDataURL('image/png');
-            src.postMessage({ app: APP, type: 'SCREENSHOT_DATA',
-              reqId: ev.data.reqId, data: _dataUrl }, ALLOWED_ORIGIN);
-            BCK.ok('CAPTURE_SCREENSHOT: ' + _sw + 'x' + _sh + ' → ' + Math.round(_dataUrl.length/1024) + ' KB');
-          } catch(ex) {
-            src.postMessage({ app: APP, type: 'SCREENSHOT_DATA',
-              reqId: ev.data.reqId, err: ex.message }, ALLOWED_ORIGIN);
-          }
+          // Capture a crop of the BC game canvas.
+          // Must run inside requestAnimationFrame so the WebGL/2D buffer is filled
+          // (BC clears the buffer between frames; reading outside rAF gives blank image).
+          const _ssReqId = ev.data.reqId;
+          const _sx = ev.data.x ?? 250, _sy = ev.data.y ?? 0,
+                _sw = ev.data.w ?? 500, _sh = ev.data.h ?? 1000;
+          requestAnimationFrame(function() {
+            try {
+              // BC may have several canvases – pick the largest (main game canvas)
+              const _canvases = Array.from(document.querySelectorAll('canvas'));
+              if (!_canvases.length) throw new Error('Kein Canvas im BC-Tab gefunden');
+              const _sc = _canvases.reduce((a, b) => (a.width * a.height >= b.width * b.height ? a : b));
+              const _tc = document.createElement('canvas');
+              _tc.width = _sw; _tc.height = _sh;
+              _tc.getContext('2d', { willReadFrequently: true })
+                 .drawImage(_sc, _sx, _sy, _sw, _sh, 0, 0, _sw, _sh);
+              const _dataUrl = _tc.toDataURL('image/jpeg', 0.92);
+              src.postMessage({ app: APP, type: 'SCREENSHOT_DATA',
+                reqId: _ssReqId, data: _dataUrl }, ALLOWED_ORIGIN);
+              BCK.ok('CAPTURE_SCREENSHOT: ' + _sw + 'x' + _sh + ' → ' + Math.round(_dataUrl.length / 1024) + ' KB');
+            } catch(ex) {
+              BCK.warn('CAPTURE_SCREENSHOT Fehler:', ex.message);
+              src.postMessage({ app: APP, type: 'SCREENSHOT_DATA',
+                reqId: _ssReqId, err: ex.message }, ALLOWED_ORIGIN);
+            }
+          });
           break;
         }
 

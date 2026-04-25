@@ -2078,14 +2078,11 @@ function renderProfileList() {
         : '<span class="pc-tag">Profil</span>';
 
       // Use data-slot + data-strip-owner for the modal click — avoids inline JSON escaping issues
-      // Thumb click: open modal if screenshot exists, else capture
-      const thumbClick = img
-        ? '_openProfileCard(this.dataset.slot,this.dataset.stripOwner)'
-        : 'event.stopPropagation();captureProfileScreenshot(this.dataset.slot)';
+      // Thumb click always opens the modal; screenshot capture only via explicit button
       const thumbHint = img ? '<span class="pc-zoom">🔍</span>' : '<span class="pc-capture-hint">📸</span>';
 
       return '<div class="pc' + (isEdit ? ' pc-edit-active' : '') + '" id="prow_' + idx + '">'
-        + '<div class="pc-thumb" data-slot="' + slotKey + '" data-strip-owner="' + escHtml(blockId) + '" onclick="' + thumbClick + '">'
+        + '<div class="pc-thumb" data-slot="' + slotKey + '" data-strip-owner="' + escHtml(blockId) + '" onclick="_openProfileCard(this.dataset.slot,this.dataset.stripOwner)">'
         + thumbContent
         + dupBadge
         + '<button class="pc-fav' + (isFav ? ' on' : '') + '" data-pkey="' + idx + '" onclick="event.stopPropagation();toggleProfileFav(_profileNameMap[\'p_\'+this.dataset.pkey])" title="Favorit">'
@@ -3268,8 +3265,6 @@ function _doSaveProfile(items, defaultName) {
   try {
     _saveProfiles();
     showStatus('✅ Profil "' + trimmed + '" gespeichert (' + items.length + ' Items) – nutzbar in Bot-Triggern!', 'success');
-    // Direkt nach dem Speichern Screenshot vom BC-Canvas aufnehmen
-    if (_connected) captureProfileScreenshot(trimmed);
   } catch(e) { showStatus('❌ Speichern fehlgeschlagen: ' + e.message, 'error'); }
 }
 
