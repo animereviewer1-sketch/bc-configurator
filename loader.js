@@ -979,11 +979,33 @@ window.CurseScanner = (() => {
             const _chars = [Player, ...(ChatRoomCharacter ?? [])]
               .filter(c => c?.MemberNumber && !_seen.has(c.MemberNumber) && _seen.add(c.MemberNumber));
             const _room2 = (typeof ChatRoomData !== 'undefined' && ChatRoomData?.Name) ? ChatRoomData.Name : 'Unbekannter Raum';
-            const _results = _chars.map(_BCU_serializeChar);
+            const _results = _chars.map(window._BCU_serializeChar);
             src.postMessage({ app: APP, type: 'LSCG_OUTFITS_DATA', results: _results, room: _room2 }, ALLOWED_ORIGIN);
             BCK.ok('LSCG_OUTFITS_DATA: ' + _results.length + ' Chars');
           } catch(ex) {
             src.postMessage({ app: APP, type: 'LSCG_OUTFITS_DATA', err: ex.message }, ALLOWED_ORIGIN);
+          }
+          break;
+        }
+
+        case 'SAVE_LSCG_OUTFIT': {
+          // Speichert einen Outfit-Code direkt in LSCG's Outfit-Collection
+          try {
+            const _key  = ev.data.key;
+            const _code = ev.data.code;
+            if (!_key || !_code) throw new Error('key oder code fehlt');
+            if (typeof LSCG_OUTFITS === 'undefined') throw new Error('LSCG_OUTFITS nicht verfügbar');
+            const _result = LSCG_OUTFITS.SetOutfitCode(_key, _code);
+            // 0 = SUCCESS, 1 = SPACE_LOW, 3 = ERROR
+            if (_result === 0) {
+              BCK.ok('LSCG Outfit gespeichert: ' + _key);
+              src.postMessage({ app: APP, type: 'SAVE_LSCG_OUTFIT_RESULT', key: _key, ok: true }, ALLOWED_ORIGIN);
+            } else {
+              throw new Error('SetOutfitCode Fehler: ' + _result);
+            }
+          } catch(ex) {
+            BCK.err('SAVE_LSCG_OUTFIT Fehler:', ex.message);
+            src.postMessage({ app: APP, type: 'SAVE_LSCG_OUTFIT_RESULT', ok: false, err: ex.message }, ALLOWED_ORIGIN);
           }
           break;
         }
