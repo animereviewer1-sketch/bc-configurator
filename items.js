@@ -4645,7 +4645,7 @@ function importAllData() {
 // ══════════════════════════════════════════════════════════════
 //  LSCG OUTFIT TAB
 // ══════════════════════════════════════════════════════════════
-let LSCG_OUTFIT_DB = {}; // memberNum (string) → { name, versions: [{code, bcCode, source, ts}] }
+let LSCG_OUTFIT_DB = {}; // memberNum (string) → { name, versions: [{code, ts}] }
 const LSCG_OUTFIT_MAX_VERSIONS = 20;
 
 (async () => {
@@ -4676,7 +4676,7 @@ function _handleLscgOutfitsData(data) {
     const entry = LSCG_OUTFIT_DB[key];
     const last = entry.versions[entry.versions.length - 1];
     if (!last || last.code !== r.code) {
-      entry.versions.push({ code: r.code, bcCode: r.bcCode, source: r.source, ts: r.ts });
+      entry.versions.push({ code: r.code, ts: r.ts });
       if (entry.versions.length > LSCG_OUTFIT_MAX_VERSIONS)
         entry.versions = entry.versions.slice(-LSCG_OUTFIT_MAX_VERSIONS);
       if (!isNew) geaendert++;
@@ -4706,15 +4706,12 @@ function renderLscgOutfitTab() {
       const realIdx = entry.versions.length - 1 - i;
       const dt = new Date(v.ts).toLocaleString('de-DE', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
       const preview = v.code ? v.code.substring(0, 40) + '…' : '(leer)';
-      const srcLabel = v.source === 'BC.Appearance' ? '🎭 BC' : '🔮 LSCG';
       return '<div class="lscg-version' + (i === 0 ? ' lscg-latest' : '') + '">'
         + '<span class="lscg-vnum">v' + (vs.length - i) + '</span>'
-        + '<span class="lscg-src">' + srcLabel + '</span>'
         + '<span class="lscg-date">' + dt + '</span>'
         + '<span class="lscg-preview" title="' + escHtml(v.code ?? '') + '">' + escHtml(preview) + '</span>'
         + '<div class="lscg-vbtns">'
         + '<button class="lscg-btn" onclick="copyLscgCode(\'' + escHtml(k) + '\',' + realIdx + ')" title="Code kopieren">📋 Code</button>'
-        + (v.bcCode && v.source !== 'BC.Appearance' ? '<button class="lscg-btn" onclick="copyLscgBcCode(\'' + escHtml(k) + '\',' + realIdx + ')" title="BC-Appearance kopieren">🎭 BC</button>' : '')
         + '<button class="lscg-btn lscg-del" onclick="deleteLscgVersion(\'' + escHtml(k) + '\',' + realIdx + ')" title="Version löschen">✕</button>'
         + '</div></div>';
     }).join('');
@@ -4735,11 +4732,6 @@ function copyLscgCode(memberKey, vIdx) {
   navigator.clipboard.writeText(v.code).then(() => showStatus('📋 Code kopiert!', 'success'));
 }
 
-function copyLscgBcCode(memberKey, vIdx) {
-  const v = LSCG_OUTFIT_DB[memberKey]?.versions?.[vIdx];
-  if (!v?.bcCode) { showStatus('❌ Kein BC-Code vorhanden', 'error'); return; }
-  navigator.clipboard.writeText(v.bcCode).then(() => showStatus('📋 BC-Appearance kopiert!', 'success'));
-}
 
 function deleteLscgVersion(memberKey, vIdx) {
   const entry = LSCG_OUTFIT_DB[memberKey];
