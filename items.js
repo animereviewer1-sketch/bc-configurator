@@ -2913,7 +2913,7 @@ function deleteProfileByIdx(idx) {
 let _activeTab = 'items';
 function switchTab(tab) {
   _activeTab = tab;
-  ['items','outfit','curse','bot','log','money','events','rank','shop','outfit-import'].forEach(t => {
+  ['items','outfit','curse','bot','log','money','events','rank','shop','outfit-import','lscg-outfit'].forEach(t => {
     document.getElementById('tab-'+t)?.classList.toggle('active', t===tab);
     document.getElementById('tab-'+t+'-btn')?.classList.toggle('active', t===tab);
   });
@@ -2925,6 +2925,7 @@ function switchTab(tab) {
   if (tab === 'rank')          { renderRankTab(); }
   if (tab === 'shop')          { renderShopTab(); }
   if (tab === 'outfit-import') { renderOutfitImportTab(); }
+  if (tab === 'lscg-outfit')   { renderLscgOutfitTab(); }
 
 }
 
@@ -4207,6 +4208,10 @@ window.addEventListener('message', function(ev) {
     case 'SCREENSHOT_DATA':
       _handleScreenshotData(ev.data);
       break;
+
+    case 'LSCG_OUTFITS_DATA':
+      _handleLscgOutfitsData(ev.data);
+      break;
   }
 });
 
@@ -4636,4 +4641,126 @@ function importAllData() {
     r.readAsText(e.target.files[0]);
   };
   inp.click();
+}
+// ══════════════════════════════════════════════════════════════
+//  LSCG OUTFIT TAB
+// ══════════════════════════════════════════════════════════════
+let LSCG_OUTFIT_DB = {}; // memberNum (string) → { name, versions: [{code, bcCode, source, ts}] }
+const LSCG_OUTFIT_MAX_VERSIONS = 20;
+
+(async () => {
+  const d = await idbGet('BC_LSCG_OUTFIT_v1');
+  if (d && typeof d === 'object') {
+    LSCG_OUTFIT_DB = d;
+    console.log('[BCK] LSCG Outfits geladen:', Object.keys(d).length, 'Chars');
+  }
+})();
+
+async function _saveLscgOutfitDB() { await idbSet('BC_LSCG_OUTFIT_v1', LSCG_OUTFIT_DB); }
+
+function scanLscgOutfits() {
+  if (!_connected) { showStatus('❌ Nicht verbunden mit BC', 'error'); return; }
+  bcSend({ type: 'GET_LSCG_OUTFITS' });
+  showStatus('⏳ Scanne LSCG Outfits...', 'info');
+}
+
+function _handleLscgOutfitsData(data) {
+  if (data.err) { showStatus('❌ LSCG Scan: ' + data.err, 'error'); return; }
+  const results = data.results ?? [];
+  let neuChars = 0, geaendert = 0;
+  for (const r of results) {
+    const key = String(r.memberNumber);
+    const isNew = !LSCG_OUTFIT_DB[key];
+    if (isNew) { LSCG_OUTFIT_DB[key] = { name: r.name, versions: [] }; neuChars++; }
+    else LSCG_OUTFIT_DB[key].name = r.name;
+    const entry = LSCG_OUTFIT_DB[key];
+    const last = entry.versions[entry.versions.length - 1];
+    if (!last || last.code !== r.code) {
+      entry.versions.push({ code: r.code, bcCode: r.bcCode, source: r.source, ts: r.ts });
+      if (entry.versions.length > LSCG_OUTFIT_MAX_VERSIONS)
+        entry.versions = entry.versions.slice(-LSCG_OUTFIT_MAX_VERSIONS);
+      if (!isNew) geaendert++;
+    }
+  }
+  _saveLscgOutfitDB();
+  if (_activeTab === 'lscg-outfit') renderLscgOutfitTab();
+  let msg = '✅ LSCG Outfits: ' + results.length + ' Chars gescannt';
+  if (neuChars)    msg += ' | +' + neuChars + ' neu';
+  if (geaendert)   msg += ' | ' + geaendert + ' geändert';
+  showStatus(msg, 'success');
+}
+
+function renderLscgOutfitTab() {
+  const body = document.getElementById('lscgOutfitBody');
+  if (!body) return;
+  const keys = Object.keys(LSCG_OUTFIT_DB).sort((a, b) =>
+    (LSCG_OUTFIT_DB[a].name ?? '').localeCompare(LSCG_OUTFIT_DB[b].name ?? ''));
+  if (!keys.length) {
+    body.innerHTML = '<div class="lscg-empty">Noch keine Outfits gespeichert.<br>Drücke <strong>Jetzt scannen</strong> während Charaktere im Raum sind.</div>';
+    return;
+  }
+  body.innerHTML = keys.map(k => {
+    const entry = LSCG_OUTFIT_DB[k];
+    const vs = [...entry.versions].reverse(); // neueste zuerst
+    const versHtml = vs.map((v, i) => {
+      const realIdx = entry.versions.length - 1 - i;
+      const dt = new Date(v.ts).toLocaleString('de-DE', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
+      const preview = v.code ? v.code.substring(0, 40) + '…' : '(leer)';
+      const srcLabel = v.source === 'BC.Appearance' ? '🎭 BC' : '🔮 LSCG';
+      return '<div class="lscg-version' + (i === 0 ? ' lscg-latest' : '') + '">'
+        + '<span class="lscg-vnum">v' + (vs.length - i) + '</span>'
+        + '<span class="lscg-src">' + srcLabel + '</span>'
+        + '<span class="lscg-date">' + dt + '</span>'
+        + '<span class="lscg-preview" title="' + escHtml(v.code ?? '') + '">' + escHtml(preview) + '</span>'
+        + '<div class="lscg-vbtns">'
+        + '<button class="lscg-btn" onclick="copyLscgCode(\'' + escHtml(k) + '\',' + realIdx + ')" title="Code kopieren">📋 Code</button>'
+        + (v.bcCode && v.source !== 'BC.Appearance' ? '<button class="lscg-btn" onclick="copyLscgBcCode(\'' + escHtml(k) + '\',' + realIdx + ')" title="BC-Appearance kopieren">🎭 BC</button>' : '')
+        + '<button class="lscg-btn lscg-del" onclick="deleteLscgVersion(\'' + escHtml(k) + '\',' + realIdx + ')" title="Version löschen">✕</button>'
+        + '</div></div>';
+    }).join('');
+    return '<div class="lscg-char-block">'
+      + '<div class="lscg-char-hdr">'
+      + '<span class="lscg-char-name">' + escHtml(entry.name) + ' <span class="lscg-char-id">#' + escHtml(k) + '</span></span>'
+      + '<span class="lscg-ver-count">' + entry.versions.length + ' Version' + (entry.versions.length !== 1 ? 'en' : '') + '</span>'
+      + '<button class="lscg-btn lscg-del" onclick="deleteAllLscgVersions(\'' + escHtml(k) + '\')" title="Alle Versionen löschen">🗑️ Alle</button>'
+      + '</div>'
+      + '<div class="lscg-versions">' + versHtml + '</div>'
+      + '</div>';
+  }).join('');
+}
+
+function copyLscgCode(memberKey, vIdx) {
+  const v = LSCG_OUTFIT_DB[memberKey]?.versions?.[vIdx];
+  if (!v?.code) { showStatus('❌ Kein Code vorhanden', 'error'); return; }
+  navigator.clipboard.writeText(v.code).then(() => showStatus('📋 Code kopiert!', 'success'));
+}
+
+function copyLscgBcCode(memberKey, vIdx) {
+  const v = LSCG_OUTFIT_DB[memberKey]?.versions?.[vIdx];
+  if (!v?.bcCode) { showStatus('❌ Kein BC-Code vorhanden', 'error'); return; }
+  navigator.clipboard.writeText(v.bcCode).then(() => showStatus('📋 BC-Appearance kopiert!', 'success'));
+}
+
+function deleteLscgVersion(memberKey, vIdx) {
+  const entry = LSCG_OUTFIT_DB[memberKey];
+  if (!entry) return;
+  entry.versions.splice(vIdx, 1);
+  if (!entry.versions.length) delete LSCG_OUTFIT_DB[memberKey];
+  _saveLscgOutfitDB();
+  renderLscgOutfitTab();
+}
+
+function deleteAllLscgVersions(memberKey) {
+  if (!confirm('Alle Versionen von ' + (LSCG_OUTFIT_DB[memberKey]?.name ?? memberKey) + ' löschen?')) return;
+  delete LSCG_OUTFIT_DB[memberKey];
+  _saveLscgOutfitDB();
+  renderLscgOutfitTab();
+}
+
+function clearAllLscgOutfits() {
+  if (!confirm('ALLE gespeicherten LSCG-Outfits löschen?')) return;
+  LSCG_OUTFIT_DB = {};
+  _saveLscgOutfitDB();
+  renderLscgOutfitTab();
+  showStatus('🗑️ LSCG Outfits geleert', 'info');
 }

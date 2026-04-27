@@ -911,6 +911,39 @@ window.CurseScanner = (() => {
           break;
         }
 
+        case 'GET_LSCG_OUTFITS': {
+          // Scannt alle Charaktere im Raum auf LSCG Outfit-Codes + BC-Appearance
+          try {
+            const _chars = [Player, ...(ChatRoomCharacter ?? [])].filter(c => c?.MemberNumber);
+            const _results = _chars.map(C => {
+              let code = null, source = null;
+              // 1. LSCG AppearanceModule / OutfitModule direkt prüfen
+              try {
+                const _mod = C.LSCG?.AppearanceModule ?? C.LSCG?.OutfitModule;
+                if (_mod) {
+                  if (typeof _mod.GetOutfitCode === 'function')  { code = _mod.GetOutfitCode();  source = 'LSCG.GetOutfitCode'; }
+                  else if (typeof _mod.ExportCode === 'function') { code = _mod.ExportCode();     source = 'LSCG.ExportCode'; }
+                  else { code = LZString.compressToBase64(JSON.stringify(_mod)); source = 'LSCG.AppearanceModule'; }
+                }
+              } catch(_e) {}
+              // 2. Globale LSCG-Funktion
+              if (!code) try {
+                if (typeof window.LSCG?.CharacterExportCode === 'function') { code = window.LSCG.CharacterExportCode(C); source = 'LSCG.CharacterExportCode'; }
+              } catch(_e) {}
+              // 3. BC Appearance als sicherer Fallback
+              let bcCode = null;
+              try { bcCode = LZString.compressToBase64(JSON.stringify(C.Appearance)); } catch(_e) {}
+              if (!code) { code = bcCode; source = 'BC.Appearance'; }
+              return { memberNumber: C.MemberNumber, name: C.Name, code, bcCode, source, ts: Date.now() };
+            });
+            src.postMessage({ app: APP, type: 'LSCG_OUTFITS_DATA', results: _results }, ALLOWED_ORIGIN);
+            BCK.ok('LSCG_OUTFITS_DATA: ' + _results.length + ' Chars');
+          } catch(ex) {
+            src.postMessage({ app: APP, type: 'LSCG_OUTFITS_DATA', err: ex.message }, ALLOWED_ORIGIN);
+          }
+          break;
+        }
+
         case 'EXEC': {
           const _execCode = ev.data.code;
           const _execLen  = _execCode?.length ?? 0;
