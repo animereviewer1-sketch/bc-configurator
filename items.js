@@ -4212,6 +4212,14 @@ window.addEventListener('message', function(ev) {
     case 'LSCG_OUTFITS_DATA':
       _handleLscgOutfitsData(ev.data);
       break;
+
+    case 'SAVE_LSCG_OUTFIT_RESULT':
+      if (ev.data.ok) {
+        showStatus('✅ LSCG-Outfit "' + ev.data.key + '" gespeichert! → /lscg wear-outfit ' + ev.data.key, 'success');
+      } else {
+        showStatus('❌ Speichern fehlgeschlagen: ' + (ev.data.err ?? 'Unbekannt'), 'error');
+      }
+      break;
   }
 });
 
