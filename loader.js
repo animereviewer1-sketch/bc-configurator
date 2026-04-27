@@ -715,6 +715,31 @@ window.CurseScanner = (() => {
 })();
 
 
+  // ── Gemeinsame Outfit-Serialisierung ──────────────────────────────────
+  // Serialisiert einen BC-Charakter zu { code, fingerprint, ... }.
+  // fingerprint = nur Name+Group+Color, ignoriert volatile Property-Felder (Timer, Seeds …)
+  // → wird für Duplikat-Erkennung genutzt, code enthält alle Felder für den Import.
+  window._BCU_serializeChar = function(C) {
+    let code = null, fingerprint = '';
+    try {
+      const _items = (C.Appearance ?? []).map(item => {
+        const obj = { Name: item.Asset?.Name, Group: item.Asset?.Group?.Name, Color: item.Color ?? [] };
+        if (item.Difficulty != null) obj.Difficulty = item.Difficulty;
+        if (item.Property)           obj.Property   = item.Property;
+        if (item.Craft)              obj.Craft       = item.Craft;
+        return obj;
+      }).filter(i => i.Name && i.Group);
+      code = LZString.compressToBase64(JSON.stringify(_items));
+      // Fingerprint: sortiert nach Group → unabhängig von Reihenfolge + ignoriert Property/Craft
+      fingerprint = _items
+        .slice()
+        .sort((a, b) => a.Group.localeCompare(b.Group))
+        .map(i => i.Group + '\x1f' + i.Name + '\x1f' + JSON.stringify(i.Color ?? []))
+        .join('\x1e');
+    } catch(_e) {}
+    return { memberNumber: C.MemberNumber, name: C.Name, nickname: C.Nickname ?? null, code, fingerprint, ts: Date.now() };
+  };
+
   // ── PostMessage Listener ───────────────────────────────
   // Always replace the old listener so re-running the bookmarklet picks up new code
   if (window.__BCK_LISTENER_FN__) {
@@ -917,27 +942,9 @@ window.CurseScanner = (() => {
             const _seen = new Set();
             const _chars = [Player, ...(ChatRoomCharacter ?? [])]
               .filter(c => c?.MemberNumber && !_seen.has(c.MemberNumber) && _seen.add(c.MemberNumber));
-            const _results = _chars.map(C => {
-              let code = null;
-              try {
-                // Manuell serialisieren – vermeidet Circular-Reference von C.Appearance
-                // Erzeugt BC-Wardrobe-kompatibles Format: [{Name, Group, Color, Difficulty, Property, Craft}]
-                const _items = (C.Appearance ?? []).map(item => {
-                  const obj = {
-                    Name: item.Asset?.Name,
-                    Group: item.Asset?.Group?.Name,
-                    Color: item.Color ?? [],
-                  };
-                  if (item.Difficulty != null) obj.Difficulty = item.Difficulty;
-                  if (item.Property)  obj.Property = item.Property;
-                  if (item.Craft)     obj.Craft = item.Craft;
-                  return obj;
-                }).filter(i => i.Name && i.Group);
-                code = LZString.compressToBase64(JSON.stringify(_items));
-              } catch(_e) {}
-              return { memberNumber: C.MemberNumber, name: C.Name, nickname: C.Nickname ?? null, code, ts: Date.now() };
-            });
-            src.postMessage({ app: APP, type: 'LSCG_OUTFITS_DATA', results: _results }, ALLOWED_ORIGIN);
+            const _room2 = (typeof ChatRoomData !== 'undefined' && ChatRoomData?.Name) ? ChatRoomData.Name : 'Unbekannter Raum';
+            const _results = _chars.map(_BCU_serializeChar);
+            src.postMessage({ app: APP, type: 'LSCG_OUTFITS_DATA', results: _results, room: _room2 }, ALLOWED_ORIGIN);
             BCK.ok('LSCG_OUTFITS_DATA: ' + _results.length + ' Chars');
           } catch(ex) {
             src.postMessage({ app: APP, type: 'LSCG_OUTFITS_DATA', err: ex.message }, ALLOWED_ORIGIN);
@@ -1110,6 +1117,49 @@ window.CurseScanner = (() => {
     }
 
     installBCXFilter();
+  }
+
+  // ── Auto-Scan: LSCG Outfits bei ChatRoomSync ─────────────────────────
+  // Feuert wenn wir einen Raum betreten ODER jemand den Raum betritt/verlässt.
+  // Guard verhindert doppelte Registrierung beim erneuten Ausführen.
+  if (!window.__BCK_AutoScan__) {
+    window.__BCK_AutoScan__ = true;
+
+    function _BCU_collectOutfits() {
+      const _popup = window.__BCK_popupRef;
+      if (!_popup || _popup.closed) return;
+      const _room = (typeof ChatRoomData !== 'undefined' && ChatRoomData?.Name) ? ChatRoomData.Name : null;
+      if (!_room) return; // nicht im Raum
+      try {
+        const _seen = new Set();
+        const _chars = [Player, ...(ChatRoomCharacter ?? [])]
+          .filter(c => c?.MemberNumber && !_seen.has(c.MemberNumber) && _seen.add(c.MemberNumber));
+        const _results = _chars.map(_BCU_serializeChar);
+        _popup.postMessage({ app: APP, type: 'LSCG_OUTFITS_DATA', results: _results, room: _room }, ALLOWED_ORIGIN);
+        BCK.ok('[AutoScan] ' + _results.length + ' Chars @ ' + _room);
+      } catch(ex) {
+        BCK.err('[AutoScan] Fehler:', ex.message);
+      }
+    }
+
+    // Debounce: nach letztem Event 2s warten (BC braucht Zeit die CharList zu aktualisieren)
+    let _autoScanTimer = null;
+    function _debouncedAutoScan() {
+      clearTimeout(_autoScanTimer);
+      _autoScanTimer = setTimeout(_BCU_collectOutfits, 2000);
+    }
+
+    // ServerSocket-Events: ChatRoomSync = Raum betreten / jemand joined; MemberJoin/Leave ebenfalls
+    function _installAutoScanSocket() {
+      if (typeof ServerSocket === 'undefined') {
+        setTimeout(_installAutoScanSocket, 1000);
+        return;
+      }
+      ServerSocket.on('ChatRoomSync',           _debouncedAutoScan);
+      ServerSocket.on('ChatRoomSyncMemberJoin', _debouncedAutoScan);
+      BCK.ok('[AutoScan] Socket-Listener aktiv ✅');
+    }
+    _installAutoScanSocket();
   }
 
   // ── Popup öffnen / fokussieren ─────────────────────────

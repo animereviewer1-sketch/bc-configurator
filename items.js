@@ -4644,19 +4644,20 @@ function importAllData() {
 }
 // ══════════════════════════════════════════════════════════════
 //  LSCG OUTFIT TAB
+//  Struktur: DB[room][dateStr][memberNum] = { name, nickname, versions:[{code,ts}] }
 // ══════════════════════════════════════════════════════════════
-let LSCG_OUTFIT_DB = {}; // memberNum (string) → { name, nickname, versions: [{code, ts}] }
-const LSCG_OUTFIT_MAX_VERSIONS = 20;
+let LSCG_OUTFIT_DB = {};
+const LSCG_OUTFIT_MAX_VERSIONS = 50; // pro Char/Tag/Raum
 
 (async () => {
-  const d = await idbGet('BC_LSCG_OUTFIT_v1');
+  const d = await idbGet('BC_LSCG_OUTFIT_v2');
   if (d && typeof d === 'object') {
     LSCG_OUTFIT_DB = d;
-    console.log('[BCK] LSCG Outfits geladen:', Object.keys(d).length, 'Chars');
+    console.log('[BCK] LSCG Outfits geladen:', JSON.stringify(Object.keys(d)));
   }
 })();
 
-async function _saveLscgOutfitDB() { await idbSet('BC_LSCG_OUTFIT_v1', LSCG_OUTFIT_DB); }
+async function _saveLscgOutfitDB() { await idbSet('BC_LSCG_OUTFIT_v2', LSCG_OUTFIT_DB); }
 
 function scanLscgOutfits() {
   if (!_connected) { showStatus('❌ Nicht verbunden mit BC', 'error'); return; }
@@ -4667,86 +4668,100 @@ function scanLscgOutfits() {
 function _handleLscgOutfitsData(data) {
   if (data.err) { showStatus('❌ LSCG Scan: ' + data.err, 'error'); return; }
   const results = data.results ?? [];
-  let neuChars = 0, geaendert = 0;
+  if (!results.length) return;
+
+  const room    = (data.room ?? 'Unbekannter Raum').trim();
+  const dateStr = new Date().toISOString().split('T')[0]; // "2026-04-27"
+
+  if (!LSCG_OUTFIT_DB[room])          LSCG_OUTFIT_DB[room] = {};
+  if (!LSCG_OUTFIT_DB[room][dateStr]) LSCG_OUTFIT_DB[room][dateStr] = {};
+  const daySlot = LSCG_OUTFIT_DB[room][dateStr];
+
+  let neu = 0, geaendert = 0;
   for (const r of results) {
-    const key = String(r.memberNumber);
-    const isNew = !LSCG_OUTFIT_DB[key];
-    if (isNew) { LSCG_OUTFIT_DB[key] = { name: r.name, nickname: r.nickname ?? null, versions: [] }; neuChars++; }
-    else { LSCG_OUTFIT_DB[key].name = r.name; LSCG_OUTFIT_DB[key].nickname = r.nickname ?? null; }
-    const entry = LSCG_OUTFIT_DB[key];
-    const last = entry.versions[entry.versions.length - 1];
-    if (!last || last.code !== r.code) {
-      entry.versions.push({ code: r.code, ts: r.ts });
+    const mk = String(r.memberNumber);
+    if (!daySlot[mk]) { daySlot[mk] = { name: r.name, nickname: r.nickname ?? null, versions: [] }; neu++; }
+    else { daySlot[mk].name = r.name; daySlot[mk].nickname = r.nickname ?? null; }
+    const entry = daySlot[mk];
+    const last  = entry.versions[entry.versions.length - 1];
+    // Fingerprint vergleichen (Name+Group+Color) – ignoriert volatile Property-Felder wie Timer
+    const fp = r.fingerprint ?? r.code ?? '';
+    if (!last || (last.fingerprint ?? last.code ?? '') !== fp) {
+      entry.versions.push({ code: r.code, fingerprint: fp, ts: r.ts });
       if (entry.versions.length > LSCG_OUTFIT_MAX_VERSIONS)
         entry.versions = entry.versions.slice(-LSCG_OUTFIT_MAX_VERSIONS);
-      if (!isNew) geaendert++;
+      if (entry.versions.length > 1) geaendert++;
     }
   }
   _saveLscgOutfitDB();
   if (_activeTab === 'lscg-outfit') renderLscgOutfitTab();
-  let msg = '✅ LSCG Outfits: ' + results.length + ' Chars gescannt';
-  if (neuChars)    msg += ' | +' + neuChars + ' neu';
-  if (geaendert)   msg += ' | ' + geaendert + ' geändert';
+  let msg = '✅ ' + room + ': ' + results.length + ' Chars';
+  if (neu)      msg += ' | +' + neu + ' neu';
+  if (geaendert) msg += ' | ' + geaendert + ' geändert';
   showStatus(msg, 'success');
 }
 
 function renderLscgOutfitTab() {
   const body = document.getElementById('lscgOutfitBody');
   if (!body) return;
-  const keys = Object.keys(LSCG_OUTFIT_DB).sort((a, b) =>
-    (LSCG_OUTFIT_DB[a].name ?? '').localeCompare(LSCG_OUTFIT_DB[b].name ?? ''));
-  if (!keys.length) {
-    body.innerHTML = '<div class="lscg-empty">Noch keine Outfits gespeichert.<br>Drücke <strong>Jetzt scannen</strong> während Charaktere im Raum sind.</div>';
+
+  const rooms = Object.keys(LSCG_OUTFIT_DB).sort();
+  if (!rooms.length) {
+    body.innerHTML = '<div class="lscg-empty">Noch keine Outfits gespeichert.<br>Automatischer Scan startet beim nächsten Raum-Beitritt.</div>';
     return;
   }
-  body.innerHTML = keys.map(k => {
-    const entry = LSCG_OUTFIT_DB[k];
-    const vs = [...entry.versions].reverse(); // neueste zuerst
-    const versHtml = vs.map((v, i) => {
-      const realIdx = entry.versions.length - 1 - i;
-      const dt = new Date(v.ts).toLocaleString('de-DE', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
-      const preview = v.code ? v.code.substring(0, 40) + '…' : '(leer)';
-      return '<div class="lscg-version' + (i === 0 ? ' lscg-latest' : '') + '">'
-        + '<span class="lscg-vnum">v' + (vs.length - i) + '</span>'
-        + '<span class="lscg-date">' + dt + '</span>'
-        + '<span class="lscg-preview" title="' + escHtml(v.code ?? '') + '">' + escHtml(preview) + '</span>'
-        + '<div class="lscg-vbtns">'
-        + '<button class="lscg-btn" onclick="copyLscgCode(\'' + escHtml(k) + '\',' + realIdx + ')" title="Code kopieren">📋 Code</button>'
-        + '<button class="lscg-btn lscg-del" onclick="deleteLscgVersion(\'' + escHtml(k) + '\',' + realIdx + ')" title="Version löschen">✕</button>'
-        + '</div></div>';
+
+  body.innerHTML = rooms.map(room => {
+    const dates = Object.keys(LSCG_OUTFIT_DB[room]).sort().reverse(); // neueste zuerst
+    const datesHtml = dates.map(dateStr => {
+      const daySlot = LSCG_OUTFIT_DB[room][dateStr];
+      const members = Object.keys(daySlot).sort((a, b) =>
+        (daySlot[a].name ?? '').localeCompare(daySlot[b].name ?? ''));
+
+      const charsHtml = members.map(mk => {
+        const entry = daySlot[mk];
+        const vs    = [...entry.versions].reverse(); // neueste zuerst
+        const versHtml = vs.map((v, i) => {
+          const realIdx = entry.versions.length - 1 - i;
+          const time    = new Date(v.ts).toLocaleString('de-DE', { hour:'2-digit', minute:'2-digit' });
+          const preview = v.code ? v.code.substring(0, 36) + '…' : '(leer)';
+          const rStr    = escHtml(room);
+          return '<div class="lscg-version' + (i === 0 ? ' lscg-latest' : '') + '">'
+            + '<span class="lscg-vnum">v' + (vs.length - i) + '</span>'
+            + '<span class="lscg-vtime">' + time + '</span>'
+            + '<span class="lscg-preview" title="' + escHtml(v.code ?? '') + '">' + escHtml(preview) + '</span>'
+            + '<button class="lscg-btn" onclick="copyLscgCode(' + JSON.stringify(room) + ',' + JSON.stringify(dateStr) + ',' + JSON.stringify(mk) + ',' + realIdx + ')" title="Code kopieren">📋</button>'
+            + '</div>';
+        }).join('');
+        const nameLabel = escHtml(entry.name)
+          + (entry.nickname ? ' <em class="lscg-nick">„' + escHtml(entry.nickname) + '"</em>' : '')
+          + ' <span class="lscg-char-id">#' + escHtml(mk) + '</span>';
+        return '<div class="lscg-char-block">'
+          + '<div class="lscg-char-hdr"><span class="lscg-char-name">' + nameLabel + '</span>'
+          + '<span class="lscg-ver-count">' + entry.versions.length + 'x</span></div>'
+          + '<div class="lscg-versions">' + versHtml + '</div>'
+          + '</div>';
+      }).join('');
+
+      const [y, m, d] = dateStr.split('-');
+      const dateFmt   = d + '.' + m + '.' + y;
+      return '<div class="lscg-date-block">'
+        + '<div class="lscg-date-hdr">📅 ' + escHtml(dateFmt) + ' <span class="lscg-date-count">(' + members.length + ' Chars)</span></div>'
+        + '<div class="lscg-date-chars">' + charsHtml + '</div>'
+        + '</div>';
     }).join('');
-    return '<div class="lscg-char-block">'
-      + '<div class="lscg-char-hdr">'
-      + '<span class="lscg-char-name">' + escHtml(entry.name) + (entry.nickname ? ' <em class="lscg-nick">„' + escHtml(entry.nickname) + '"</em>' : '') + ' <span class="lscg-char-id">#' + escHtml(k) + '</span></span>'
-      + '<span class="lscg-ver-count">' + entry.versions.length + ' Version' + (entry.versions.length !== 1 ? 'en' : '') + '</span>'
-      + '<button class="lscg-btn lscg-del" onclick="deleteAllLscgVersions(\'' + escHtml(k) + '\')" title="Alle Versionen löschen">🗑️ Alle</button>'
-      + '</div>'
-      + '<div class="lscg-versions">' + versHtml + '</div>'
+
+    return '<div class="lscg-room-block">'
+      + '<div class="lscg-room-hdr">📍 ' + escHtml(room) + '</div>'
+      + datesHtml
       + '</div>';
   }).join('');
 }
 
-function copyLscgCode(memberKey, vIdx) {
-  const v = LSCG_OUTFIT_DB[memberKey]?.versions?.[vIdx];
+function copyLscgCode(room, dateStr, memberKey, vIdx) {
+  const v = LSCG_OUTFIT_DB[room]?.[dateStr]?.[memberKey]?.versions?.[vIdx];
   if (!v?.code) { showStatus('❌ Kein Code vorhanden', 'error'); return; }
   navigator.clipboard.writeText(v.code).then(() => showStatus('📋 Code kopiert!', 'success'));
-}
-
-
-function deleteLscgVersion(memberKey, vIdx) {
-  const entry = LSCG_OUTFIT_DB[memberKey];
-  if (!entry) return;
-  entry.versions.splice(vIdx, 1);
-  if (!entry.versions.length) delete LSCG_OUTFIT_DB[memberKey];
-  _saveLscgOutfitDB();
-  renderLscgOutfitTab();
-}
-
-function deleteAllLscgVersions(memberKey) {
-  if (!confirm('Alle Versionen von ' + (LSCG_OUTFIT_DB[memberKey]?.name ?? memberKey) + ' löschen?')) return;
-  delete LSCG_OUTFIT_DB[memberKey];
-  _saveLscgOutfitDB();
-  renderLscgOutfitTab();
 }
 
 function clearAllLscgOutfits() {

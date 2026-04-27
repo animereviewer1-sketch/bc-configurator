@@ -3111,25 +3111,32 @@ document.write('<scr'+'ipt src="outfit-import.js?_='+_cbv+'"><\/scr'+'ipt>');
 <style>
 /* ── LSCG Outfit Tab ── */
 .lscg-empty { text-align:center; color:var(--text3); padding:48px 20px; font-size:.85rem; line-height:1.8; }
-.lscg-char-block { background:var(--bg2); border:1px solid var(--border); border-radius:8px; margin-bottom:10px; overflow:hidden; }
-.lscg-char-hdr { display:flex; align-items:center; gap:8px; padding:8px 12px; background:var(--bg3); border-bottom:1px solid var(--border); }
-.lscg-char-name { font-weight:700; font-size:.85rem; color:var(--text1); flex:1; }
-.lscg-char-id { color:var(--text3); font-size:.72rem; font-weight:400; }
-.lscg-nick { color:var(--acc2); font-size:.78rem; font-weight:400; font-style:italic; }
-.lscg-ver-count { font-size:.7rem; color:var(--text3); white-space:nowrap; }
-.lscg-versions { display:flex; flex-direction:column; gap:0; }
-.lscg-version { display:grid; grid-template-columns:36px 52px 90px 1fr auto; align-items:center; gap:8px; padding:6px 12px; border-bottom:1px solid rgba(255,255,255,0.04); font-size:.72rem; }
+/* Raum */
+.lscg-room-block { background:var(--bg2); border:1px solid var(--border); border-radius:10px; margin-bottom:12px; overflow:hidden; }
+.lscg-room-hdr { padding:9px 14px; background:var(--bg3); font-weight:700; font-size:.88rem; color:var(--text1); border-bottom:1px solid var(--border); letter-spacing:.02em; }
+/* Datum */
+.lscg-date-block { border-bottom:1px solid var(--border); }
+.lscg-date-block:last-child { border-bottom:none; }
+.lscg-date-hdr { padding:6px 14px; background:rgba(99,102,241,0.07); font-size:.75rem; color:var(--accent-text); font-weight:600; }
+.lscg-date-count { color:var(--text3); font-weight:400; }
+.lscg-date-chars { padding:6px 10px; display:flex; flex-direction:column; gap:6px; }
+/* Char */
+.lscg-char-block { background:var(--bg1); border:1px solid rgba(255,255,255,0.06); border-radius:7px; overflow:hidden; }
+.lscg-char-hdr { display:flex; align-items:center; gap:6px; padding:6px 10px; background:var(--bg3); border-bottom:1px solid var(--border); }
+.lscg-char-name { font-weight:700; font-size:.82rem; color:var(--text1); flex:1; }
+.lscg-char-id { color:var(--text3); font-size:.7rem; font-weight:400; }
+.lscg-nick { color:var(--acc2); font-size:.75rem; font-weight:400; font-style:italic; }
+.lscg-ver-count { font-size:.68rem; color:var(--text3); white-space:nowrap; }
+/* Versionen */
+.lscg-versions { display:flex; flex-direction:column; }
+.lscg-version { display:grid; grid-template-columns:30px 42px 1fr auto; align-items:center; gap:6px; padding:5px 10px; border-bottom:1px solid rgba(255,255,255,0.03); font-size:.7rem; }
 .lscg-version:last-child { border-bottom:none; }
-.lscg-version.lscg-latest { background:rgba(99,102,241,0.06); }
-.lscg-vnum { color:var(--accent-text); font-weight:700; font-size:.68rem; }
-.lscg-src { font-size:.65rem; color:var(--text3); white-space:nowrap; }
-.lscg-date { color:var(--text3); font-size:.68rem; white-space:nowrap; }
-.lscg-preview { color:var(--text2); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-family:monospace; font-size:.65rem; }
-.lscg-vbtns { display:flex; gap:4px; justify-content:flex-end; }
-.lscg-btn { background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.12); border-radius:4px; color:var(--text2); font-size:.65rem; padding:2px 6px; cursor:pointer; white-space:nowrap; transition:background .15s; }
+.lscg-version.lscg-latest { background:rgba(99,102,241,0.07); }
+.lscg-vnum { color:var(--accent-text); font-weight:700; font-size:.66rem; }
+.lscg-vtime { color:var(--text3); font-size:.66rem; white-space:nowrap; }
+.lscg-preview { color:var(--text2); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-family:monospace; font-size:.63rem; }
+.lscg-btn { background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.12); border-radius:4px; color:var(--text2); font-size:.65rem; padding:2px 7px; cursor:pointer; white-space:nowrap; transition:background .15s; }
 .lscg-btn:hover { background:rgba(255,255,255,0.1); color:var(--text1); }
-.lscg-btn.lscg-del { border-color:rgba(220,50,50,0.3); color:var(--red); }
-.lscg-btn.lscg-del:hover { background:rgba(220,50,50,0.12); }
 </style>
 
 </body>
