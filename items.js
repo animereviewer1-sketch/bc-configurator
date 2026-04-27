@@ -3077,18 +3077,17 @@ function _handleCurseData(data) {
   CURSE_DB         = data.database    ?? {};
   CURSE_LSCG       = data.lscgTable   ?? {};
   CURSE_CACHE_LSCG = data.lscgCache   ?? {};
-  // Cursed-Items: ZuletztGescannt für neue Einträge setzen (für "Neu binnen 1h"-Badge).
-  // Normale Items brauchen keinen Timestamp – ihr Neu-Badge basiert nur auf dem Outfit-Tag.
+  // Cursed-Items: ZuletztGescannt NUR für echte Neuzugänge setzen.
+  // Bestehende Einträge behalten ihren alten Timestamp (oder bleiben ohne → kein Badge).
   const _now = Date.now();
   Object.keys(CURSE_DB).forEach(k => {
     if (CURSE_DB[k].IstCursed) {
       if (!prevDB[k]) {
-        CURSE_DB[k].ZuletztGescannt = _now;                        // neu → Timestamp setzen
+        CURSE_DB[k].ZuletztGescannt = _now;                        // echter Neuzugang → Timestamp
       } else if (prevDB[k].ZuletztGescannt) {
         CURSE_DB[k].ZuletztGescannt = prevDB[k].ZuletztGescannt;  // bestehend → alten Wert behalten
-      } else {
-        CURSE_DB[k].ZuletztGescannt = _now;                        // kein alter Wert → als frisch markieren
       }
+      // kein else: bestehender Eintrag ohne Timestamp bleibt ohne → kein 🔮 Neu
     }
   });
   _updateCurseStats();
@@ -3150,15 +3149,17 @@ function toggleCurseFilterPanel(e) {
   }
 }
 
-// Gibt zurück welcher Neu-Typ zutrifft:
-//   'normal'  → nicht-gecurstes Item: kein Outfit-Tag ODER Tag vor <5min gesetzt
-//   'cursed'  → gecurstes Item: in letzter Stunde gescannt (unabhaengig vom Outfit-Tag)
+// Gibt zurueck welcher Neu-Typ zutrifft:
+//   'normal'  → nicht-gecurstes Item ohne Outfit-Tag: nie angewendet ODER angewendet vor <5min
+//   'cursed'  → gecurstes Item ohne Outfit-Tag: in letzter Stunde gescannt
 //   false     → kein Badge
 function _getNeuType(entry) {
   const k   = (entry.Besitzer?.Nummer ?? '') + ':' + entry.ItemName + ':' + entry.CraftName;
   const now = Date.now();
+  // Outfit-Tag gesetzt → nie Neu (fuer beide Typen)
+  if (CURSE_OUTFIT_FLAGS[k]) return false;
   if (entry.IstCursed) {
-    // Curse-Neu: 1h ab Scan – Outfit-Tag aendert nichts daran
+    // Curse-Neu: kein Outfit-Tag + in letzter Stunde gescannt
     const fresh = entry.ZuletztGescannt && now - entry.ZuletztGescannt < 3600000;
     return fresh ? 'cursed' : false;
   }
