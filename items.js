@@ -4686,11 +4686,19 @@ function _handleLscgOutfitsData(data) {
     const last  = entry.versions[entry.versions.length - 1];
     // Fingerprint vergleichen (Name+Group+Color) – ignoriert volatile Property-Felder wie Timer
     const fp = r.fingerprint ?? r.code ?? '';
-    if (!last || (last.fingerprint ?? last.code ?? '') !== fp) {
+    const lastFp = last?.fingerprint ?? last?.code ?? '';
+    const lastCodeOk = !!last?.code;
+    if (!last || lastFp !== fp) {
+      // Outfit hat sich geändert → neue Version anlegen
       entry.versions.push({ code: r.code, fingerprint: fp, ts: r.ts });
       if (entry.versions.length > LSCG_OUTFIT_MAX_VERSIONS)
         entry.versions = entry.versions.slice(-LSCG_OUTFIT_MAX_VERSIONS);
       if (entry.versions.length > 1) geaendert++;
+    } else if (!lastCodeOk && r.code) {
+      // Gleicher Fingerprint, aber alter Code war kaputt (null) → Code still aktualisieren
+      last.code = r.code;
+      last.ts   = r.ts;
+      geaendert++;
     }
   }
   _saveLscgOutfitDB();
