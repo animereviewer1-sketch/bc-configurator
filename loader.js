@@ -719,20 +719,58 @@ window.CurseScanner = (() => {
   // Serialisiert einen BC-Charakter zu { code, fingerprint, ... }.
   // fingerprint = nur Name+Group+Color, ignoriert volatile Property-Felder (Timer, Seeds …)
   // → wird für Duplikat-Erkennung genutzt, code enthält alle Felder für den Import.
+  //
+  // _BCU_safeClone: JSON-basierter Clone mit WeakSet-Circular-Ref-Brecher.
+  // Benutzt JSON.stringify's native Replacer, der toJSON() automatisch aufruft
+  // und Circular References sauber mit undefined ersetzt (Key wird verworfen).
+  // Deutlich sicherer als manuelles DeepClone, das versehentlich zirkuläre
+  // Klone erzeugen kann (seen.get(val) gibt das halb-fertige Objekt zurück → noch kreisförmig).
+  function _BCU_safeClone(val) {
+    if (val == null || typeof val !== 'object') return val;
+    try {
+      const _seen = new WeakSet();
+      return JSON.parse(JSON.stringify(val, function(k, v) {
+        if (v && typeof v === 'object') {
+          if (_seen.has(v)) return undefined; // Circular → Key weglassen
+          _seen.add(v);
+        }
+        return v;
+      }));
+    } catch(_) {
+      return undefined; // Wenn alles fehlschlägt → Feld weglassen
+    }
+  }
+
   window._BCU_serializeChar = function(C) {
     let code = null, fingerprint = '';
     try {
-      // ServerAppearanceBundle(C.Appearance) ist BC's eigene Serialisierung für den Server.
-      // Sie löst alle Circular-References auf und liefert ItemBundle[]:
-      //   [{Group, Name, Color, Difficulty, Property, Craft}]
-      // Das ist exakt das Format das LSCG's /lscg get-outfit-code erzeugt.
-      const _bundle = ServerAppearanceBundle(C.Appearance ?? []);
-      code = LZString.compressToBase64(JSON.stringify(_bundle));
-      // Fingerprint: nur Group+Name+Color – ignoriert volatile Property (Timer etc.)
-      fingerprint = _bundle
-        .slice()
-        .sort((a, b) => (a.Group ?? '').localeCompare(b.Group ?? ''))
-        .map(i => (i.Group ?? '') + '\x1f' + (i.Name ?? '') + '\x1f' + JSON.stringify(i.Color ?? ''))
+      const _assetFamily = C.AssetFamily ?? 'Female3DCG';
+      const _items = [];
+      for (const item of (C.Appearance ?? [])) {
+        const grp  = item.Asset?.Group?.Name;
+        const name = item.Asset?.Name;
+        if (!grp || !name) continue;
+        // Asset validieren (wie LSCG's toItemBundle) – unbekannte Mod-Items überspringen
+        if (typeof AssetGet === 'function' && !AssetGet(_assetFamily, grp, name)) continue;
+        const obj = { Group: grp, Name: name, Color: _BCU_safeClone(item.Color) };
+        const craft = _BCU_safeClone(item.Craft);
+        const prop  = _BCU_safeClone(item.Property);
+        if (craft != null) obj.Craft    = craft;
+        if (prop  != null) obj.Property = prop;
+        _items.push(obj);
+      }
+      // Sicherheitshalber nochmal mit Circular-Brecher serialisieren
+      const _seen2 = new WeakSet();
+      code = LZString.compressToBase64(JSON.stringify(_items, function(k, v) {
+        if (v && typeof v === 'object') {
+          if (_seen2.has(v)) return undefined;
+          _seen2.add(v);
+        }
+        return v;
+      }));
+      fingerprint = _items.slice()
+        .sort((a, b) => a.Group.localeCompare(b.Group))
+        .map(i => i.Group + '\x1f' + i.Name + '\x1f' + JSON.stringify(i.Color ?? ''))
         .join('\x1e');
     } catch(_e) { console.warn('[BCU] serializeChar Fehler:', _e); }
     return { memberNumber: C.MemberNumber, name: C.Name, nickname: C.Nickname ?? null, code, fingerprint, ts: Date.now() };
