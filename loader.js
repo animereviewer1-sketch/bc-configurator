@@ -723,10 +723,10 @@ window.CurseScanner = (() => {
     let code = null, fingerprint = '';
     try {
       const _items = (C.Appearance ?? []).map(item => {
+        // Nur Name+Group+Color+Craft – Property/Difficulty weglassen da BC-interne
+        // Laufzeit-Objekte (Timer, Lock-States) den Import mit "Bad data" brechen.
         const obj = { Name: item.Asset?.Name, Group: item.Asset?.Group?.Name, Color: item.Color ?? [] };
-        if (item.Difficulty != null) obj.Difficulty = item.Difficulty;
-        if (item.Property)           obj.Property   = item.Property;
-        if (item.Craft)              obj.Craft       = item.Craft;
+        if (item.Craft) obj.Craft = item.Craft;
         return obj;
       }).filter(i => i.Name && i.Group);
       code = LZString.compressToBase64(JSON.stringify(_items));
