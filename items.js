@@ -4645,7 +4645,7 @@ function importAllData() {
 // ══════════════════════════════════════════════════════════════
 //  LSCG OUTFIT TAB
 // ══════════════════════════════════════════════════════════════
-let LSCG_OUTFIT_DB = {}; // memberNum (string) → { name, versions: [{code, ts}] }
+let LSCG_OUTFIT_DB = {}; // memberNum (string) → { name, nickname, versions: [{code, ts}] }
 const LSCG_OUTFIT_MAX_VERSIONS = 20;
 
 (async () => {
@@ -4671,8 +4671,8 @@ function _handleLscgOutfitsData(data) {
   for (const r of results) {
     const key = String(r.memberNumber);
     const isNew = !LSCG_OUTFIT_DB[key];
-    if (isNew) { LSCG_OUTFIT_DB[key] = { name: r.name, versions: [] }; neuChars++; }
-    else LSCG_OUTFIT_DB[key].name = r.name;
+    if (isNew) { LSCG_OUTFIT_DB[key] = { name: r.name, nickname: r.nickname ?? null, versions: [] }; neuChars++; }
+    else { LSCG_OUTFIT_DB[key].name = r.name; LSCG_OUTFIT_DB[key].nickname = r.nickname ?? null; }
     const entry = LSCG_OUTFIT_DB[key];
     const last = entry.versions[entry.versions.length - 1];
     if (!last || last.code !== r.code) {
@@ -4717,7 +4717,7 @@ function renderLscgOutfitTab() {
     }).join('');
     return '<div class="lscg-char-block">'
       + '<div class="lscg-char-hdr">'
-      + '<span class="lscg-char-name">' + escHtml(entry.name) + ' <span class="lscg-char-id">#' + escHtml(k) + '</span></span>'
+      + '<span class="lscg-char-name">' + escHtml(entry.name) + (entry.nickname ? ' <em class="lscg-nick">„' + escHtml(entry.nickname) + '"</em>' : '') + ' <span class="lscg-char-id">#' + escHtml(k) + '</span></span>'
       + '<span class="lscg-ver-count">' + entry.versions.length + ' Version' + (entry.versions.length !== 1 ? 'en' : '') + '</span>'
       + '<button class="lscg-btn lscg-del" onclick="deleteAllLscgVersions(\'' + escHtml(k) + '\')" title="Alle Versionen löschen">🗑️ Alle</button>'
       + '</div>'

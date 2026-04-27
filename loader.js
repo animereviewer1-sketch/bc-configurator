@@ -919,11 +919,23 @@ window.CurseScanner = (() => {
               .filter(c => c?.MemberNumber && !_seen.has(c.MemberNumber) && _seen.add(c.MemberNumber));
             const _results = _chars.map(C => {
               let code = null;
-              // CharacterAppearanceStringify loest das Circular-Reference-Problem von JSON.stringify
               try {
-                code = LZString.compressToBase64(CharacterAppearanceStringify(C));
+                // Manuell serialisieren – vermeidet Circular-Reference von C.Appearance
+                // Erzeugt BC-Wardrobe-kompatibles Format: [{Name, Group, Color, Difficulty, Property, Craft}]
+                const _items = (C.Appearance ?? []).map(item => {
+                  const obj = {
+                    Name: item.Asset?.Name,
+                    Group: item.Asset?.Group?.Name,
+                    Color: item.Color ?? [],
+                  };
+                  if (item.Difficulty != null) obj.Difficulty = item.Difficulty;
+                  if (item.Property)  obj.Property = item.Property;
+                  if (item.Craft)     obj.Craft = item.Craft;
+                  return obj;
+                }).filter(i => i.Name && i.Group);
+                code = LZString.compressToBase64(JSON.stringify(_items));
               } catch(_e) {}
-              return { memberNumber: C.MemberNumber, name: C.Name, code, ts: Date.now() };
+              return { memberNumber: C.MemberNumber, name: C.Name, nickname: C.Nickname ?? null, code, ts: Date.now() };
             });
             src.postMessage({ app: APP, type: 'LSCG_OUTFITS_DATA', results: _results }, ALLOWED_ORIGIN);
             BCK.ok('LSCG_OUTFITS_DATA: ' + _results.length + ' Chars');
