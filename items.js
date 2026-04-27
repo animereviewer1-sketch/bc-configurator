@@ -3009,7 +3009,8 @@ let CURSE_CACHE_LSCG = {}; // from lscgCache
 let CURSE_COMMENTS = {};
 function _saveCurseComments() { idbSet('BC_CURSE_COMMENTS_v1', CURSE_COMMENTS); }
 // ── Outfit-Flags ─────────────────────────────────────────────
-let CURSE_OUTFIT_FLAGS = {};  // dbKey → true
+let CURSE_OUTFIT_FLAGS = {};  // dbKey → timestamp (wann Outfit-Tag gesetzt wurde)
+let CURSE_APPLIED_TS  = {};  // dbKey → timestamp (wann Item zuletzt angewendet wurde)
 function _saveCurseOutfitFlags() {
   // Outfit-Flags sofort separat speichern (schnell, kein Freeze)
   idbSet('BC_CURSE_OUTFIT_v1', CURSE_OUTFIT_FLAGS);
@@ -3076,14 +3077,18 @@ function _handleCurseData(data) {
   CURSE_DB         = data.database    ?? {};
   CURSE_LSCG       = data.lscgTable   ?? {};
   CURSE_CACHE_LSCG = data.lscgCache   ?? {};
-  // Stamp only truly new entries with the current time (enables "Neu within 1h" logic).
-  // Existing entries keep their old ZuletztGescannt so the badge expires naturally.
+  // Cursed-Items: ZuletztGescannt für neue Einträge setzen (für "Neu binnen 1h"-Badge).
+  // Normale Items brauchen keinen Timestamp – ihr Neu-Badge basiert nur auf dem Outfit-Tag.
   const _now = Date.now();
   Object.keys(CURSE_DB).forEach(k => {
-    if (!prevDB[k]) {
-      CURSE_DB[k].ZuletztGescannt = _now;          // new → mark as Neu
-    } else if (prevDB[k].ZuletztGescannt) {
-      CURSE_DB[k].ZuletztGescannt = prevDB[k].ZuletztGescannt; // keep existing timestamp
+    if (CURSE_DB[k].IstCursed) {
+      if (!prevDB[k]) {
+        CURSE_DB[k].ZuletztGescannt = _now;                        // neu → Timestamp setzen
+      } else if (prevDB[k].ZuletztGescannt) {
+        CURSE_DB[k].ZuletztGescannt = prevDB[k].ZuletztGescannt;  // bestehend → alten Wert behalten
+      } else {
+        CURSE_DB[k].ZuletztGescannt = _now;                        // kein alter Wert → als frisch markieren
+      }
     }
   });
   _updateCurseStats();
@@ -3145,10 +3150,25 @@ function toggleCurseFilterPanel(e) {
   }
 }
 
-// Neu = scanned within the last hour
-function _isNeu(entry) {
-  return !!(entry.ZuletztGescannt && Date.now() - entry.ZuletztGescannt < 3600000);
+// Gibt zurück welcher Neu-Typ zutrifft:
+//   'normal'  → nicht-gecurstes Item: kein Outfit-Tag ODER Tag vor <5min gesetzt
+//   'cursed'  → gecurstes Item: in letzter Stunde gescannt (unabhaengig vom Outfit-Tag)
+//   false     → kein Badge
+function _getNeuType(entry) {
+  const k   = (entry.Besitzer?.Nummer ?? '') + ':' + entry.ItemName + ':' + entry.CraftName;
+  const now = Date.now();
+  if (entry.IstCursed) {
+    // Curse-Neu: 1h ab Scan – Outfit-Tag aendert nichts daran
+    const fresh = entry.ZuletztGescannt && now - entry.ZuletztGescannt < 3600000;
+    return fresh ? 'cursed' : false;
+  }
+  // Normal-Neu: nie angewendet → immer Neu; angewendet → noch 5min sichtbar, dann weg
+  const appliedAt = CURSE_APPLIED_TS[k];
+  if (!appliedAt) return 'normal';
+  return (now - appliedAt) < 300000 ? 'normal' : false;
 }
+// Compat-Wrapper fuer Filter-Logik
+function _isNeu(entry) { return !!_getNeuType(entry); }
 
 function toggleCurseFilter(key) {
   if (_curseActiveFilters.has(key)) {
@@ -3366,7 +3386,7 @@ function _renderCurseOwnerRows(ownerNum) {
     const isCursed = entry.IstCursed;
     const isOutfit = !!CURSE_OUTFIT_FLAGS[dbKey];
     const isFav    = CURSE_FAVOURITES.has(dbKey);
-    const isNeu    = _isNeu(entry);
+    const neuType  = _getNeuType(entry); // 'normal' | 'cursed' | false
     const effGruppe = _getEffectiveGruppe(entry, dbKey);
     const isUnbekannt = effGruppe === 'UNBEKANNT';
     const hasOverride = !!CURSE_GRUPPE_OVERRIDES[dbKey];
@@ -3393,7 +3413,10 @@ function _renderCurseOwnerRows(ownerNum) {
       + (entry.Private ? '<span class="curse-detail-badge">\uD83D\uDD12</span>' : '')
       + (entry.Property ? '<span class="curse-detail-badge">' + escHtml(entry.Property) + '</span>' : '')
       + '</div>'
-      + '<div class="cg-neu">' + (isNeu ? '<span class="neu-badge">Neu</span>' : '') + '</div>'
+      + '<div class="cg-neu">'
+      + (neuType === 'normal' ? '<span class="neu-badge">Neu</span>' : '')
+      + (neuType === 'cursed' ? '<span class="neu-badge neu-cursed">🔮 Neu</span>' : '')
+      + '</div>'
       + '<div class="cg-spacer"></div>'
       + '<div class="cg-comment"><textarea class="curse-comment-input" placeholder="Notiz..." data-rowid="' + rowId + '" onchange="saveCurseCommentById(this.dataset.rowid,this.value)">' + escHtml(comment) + '</textarea></div>'
       + '<div class="cg-actions">'
@@ -3477,7 +3500,7 @@ function saveCurseComment(key, val) {
 function toggleCurseOutfitFlag(dbKey, cellEl) {
   const wasSet = !!CURSE_OUTFIT_FLAGS[dbKey];
   if (wasSet) delete CURSE_OUTFIT_FLAGS[dbKey];
-  else CURSE_OUTFIT_FLAGS[dbKey] = true;
+  else CURSE_OUTFIT_FLAGS[dbKey] = Date.now();
   _saveCurseOutfitFlags();
   if (cellEl) {
     const isSet = !wasSet;
@@ -3515,7 +3538,7 @@ function curseAutoMarkOutfit() {
   let marked = 0;
   for (const [key, comment] of Object.entries(CURSE_COMMENTS)) {
     if (/outfit/i.test(comment) && !CURSE_OUTFIT_FLAGS[key]) {
-      CURSE_OUTFIT_FLAGS[key] = true;
+      CURSE_OUTFIT_FLAGS[key] = Date.now();
       marked++;
     }
   }
@@ -3553,6 +3576,7 @@ function wearCurse(dbKey, targetNum) {
   const effectiveEntry = CURSE_GRUPPE_OVERRIDES[dbKey]
     ? { ...entry, Gruppe: CURSE_GRUPPE_OVERRIDES[dbKey] }
     : entry;
+  CURSE_APPLIED_TS[dbKey] = Date.now();  // Neu-Badge läuft 5min nach Anwendung ab
   bcSend({ type: 'WEAR_CURSE', dbKey, targetNum, entry: effectiveEntry });
   showStatus('⏳ Curse wird angelegt...', 'info');
 }
@@ -3677,7 +3701,7 @@ function curseSaveAsProfile(rowIdOrDbKey) {
   if (!entry) { showStatus('❌ Eintrag nicht gefunden', 'error'); return; }
   // Auto-Flag setzen
   if (!CURSE_OUTFIT_FLAGS[dbKey]) {
-    CURSE_OUTFIT_FLAGS[dbKey] = true;
+    CURSE_OUTFIT_FLAGS[dbKey] = Date.now();
     _saveCurseOutfitFlags();
     const row = document.getElementById(rowIdOrDbKey);
     if (row) {
@@ -3702,7 +3726,7 @@ function curseSaveAllAsProfile(ownerNum) {
   let flagged = 0;
   for (const e of entries) {
     const k = (e.Besitzer?.Nummer ?? '') + ':' + e.ItemName + ':' + e.CraftName;
-    if (!CURSE_OUTFIT_FLAGS[k]) { CURSE_OUTFIT_FLAGS[k] = true; flagged++; }
+    if (!CURSE_OUTFIT_FLAGS[k]) { CURSE_OUTFIT_FLAGS[k] = Date.now(); flagged++; }
   }
   if (flagged > 0) _saveCurseOutfitFlags();
   const defaultName = ownerName + ' Outfit';
