@@ -719,22 +719,34 @@ window.CurseScanner = (() => {
   // Serialisiert einen BC-Charakter zu { code, fingerprint, ... }.
   // fingerprint = nur Name+Group+Color, ignoriert volatile Property-Felder (Timer, Seeds …)
   // → wird für Duplikat-Erkennung genutzt, code enthält alle Felder für den Import.
+  // Normalisiert Color → immer String-Array (BC gibt manchmal String statt Array zurück)
+  function _BCU_normalizeColor(c) {
+    if (Array.isArray(c)) return c;
+    if (c == null || c === '') return [];
+    return [String(c)];
+  }
+
   window._BCU_serializeChar = function(C) {
     let code = null, fingerprint = '';
     try {
       const _items = (C.Appearance ?? []).map(item => {
-        // Nur Name+Group+Color+Craft – Property/Difficulty weglassen da BC-interne
-        // Laufzeit-Objekte (Timer, Lock-States) den Import mit "Bad data" brechen.
-        const obj = { Name: item.Asset?.Name, Group: item.Asset?.Group?.Name, Color: item.Color ?? [] };
-        if (item.Craft) obj.Craft = item.Craft;
-        return obj;
+        // Nur Name+Group+Color+Difficulty – BC-Wardrobe-Format.
+        // Property weglassen (volatile Timer/Lock-State bricht Import).
+        // Craft weglassen (enthält MemberNumber → Rechte-Checks).
+        const color = _BCU_normalizeColor(item.Color);
+        return {
+          Name:       item.Asset?.Name,
+          Group:      item.Asset?.Group?.Name,
+          Color:      color,
+          Difficulty: item.Difficulty ?? 0,
+        };
       }).filter(i => i.Name && i.Group);
       code = LZString.compressToBase64(JSON.stringify(_items));
-      // Fingerprint: sortiert nach Group → unabhängig von Reihenfolge + ignoriert Property/Craft
+      // Fingerprint: Group+Name+Color (normalisiert, sortiert) – ignoriert Difficulty/Property/Craft
       fingerprint = _items
         .slice()
         .sort((a, b) => a.Group.localeCompare(b.Group))
-        .map(i => i.Group + '\x1f' + i.Name + '\x1f' + JSON.stringify(i.Color ?? []))
+        .map(i => i.Group + '\x1f' + i.Name + '\x1f' + JSON.stringify(i.Color))
         .join('\x1e');
     } catch(_e) {}
     return { memberNumber: C.MemberNumber, name: C.Name, nickname: C.Nickname ?? null, code, fingerprint, ts: Date.now() };
@@ -1121,46 +1133,54 @@ window.CurseScanner = (() => {
 
   // ── Auto-Scan: LSCG Outfits bei ChatRoomSync ─────────────────────────
   // Feuert wenn wir einen Raum betreten ODER jemand den Raum betritt/verlässt.
-  // Guard verhindert doppelte Registrierung beim erneuten Ausführen.
-  if (!window.__BCK_AutoScan__) {
-    window.__BCK_AutoScan__ = true;
+  // Beim Re-Run des Bookmarklets werden alte Listener zuerst entfernt.
 
-    function _BCU_collectOutfits() {
-      const _popup = window.__BCK_popupRef;
-      if (!_popup || _popup.closed) return;
-      const _room = (typeof ChatRoomData !== 'undefined' && ChatRoomData?.Name) ? ChatRoomData.Name : null;
-      if (!_room) return; // nicht im Raum
-      try {
-        const _seen = new Set();
-        const _chars = [Player, ...(ChatRoomCharacter ?? [])]
-          .filter(c => c?.MemberNumber && !_seen.has(c.MemberNumber) && _seen.add(c.MemberNumber));
-        const _results = _chars.map(_BCU_serializeChar);
-        _popup.postMessage({ app: APP, type: 'LSCG_OUTFITS_DATA', results: _results, room: _room }, ALLOWED_ORIGIN);
-        BCK.ok('[AutoScan] ' + _results.length + ' Chars @ ' + _room);
-      } catch(ex) {
-        BCK.err('[AutoScan] Fehler:', ex.message);
-      }
-    }
-
-    // Debounce: nach letztem Event 2s warten (BC braucht Zeit die CharList zu aktualisieren)
-    let _autoScanTimer = null;
-    function _debouncedAutoScan() {
-      clearTimeout(_autoScanTimer);
-      _autoScanTimer = setTimeout(_BCU_collectOutfits, 2000);
-    }
-
-    // ServerSocket-Events: ChatRoomSync = Raum betreten / jemand joined; MemberJoin/Leave ebenfalls
-    function _installAutoScanSocket() {
-      if (typeof ServerSocket === 'undefined') {
-        setTimeout(_installAutoScanSocket, 1000);
-        return;
-      }
-      ServerSocket.on('ChatRoomSync',           _debouncedAutoScan);
-      ServerSocket.on('ChatRoomSyncMemberJoin', _debouncedAutoScan);
-      BCK.ok('[AutoScan] Socket-Listener aktiv ✅');
-    }
-    _installAutoScanSocket();
+  // Alte Listener sauber entfernen (verhindert Doppel-Scans beim Re-Run)
+  if (window.__BCK_AutoScanCleanup) {
+    try { window.__BCK_AutoScanCleanup(); } catch(_e) {}
   }
+
+  function _BCU_collectOutfits() {
+    const _popup = window.__BCK_popupRef;
+    if (!_popup || _popup.closed) return;
+    const _room = (typeof ChatRoomData !== 'undefined' && ChatRoomData?.Name) ? ChatRoomData.Name : null;
+    if (!_room) return; // nicht im Raum
+    try {
+      const _seen = new Set();
+      const _chars = [Player, ...(ChatRoomCharacter ?? [])]
+        .filter(c => c?.MemberNumber && !_seen.has(c.MemberNumber) && _seen.add(c.MemberNumber));
+      const _results = _chars.map(window._BCU_serializeChar);
+      _popup.postMessage({ app: APP, type: 'LSCG_OUTFITS_DATA', results: _results, room: _room }, ALLOWED_ORIGIN);
+      BCK.ok('[AutoScan] ' + _results.length + ' Chars @ ' + _room);
+    } catch(ex) {
+      BCK.err('[AutoScan] Fehler:', ex.message);
+    }
+  }
+
+  // Debounce: nach letztem Event 2s warten (BC braucht Zeit die CharList zu aktualisieren)
+  let _autoScanTimer = null;
+  function _debouncedAutoScan() {
+    clearTimeout(_autoScanTimer);
+    _autoScanTimer = setTimeout(_BCU_collectOutfits, 2000);
+  }
+
+  function _installAutoScanSocket() {
+    if (typeof ServerSocket === 'undefined') {
+      setTimeout(_installAutoScanSocket, 1000);
+      return;
+    }
+    ServerSocket.on('ChatRoomSync',           _debouncedAutoScan);
+    ServerSocket.on('ChatRoomSyncMemberJoin', _debouncedAutoScan);
+    // Cleanup-Funktion speichern – wird beim nächsten Bookmarklet-Run aufgerufen
+    window.__BCK_AutoScanCleanup = () => {
+      clearTimeout(_autoScanTimer);
+      ServerSocket.off('ChatRoomSync',           _debouncedAutoScan);
+      ServerSocket.off('ChatRoomSyncMemberJoin', _debouncedAutoScan);
+      BCK.info('[AutoScan] Alte Listener entfernt');
+    };
+    BCK.ok('[AutoScan] Socket-Listener aktiv ✅');
+  }
+  _installAutoScanSocket();
 
   // ── Popup öffnen / fokussieren ─────────────────────────
   if (window.__BCK_WIN__ && !window.__BCK_WIN__.closed) {
