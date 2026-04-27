@@ -4687,18 +4687,17 @@ function _handleLscgOutfitsData(data) {
     // Fingerprint vergleichen (Name+Group+Color) – ignoriert volatile Property-Felder wie Timer
     const fp = r.fingerprint ?? r.code ?? '';
     const lastFp = last?.fingerprint ?? last?.code ?? '';
-    const lastCodeOk = !!last?.code;
     if (!last || lastFp !== fp) {
       // Outfit hat sich geändert → neue Version anlegen
       entry.versions.push({ code: r.code, fingerprint: fp, ts: r.ts });
       if (entry.versions.length > LSCG_OUTFIT_MAX_VERSIONS)
         entry.versions = entry.versions.slice(-LSCG_OUTFIT_MAX_VERSIONS);
       if (entry.versions.length > 1) geaendert++;
-    } else if (!lastCodeOk && r.code) {
-      // Gleicher Fingerprint, aber alter Code war kaputt (null) → Code still aktualisieren
+    } else if (r.code) {
+      // Gleicher Fingerprint → Code immer mit frischestem Scan-Ergebnis aktualisieren.
+      // Verhindert, dass alte kaputte Codes (falsches Format) im DB bleiben.
       last.code = r.code;
       last.ts   = r.ts;
-      geaendert++;
     }
   }
   _saveLscgOutfitDB();
@@ -4734,11 +4733,13 @@ function renderLscgOutfitTab() {
           const time    = new Date(v.ts).toLocaleString('de-DE', { hour:'2-digit', minute:'2-digit' });
           const preview = v.code ? v.code.substring(0, 36) + '…' : '(leer)';
           const rStr    = escHtml(room);
+          const hasCode = !!v.code;
           return '<div class="lscg-version' + (i === 0 ? ' lscg-latest' : '') + '">'
             + '<span class="lscg-vnum">v' + (vs.length - i) + '</span>'
             + '<span class="lscg-vtime">' + time + '</span>'
             + '<span class="lscg-preview" title="' + escHtml(v.code ?? '') + '">' + escHtml(preview) + '</span>'
-            + '<button class="lscg-btn" onclick="copyLscgCode(' + JSON.stringify(room) + ',' + JSON.stringify(dateStr) + ',' + JSON.stringify(mk) + ',' + realIdx + ')" title="Code kopieren">📋</button>'
+            + (hasCode ? '<button class="lscg-btn" onclick="copyLscgCode(' + JSON.stringify(room) + ',' + JSON.stringify(dateStr) + ',' + JSON.stringify(mk) + ',' + realIdx + ')" title="Code kopieren">📋</button>' : '')
+            + (hasCode ? '<button class="lscg-btn lscg-save-btn" onclick="saveLscgToGame(' + JSON.stringify(room) + ',' + JSON.stringify(dateStr) + ',' + JSON.stringify(mk) + ',' + realIdx + ',' + JSON.stringify(entry.name) + ')" title="Direkt als LSCG-Outfit speichern">💾</button>' : '')
             + '</div>';
         }).join('');
         const nameLabel = escHtml(entry.name)
@@ -4778,4 +4779,15 @@ function clearAllLscgOutfits() {
   _saveLscgOutfitDB();
   renderLscgOutfitTab();
   showStatus('🗑️ LSCG Outfits geleert', 'info');
+}
+
+function saveLscgToGame(room, dateStr, memberKey, vIdx, charName) {
+  const v = LSCG_OUTFIT_DB[room]?.[dateStr]?.[memberKey]?.versions?.[vIdx];
+  if (!v?.code) { showStatus('❌ Kein Code vorhanden', 'error'); return; }
+  // Outfit-Name: "Name_MMDD" z.B. "Yuuki_0427"
+  const [y, m, d] = dateStr.split('-');
+  const safeName  = (charName ?? memberKey).replace(/[^a-zA-Z0-9_\-]/g, '_').substring(0, 20);
+  const outfitKey = safeName + '_' + m + d;
+  bcSend({ type: 'SAVE_LSCG_OUTFIT', key: outfitKey, code: v.code });
+  showStatus('💾 Speichere als LSCG-Outfit "' + outfitKey + '"…', 'info');
 }
