@@ -719,41 +719,20 @@ window.CurseScanner = (() => {
   // Serialisiert einen BC-Charakter zu { code, fingerprint, ... }.
   // fingerprint = nur Name+Group+Color, ignoriert volatile Property-Felder (Timer, Seeds …)
   // → wird für Duplikat-Erkennung genutzt, code enthält alle Felder für den Import.
-  // Sicheres Deep-Clone: verhindert Circular-Reference-Fehler bei JSON.stringify
-  function _BCU_safeClone(obj) {
-    if (obj == null) return obj;
-    try { return structuredClone(obj); } catch(_) {
-      try { return JSON.parse(JSON.stringify(obj)); } catch(_) { return undefined; }
-    }
-  }
-
   window._BCU_serializeChar = function(C) {
     let code = null, fingerprint = '';
     try {
-      // LSCG ItemBundle Format – identisch zu /lscg get-outfit-code:
-      // LZString.compressToBase64(JSON.stringify([{Group, Name, Color, Craft, Property}]))
-      const _items = (C.Appearance ?? []).map(item => {
-        const grp  = item.Asset?.Group?.Name;
-        const name = item.Asset?.Name;
-        if (!grp || !name) return null;
-        const obj = {
-          Group:    grp,
-          Name:     name,
-          Color:    _BCU_safeClone(item.Color),
-          Craft:    _BCU_safeClone(item.Craft),
-          Property: _BCU_safeClone(item.Property),
-        };
-        // Felder ohne Wert entfernen (wie LSCG's toItemBundle)
-        if (obj.Craft    == null) delete obj.Craft;
-        if (obj.Property == null) delete obj.Property;
-        return obj;
-      }).filter(Boolean);
-      code = LZString.compressToBase64(JSON.stringify(_items));
+      // ServerAppearanceBundle(C.Appearance) ist BC's eigene Serialisierung für den Server.
+      // Sie löst alle Circular-References auf und liefert ItemBundle[]:
+      //   [{Group, Name, Color, Difficulty, Property, Craft}]
+      // Das ist exakt das Format das LSCG's /lscg get-outfit-code erzeugt.
+      const _bundle = ServerAppearanceBundle(C.Appearance ?? []);
+      code = LZString.compressToBase64(JSON.stringify(_bundle));
       // Fingerprint: nur Group+Name+Color – ignoriert volatile Property (Timer etc.)
-      fingerprint = _items
+      fingerprint = _bundle
         .slice()
-        .sort((a, b) => a.Group.localeCompare(b.Group))
-        .map(i => i.Group + '\x1f' + i.Name + '\x1f' + JSON.stringify(i.Color ?? ''))
+        .sort((a, b) => (a.Group ?? '').localeCompare(b.Group ?? ''))
+        .map(i => (i.Group ?? '') + '\x1f' + (i.Name ?? '') + '\x1f' + JSON.stringify(i.Color ?? ''))
         .join('\x1e');
     } catch(_e) { console.warn('[BCU] serializeChar Fehler:', _e); }
     return { memberNumber: C.MemberNumber, name: C.Name, nickname: C.Nickname ?? null, code, fingerprint, ts: Date.now() };
