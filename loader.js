@@ -719,34 +719,20 @@ window.CurseScanner = (() => {
   // Serialisiert einen BC-Charakter zu { code, fingerprint, ... }.
   // fingerprint = nur Name+Group+Color, ignoriert volatile Property-Felder (Timer, Seeds …)
   // → wird für Duplikat-Erkennung genutzt, code enthält alle Felder für den Import.
-  // Normalisiert Color → immer String-Array (BC gibt manchmal String statt Array zurück)
-  function _BCU_normalizeColor(c) {
-    if (Array.isArray(c)) return c;
-    if (c == null || c === '') return [];
-    return [String(c)];
-  }
-
   window._BCU_serializeChar = function(C) {
     let code = null, fingerprint = '';
     try {
-      const _items = (C.Appearance ?? []).map(item => {
-        // Nur Name+Group+Color+Difficulty – BC-Wardrobe-Format.
-        // Property weglassen (volatile Timer/Lock-State bricht Import).
-        // Craft weglassen (enthält MemberNumber → Rechte-Checks).
-        const color = _BCU_normalizeColor(item.Color);
-        return {
-          Name:       item.Asset?.Name,
-          Group:      item.Asset?.Group?.Name,
-          Color:      color,
-          Difficulty: item.Difficulty ?? 0,
-        };
-      }).filter(i => i.Name && i.Group);
-      code = LZString.compressToBase64(JSON.stringify(_items));
-      // Fingerprint: Group+Name+Color (normalisiert, sortiert) – ignoriert Difficulty/Property/Craft
-      fingerprint = _items
-        .slice()
-        .sort((a, b) => a.Group.localeCompare(b.Group))
-        .map(i => i.Group + '\x1f' + i.Name + '\x1f' + JSON.stringify(i.Color))
+      // CharacterAppearanceStringify nutzt BC's eigenes AppearanceItemStringify pro Item.
+      // Format: [{"Asset":"Female3DCG/Group/Name","Difficulty":0,"Color":"..."}]
+      // → importierbar in BC Wardrobe und kompatibel mit LSCG.
+      const _jsonStr = CharacterAppearanceStringify(C);
+      code = LZString.compressToBase64(_jsonStr);
+
+      // Fingerprint: Asset-Pfad + Color, sortiert – ignoriert volatile Property-Felder
+      const _parsed = JSON.parse(_jsonStr);
+      fingerprint = _parsed
+        .map(i => (i.Asset ?? '') + '\x1f' + JSON.stringify(i.Color ?? ''))
+        .sort()
         .join('\x1e');
     } catch(_e) {}
     return { memberNumber: C.MemberNumber, name: C.Name, nickname: C.Nickname ?? null, code, fingerprint, ts: Date.now() };
@@ -1132,15 +1118,16 @@ window.CurseScanner = (() => {
   }
 
   // ── Auto-Scan: LSCG Outfits bei ChatRoomSync ─────────────────────────
-  // Feuert wenn wir einen Raum betreten ODER jemand den Raum betritt/verlässt.
-  // Beim Re-Run des Bookmarklets werden alte Listener zuerst entfernt.
-
-  // Alte Listener sauber entfernen (verhindert Doppel-Scans beim Re-Run)
-  if (window.__BCK_AutoScanCleanup) {
-    try { window.__BCK_AutoScanCleanup(); } catch(_e) {}
-  }
+  // Run-ID-Ansatz: Jeder Bookmarklet-Run bekommt eine eigene ID.
+  // Ältere Runs erkennen, dass sie überholt wurden, und überspringen den Scan.
+  // Zuverlässiger als socket.off(), das in manchen socket.io-Versionen nicht greift.
+  const _scanRunId = Date.now();
+  window.__BCK_ActiveScanRunId = _scanRunId;
+  BCK.info('[AutoScan] Run-ID:', _scanRunId);
 
   function _BCU_collectOutfits() {
+    // Abgebrochener Run → ignorieren
+    if (window.__BCK_ActiveScanRunId !== _scanRunId) return;
     const _popup = window.__BCK_popupRef;
     if (!_popup || _popup.closed) return;
     const _room = (typeof ChatRoomData !== 'undefined' && ChatRoomData?.Name) ? ChatRoomData.Name : null;
@@ -1158,10 +1145,10 @@ window.CurseScanner = (() => {
   }
 
   // Debounce: nach letztem Event 2s warten (BC braucht Zeit die CharList zu aktualisieren)
-  let _autoScanTimer = null;
   function _debouncedAutoScan() {
-    clearTimeout(_autoScanTimer);
-    _autoScanTimer = setTimeout(_BCU_collectOutfits, 2000);
+    if (window.__BCK_ActiveScanRunId !== _scanRunId) return; // veralteter Run → ignorieren
+    clearTimeout(window.__BCK_autoScanTimer);
+    window.__BCK_autoScanTimer = setTimeout(_BCU_collectOutfits, 2000);
   }
 
   function _installAutoScanSocket() {
@@ -1171,14 +1158,7 @@ window.CurseScanner = (() => {
     }
     ServerSocket.on('ChatRoomSync',           _debouncedAutoScan);
     ServerSocket.on('ChatRoomSyncMemberJoin', _debouncedAutoScan);
-    // Cleanup-Funktion speichern – wird beim nächsten Bookmarklet-Run aufgerufen
-    window.__BCK_AutoScanCleanup = () => {
-      clearTimeout(_autoScanTimer);
-      ServerSocket.off('ChatRoomSync',           _debouncedAutoScan);
-      ServerSocket.off('ChatRoomSyncMemberJoin', _debouncedAutoScan);
-      BCK.info('[AutoScan] Alte Listener entfernt');
-    };
-    BCK.ok('[AutoScan] Socket-Listener aktiv ✅');
+    BCK.ok('[AutoScan] Socket-Listener aktiv ✅ (Run-ID: ' + _scanRunId + ')');
   }
   _installAutoScanSocket();
 
