@@ -4213,6 +4213,10 @@ window.addEventListener('message', function(ev) {
       _handleOutfitScanData(ev.data);
       break;
 
+    case 'LSCG_OUTFITS_DATA':
+      _handleLscgOutfitsData(ev.data);
+      break;
+
   }
 });
 
@@ -4653,6 +4657,7 @@ const LSCG_IDB_KEY     = 'BC_LSCG_OUTFITS_v3';
 const LSCG_MAX_VERSIONS = 30;
 let LSCG_DB = {};
 const _osOpenSet = new Set(); // member keys currently expanded
+let _lscgFpMap = {};          // fingerprint → [key1, key2, …] aus LSCG_OUTFITS
 
 function toggleOsChar(mk, hdrEl) {
   const el = hdrEl
@@ -4683,7 +4688,19 @@ async function _saveLscgDB() { await idbSet(LSCG_IDB_KEY, LSCG_DB); }
 function scanOutfits() {
   if (!_connected) { showStatus('❌ Nicht verbunden mit BC', 'error'); return; }
   bcSend({ type: 'GET_OUTFIT_SCAN' });
+  bcSend({ type: 'GET_LSCG_OUTFITS' });
   showStatus('⏳ Scanne LSCG Outfits…', 'info');
+}
+
+function _handleLscgOutfitsData(data) {
+  if (data.err) { console.warn('[BCU] LSCG Outfits:', data.err); return; }
+  _lscgFpMap = {};
+  for (const [key, info] of Object.entries(data.outfits ?? {})) {
+    if (!info.fingerprint) continue;
+    if (!_lscgFpMap[info.fingerprint]) _lscgFpMap[info.fingerprint] = [];
+    _lscgFpMap[info.fingerprint].push(key);
+  }
+  if (_activeTab === 'outfit-scan') renderOutfitScanTab();
 }
 
 function _handleOutfitScanData(data) {
@@ -4748,10 +4765,15 @@ function renderOutfitScanTab() {
       const ts = d.toLocaleDateString('de-DE', { day:'2-digit', month:'2-digit' })
                + ' ' + d.toLocaleTimeString('de-DE', { hour:'2-digit', minute:'2-digit' });
       const hasCode = !!v.code;
-      return '<div class="os-version' + (i === 0 ? ' os-latest' : '') + '">'
+      const savedKeys = (v.fingerprint && _lscgFpMap[v.fingerprint]) ? _lscgFpMap[v.fingerprint] : [];
+      const savedBadge = savedKeys.length > 0
+        ? '<span class="os-saved-badge" title="Bereits in LSCG gespeichert als: ' + savedKeys.join(', ') + '">✅ ' + savedKeys.map(function(k){ return escHtml(k); }).join(', ') + '</span>'
+        : '';
+      return '<div class="os-version' + (i === 0 ? ' os-latest' : '') + (savedKeys.length ? ' os-already-saved' : '') + '">'
         + '<span class="os-vnum">v' + (vs.length - i) + '</span>'
         + '<span class="os-vts">' + ts + '</span>'
-        + (hasCode ? '<span class="os-codelen">' + v.code.length + ' Zeichen</span>' : '<span class="os-warn">⚠ kein Code</span>')
+        + (hasCode ? '<span class="os-codelen">' + v.code.length + ' Z</span>' : '<span class="os-warn">⚠ kein Code</span>')
+        + savedBadge
         + (hasCode ? '<button class="os-btn-save" onclick="saveOutfitToLscg(\'' + mk + '\',' + realIdx + ')" title="In LSCG speichern">💾</button>' : '')
         + (hasCode ? '<button class="os-btn-copy" onclick="copyOutfitCode(\'' + mk + '\',' + realIdx + ')" title="Code kopieren">📋</button>' : '')
         + '</div>';
