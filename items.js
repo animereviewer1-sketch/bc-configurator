@@ -5052,6 +5052,52 @@ window.debugOsOutfit = function(mk, vIdx) {
   bcSend({ type: 'EXEC', code }, true);
 };
 
+// ── Outfit anlegen ohne Zurückwechseln (Test) ─────────
+// Verwendung: testOsOutfit('102866', 0)
+//   Legt das Outfit auf Player an und lässt es offen – kein Restore.
+//   Danach kann man im Spiel prüfen ob Arme/Hände etc. korrekt sind.
+//   Zum Zurücksetzen: normales Outfit in BC-Garderobe wählen.
+window.testOsOutfit = function(mk, vIdx) {
+  mk = String(mk);
+  vIdx = vIdx ?? 0;
+  const v = LSCG_DB[mk]?.versions?.[vIdx];
+  if (!v?.code) { console.error('[BCU] Kein Code für', mk, 'v', vIdx); return; }
+  const outfitCode = v.code;
+  console.log('[BCU] TEST-Apply #' + mk + ' v' + (vIdx + 1) + ' – Outfit bleibt angelegt!');
+
+  const code = '(function(){'
+    + 'try{'
+    + '  var decoded=JSON.parse(LZString.decompressFromBase64(' + JSON.stringify(outfitCode) + '));'
+    + '  if(!Array.isArray(decoded)||!decoded.length){console.warn("[BCU] Leeres Bundle");return;}'
+    // Nackt-Gruppen (Name="") sichern – ArmsLeft, HandsLeft, etc.
+    + '  var origApp=Player.Appearance.slice();'
+    + '  var nakedItems=origApp.filter(function(i){return !i.Asset.Name||i.Asset.Name==="";});'
+    + '  var bundleGroups=new Set(decoded.map(function(i){return i.Group;}));'
+    + '  Player.Appearance=[];'
+    + '  if(typeof CharacterAppearanceSetFromBundle==="function"){'
+    + '    CharacterAppearanceSetFromBundle(Player,decoded,0,Player.AssetFamily);'
+    + '  }else{'
+    + '    decoded.forEach(function(item){'
+    + '      if(!item||!item.Group)return;'
+    + '      try{InventoryWear(Player,item.Name||"",item.Group,item.Color,0,null,item.Property,false);}catch(_e){}'
+    + '    });'
+    + '  }'
+    // Nackt-Gruppen zurück die nicht im Bundle sind
+    + '  nakedItems.forEach(function(item){'
+    + '    if(!bundleGroups.has(item.Asset.Group.Name))Player.Appearance.push(item);'
+    + '  });'
+    + '  CharacterRefresh(Player,false,false);'
+    + '  CharacterLoadCanvas(Player);'
+    + '  console.log("[BCU] TEST-Apply fertig. Appearance-Items:",Player.Appearance.length);'
+    + '  console.log("[BCU] Nackt-Items ergänzt:",nakedItems.filter(function(i){return !bundleGroups.has(i.Asset.Group.Name);}).map(function(i){return i.Asset.Group.Name;}));'
+    + '}catch(e){'
+    + '  console.error("[BCU] TEST-Apply Fehler:",e.message);'
+    + '}'
+    + '})();';
+
+  bcSend({ type: 'EXEC', code }, true);
+};
+
 // ── Gestaffeltes Aufnehmen aller fehlenden Bilder ─────
 function captureAllMissingOsScreenshots() {
   if (!_connected) { showStatus('❌ Nicht verbunden mit BC', 'error'); return; }
