@@ -4970,6 +4970,13 @@ function captureOsScreenshot(mk, vIdx) {
         + '        try{InventoryWear(Player,item.Name||"",item.Group,item.Color,0,null,item.Property,false);}catch(_e){}'
         + '      });'
         + '    }'
+        // Property-Fix: CharacterAppearanceSetFromBundle überträgt Craft/Konfigurationen manchmal nicht vollständig.
+        // Jedes Item aus dem Bundle explizit mit dem vollen Property-Objekt überschreiben.
+        + '    decoded.forEach(function(bundleItem){'
+        + '      if(!bundleItem||!bundleItem.Group||!bundleItem.Property)return;'
+        + '      var worn=Player.Appearance.find(function(a){return a.Asset&&a.Asset.Group&&a.Asset.Group.Name===bundleItem.Group;});'
+        + '      if(worn)worn.Property=JSON.parse(JSON.stringify(bundleItem.Property));'
+        + '    });'
         + '  }catch(applyErr){'
         // Apply-Fehler → Appearance wiederherstellen, Fehler melden
         + '    Player.Appearance.splice(0,Player.Appearance.length);'
@@ -5163,12 +5170,20 @@ window.testOsOutfit = function(mk, vIdx) {
     + '      try{InventoryWear(Player,item.Name||"",item.Group,item.Color,0,null,item.Property,false);}catch(_e){}'
     + '    });'
     + '  }'
+    // Property-Fix: Craft/Text-Konfigurationen explizit übertragen
+    + '  decoded.forEach(function(bundleItem){'
+    + '    if(!bundleItem||!bundleItem.Group||!bundleItem.Property)return;'
+    + '    var worn=Player.Appearance.find(function(a){return a.Asset&&a.Asset.Group&&a.Asset.Group.Name===bundleItem.Group;});'
+    + '    if(worn){worn.Property=JSON.parse(JSON.stringify(bundleItem.Property));}'
+    + '  });'
     + '  keptItems.forEach(function(item){Player.Appearance.push(item);});'
     + '  CharacterRefresh(Player,false,false);'
     + '  CharacterLoadCanvas(Player);'
     + '  console.log("[BCU] TEST-Apply fertig. Appearance-Items:",Player.Appearance.length);'
     + '  console.log("[BCU] Bundle-Gruppen:",Array.from(bundleGroups).join(", "));'
     + '  console.log("[BCU] Erhaltene Items (Haare/Gesicht etc.):",keptItems.map(function(i){return i.Asset.Group.Name;}));'
+    + '  var withCraft=decoded.filter(function(i){return i.Property&&i.Property.Craft;});'
+    + '  if(withCraft.length)console.log("[BCU] Craft-Items:",withCraft.map(function(i){return i.Group+"="+i.Property.Craft.Name;}));'
     + '}catch(e){'
     + '  console.error("[BCU] TEST-Apply Fehler:",e.message);'
     + '}'
@@ -5404,6 +5419,12 @@ function _oiBuildExecCode(code) {
     + '      try{InventoryWear(Player,item.Name||"",item.Group,item.Color,0,null,item.Property,false);}catch(_e){}'
     + '    });'
     + '  }'
+    // Property-Fix: Craft/Konfigurationen (z.B. eingeschriebener Text) explizit übertragen
+    + '  decoded.forEach(function(bundleItem){'
+    + '    if(!bundleItem||!bundleItem.Group||!bundleItem.Property)return;'
+    + '    var worn=Player.Appearance.find(function(a){return a.Asset&&a.Asset.Group&&a.Asset.Group.Name===bundleItem.Group;});'
+    + '    if(worn)worn.Property=JSON.parse(JSON.stringify(bundleItem.Property));'
+    + '  });'
     // Nicht-Bundle-Items zurück einfügen
     + '  keptItems.forEach(function(item){Player.Appearance.push(item);});'
     + '  CharacterRefresh(Player,false,false);'
