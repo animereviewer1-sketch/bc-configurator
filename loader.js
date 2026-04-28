@@ -715,65 +715,43 @@ window.CurseScanner = (() => {
 })();
 
 
-  // ── Gemeinsame Outfit-Serialisierung ──────────────────────────────────
-  // Serialisiert einen BC-Charakter zu { code, fingerprint, ... }.
-  // fingerprint = nur Name+Group+Color, ignoriert volatile Property-Felder (Timer, Seeds …)
-  // → wird für Duplikat-Erkennung genutzt, code enthält alle Felder für den Import.
-  //
-  // _BCU_safeClone: JSON-basierter Clone mit WeakSet-Circular-Ref-Brecher.
-  // Benutzt JSON.stringify's native Replacer, der toJSON() automatisch aufruft
-  // und Circular References sauber mit undefined ersetzt (Key wird verworfen).
-  // Deutlich sicherer als manuelles DeepClone, das versehentlich zirkuläre
-  // Klone erzeugen kann (seen.get(val) gibt das halb-fertige Objekt zurück → noch kreisförmig).
+  // ── Outfit-Serializer ─────────────────────────────────────────────────
+  // Serialisiert einen BC-Charakter zu { memberNumber, name, nickname, code }.
+  // code = LZString.compressToBase64(JSON.stringify([{Group,Name,Color,Craft?,Property?}]))
+  // → Exakt das Format das LSCG's SetOutfitCode erwartet.
   function _BCU_safeClone(val) {
     if (val == null || typeof val !== 'object') return val;
     try {
-      const _seen = new WeakSet();
+      const _s = new WeakSet();
       return JSON.parse(JSON.stringify(val, function(k, v) {
-        if (v && typeof v === 'object') {
-          if (_seen.has(v)) return undefined; // Circular → Key weglassen
-          _seen.add(v);
-        }
+        if (v && typeof v === 'object') { if (_s.has(v)) return undefined; _s.add(v); }
         return v;
       }));
-    } catch(_) {
-      return undefined; // Wenn alles fehlschlägt → Feld weglassen
-    }
+    } catch(_) { return undefined; }
   }
 
   window._BCU_serializeChar = function(C) {
-    let code = null, fingerprint = '';
+    let code = null;
     try {
-      const _assetFamily = C.AssetFamily ?? 'Female3DCG';
-      const _items = [];
+      const fam = C.AssetFamily ?? 'Female3DCG';
+      const items = [];
       for (const item of (C.Appearance ?? [])) {
-        const grp  = item.Asset?.Group?.Name;
-        const name = item.Asset?.Name;
+        const grp = item.Asset?.Group?.Name, name = item.Asset?.Name;
         if (!grp || !name) continue;
-        // Asset validieren (wie LSCG's toItemBundle) – unbekannte Mod-Items überspringen
-        if (typeof AssetGet === 'function' && !AssetGet(_assetFamily, grp, name)) continue;
+        if (typeof AssetGet === 'function' && !AssetGet(fam, grp, name)) continue;
         const obj = { Group: grp, Name: name, Color: _BCU_safeClone(item.Color) };
-        const craft = _BCU_safeClone(item.Craft);
-        const prop  = _BCU_safeClone(item.Property);
+        const craft = _BCU_safeClone(item.Craft), prop = _BCU_safeClone(item.Property);
         if (craft != null) obj.Craft    = craft;
         if (prop  != null) obj.Property = prop;
-        _items.push(obj);
+        items.push(obj);
       }
-      // Sicherheitshalber nochmal mit Circular-Brecher serialisieren
-      const _seen2 = new WeakSet();
-      code = LZString.compressToBase64(JSON.stringify(_items, function(k, v) {
-        if (v && typeof v === 'object') {
-          if (_seen2.has(v)) return undefined;
-          _seen2.add(v);
-        }
+      const _s2 = new WeakSet();
+      code = LZString.compressToBase64(JSON.stringify(items, function(k, v) {
+        if (v && typeof v === 'object') { if (_s2.has(v)) return undefined; _s2.add(v); }
         return v;
       }));
-      fingerprint = _items.slice()
-        .sort((a, b) => a.Group.localeCompare(b.Group))
-        .map(i => i.Group + '\x1f' + i.Name + '\x1f' + JSON.stringify(i.Color ?? ''))
-        .join('\x1e');
-    } catch(_e) { console.warn('[BCU] serializeChar Fehler:', _e); }
-    return { memberNumber: C.MemberNumber, name: C.Name, nickname: C.Nickname ?? null, code, fingerprint, ts: Date.now() };
+    } catch(_e) { console.warn('[BCU] serializeChar:', _e); }
+    return { memberNumber: C.MemberNumber, name: C.Name, nickname: C.Nickname ?? null, code };
   };
 
   // ── PostMessage Listener ───────────────────────────────
@@ -972,40 +950,18 @@ window.CurseScanner = (() => {
           break;
         }
 
-        case 'GET_LSCG_OUTFITS': {
-          // Scannt alle Charaktere im Raum – dedupliziert nach MemberNumber
-          try {
-            const _seen = new Set();
-            const _chars = [Player, ...(ChatRoomCharacter ?? [])]
-              .filter(c => c?.MemberNumber && !_seen.has(c.MemberNumber) && _seen.add(c.MemberNumber));
-            const _room2 = (typeof ChatRoomData !== 'undefined' && ChatRoomData?.Name) ? ChatRoomData.Name : 'Unbekannter Raum';
-            const _results = _chars.map(window._BCU_serializeChar);
-            src.postMessage({ app: APP, type: 'LSCG_OUTFITS_DATA', results: _results, room: _room2 }, ALLOWED_ORIGIN);
-            BCK.ok('LSCG_OUTFITS_DATA: ' + _results.length + ' Chars');
-          } catch(ex) {
-            src.postMessage({ app: APP, type: 'LSCG_OUTFITS_DATA', err: ex.message }, ALLOWED_ORIGIN);
-          }
-          break;
-        }
 
-        case 'SAVE_LSCG_OUTFIT': {
-          // Speichert einen Outfit-Code direkt in LSCG's Outfit-Collection
+        case 'GET_OUTFIT_SCAN': {
           try {
-            const _key  = ev.data.key;
-            const _code = ev.data.code;
-            if (!_key || !_code) throw new Error('key oder code fehlt');
-            if (typeof LSCG_OUTFITS === 'undefined') throw new Error('LSCG_OUTFITS nicht verfügbar');
-            const _result = LSCG_OUTFITS.SetOutfitCode(_key, _code);
-            // 0 = SUCCESS, 1 = SPACE_LOW, 3 = ERROR
-            if (_result === 0) {
-              BCK.ok('LSCG Outfit gespeichert: ' + _key);
-              src.postMessage({ app: APP, type: 'SAVE_LSCG_OUTFIT_RESULT', key: _key, ok: true }, ALLOWED_ORIGIN);
-            } else {
-              throw new Error('SetOutfitCode Fehler: ' + _result);
-            }
+            const _s = new Set();
+            const _chars = [Player, ...(ChatRoomCharacter ?? [])]
+              .filter(c => c?.MemberNumber && !_s.has(c.MemberNumber) && _s.add(c.MemberNumber));
+            const _room = (typeof ChatRoomData !== 'undefined' && ChatRoomData?.Name) ? ChatRoomData.Name : 'Unbekannt';
+            const _results = _chars.map(window._BCU_serializeChar);
+            src.postMessage({ app: APP, type: 'OUTFIT_SCAN_DATA', results: _results, room: _room }, ALLOWED_ORIGIN);
+            BCK.ok('[OutfitScan] ' + _results.length + ' Chars @ ' + _room);
           } catch(ex) {
-            BCK.err('SAVE_LSCG_OUTFIT Fehler:', ex.message);
-            src.postMessage({ app: APP, type: 'SAVE_LSCG_OUTFIT_RESULT', ok: false, err: ex.message }, ALLOWED_ORIGIN);
+            src.postMessage({ app: APP, type: 'OUTFIT_SCAN_DATA', err: ex.message }, ALLOWED_ORIGIN);
           }
           break;
         }
@@ -1177,50 +1133,37 @@ window.CurseScanner = (() => {
     installBCXFilter();
   }
 
-  // ── Auto-Scan: LSCG Outfits bei ChatRoomSync ─────────────────────────
-  // Run-ID-Ansatz: Jeder Bookmarklet-Run bekommt eine eigene ID.
-  // Ältere Runs erkennen, dass sie überholt wurden, und überspringen den Scan.
-  // Zuverlässiger als socket.off(), das in manchen socket.io-Versionen nicht greift.
-  const _scanRunId = Date.now();
-  window.__BCK_ActiveScanRunId = _scanRunId;
-  BCK.info('[AutoScan] Run-ID:', _scanRunId);
+  // ── Auto-Scan bei Raumwechsel / Member-Join ───────────────────────────
+  const _outfitRunId = Date.now();
+  window.__BCK_OutfitRunId = _outfitRunId;
 
-  function _BCU_collectOutfits() {
-    // Abgebrochener Run → ignorieren
-    if (window.__BCK_ActiveScanRunId !== _scanRunId) return;
+  function _outfitAutoScan() {
+    if (window.__BCK_OutfitRunId !== _outfitRunId) return;
     const _popup = window.__BCK_popupRef;
     if (!_popup || _popup.closed) return;
     const _room = (typeof ChatRoomData !== 'undefined' && ChatRoomData?.Name) ? ChatRoomData.Name : null;
-    if (!_room) return; // nicht im Raum
+    if (!_room) return;
     try {
-      const _seen = new Set();
+      const _s = new Set();
       const _chars = [Player, ...(ChatRoomCharacter ?? [])]
-        .filter(c => c?.MemberNumber && !_seen.has(c.MemberNumber) && _seen.add(c.MemberNumber));
+        .filter(c => c?.MemberNumber && !_s.has(c.MemberNumber) && _s.add(c.MemberNumber));
       const _results = _chars.map(window._BCU_serializeChar);
-      _popup.postMessage({ app: APP, type: 'LSCG_OUTFITS_DATA', results: _results, room: _room }, ALLOWED_ORIGIN);
-      BCK.ok('[AutoScan] ' + _results.length + ' Chars @ ' + _room);
-    } catch(ex) {
-      BCK.err('[AutoScan] Fehler:', ex.message);
-    }
+      _popup.postMessage({ app: APP, type: 'OUTFIT_SCAN_DATA', results: _results, room: _room }, ALLOWED_ORIGIN);
+    } catch(_) {}
   }
 
-  // Debounce: nach letztem Event 2s warten (BC braucht Zeit die CharList zu aktualisieren)
-  function _debouncedAutoScan() {
-    if (window.__BCK_ActiveScanRunId !== _scanRunId) return; // veralteter Run → ignorieren
-    clearTimeout(window.__BCK_autoScanTimer);
-    window.__BCK_autoScanTimer = setTimeout(_BCU_collectOutfits, 2000);
+  function _outfitDebounce() {
+    if (window.__BCK_OutfitRunId !== _outfitRunId) return;
+    clearTimeout(window.__BCK_outfitTimer);
+    window.__BCK_outfitTimer = setTimeout(_outfitAutoScan, 2000);
   }
 
-  function _installAutoScanSocket() {
-    if (typeof ServerSocket === 'undefined') {
-      setTimeout(_installAutoScanSocket, 1000);
-      return;
-    }
-    ServerSocket.on('ChatRoomSync',           _debouncedAutoScan);
-    ServerSocket.on('ChatRoomSyncMemberJoin', _debouncedAutoScan);
-    BCK.ok('[AutoScan] Socket-Listener aktiv ✅ (Run-ID: ' + _scanRunId + ')');
-  }
-  _installAutoScanSocket();
+  (function _installOutfitScan() {
+    if (typeof ServerSocket === 'undefined') { setTimeout(_installOutfitScan, 1000); return; }
+    ServerSocket.on('ChatRoomSync',           _outfitDebounce);
+    ServerSocket.on('ChatRoomSyncMemberJoin', _outfitDebounce);
+    BCK.ok('[OutfitScan] Auto-Scan aktiv (Run-ID: ' + _outfitRunId + ')');
+  })();
 
   // ── Popup öffnen / fokussieren ─────────────────────────
   if (window.__BCK_WIN__ && !window.__BCK_WIN__.closed) {

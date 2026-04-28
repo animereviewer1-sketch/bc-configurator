@@ -2192,7 +2192,7 @@ button { cursor: pointer; }
   <button class="tab-btn"        id="tab-rank-btn"          onclick="switchTab('rank')">🏆 Rang</button>
   <button class="tab-btn"        id="tab-shop-btn"          onclick="switchTab('shop')">🛒 Shop</button>
   <button class="tab-btn"        id="tab-outfit-import-btn" onclick="switchTab('outfit-import')">📥 Outfit Import</button>
-  <button class="tab-btn"        id="tab-lscg-outfit-btn"  onclick="switchTab('lscg-outfit')">🧬 LSCG Outfit</button>
+  <button class="tab-btn"        id="tab-outfit-scan-btn"   onclick="switchTab('outfit-scan')">👗 Outfits</button>
   <button class="tab-btn"        id="tab-settings-btn"      onclick="switchTab('settings')">⚙️ Einstellungen</button>
 </div>
 
@@ -3093,50 +3093,43 @@ document.write('<scr'+'ipt src="outfit-import.js?_='+_cbv+'"><\/scr'+'ipt>');
 </div>
 <!-- /tab-outfit-import -->
 
-<!-- ══════════════════════════════════════════ -->
-<!-- LSCG OUTFIT TAB                            -->
-<!-- ══════════════════════════════════════════ -->
-<div id="tab-lscg-outfit" class="tab-pane">
-  <div style="display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--border);flex-wrap:wrap">
-    <button class="btn btn-primary" onclick="scanLscgOutfits()">🔍 Jetzt scannen</button>
-    <span style="font-size:.72rem;color:var(--text3)">Scannt alle Chars im Raum · speichert neue Version wenn Outfit sich geändert hat</span>
-    <div style="margin-left:auto">
-      <button class="btn btn-red" onclick="clearAllLscgOutfits()" title="Alle gespeicherten LSCG-Outfits löschen">🗑️ Alle löschen</button>
-    </div>
+<!-- ══ TAB: OUTFIT SCAN ══════════════════════════════════════════════ -->
+<div id="tab-outfit-scan" class="tab-pane">
+  <div class="os-header">
+    <button class="btn btn-primary" onclick="scanOutfits()">▶ Jetzt scannen</button>
+    <span class="os-hint">Automatischer Scan beim Raum-Beitritt · 💾 speichert direkt in LSCG · 📋 kopiert den Code</span>
   </div>
-  <div id="lscgOutfitBody" style="padding:10px;overflow-y:auto;max-height:calc(100vh - 160px)"></div>
+  <div id="outfitScanBody" class="os-body"></div>
 </div>
-<!-- /tab-lscg-outfit -->
+<!-- /tab-outfit-scan -->
 
 <style>
-/* ── LSCG Outfit Tab ── */
-.lscg-empty { text-align:center; color:var(--text3); padding:48px 20px; font-size:.85rem; line-height:1.8; }
-/* Raum */
-.lscg-room-block { background:var(--bg2); border:1px solid var(--border); border-radius:10px; margin-bottom:12px; overflow:hidden; }
-.lscg-room-hdr { padding:9px 14px; background:var(--bg3); font-weight:700; font-size:.88rem; color:var(--text1); border-bottom:1px solid var(--border); letter-spacing:.02em; }
-/* Datum */
-.lscg-date-block { border-bottom:1px solid var(--border); }
-.lscg-date-block:last-child { border-bottom:none; }
-.lscg-date-hdr { padding:6px 14px; background:rgba(99,102,241,0.07); font-size:.75rem; color:var(--accent-text); font-weight:600; }
-.lscg-date-count { color:var(--text3); font-weight:400; }
-.lscg-date-chars { padding:6px 10px; display:flex; flex-direction:column; gap:6px; }
-/* Char */
-.lscg-char-block { background:var(--bg1); border:1px solid rgba(255,255,255,0.06); border-radius:7px; overflow:hidden; }
-.lscg-char-hdr { display:flex; align-items:center; gap:6px; padding:6px 10px; background:var(--bg3); border-bottom:1px solid var(--border); }
-.lscg-char-name { font-weight:700; font-size:.82rem; color:var(--text1); flex:1; }
-.lscg-char-id { color:var(--text3); font-size:.7rem; font-weight:400; }
-.lscg-nick { color:var(--acc2); font-size:.75rem; font-weight:400; font-style:italic; }
-.lscg-ver-count { font-size:.68rem; color:var(--text3); white-space:nowrap; }
-/* Versionen */
-.lscg-versions { display:flex; flex-direction:column; }
-.lscg-version { display:grid; grid-template-columns:30px 42px 1fr auto; align-items:center; gap:6px; padding:5px 10px; border-bottom:1px solid rgba(255,255,255,0.03); font-size:.7rem; }
-.lscg-version:last-child { border-bottom:none; }
-.lscg-version.lscg-latest { background:rgba(99,102,241,0.07); }
-.lscg-vnum { color:var(--accent-text); font-weight:700; font-size:.66rem; }
-.lscg-vtime { color:var(--text3); font-size:.66rem; white-space:nowrap; }
-.lscg-preview { color:var(--text2); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-family:monospace; font-size:.63rem; }
-.lscg-btn { background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.12); border-radius:4px; color:var(--text2); font-size:.65rem; padding:2px 7px; cursor:pointer; white-space:nowrap; transition:background .15s; }
-.lscg-btn:hover { background:rgba(255,255,255,0.1); color:var(--text1); }
+/* ── Outfit Scan Tab ── */
+.os-header { display:flex; align-items:center; gap:12px; padding:10px 14px; border-bottom:1px solid var(--border); flex-wrap:wrap; }
+.os-hint { font-size:.7rem; color:var(--text3); flex:1; }
+.os-body { padding:10px; overflow-y:auto; max-height:calc(100vh - 110px); }
+.os-empty { text-align:center; color:var(--text3); padding:56px 20px; font-size:.85rem; line-height:1.9; }
+.os-list { display:flex; flex-direction:column; gap:6px; }
+.os-char { display:flex; align-items:center; justify-content:space-between; gap:10px;
+           background:var(--bg2); border:1px solid var(--border); border-radius:8px;
+           padding:9px 14px; }
+.os-char.os-nocode { opacity:.55; }
+.os-char-left { display:flex; flex-direction:column; gap:2px; min-width:0; flex:1; }
+.os-name { font-weight:700; font-size:.88rem; color:var(--text1); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.os-nick { color:var(--acc2); font-size:.75rem; font-weight:400; font-style:italic; }
+.os-num  { font-size:.7rem; color:var(--text3); }
+.os-char-right { display:flex; align-items:center; gap:6px; flex-shrink:0; }
+.os-warn { font-size:.7rem; color:#f87171; }
+.os-btn-save { background:rgba(99,102,241,0.18); border:1px solid rgba(99,102,241,0.4);
+               color:var(--accent-text); font-size:.72rem; padding:4px 10px; border-radius:5px;
+               cursor:pointer; white-space:nowrap; transition:background .15s; }
+.os-btn-save:hover { background:rgba(99,102,241,0.35); }
+.os-btn-copy { background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.15);
+               color:var(--text2); font-size:.72rem; padding:4px 8px; border-radius:5px;
+               cursor:pointer; transition:background .15s; }
+.os-btn-copy:hover { background:rgba(255,255,255,0.12); color:var(--text1); }
 </style>
+
+<!-- ══════════════════════════════════════════ -->
 
 </body>
