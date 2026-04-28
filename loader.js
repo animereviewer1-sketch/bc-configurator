@@ -980,17 +980,8 @@ window.CurseScanner = (() => {
             const _outfits = {};
             for (const _key of _keys) {
               try {
-                const _code = LSCG_OUTFITS.GetOutfitCode(_key);
-                let _fp = null;
-                if (_code) {
-                  const _items = JSON.parse(LZString.decompressFromBase64(_code));
-                  _fp = _items.slice()
-                    .sort(function(a,b){ return a.Group.localeCompare(b.Group); })
-                    .map(function(i){ return i.Group + '\x1f' + i.Name + '\x1f' + JSON.stringify(i.Color ?? ''); })
-                    .join('\x1e');
-                }
-                _outfits[_key] = { fingerprint: _fp };
-              } catch(_e) { _outfits[_key] = { fingerprint: null }; }
+                _outfits[_key] = { code: LSCG_OUTFITS.GetOutfitCode(_key) };
+              } catch(_e) { _outfits[_key] = { code: null }; }
             }
             src.postMessage({ app: APP, type: 'LSCG_OUTFITS_DATA', outfits: _outfits }, ALLOWED_ORIGIN);
           } catch(ex) {

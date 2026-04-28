@@ -3097,8 +3097,17 @@ document.write('<scr'+'ipt src="outfit-import.js?_='+_cbv+'"><\/scr'+'ipt>');
 <div id="tab-outfit-scan" class="tab-pane">
   <div class="os-header">
     <button class="btn btn-primary" onclick="scanOutfits()">▶ Jetzt scannen</button>
-    <span class="os-hint">Auto-Scan beim Raum-Beitritt · 💾 direkt in LSCG speichern · neue Version nur bei Outfit-Änderung</span>
+    <span class="os-hint">Auto-Scan beim Raum-Beitritt · 💾 in LSCG speichern · neue Version nur bei Outfit-Änderung</span>
+    <button class="os-filter-btn" onclick="toggleIgnorePanel()" title="Gruppen-Filter">⚙ Filter</button>
     <button class="btn btn-red" onclick="clearAllLscgOutfits()" title="Alle löschen">🗑️</button>
+  </div>
+  <div id="osIgnorePanel" class="os-ignore-panel" style="display:none">
+    <div class="os-ignore-info">Ignorierte Gruppen (kommagetrennt). Suffix <code>*</code> = Prefix-Match, z.B. <code>Item*</code> ignoriert alle Item-Gruppen (Restraints).</div>
+    <textarea id="osIgnoreInput" class="os-ignore-input" rows="2" placeholder="Blush, Emoticon, Fluids, Mouth, Eyes, Eyes2, Eyebrows, Eyebrows2, Pronouns"></textarea>
+    <div class="os-ignore-actions">
+      <button class="btn btn-primary" onclick="setIgnoreText(document.getElementById('osIgnoreInput').value)">💾 Speichern &amp; neu berechnen</button>
+      <button class="btn" onclick="document.getElementById('osIgnoreInput').value='Blush, Emoticon, Fluids, Mouth, Eyes, Eyes2, Eyebrows, Eyebrows2, Pronouns'">↺ Standard</button>
+    </div>
   </div>
   <div id="outfitScanBody" class="os-body"></div>
 </div>
@@ -3108,6 +3117,18 @@ document.write('<scr'+'ipt src="outfit-import.js?_='+_cbv+'"><\/scr'+'ipt>');
 /* ── LSCG Outfit Tab ── */
 .os-header { display:flex; align-items:center; gap:10px; padding:10px 14px; border-bottom:1px solid var(--border); flex-wrap:wrap; }
 .os-hint   { font-size:.7rem; color:var(--text3); flex:1; }
+.os-filter-btn { font-size:.72rem; padding:4px 10px; border-radius:6px; cursor:pointer;
+                 background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12);
+                 color:var(--text2); transition:background .15s; }
+.os-filter-btn:hover { background:rgba(255,255,255,0.12); }
+.os-ignore-panel { flex-direction:column; gap:8px; padding:10px 14px;
+                   background:var(--bg3); border-bottom:1px solid var(--border); }
+.os-ignore-info  { font-size:.7rem; color:var(--text3); line-height:1.6; }
+.os-ignore-info code { background:rgba(255,255,255,0.08); padding:1px 5px; border-radius:3px; font-family:var(--font-mono); }
+.os-ignore-input { width:100%; background:var(--bg4); border:1px solid var(--border2); border-radius:6px;
+                   color:var(--text1); font-size:.78rem; padding:6px 10px; font-family:var(--font-mono);
+                   resize:vertical; box-sizing:border-box; }
+.os-ignore-actions { display:flex; gap:8px; }
 .os-body   { padding:10px; overflow-y:auto; max-height:calc(100vh - 110px); display:flex; flex-direction:column; gap:8px; }
 .os-empty  { text-align:center; color:var(--text3); padding:56px 20px; font-size:.85rem; line-height:1.9; }
 
@@ -3144,7 +3165,7 @@ document.write('<scr'+'ipt src="outfit-import.js?_='+_cbv+'"><\/scr'+'ipt>');
                     background:rgba(255,255,255,0.015); }
 .os-char.open .os-versions { display:flex; }
 
-.os-version  { display:grid; grid-template-columns:36px 110px 60px 1fr auto auto; align-items:center; gap:8px;
+.os-version  { display:grid; grid-template-columns:36px 110px 55px 1fr auto auto; align-items:center; gap:8px;
                padding:8px 14px; border-bottom:1px solid rgba(255,255,255,0.05); min-height:36px; }
 .os-version:last-child { border-bottom:none; }
 .os-version.os-latest       { background:rgba(99,102,241,0.10); }

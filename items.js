@@ -4651,13 +4651,87 @@ function importAllData() {
 // ══════════════════════════════════════════════════════════════
 //  LSCG OUTFIT TAB
 //  DB[memberNumber] = { name, nickname, versions: [{code, fingerprint, ts}] }
-//  Neue Version nur wenn Fingerprint (Group+Name+Color) sich ändert.
+//  Fingerprint = gefiltert (ignorierte Gruppen ausgeschlossen)
 // ══════════════════════════════════════════════════════════════
-const LSCG_IDB_KEY     = 'BC_LSCG_OUTFITS_v3';
+const LSCG_IDB_KEY      = 'BC_LSCG_OUTFITS_v3';
+const LSCG_IGNORE_KEY   = 'BC_LSCG_IGNORE_v1';
 const LSCG_MAX_VERSIONS = 30;
 let LSCG_DB = {};
-const _osOpenSet = new Set(); // member keys currently expanded
-let _lscgFpMap = {};          // fingerprint → [key1, key2, …] aus LSCG_OUTFITS
+const _osOpenSet = new Set();
+let _lscgFpMap   = {};
+
+// Ignorierte Gruppen: Prefixe + exakte Namen
+let _ignorePrefix = [];
+let _ignoreExact  = new Set(['Blush','Emoticon','Fluids','Mouth','Eyes','Eyes2','Eyebrows','Eyebrows2','Pronouns']);
+
+function _shouldIgnoreGroup(g) {
+  if (_ignoreExact.has(g)) return true;
+  return _ignorePrefix.some(function(p){ return g.startsWith(p); });
+}
+
+function _computeFilteredFp(code) {
+  if (!code) return '';
+  try {
+    const items = JSON.parse(LZString.decompressFromBase64(code));
+    return items
+      .filter(function(i){ return i.Group && !_shouldIgnoreGroup(i.Group); })
+      .sort(function(a,b){ return a.Group.localeCompare(b.Group); })
+      .map(function(i){ return i.Group + '\x1f' + i.Name + '\x1f' + JSON.stringify(i.Color ?? ''); })
+      .join('\x1e');
+  } catch(e) { return ''; }
+}
+
+async function _loadIgnoreSettings() {
+  const saved = await idbGet(LSCG_IGNORE_KEY);
+  if (saved) {
+    _ignorePrefix = saved.prefix ?? ['Item'];
+    _ignoreExact  = new Set(saved.exact ?? ['Emoticon', 'Fluids']);
+  }
+}
+
+async function _saveIgnoreSettings() {
+  await idbSet(LSCG_IGNORE_KEY, { prefix: _ignorePrefix, exact: [..._ignoreExact] });
+}
+
+function getIgnoreText() {
+  return [..._ignoreExact, ..._ignorePrefix.map(function(p){ return p + '*'; })].join(', ');
+}
+
+function setIgnoreText(text) {
+  const parts = text.split(/[\n,]+/).map(function(s){ return s.trim(); }).filter(Boolean);
+  _ignorePrefix = parts.filter(function(s){ return s.endsWith('*'); }).map(function(s){ return s.slice(0,-1); });
+  _ignoreExact  = new Set(parts.filter(function(s){ return !s.endsWith('*'); }));
+  _saveIgnoreSettings();
+  // Fingerprints in DB neu berechnen
+  for (const mk of Object.keys(LSCG_DB)) {
+    for (const v of (LSCG_DB[mk].versions ?? [])) {
+      if (v.code) v.fingerprint = _computeFilteredFp(v.code);
+    }
+    // Duplikate innerhalb eines Chars entfernen (gleichem Fingerprint behalten nur neueste)
+    _dedupeVersions(LSCG_DB[mk]);
+  }
+  _saveLscgDB();
+  if (_activeTab === 'outfit-scan') renderOutfitScanTab();
+  showStatus('✅ Gruppen-Filter gespeichert & DB aktualisiert', 'success');
+}
+
+function _dedupeVersions(entry) {
+  const seen = new Set();
+  entry.versions = entry.versions.filter(function(v) {
+    const fp = v.fingerprint ?? ('__' + v.ts);
+    if (seen.has(fp)) return false;
+    seen.add(fp);
+    return true;
+  });
+}
+
+function toggleIgnorePanel() {
+  const panel = document.getElementById('osIgnorePanel');
+  if (!panel) return;
+  const open = panel.style.display === 'flex';
+  panel.style.display = open ? 'none' : 'flex';
+  if (!open) document.getElementById('osIgnoreInput').value = getIgnoreText();
+}
 
 function toggleOsChar(mk, hdrEl) {
   const el = hdrEl
@@ -4676,9 +4750,21 @@ function toggleOsChar(mk, hdrEl) {
 }
 
 (async () => {
+  await _loadIgnoreSettings();
   const saved = await idbGet(LSCG_IDB_KEY);
   if (saved && typeof saved === 'object') {
     LSCG_DB = saved;
+    // Fingerprints mit aktuellen Ignore-Regeln neu berechnen + Dups entfernen
+    let migrated = false;
+    for (const mk of Object.keys(LSCG_DB)) {
+      const entry = LSCG_DB[mk];
+      if (!entry?.versions) continue;
+      for (const v of entry.versions) {
+        if (v.code) { v.fingerprint = _computeFilteredFp(v.code); migrated = true; }
+      }
+      _dedupeVersions(entry);
+    }
+    if (migrated) await idbSet(LSCG_IDB_KEY, LSCG_DB);
     console.log('[BCU] LSCG Outfits geladen:', Object.keys(LSCG_DB).length, 'Chars');
   }
 })();
@@ -4696,9 +4782,10 @@ function _handleLscgOutfitsData(data) {
   if (data.err) { console.warn('[BCU] LSCG Outfits:', data.err); return; }
   _lscgFpMap = {};
   for (const [key, info] of Object.entries(data.outfits ?? {})) {
-    if (!info.fingerprint) continue;
-    if (!_lscgFpMap[info.fingerprint]) _lscgFpMap[info.fingerprint] = [];
-    _lscgFpMap[info.fingerprint].push(key);
+    const fp = _computeFilteredFp(info.code);
+    if (!fp) continue;
+    if (!_lscgFpMap[fp]) _lscgFpMap[fp] = [];
+    _lscgFpMap[fp].push(key);
   }
   if (_activeTab === 'outfit-scan') renderOutfitScanTab();
 }
@@ -4715,18 +4802,19 @@ function _handleOutfitScanData(data) {
     else { LSCG_DB[mk].name = r.name; LSCG_DB[mk].nickname = r.nickname ?? null; }
 
     const entry = LSCG_DB[mk];
-    const last  = entry.versions[entry.versions.length - 1];
-    const fp    = r.fingerprint ?? '';
+    // Filtered Fingerprint im Popup berechnen (Ignore-Regeln anwenden)
+    const fp = r.code ? _computeFilteredFp(r.code) : '';
 
-    if (!last || (last.fingerprint ?? '') !== fp) {
-      // Outfit geändert oder erster Eintrag → neue Version
+    const existing = fp ? entry.versions.find(function(v){ return (v.fingerprint ?? '') === fp; }) : null;
+    if (existing) {
+      // Fingerprint bereits bekannt → kein Duplikat, Code aktuell halten
+      if (r.code) existing.code = r.code;
+    } else {
+      // Neuer Fingerprint → neue Version anlegen
       entry.versions.push({ code: r.code, fingerprint: fp, ts: Date.now() });
       if (entry.versions.length > LSCG_MAX_VERSIONS)
         entry.versions = entry.versions.slice(-LSCG_MAX_VERSIONS);
       if (entry.versions.length > 1) geaendert++;
-    } else if (r.code) {
-      // Gleicher Fingerprint → Code immer aktuell halten (fixe alte null-Einträge)
-      last.code = r.code;
     }
   }
 
@@ -4760,17 +4848,21 @@ function renderOutfitScanTab() {
       + (entry.nickname ? ' <em class="os-nick">„' + escHtml(entry.nickname) + '"</em>' : '');
 
     const versHtml = vs.map(function(v, i) {
-      const realIdx = entry.versions.length - 1 - i;
-      const d = new Date(v.ts);
-      const ts = d.toLocaleDateString('de-DE', { day:'2-digit', month:'2-digit' })
-               + ' ' + d.toLocaleTimeString('de-DE', { hour:'2-digit', minute:'2-digit' });
-      const hasCode = !!v.code;
-      const savedKeys = (v.fingerprint && _lscgFpMap[v.fingerprint]) ? _lscgFpMap[v.fingerprint] : [];
+      const realIdx   = entry.versions.length - 1 - i;
+      const vNum      = vs.length - i;
+      const d         = new Date(v.ts);
+      const ts        = d.toLocaleDateString('de-DE', { day:'2-digit', month:'2-digit' })
+                      + ' ' + d.toLocaleTimeString('de-DE', { hour:'2-digit', minute:'2-digit' });
+      const hasCode   = !!v.code;
+      const fp        = v.fingerprint;
+      const savedKeys = (fp && _lscgFpMap[fp]) ? _lscgFpMap[fp] : [];
       const savedBadge = savedKeys.length > 0
-        ? '<span class="os-saved-badge" title="Bereits in LSCG gespeichert als: ' + savedKeys.join(', ') + '">✅ ' + savedKeys.map(function(k){ return escHtml(k); }).join(', ') + '</span>'
+        ? '<span class="os-saved-badge" title="Gespeichert als: ' + savedKeys.join(', ') + '">✅ ' + savedKeys.map(function(k){ return escHtml(k); }).join(', ') + '</span>'
         : '';
-      return '<div class="os-version' + (i === 0 ? ' os-latest' : '') + (savedKeys.length ? ' os-already-saved' : '') + '">'
-        + '<span class="os-vnum">v' + (vs.length - i) + '</span>'
+      const rowClass = 'os-version' + (i === 0 ? ' os-latest' : '') + (savedKeys.length ? ' os-already-saved' : '');
+
+      return '<div class="' + rowClass + '">'
+        + '<span class="os-vnum">v' + vNum + '</span>'
         + '<span class="os-vts">' + ts + '</span>'
         + (hasCode ? '<span class="os-codelen">' + v.code.length + ' Z</span>' : '<span class="os-warn">⚠ kein Code</span>')
         + savedBadge
