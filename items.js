@@ -4890,36 +4890,31 @@ function captureOsScreenshot(mk, vIdx) {
   if (!_connected) { showStatus('❌ Nicht verbunden mit BC', 'error'); return; }
   const memberNum = parseInt(mk, 10);
   if (isNaN(memberNum)) return;
-  const fp = (vIdx !== undefined && vIdx !== null)
-    ? (LSCG_DB[mk]?.versions?.[vIdx]?.fingerprint ?? null)
-    : null;
+  const v = (vIdx !== undefined && vIdx !== null) ? (LSCG_DB[mk]?.versions?.[vIdx] ?? null) : null;
+  const fp = v?.fingerprint ?? null;
+  const outfitCode = v?.code ?? null;
   const reqId = 'os_' + Date.now() + '_' + mk;
   _pendingOsCapture[reqId] = { mk, fp };
 
-  const code = '(function(){'
-    + 'var T=ChatRoomCharacter.find(function(c){return c.MemberNumber===' + memberNum + ';});'
-    + 'if(!T){window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",'
-    + 'reqId:' + JSON.stringify(reqId) + ',err:"Spieler nicht im Raum"},"*");return;}'
-    + 'try{CharacterLoadCanvas(T);}catch(e){}'
-    + 'requestAnimationFrame(function(){'
-    + 'try{'
-    + 'var src=T.Canvas;'
+  // Capture helper (shared pixel crop + send logic, injected as a string)
+  const cropAndSend = ''
+    + 'var src=C.Canvas;'
     + 'if(!src||!src.width)throw new Error("Canvas leer");'
     + 'var oc=document.createElement("canvas");oc.width=src.width;oc.height=src.height;'
     + 'var ctx=oc.getContext("2d");ctx.drawImage(src,0,0);'
-    // Auto-crop: scan pixels to find the character bounding box (remove black empty space)
+    // Auto-crop: use threshold 5 to catch dark items like black boots
     + 'var id=ctx.getImageData(0,0,oc.width,oc.height);'
     + 'var px=id.data,W=oc.width,H=oc.height;'
     + 'var x0=W,x1=0,y0=H,y1=0;'
-    + 'for(var r=0;r<H;r++){for(var c=0;c<W;c++){'
-    + '  var ii=(r*W+c)*4;'
-    + '  if(px[ii]>12||px[ii+1]>12||px[ii+2]>12){'
-    + '    if(c<x0)x0=c;if(c>x1)x1=c;'
+    + 'for(var r=0;r<H;r++){for(var c2=0;c2<W;c2++){'
+    + '  var ii=(r*W+c2)*4;'
+    + '  if(px[ii]>5||px[ii+1]>5||px[ii+2]>5){'
+    + '    if(c2<x0)x0=c2;if(c2>x1)x1=c2;'
     + '    if(r<y0)y0=r;if(r>y1)y1=r;'
     + '  }'
     + '}}'
-    + 'if(x1<x0){x0=0;y0=0;x1=W-1;y1=H-1;}'  // fallback: full canvas
-    + 'var pad=12;'
+    + 'if(x1<x0){x0=0;y0=0;x1=W-1;y1=H-1;}'
+    + 'var pad=20;'
     + 'x0=Math.max(0,x0-pad);y0=Math.max(0,y0-pad);'
     + 'x1=Math.min(W-1,x1+pad);y1=Math.min(H-1,y1+pad);'
     + 'var cw=x1-x0+1,ch=y1-y0+1;'
@@ -4927,13 +4922,57 @@ function captureOsScreenshot(mk, vIdx) {
     + 'cc.getContext("2d").drawImage(oc,x0,y0,cw,ch,0,0,cw,ch);'
     + 'var d=cc.toDataURL("image/jpeg",0.88);'
     + 'window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",'
-    + 'reqId:' + JSON.stringify(reqId) + ',data:d,name:T.Nickname||T.Name,'
-    + 'memberNumber:T.MemberNumber,itemCount:(T.Appearance||[]).length,'
-    + 'width:cw,height:ch},"*");'
+    + 'reqId:' + JSON.stringify(reqId) + ',data:d,width:cw,height:ch},"*");';
+
+  const code = '(function(){'
+    // ── Try to apply the outfit on the LOCAL Player so we don't touch other players ──
+    + 'var origApp=null;'
+    + 'var C=Player;'  // default: use local player
+    + (outfitCode
+        ? ('try{'
+          + '  var decoded=JSON.parse(LZString.decompressFromBase64(' + JSON.stringify(outfitCode) + '));'
+          + '  if(Array.isArray(decoded)&&decoded.length>0){'
+          + '    var newApp=decoded.map(function(item){'
+          + '      if(!item||!item.Group||!item.Name)return null;'
+          + '      var asset=AssetGet(Player.AssetFamily,item.Group,item.Name);'
+          + '      if(!asset)return null;'
+          + '      return{Asset:asset,Color:item.Color!==undefined?item.Color:asset.DefaultColor,Property:item.Property||{}};'
+          + '    }).filter(Boolean);'
+          + '    if(newApp.length>0){'
+          + '      origApp=Player.Appearance.slice();'
+          + '      Player.Appearance=newApp;'
+          + '      CharacterRefresh(Player,false,false);'
+          + '      CharacterLoadCanvas(Player);'
+          + '    }'
+          + '  }'
+          + '}catch(e){'
+          // Fallback: capture target player as-is
+          + '  C=ChatRoomCharacter.find(function(ch){return ch.MemberNumber===' + memberNum + ';});'
+          + '  if(C){try{CharacterLoadCanvas(C);}catch(e2){}}'
+          + '  else{'
+          + '    window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",'
+          + '    reqId:' + JSON.stringify(reqId) + ',err:"Outfit konnte nicht geladen werden"},"*");'
+          + '    return;'
+          + '  }'
+          + '}')
+        // No outfit code: just capture the target player directly
+        : ('C=ChatRoomCharacter.find(function(ch){return ch.MemberNumber===' + memberNum + ';});'
+          + 'if(!C){window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",'
+          + 'reqId:' + JSON.stringify(reqId) + ',err:"Spieler nicht im Raum"},"*");return;}'
+          + 'try{CharacterLoadCanvas(C);}catch(e){}')
+      )
+    + 'requestAnimationFrame(function(){'
+    + 'requestAnimationFrame(function(){'
+    + 'try{'
+    + cropAndSend
     + '}catch(e){'
-    + 'window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",'
-    + 'reqId:' + JSON.stringify(reqId) + ',err:e.message},"*");'
+    + '  window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",'
+    + '  reqId:' + JSON.stringify(reqId) + ',err:e.message},"*");'
+    + '}finally{'
+    // Always restore Player appearance if we modified it
+    + '  if(origApp){Player.Appearance=origApp;CharacterRefresh(Player,false,false);}'
     + '}'
+    + '});'
     + '});'
     + '})();';
 
