@@ -3222,14 +3222,18 @@ document.write('<scr'+'ipt src="outfit-import.js?_='+_cbv+'"><\/scr'+'ipt>');
 .os-card-btn.primary { background:var(--accent); border-color:var(--accent); color:#1a1611; font-weight:700; }
 .os-card-btn.primary:hover { background:var(--accent-hover); }
 .os-card-btn.fav-on { color:var(--yellow); border-color:rgba(251,191,36,0.4); background:rgba(251,191,36,0.12); }
+.os-card-btn.danger { color:#fb7185; border-color:rgba(251,113,133,0.25); flex:0 0 auto; padding:4px 8px; }
+.os-card-btn.danger:hover { background:rgba(251,113,133,0.15); border-color:rgba(251,113,133,0.5); }
 
 /* ── Lightbox (Großansicht im Tool) ── */
 .os-lightbox { display:none; position:fixed; inset:0; z-index:9000;
                background:rgba(0,0,0,0.88); backdrop-filter:blur(8px);
-               align-items:center; justify-content:center; flex-direction:column; gap:14px; }
+               align-items:center; justify-content:center; flex-direction:column; gap:8px;
+               padding:12px; overflow:hidden; }
 .os-lightbox.open { display:flex; }
-.os-lightbox-img { max-height:82vh; max-width:90vw; border-radius:12px;
-                   box-shadow:0 24px 64px rgba(0,0,0,0.7); object-fit:contain; }
+.os-lightbox-img { max-height:calc(100vh - 130px); max-width:min(90vw,420px);
+                   border-radius:12px; box-shadow:0 24px 64px rgba(0,0,0,0.7);
+                   object-fit:contain; display:block; }
 .os-lightbox-name { color:var(--accent-text); font-weight:800; font-size:1rem; }
 .os-lightbox-sub  { color:var(--text3); font-size:.75rem; font-family:var(--font-mono); margin-top:-8px; }
 .os-lightbox-actions { display:flex; gap:8px; margin-top:4px; }

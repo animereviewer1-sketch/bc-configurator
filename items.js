@@ -4885,6 +4885,7 @@ function _syncLscgScreenshotToProfiles(mk) {
 const _pendingOsCapture = {};  // reqId → mk
 let   _osCaptureQueue   = [];
 let   _osCaptureRunning = false;
+let   _osCaptureNeedSync = false;  // true wenn Player-Appearance temporär geändert wurde
 
 function captureOsScreenshot(mk, vIdx) {
   if (!_connected) { showStatus('❌ Nicht verbunden mit BC', 'error'); return; }
@@ -4895,6 +4896,7 @@ function captureOsScreenshot(mk, vIdx) {
   const outfitCode = v?.code ?? null;
   const reqId = 'os_' + Date.now() + '_' + mk;
   _pendingOsCapture[reqId] = { mk, fp };
+  if (outfitCode) _osCaptureNeedSync = true;  // Player-Appearance wird temporär geändert
 
   // Capture helper (shared pixel crop + send logic, injected as a string)
   const cropAndSend = ''
@@ -4925,53 +4927,64 @@ function captureOsScreenshot(mk, vIdx) {
     + 'reqId:' + JSON.stringify(reqId) + ',data:d,width:cw,height:ch},"*");';
 
   const code = '(function(){'
-    // ── Try to apply the outfit on the LOCAL Player so we don't touch other players ──
+    // ── Outfit auf LOCAL Player anwenden (wie Wardrobe) ──
     + 'var origApp=null;'
-    + 'var C=Player;'  // default: use local player
+    + 'var C=Player;'
     + (outfitCode
         ? ('try{'
           + '  var decoded=JSON.parse(LZString.decompressFromBase64(' + JSON.stringify(outfitCode) + '));'
           + '  if(Array.isArray(decoded)&&decoded.length>0){'
-          + '    var newApp=decoded.map(function(item){'
-          + '      if(!item||!item.Group||!item.Name)return null;'
-          + '      var asset=AssetGet(Player.AssetFamily,item.Group,item.Name);'
-          + '      if(!asset)return null;'
-          + '      return{Asset:asset,Color:item.Color!==undefined?item.Color:asset.DefaultColor,Property:item.Property||{}};'
-          + '    }).filter(Boolean);'
-          + '    if(newApp.length>0){'
-          + '      origApp=Player.Appearance.slice();'
-          + '      Player.Appearance=newApp;'
-          + '      CharacterRefresh(Player,false,false);'
-          + '      CharacterLoadCanvas(Player);'
+          + '    origApp=Player.Appearance.slice();'
+          // CharacterAppearanceSetFromBundle = exakt dieselbe Funktion wie die Wardrobe
+          + '    if(typeof CharacterAppearanceSetFromBundle==="function"){'
+          + '      CharacterAppearanceSetFromBundle(Player,decoded,0,Player.AssetFamily);'
+          + '    }else{'
+          // Fallback: InventoryRemoveAll + InventoryWear (wie BC intern)
+          + '      try{InventoryRemoveAll(Player,false);}catch(_e){}'
+          + '      decoded.forEach(function(item){'
+          + '        if(!item||!item.Group||!item.Name)return;'
+          + '        try{InventoryWear(Player,item.Name,item.Group,item.Color,0,null,item.Property,false);}catch(_e){}'
+          + '      });'
           + '    }'
+          + '    CharacterRefresh(Player,false,false);'
+          + '    CharacterLoadCanvas(Player);'
           + '  }'
           + '}catch(e){'
-          // Fallback: capture target player as-is
+          // Fallback: Zielspieler direkt aufnehmen
+          + '  origApp=null;'
           + '  C=ChatRoomCharacter.find(function(ch){return ch.MemberNumber===' + memberNum + ';});'
-          + '  if(C){try{CharacterLoadCanvas(C);}catch(e2){}}'
+          + '  if(C){try{CharacterLoadCanvas(C);}catch(_e){}}'
           + '  else{'
           + '    window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",'
-          + '    reqId:' + JSON.stringify(reqId) + ',err:"Outfit konnte nicht geladen werden"},"*");'
+          + '    reqId:' + JSON.stringify(reqId) + ',err:"Outfit konnte nicht geladen werden: "+e.message},"*");'
           + '    return;'
           + '  }'
           + '}')
-        // No outfit code: just capture the target player directly
         : ('C=ChatRoomCharacter.find(function(ch){return ch.MemberNumber===' + memberNum + ';});'
           + 'if(!C){window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",'
           + 'reqId:' + JSON.stringify(reqId) + ',err:"Spieler nicht im Raum"},"*");return;}'
-          + 'try{CharacterLoadCanvas(C);}catch(e){}')
+          + 'try{CharacterLoadCanvas(C);}catch(_e){}')
       )
+    // Zwei Frames + 80ms warten damit BC alle Items vollständig rendert
     + 'requestAnimationFrame(function(){'
     + 'requestAnimationFrame(function(){'
+    + 'setTimeout(function(){'
     + 'try{'
     + cropAndSend
     + '}catch(e){'
     + '  window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",'
     + '  reqId:' + JSON.stringify(reqId) + ',err:e.message},"*");'
     + '}finally{'
-    // Always restore Player appearance if we modified it
-    + '  if(origApp){Player.Appearance=origApp;CharacterRefresh(Player,false,false);}'
+    + '  if(origApp){'
+    + '    if(typeof CharacterAppearanceSetFromBundle==="function"){'
+    + '      CharacterAppearanceSetFromBundle(Player,origApp.map(function(i){return{Name:i.Asset.Name,Group:i.Asset.Group.Name,Color:i.Color,Property:i.Property};}),0,Player.AssetFamily);'
+    + '    }else{'
+    + '      Player.Appearance=origApp;'
+    + '    }'
+    + '    CharacterRefresh(Player,false,false);'
+    + '  }'
     + '}'
+    + '},80);'
     + '});'
     + '});'
     + '})();';
@@ -5002,7 +5015,25 @@ function captureAllMissingOsScreenshots() {
 }
 
 function _runNextOsCapture() {
-  if (!_osCaptureQueue.length) { _osCaptureRunning = false; return; }
+  if (!_osCaptureQueue.length) {
+    _osCaptureRunning = false;
+    if (_osCaptureNeedSync) {
+      _osCaptureNeedSync = false;
+      // Alle Captures fertig → Player-Canvas neu laden + Server-Sync
+      bcSend({
+        type: 'EXEC',
+        code: '(function(){'
+          + 'try{'
+          + '  CharacterLoadCanvas(Player);'
+          + '  if(typeof ServerPlayerAppearanceSync==="function"){ServerPlayerAppearanceSync();}'
+          + '  else if(typeof ServerSend==="function"){ServerSend("AccountUpdate",{Appearance:Player.Appearance});}'
+          + '}catch(e){console.warn("[BCU] Appearance-Sync fehlgeschlagen:",e.message);}'
+          + '})();'
+      }, true);
+      showStatus('✅ Alle Bilder fertig · Outfit synchronisiert', 'success');
+    }
+    return;
+  }
   _osCaptureRunning = true;
   const item = _osCaptureQueue.shift();
   setTimeout(function() { captureOsScreenshot(item.mk, item.vIdx); }, 600);
@@ -5411,6 +5442,7 @@ function renderOutfitScanTab() {
         + (hasCode ? '<button class="os-card-btn primary" onclick="osApplyOutfit(\'' + mk + '\',' + realIdx + ')">▶ Run</button>' : '')
         + '<button class="os-card-btn' + (isFav ? ' fav-on' : '') + '" onclick="toggleOsFav(\'' + mk + '\')">⭐</button>'
         + (hasCode ? '<button class="os-card-btn" onclick="osSaveOutfitAsProfile(\'' + mk + '\',' + realIdx + ')" title="Als Profil speichern">💾</button>' : '')
+        + '<button class="os-card-btn danger" onclick="deleteLscgVersion(\'' + mk + '\',' + realIdx + ')" title="Version löschen">🗑</button>'
         + '</div>'
         + '</div>';
     }).join('');
@@ -5541,6 +5573,35 @@ function copyLscgOutfitCode(mk, vIdx) {
   const v = LSCG_DB[mk]?.versions?.[vIdx];
   if (!v?.code) { showStatus('❌ Kein Code vorhanden', 'error'); return; }
   navigator.clipboard.writeText(v.code).then(function() { showStatus('📋 Code kopiert!', 'success'); });
+}
+
+// Einzelne Version löschen (Code + Screenshot)
+function deleteLscgVersion(mk, vIdx) {
+  const entry = LSCG_DB[mk];
+  if (!entry?.versions?.[vIdx]) return;
+  const vNum = entry.versions.length - vIdx;
+  if (!confirm('Version v' + vNum + ' von ' + (entry.name ?? mk) + ' löschen?')) return;
+  // Screenshot für diese Version löschen
+  const fp  = entry.versions[vIdx]?.fingerprint ?? null;
+  const key = fp ? (mk + '|' + fp) : null;
+  if (key && LSCG_SCREENSHOTS[key]) {
+    delete LSCG_SCREENSHOTS[key];
+    _saveLscgScreenshots();
+  }
+  // Fingerprint-Map bereinigen
+  if (fp && _lscgFpMap[fp]) {
+    _lscgFpMap[fp] = _lscgFpMap[fp].filter(function(k) { return k !== mk; });
+    if (!_lscgFpMap[fp].length) delete _lscgFpMap[fp];
+  }
+  // Version aus DB entfernen
+  entry.versions.splice(vIdx, 1);
+  if (!entry.versions.length) {
+    // Letzter Eintrag → ganzen Member löschen
+    delete LSCG_DB[mk];
+  }
+  _saveLscgDB();
+  renderOutfitScanTab();
+  showStatus('🗑️ Version v' + vNum + ' gelöscht', 'info');
 }
 
 function clearAllLscgOutfits() {
