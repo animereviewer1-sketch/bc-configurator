@@ -5238,7 +5238,11 @@ function renderOutfitScanTab() {
   const searchEl = document.getElementById('osSearchInput');
   if (searchEl && document.activeElement !== searchEl) searchEl.value = _osSearchQuery;
 
-  let members = Object.keys(LSCG_DB);
+  // Nur Einträge mit gültigem versions-Array
+  let members = Object.keys(LSCG_DB).filter(function(mk) {
+    return LSCG_DB[mk] && Array.isArray(LSCG_DB[mk].versions) && LSCG_DB[mk].versions.length > 0;
+  });
+
   if (!members.length) {
     body.innerHTML = '<div class="os-empty">Noch keine Outfits gespeichert.<br>Automatischer Scan beim Raum-Beitritt, oder ▶ Jetzt scannen.</div>';
     return;
@@ -5262,7 +5266,7 @@ function renderOutfitScanTab() {
     return (LSCG_DB[a].name ?? '').localeCompare(LSCG_DB[b].name ?? '');
   });
 
-  body.innerHTML = members.map(function(mk) {
+  try { body.innerHTML = members.map(function(mk) {
     const entry = LSCG_DB[mk];
     const isFav = _osFavs.has(mk);
     const thumb = _getLscgScreenshot(mk);
@@ -5320,6 +5324,10 @@ function renderOutfitScanTab() {
       + '<div class="os-member-rows"><div class="os-strip">' + cards + '</div></div>'
       + '</div>';
   }).join('');
+  } catch(err) {
+    console.error('[BCU] renderOutfitScanTab error:', err);
+    body.innerHTML = '<div class="os-empty" style="color:#fb7185">⚠ Render-Fehler: ' + err.message + '</div>';
+  }
 }
 
 function toggleOsMember(mk) {
