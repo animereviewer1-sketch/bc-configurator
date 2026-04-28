@@ -4654,11 +4654,11 @@ const LSCG_MAX_VERSIONS = 30;
 let LSCG_DB = {};
 const _osOpenSet = new Set(); // member keys currently expanded
 
-function toggleOsChar(mk) {
-  const el = document.querySelector('.os-char[data-mk="' + mk + '"]');
+function toggleOsChar(mk, hdrEl) {
+  const el = hdrEl ? hdrEl.closest('.os-char') : document.querySelector('.os-char[data-mk="' + mk + '"]');
   if (!el) return;
   const nowOpen = el.classList.toggle('open');
-  if (nowOpen) _osOpenSet.add(mk); else _osOpenSet.delete(mk);
+  if (nowOpen) _osOpenSet.add(String(mk)); else _osOpenSet.delete(String(mk));
 }
 
 (async () => {
@@ -4694,12 +4694,12 @@ function _handleOutfitScanData(data) {
 
     if (!last || (last.fingerprint ?? '') !== fp) {
       // Outfit geändert oder erster Eintrag → neue Version
-      entry.versions.push({ code: r.code, fingerprint: fp, ts: r.ts ?? Date.now() });
+      entry.versions.push({ code: r.code, fingerprint: fp, ts: Date.now() });
       if (entry.versions.length > LSCG_MAX_VERSIONS)
         entry.versions = entry.versions.slice(-LSCG_MAX_VERSIONS);
       if (entry.versions.length > 1) geaendert++;
-    } else if (r.code && !last.code) {
-      // Gleiches Outfit, aber Code fehlte → nachholen
+    } else if (r.code) {
+      // Gleicher Fingerprint → Code immer aktuell halten (fixe alte null-Einträge)
       last.code = r.code;
     }
   }
@@ -4742,13 +4742,14 @@ function renderOutfitScanTab() {
       return '<div class="os-version' + (i === 0 ? ' os-latest' : '') + '">'
         + '<span class="os-vnum">v' + (vs.length - i) + '</span>'
         + '<span class="os-vts">' + ts + '</span>'
+        + (hasCode ? '<span class="os-codelen">' + v.code.length + ' Zeichen</span>' : '<span class="os-warn">⚠ kein Code</span>')
         + (hasCode ? '<button class="os-btn-save" onclick="saveOutfitToLscg(\'' + mk + '\',' + realIdx + ')" title="In LSCG speichern">💾</button>' : '')
-        + (hasCode ? '<button class="os-btn-copy" onclick="copyOutfitCode(\'' + mk + '\',' + realIdx + ')" title="Code kopieren">📋</button>' : '<span class="os-warn">⚠</span>')
+        + (hasCode ? '<button class="os-btn-copy" onclick="copyOutfitCode(\'' + mk + '\',' + realIdx + ')" title="Code kopieren">📋</button>' : '')
         + '</div>';
     }).join('');
 
     return '<div class="os-char' + (isOpen ? ' open' : '') + '" data-mk="' + escHtml(mk) + '">'
-      + '<div class="os-char-hdr" onclick="toggleOsChar(\'' + mk + '\')">'
+      + '<div class="os-char-hdr" onclick="toggleOsChar(\'' + mk + '\',this)">'
       + '<span class="os-chevron">▶</span>'
       + '<span class="os-name">' + nameHtml + '</span>'
       + '<span class="os-num">#' + escHtml(mk) + '</span>'
