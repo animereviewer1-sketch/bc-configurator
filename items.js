@@ -2555,7 +2555,15 @@ function _handleCanvasPreviewData(data) {
     delete _pendingOsCapture[data.reqId];
 
     if (data.err) {
-      showStatus('❌ #' + mk + ': ' + data.err, 'error');
+      if (data.err.startsWith('DECODE_FAIL:') || data.err.startsWith('APPLY_FAIL:')) {
+        // Kaputten Code markieren → Karte zeigt Repair-Button
+        const vKey = fp ? (mk + '|' + fp) : mk;
+        _osBrokenCodes[vKey] = data.err;
+        showStatus('⚠️ #' + mk + ': Code fehlerhaft – Reparieren?', 'error');
+        if (_activeTab === 'outfit-scan') renderOutfitScanTab();
+      } else {
+        showStatus('❌ #' + mk + ': ' + data.err, 'error');
+      }
     } else if (data.data) {
       const imgEl = new Image();
       imgEl.onload = function() {
@@ -4886,6 +4894,7 @@ const _pendingOsCapture = {};  // reqId → mk
 let   _osCaptureQueue   = [];
 let   _osCaptureRunning = false;
 let   _osCaptureNeedSync = false;  // true wenn Player-Appearance temporär geändert wurde
+const _osBrokenCodes    = {};  // vKey → error-message (kaputte Outfit-Codes)
 
 function captureOsScreenshot(mk, vIdx) {
   if (!_connected) { showStatus('❌ Nicht verbunden mit BC', 'error'); return; }
@@ -4926,17 +4935,26 @@ function captureOsScreenshot(mk, vIdx) {
     + 'reqId:' + JSON.stringify(reqId) + ',data:d,width:cw,height:ch},"*");';
 
   const code = '(function(){'
-    + 'var origApp=null;'
+    // origApp IMMER zuerst sichern – bevor irgendwas verändert wird
+    + 'var origApp=Player.Appearance.slice();'
     + (outfitCode
-      ? // Outfit auf Player anwenden (genau wie _oiBuildExecCode, inkl. Layer)
-        'try{'
-        + '  var decoded=JSON.parse(LZString.decompressFromBase64(' + JSON.stringify(outfitCode) + '));'
-        + '  if(Array.isArray(decoded)&&decoded.length>0){'
-        + '    origApp=Player.Appearance.slice();'
+      ? // Outfit auf Player anwenden
+        'var decoded=null;'
+        + 'try{'
+        + '  decoded=JSON.parse(LZString.decompressFromBase64(' + JSON.stringify(outfitCode) + '));'
+        + '  if(!Array.isArray(decoded)||!decoded.length)decoded=null;'
+        + '}catch(e){'
+        // Decode-Fehler → Popup informieren (DECODE_FAIL: Prefix für Erkennung), Appearance NICHT anfassen
+        + '  window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",'
+        + '  reqId:' + JSON.stringify(reqId) + ',err:"DECODE_FAIL:"+e.message},"*");'
+        + '  return;'
+        + '}'
+        + 'if(decoded){'
         // Nackt-Gruppen (Name="") sichern – ArmsLeft, HandsLeft, etc.
-        + '    var nakedItems=origApp.filter(function(i){return !i.Asset.Name||i.Asset.Name==="";});'
-        + '    var bundleGroups=new Set(decoded.map(function(i){return i.Group;}));'
-        + '    Player.Appearance=[];'
+        + '  var nakedItems=origApp.filter(function(i){return !i.Asset.Name||i.Asset.Name==="";});'
+        + '  var bundleGroups=new Set(decoded.map(function(i){return i.Group;}));'
+        + '  Player.Appearance=[];'
+        + '  try{'
         + '    if(typeof CharacterAppearanceSetFromBundle==="function"){'
         + '      CharacterAppearanceSetFromBundle(Player,decoded,0,Player.AssetFamily);'
         + '    }else{'
@@ -4945,23 +4963,25 @@ function captureOsScreenshot(mk, vIdx) {
         + '        try{InventoryWear(Player,item.Name||"",item.Group,item.Color,0,null,item.Property,false);}catch(_e){}'
         + '      });'
         + '    }'
-        // Nackt-Gruppen zurück die nicht im Bundle sind
-        + '    nakedItems.forEach(function(item){'
-        + '      if(!bundleGroups.has(item.Asset.Group.Name))Player.Appearance.push(item);'
-        + '    });'
+        + '  }catch(applyErr){'
+        // Apply-Fehler → Appearance wiederherstellen, Fehler melden
+        + '    Player.Appearance=origApp.slice();'
         + '    CharacterRefresh(Player,false,false);'
-        + '    CharacterLoadCanvas(Player);'
+        + '    window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",'
+        + '    reqId:' + JSON.stringify(reqId) + ',err:"APPLY_FAIL:"+applyErr.message},"*");'
+        + '    return;'
         + '  }'
-        + '}catch(e){'
-        + '  window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",'
-        + '  reqId:' + JSON.stringify(reqId) + ',err:"Outfit-Apply: "+e.message},"*");'
-        + '  return;'
+        // Nackt-Gruppen zurück die nicht im Bundle sind
+        + '  nakedItems.forEach(function(item){'
+        + '    if(!bundleGroups.has(item.Asset.Group.Name))Player.Appearance.push(item);'
+        + '  });'
+        + '  CharacterRefresh(Player,false,false);'
+        + '  CharacterLoadCanvas(Player);'
         + '}'
       : // Kein Code → Player direkt wie er ist aufnehmen
         'try{CharacterLoadCanvas(Player);}catch(_e){}'
     )
     // Zweistufig: erster Pass rendert, zweiter Pass garantiert vollständigen Canvas
-    // (wichtig für komplexe Outfits mit vielen Layern)
     + 'setTimeout(function(){'
     + '  try{CharacterLoadCanvas(Player);}catch(_e){}'
     + '  setTimeout(function(){'
@@ -4971,10 +4991,9 @@ function captureOsScreenshot(mk, vIdx) {
     + '    window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",'
     + '    reqId:' + JSON.stringify(reqId) + ',err:e.message},"*");'
     + '  }finally{'
-    + '    if(origApp){'
-    + '      Player.Appearance=origApp;'
-    + '      CharacterRefresh(Player,false,false);'
-    + '    }'
+    // origApp IMMER wiederherstellen (gesichert am Anfang)
+    + '    Player.Appearance=origApp;'
+    + '    CharacterRefresh(Player,false,false);'
     + '  }'
     + '  },120);'
     + '},150);'
@@ -5050,6 +5069,56 @@ window.debugOsOutfit = function(mk, vIdx) {
     + '})();';
 
   bcSend({ type: 'EXEC', code }, true);
+};
+
+// ── Outfit-Code reparieren ────────────────────────────
+// Öffnet ein Eingabefenster um den kaputten Code zu ersetzen (aus UI-Button)
+function openRepairOsCode(mk, vIdx) {
+  mk = String(mk);
+  const v = LSCG_DB[mk]?.versions?.[vIdx];
+  if (!v) { showStatus('❌ Version nicht gefunden', 'error'); return; }
+  const name = LSCG_DB[mk]?.name ?? mk;
+  const newCode = prompt(
+    '🔧 Repair: #' + mk + ' – ' + name + ' (v' + (vIdx + 1) + ')\n\n'
+    + 'Den korrekten Outfit-Code (LZString) hier einfügen:\n'
+    + '(z.B. aus BC Garderobe nach Ausführen kopiert)',
+    ''
+  );
+  if (!newCode || !newCode.trim()) return;
+  repairOsOutfitCode(mk, vIdx, newCode.trim());
+}
+
+// Konsolen-Shortcut: repairOsOutfitCode('102866', 0, 'Nob...')
+window.repairOsOutfitCode = function(mk, vIdx, newCode) {
+  mk = String(mk);
+  const entry = LSCG_DB[mk];
+  if (!entry?.versions?.[vIdx]) { console.error('[BCU] Version nicht gefunden:', mk, vIdx); return; }
+  if (!newCode) { console.error('[BCU] Kein Code angegeben'); return; }
+
+  // Code ersetzen
+  entry.versions[vIdx].code = newCode;
+  _saveLscgDB();
+
+  // Broken-Flag löschen
+  const fp   = entry.versions[vIdx].fingerprint ?? null;
+  const vKey = fp ? (mk + '|' + fp) : mk;
+  delete _osBrokenCodes[vKey];
+
+  // Altes Screenshot löschen damit er neu aufgenommen wird
+  if (LSCG_SCREENSHOTS[vKey]) {
+    delete LSCG_SCREENSHOTS[vKey];
+    _saveLscgScreenshots();
+  }
+
+  showStatus('✅ Code ersetzt – Screenshot wird aufgenommen…', 'success');
+  console.log('[BCU] Code für #' + mk + ' v' + (vIdx + 1) + ' ersetzt. Screenshot wird neu aufgenommen.');
+
+  // Screenshot direkt neu aufnehmen
+  if (_connected) {
+    _osCaptureQueue.unshift({ mk, vIdx });
+    if (!_osCaptureRunning) _runNextOsCapture();
+  }
+  if (_activeTab === 'outfit-scan') renderOutfitScanTab();
 };
 
 // ── Outfit anlegen ohne Zurückwechseln (Test) ─────────
@@ -5552,34 +5621,46 @@ function renderOutfitScanTab() {
       // Strict lookup: only version-specific key, never the legacy mk fallback
       const vKey     = fp ? (mk + '|' + fp) : mk;
       const vThumb   = LSCG_SCREENSHOTS[vKey] || null;
+      const isBroken = !!_osBrokenCodes[vKey];
       const tagHtml  = saved.length
         ? '<span class="os-card-tag saved" title="' + saved.map(function(k){return escHtml(k);}).join(', ') + '">✅ PROFIL</span>'
         : '<span class="os-card-tag">v' + vNum + '</span>';
       const thumbContent = vThumb
         ? '<img src="' + escHtml(vThumb) + '" alt="">'
-        : '<div class="os-card-placeholder">' + letter + '</div>';
+        : (isBroken
+            ? '<div class="os-card-placeholder broken">⚠️</div>'
+            : '<div class="os-card-placeholder">' + letter + '</div>');
       const delBtn = vThumb
         ? '<button class="os-card-del" onclick="event.stopPropagation();deleteOsScreenshotKey(\'' + vKey + '\')" title="Bild löschen">🗑</button>'
         : '';
       const hintIcon = vThumb
         ? '<span class="os-card-hint">🔍</span>'
-        : '<span class="os-card-hint">📸</span>';
+        : (isBroken ? '<span class="os-card-hint">🔧</span>' : '<span class="os-card-hint">📸</span>');
       const thumbClick = vThumb
         ? 'openOsLightboxVersion(\'' + mk + '\',' + realIdx + ')'
-        : 'captureOsScreenshot(\'' + mk + '\',' + realIdx + ');showStatus(\'\uD83D\uDCF8 Bild wird aufgenommen…\',\'info\')';
+        : (isBroken
+            ? 'openRepairOsCode(\'' + mk + '\',' + realIdx + ')'
+            : 'captureOsScreenshot(\'' + mk + '\',' + realIdx + ');showStatus(\'📸 Bild wird aufgenommen…\',\'info\')');
+      const metaLabel = isBroken
+        ? '<span style="color:#f87171">⚠️ Decode-Fehler</span>'
+        : (hasCode ? itemCnt + ' Items' : '⚠ kein Code');
+      const repairBtn = (isBroken && hasCode)
+        ? '<button class="os-card-btn warn" onclick="openRepairOsCode(\'' + mk + '\',' + realIdx + ')" title="Korrekten Code einfügen">🔧 Repair</button>'
+        : '';
 
-      return '<div class="os-card">'
+      return '<div class="os-card' + (isBroken ? ' os-card-broken' : '') + '">'
         + '<div class="os-card-thumb" onclick="' + thumbClick + '">'
         + thumbContent + tagHtml
         + '<button class="os-card-fav' + (isFav ? ' on' : '') + '" onclick="event.stopPropagation();toggleOsFav(\'' + mk + '\')">' + (isFav ? '⭐' : '☆') + '</button>'
         + delBtn + hintIcon
         + '</div>'
         + '<div class="os-card-name">v' + vNum + (i === 0 ? ' <span style="font-size:.6rem;color:var(--green)">neu</span>' : '') + '</div>'
-        + '<div class="os-card-meta">' + (hasCode ? itemCnt + ' Items' : '⚠ kein Code') + ' · ' + ts + '</div>'
+        + '<div class="os-card-meta">' + metaLabel + ' · ' + ts + '</div>'
         + '<div class="os-card-actions">'
-        + (hasCode ? '<button class="os-card-btn primary" onclick="osApplyOutfit(\'' + mk + '\',' + realIdx + ')">▶ Run</button>' : '')
-        + '<button class="os-card-btn' + (isFav ? ' fav-on' : '') + '" onclick="toggleOsFav(\'' + mk + '\')">⭐</button>'
-        + (hasCode ? '<button class="os-card-btn" onclick="osSaveOutfitAsProfile(\'' + mk + '\',' + realIdx + ')" title="Als Profil speichern">💾</button>' : '')
+        + repairBtn
+        + (!isBroken && hasCode ? '<button class="os-card-btn primary" onclick="osApplyOutfit(\'' + mk + '\',' + realIdx + ')">▶ Run</button>' : '')
+        + '<button class="os-card-btn' + (isFav ? ' fav-on' : '') + '" onclick="toggleOsFav(\'' + mk + '\')">' + (isFav ? '⭐' : '☆') + '</button>'
+        + (!isBroken && hasCode ? '<button class="os-card-btn" onclick="osSaveOutfitAsProfile(\'' + mk + '\',' + realIdx + ')" title="Als Profil speichern">💾</button>' : '')
         + '<button class="os-card-btn danger" onclick="deleteLscgVersion(\'' + mk + '\',' + realIdx + ')" title="Version löschen">🗑</button>'
         + '</div>'
         + '</div>';
