@@ -4934,78 +4934,79 @@ function captureOsScreenshot(mk, vIdx) {
     + 'window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",'
     + 'reqId:' + JSON.stringify(reqId) + ',data:d,width:cw,height:ch},"*");';
 
+  // ── Neue Screenshot-Logik: Run-Button-Pfad → Screenshot → Restore ──
+  // Gleicher Apply-Code wie _oiBuildExecCode (der funktionierende Run-Button),
+  // nur ohne ServerPlayerAppearanceSync. Nach dem Render sofort Screenshot + Restore.
   const code = '(function(){'
-    // origApp IMMER zuerst sichern – bevor irgendwas verändert wird
     + 'var origApp=Player.Appearance.slice();'
     + (outfitCode
-      ? // Outfit auf Player anwenden
-        'var decoded=null;'
+      ? 'var decoded=null;'
         + 'try{'
         + '  decoded=JSON.parse(LZString.decompressFromBase64(' + JSON.stringify(outfitCode) + '));'
         + '  if(!Array.isArray(decoded)||!decoded.length)decoded=null;'
         + '}catch(e){'
-        // Decode-Fehler → Popup informieren (DECODE_FAIL: Prefix für Erkennung), Appearance NICHT anfassen
         + '  window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",'
         + '  reqId:' + JSON.stringify(reqId) + ',err:"DECODE_FAIL:"+e.message},"*");'
         + '  return;'
         + '}'
-        + 'if(decoded){'
-        // 1-zu-1 Apply: Bundle exakt wie gespeichert anwenden, nichts vom Player mischen
-        // splice statt = [] → modifiziert das Array IN-PLACE, BC-interne Referenzen sehen die Änderung
-        + '  Player.Appearance.splice(0,Player.Appearance.length);'
-        + '  try{'
-        + '    if(typeof CharacterAppearanceSetFromBundle==="function"){'
-        + '      CharacterAppearanceSetFromBundle(Player,decoded,0,Player.AssetFamily);'
-        + '    }else{'
-        + '      decoded.forEach(function(item){'
-        + '        if(!item||!item.Group)return;'
-        + '        try{InventoryWear(Player,item.Name||"",item.Group,item.Color,0,null,item.Property,false);}catch(_e){}'
-        + '      });'
-        + '    }'
-        // Property-Fix: Craft/Text-Konfigurationen (z.B. "DOLL") explizit setzen
-        // da CharacterAppearanceSetFromBundle diese manchmal nicht vollständig überträgt
-        + '    decoded.forEach(function(bundleItem){'
-        + '      if(!bundleItem||!bundleItem.Group||!bundleItem.Property)return;'
-        + '      var worn=Player.Appearance.find(function(a){return a.Asset&&a.Asset.Group&&a.Asset.Group.Name===bundleItem.Group;});'
-        + '      if(worn)worn.Property=JSON.parse(JSON.stringify(bundleItem.Property));'
-        + '    });'
-        + '  }catch(applyErr){'
-        // Restore in-place (splice) weil origApp die Items des alten Arrays hält
-        + '    Player.Appearance.splice(0,Player.Appearance.length);'
-        + '    origApp.forEach(function(i){Player.Appearance.push(i);});'
-        + '    CharacterRefresh(Player,false,false);'
-        + '    window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",'
-        + '    reqId:' + JSON.stringify(reqId) + ',err:"APPLY_FAIL:"+applyErr.message},"*");'
-        + '    return;'
-        + '  }'
-        + '  CharacterRefresh(Player,false,false);'
+        + 'if(!decoded){'
+        + '  window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",'
+        + '  reqId:' + JSON.stringify(reqId) + ',err:"DECODE_FAIL:Leeres Bundle"},"*");'
+        + '  return;'
         + '}'
-      : // Kein Code → Player direkt wie er ist aufnehmen
-        'try{CharacterRefresh(Player,false,false);}catch(_e){}'
+        // === Exakt gleicher Apply-Pfad wie Run-Button ===
+        + 'try{'
+        // Nackt-Gruppen sichern (ArmsLeft, HandsLeft etc. mit Name="")
+        + '  var nakedItems=Player.Appearance.filter(function(i){return !i.Asset||!i.Asset.Name||i.Asset.Name==="";});'
+        + '  var bundleGroups=new Set(decoded.map(function(i){return i.Group;}));'
+        // In-place leeren, damit BC-interne Referenzen die Änderung sehen
+        + '  Player.Appearance.splice(0,Player.Appearance.length);'
+        + '  if(typeof CharacterAppearanceSetFromBundle==="function"){'
+        + '    CharacterAppearanceSetFromBundle(Player,decoded,0,Player.AssetFamily);'
+        + '  }else{'
+        + '    decoded.forEach(function(item){'
+        + '      if(!item||!item.Group)return;'
+        + '      try{InventoryWear(Player,item.Name||"",item.Group,item.Color,0,null,item.Property,false);}catch(_e){}'
+        + '    });'
+        + '  }'
+        // Property-Fix: Craft/Text (z.B. "DOLL") explizit setzen
+        + '  decoded.forEach(function(bundleItem){'
+        + '    if(!bundleItem||!bundleItem.Group||!bundleItem.Property)return;'
+        + '    var worn=Player.Appearance.find(function(a){return a.Asset&&a.Asset.Group&&a.Asset.Group.Name===bundleItem.Group;});'
+        + '    if(worn)worn.Property=JSON.parse(JSON.stringify(bundleItem.Property));'
+        + '  });'
+        // Nackt-Gruppen die nicht im Bundle sind zurück einfügen
+        + '  nakedItems.forEach(function(item){'
+        + '    if(!bundleGroups.has(item.Asset.Group.Name))Player.Appearance.push(item);'
+        + '  });'
+        + '  CharacterRefresh(Player,false,false);'
+        + '  CharacterLoadCanvas(Player);'
+        + '}catch(applyErr){'
+        // Bei Fehler sofort Restore + Fehlermeldung
+        + '  Player.Appearance.splice(0,Player.Appearance.length);'
+        + '  origApp.forEach(function(i){Player.Appearance.push(i);});'
+        + '  CharacterRefresh(Player,false,false);'
+        + '  window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",'
+        + '  reqId:' + JSON.stringify(reqId) + ',err:"APPLY_FAIL:"+applyErr.message},"*");'
+        + '  return;'
+        + '}'
+      : // Kein Code → Player-Aussehen direkt aufnehmen
+        'try{CharacterRefresh(Player,false,false);CharacterLoadCanvas(Player);}catch(_e){}'
     )
-    // Dreistufig: erst warten (Assets laden), dann zweimal rendern, dann aufnehmen
-    // 1. Stufe: 350ms – BC lädt alle Texturen der fremden Kleidungsstücke
+    // Kurz warten bis BC den Canvas gerendert hat, dann Screenshot + sofortiger Restore
     + 'setTimeout(function(){'
-    + '  try{CharacterLoadCanvas(Player);}catch(_e){}'
-    // 2. Stufe: 250ms – zweiter Render-Pass für komplexe Layer
-    + '  setTimeout(function(){'
-    + '    try{CharacterLoadCanvas(Player);}catch(_e){}'
-    // 3. Stufe: 150ms – finaler Canvas-Stand aufnehmen
-    + '    setTimeout(function(){'
-    + '    try{'
+    + '  try{'
     + cropAndSend
-    + '    }catch(e){'
-    + '      window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",'
-    + '      reqId:' + JSON.stringify(reqId) + ',err:e.message},"*");'
-    + '    }finally{'
-    // origApp IN-PLACE wiederherstellen (splice statt = origApp)
-    + '      Player.Appearance.splice(0,Player.Appearance.length);'
-    + '      origApp.forEach(function(i){Player.Appearance.push(i);});'
-    + '      CharacterRefresh(Player,false,false);'
-    + '    }'
-    + '    },150);'
-    + '  },250);'
-    + '},350);'
+    + '  }catch(e){'
+    + '    window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",'
+    + '    reqId:' + JSON.stringify(reqId) + ',err:e.message},"*");'
+    + '  }finally{'
+    // Restore in-place – Outfit sofort zurück
+    + '    Player.Appearance.splice(0,Player.Appearance.length);'
+    + '    origApp.forEach(function(i){Player.Appearance.push(i);});'
+    + '    CharacterRefresh(Player,false,false);'
+    + '  }'
+    + '},400);'
     + '})();';
 
   bcSend({ type: 'EXEC', code }, true);
