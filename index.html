@@ -3104,7 +3104,8 @@ document.write('<scr'+'ipt src="outfit-import.js?_='+_cbv+'"><\/scr'+'ipt>');
            oninput="osSearch(this.value)" value="">
     <button class="os-filter-btn" onclick="toggleIgnorePanel()" title="Gruppen-Filter">⚙ Filter</button>
     <button class="btn btn-primary" onclick="captureAllMissingOsScreenshots()" title="Für alle Einträge ohne Bild ein Canvas-Bild aufnehmen" style="font-size:.68rem;padding:4px 10px">📸 Fehlende Bilder</button>
-    <button class="btn btn-red" onclick="clearAllLscgOutfits()" title="Alle löschen">🗑️</button>
+    <button class="btn" onclick="clearAllLscgScreenshots()" title="Alle Bilder löschen (Codes bleiben)" style="font-size:.68rem;padding:4px 10px;color:#fb7185;border-color:rgba(251,113,133,0.3)">🖼️ Alle Bilder löschen</button>
+    <button class="btn btn-red" onclick="clearAllLscgOutfits()" title="Alle Outfits + Bilder löschen">🗑️</button>
   </div>
   <div id="osIgnorePanel" class="os-ignore-panel" style="display:none">
     <div class="os-ignore-info">Ignorierte Gruppen (kommagetrennt). Suffix <code>*</code> = Prefix-Match, z.B. <code>Item*</code> ignoriert alle Item-Gruppen (Restraints).</div>

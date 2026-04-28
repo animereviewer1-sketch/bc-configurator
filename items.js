@@ -4935,12 +4935,11 @@ function captureOsScreenshot(mk, vIdx) {
           + '  var decoded=JSON.parse(LZString.decompressFromBase64(' + JSON.stringify(outfitCode) + '));'
           + '  if(Array.isArray(decoded)&&decoded.length>0){'
           + '    origApp=Player.Appearance.slice();'
-          // CharacterAppearanceSetFromBundle = exakt dieselbe Funktion wie die Wardrobe
+          // Zuerst Appearance komplett leeren, dann Bundle anwenden → kein Mix möglich
+          + '    Player.Appearance=[];'
           + '    if(typeof CharacterAppearanceSetFromBundle==="function"){'
           + '      CharacterAppearanceSetFromBundle(Player,decoded,0,Player.AssetFamily);'
           + '    }else{'
-          // Fallback: InventoryRemoveAll + InventoryWear (wie BC intern)
-          + '      try{InventoryRemoveAll(Player,false);}catch(_e){}'
           + '      decoded.forEach(function(item){'
           + '        if(!item||!item.Group||!item.Name)return;'
           + '        try{InventoryWear(Player,item.Name,item.Group,item.Color,0,null,item.Property,false);}catch(_e){}'
@@ -5580,7 +5579,8 @@ function deleteLscgVersion(mk, vIdx) {
   const entry = LSCG_DB[mk];
   if (!entry?.versions?.[vIdx]) return;
   const vNum = entry.versions.length - vIdx;
-  if (!confirm('Version v' + vNum + ' von ' + (entry.name ?? mk) + ' löschen?')) return;
+  const name = entry.name ?? ('#' + mk);
+  if (!confirm('Version v' + vNum + ' von ' + name + ' löschen?\n\nDiese Aktion kann nicht rückgängig gemacht werden.')) return;
   // Screenshot für diese Version löschen
   const fp  = entry.versions[vIdx]?.fingerprint ?? null;
   const key = fp ? (mk + '|' + fp) : null;
@@ -5604,10 +5604,22 @@ function deleteLscgVersion(mk, vIdx) {
   showStatus('🗑️ Version v' + vNum + ' gelöscht', 'info');
 }
 
+function clearAllLscgScreenshots() {
+  const count = Object.keys(LSCG_SCREENSHOTS).length;
+  if (!count) { showStatus('ℹ️ Keine Bilder vorhanden', 'info'); return; }
+  if (!confirm('Alle ' + count + ' gespeicherten Bilder löschen?\n\nDie Outfit-Codes bleiben erhalten.')) return;
+  LSCG_SCREENSHOTS = {};
+  _saveLscgScreenshots();
+  if (_activeTab === 'outfit-scan') renderOutfitScanTab();
+  showStatus('🗑️ Alle Bilder gelöscht', 'info');
+}
+
 function clearAllLscgOutfits() {
-  if (!confirm('Alle gespeicherten LSCG-Outfits löschen?')) return;
+  if (!confirm('Alle gespeicherten LSCG-Outfits löschen?\n\nDies löscht alle Codes und Bilder.')) return;
   LSCG_DB = {};
+  LSCG_SCREENSHOTS = {};
   _saveLscgDB();
+  _saveLscgScreenshots();
   renderOutfitScanTab();
   showStatus('🗑️ LSCG Outfits geleert', 'info');
 }
