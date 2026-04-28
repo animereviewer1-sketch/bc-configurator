@@ -2549,6 +2549,43 @@ function openCanvasPreview() {
 }
 
 function _handleCanvasPreviewData(data) {
+  // ── LSCG-Capture (reqId beginnt mit 'os_') ──────────
+  if (_pendingOsCapture[data.reqId] !== undefined) {
+    const mk = _pendingOsCapture[data.reqId];
+    delete _pendingOsCapture[data.reqId];
+
+    if (data.err) {
+      showStatus('❌ #' + mk + ': ' + data.err, 'error');
+    } else if (data.data) {
+      // Bild auf max 520px Breite verkleinern
+      const imgEl = new Image();
+      imgEl.onload = function() {
+        const MAX_W = 520, MAX_H = 1040;
+        let w = imgEl.naturalWidth, h = imgEl.naturalHeight;
+        const scale = Math.min(1, MAX_W / w, MAX_H / h);
+        w = Math.round(w * scale); h = Math.round(h * scale);
+        const oc = document.createElement('canvas');
+        oc.width = w; oc.height = h;
+        oc.getContext('2d').drawImage(imgEl, 0, 0, w, h);
+        LSCG_SCREENSHOTS[mk] = oc.toDataURL('image/jpeg', 0.88);
+        _saveLscgScreenshots();
+        _syncLscgScreenshotToProfiles(mk);
+        if (_activeTab === 'outfit-scan') renderOutfitScanTab();
+        showStatus('✅ Bild für #' + mk + ' gespeichert', 'success');
+        // Falls Tab-Vorschau angefordert war
+        if (_pendingOsTab === mk) {
+          _pendingOsTab = null;
+          _openOsTab(mk, LSCG_SCREENSHOTS[mk], LSCG_DB[mk]?.name ?? mk, LSCG_DB[mk]);
+        }
+      };
+      imgEl.src = data.data;
+    }
+    // nächste Capture aus Queue
+    _runNextOsCapture();
+    return;
+  }
+
+  // ── Standard Canvas-Vorschau (Tab öffnen) ───────────
   if (!_pendingCanvasPreview[data.reqId]) return;
   delete _pendingCanvasPreview[data.reqId];
 
@@ -4774,6 +4811,171 @@ function importAllData() {
 //  DB[memberNumber] = { name, nickname, versions: [{code, fingerprint, ts}] }
 //  Fingerprint = gefiltert (ignorierte Gruppen ausgeschlossen)
 // ══════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════
+//  LSCG Screenshots – pro Member gespeicherte Canvas-Bilder
+// ══════════════════════════════════════════════════════
+const LSCG_SCREENSHOTS_KEY = 'BC_LSCG_SCREENSHOTS_v1';
+let   LSCG_SCREENSHOTS     = {};   // mk (string) → dataUrl (jpeg)
+
+async function _saveLscgScreenshots() {
+  await idbSet(LSCG_SCREENSHOTS_KEY, LSCG_SCREENSHOTS);
+}
+
+// Gibt das beste verfügbare Bild für mk zurück:
+// 1. Direkt gespeichert  2. Vom passenden Profil (gleicher Fingerprint)
+function _getLscgScreenshot(mk) {
+  if (LSCG_SCREENSHOTS[mk]) return LSCG_SCREENSHOTS[mk];
+  // Fallback: Profil mit gleichem Fingerprint hat Screenshot?
+  const entry = LSCG_DB[mk];
+  if (!entry?.versions) return null;
+  for (const v of entry.versions) {
+    const fp = v.fingerprint;
+    if (!fp) continue;
+    const keys = _lscgFpMap[fp] ?? [];
+    for (const k of keys) {
+      if (PROFILE_SCREENSHOTS[k]) return PROFILE_SCREENSHOTS[k];
+    }
+  }
+  return null;
+}
+
+// Screenshot zu allen Profilen mit gleichem Fingerprint kopieren
+function _syncLscgScreenshotToProfiles(mk) {
+  const img = LSCG_SCREENSHOTS[mk];
+  if (!img) return;
+  const entry = LSCG_DB[mk];
+  if (!entry?.versions) return;
+  let changed = false;
+  for (const v of entry.versions) {
+    const fp = v.fingerprint;
+    if (!fp) continue;
+    const keys = _lscgFpMap[fp] ?? [];
+    for (const k of keys) {
+      if (!PROFILE_SCREENSHOTS[k]) {
+        PROFILE_SCREENSHOTS[k] = img;
+        changed = true;
+      }
+    }
+  }
+  if (changed) _saveProfileScreenshots();
+}
+
+// ── Einzelnen Screenshot aufnehmen ───────────────────
+const _pendingOsCapture = {};  // reqId → mk
+let   _osCaptureQueue   = [];
+let   _osCaptureRunning = false;
+
+function captureOsScreenshot(mk) {
+  if (!_connected) { showStatus('❌ Nicht verbunden mit BC', 'error'); return; }
+  const memberNum = parseInt(mk, 10);
+  if (isNaN(memberNum)) return;
+  const reqId = 'os_' + Date.now() + '_' + mk;
+  _pendingOsCapture[reqId] = mk;
+
+  const code = '(function(){'
+    + 'var T=ChatRoomCharacter.find(function(c){return c.MemberNumber===' + memberNum + ';});'
+    + 'if(!T){window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",'
+    + 'reqId:' + JSON.stringify(reqId) + ',err:"Spieler nicht im Raum"},"*");return;}'
+    + 'try{CharacterLoadCanvas(T);}catch(e){}'
+    + 'requestAnimationFrame(function(){'
+    + 'try{'
+    + 'var src=T.Canvas;'
+    + 'if(!src||!src.width)throw new Error("Canvas leer");'
+    + 'var oc=document.createElement("canvas");oc.width=src.width;oc.height=src.height;'
+    + 'oc.getContext("2d").drawImage(src,0,0);'
+    + 'var d=oc.toDataURL("image/jpeg",0.88);'
+    + 'window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",'
+    + 'reqId:' + JSON.stringify(reqId) + ',data:d,name:T.Nickname||T.Name,'
+    + 'memberNumber:T.MemberNumber,itemCount:(T.Appearance||[]).length,'
+    + 'width:src.width,height:src.height},"*");'
+    + '}catch(e){'
+    + 'window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",'
+    + 'reqId:' + JSON.stringify(reqId) + ',err:e.message},"*");'
+    + '}'
+    + '});'
+    + '})();';
+
+  bcSend({ type: 'EXEC', code }, true);
+}
+
+// ── Gestaffeltes Aufnehmen aller fehlenden Bilder ─────
+function captureAllMissingOsScreenshots() {
+  if (!_connected) { showStatus('❌ Nicht verbunden mit BC', 'error'); return; }
+  const missing = Object.keys(LSCG_DB).filter(function(mk) { return !_getLscgScreenshot(mk); });
+  if (!missing.length) { showStatus('✅ Alle Einträge haben bereits ein Bild', 'success'); return; }
+  _osCaptureQueue = missing.slice();
+  showStatus('📸 ' + missing.length + ' Bilder werden aufgenommen…', 'info');
+  if (!_osCaptureRunning) _runNextOsCapture();
+}
+
+function _runNextOsCapture() {
+  if (!_osCaptureQueue.length) { _osCaptureRunning = false; return; }
+  _osCaptureRunning = true;
+  const mk = _osCaptureQueue.shift();
+  setTimeout(function() { captureOsScreenshot(mk); }, 600);
+}
+
+// ── Styled Tab für LSCG-Eintrag öffnen ───────────────
+function openOsCanvasTab(mk) {
+  const img = _getLscgScreenshot(mk);
+  const entry = LSCG_DB[mk];
+  const name = entry ? (entry.nickname ? (entry.name + ' „' + entry.nickname + '"') : entry.name) : mk;
+  if (!img) {
+    // Kein Bild vorhanden → erst aufnehmen, dann Tab öffnen über Queue-Ergebnis
+    // Wir merken uns dass nach Capture ein Tab geöffnet werden soll
+    _pendingOsTab = mk;
+    captureOsScreenshot(mk);
+    showStatus('📸 Kein Bild vorhanden – wird aufgenommen…', 'info');
+    return;
+  }
+  _openOsTab(mk, img, name, entry);
+}
+
+let _pendingOsTab = null;
+
+function _openOsTab(mk, img, name, entry) {
+  const itemCount = entry?.versions?.[entry.versions.length - 1] ? '–' : '–';
+  const tab = window.open('', '_blank');
+  if (!tab) { showStatus('❌ Popup blockiert', 'error'); return; }
+  tab.document.write(`<!DOCTYPE html>
+<html lang="de"><head><meta charset="UTF-8"><title>#${mk} – ${escHtml(name)}</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0d0d0f;--bg2:#141418;--bg3:#1a1a20;--border2:rgba(255,255,255,0.12);
+--accent:oklch(72% 0.13 58);--accent-text:oklch(82% 0.1 62);
+--accent-soft:oklch(72% 0.13 58 / 0.14);--accent-line:oklch(72% 0.13 58 / 0.35);
+--text:#f4f2ee;--text3:#6d6b66;--green:#34d399;--gd:rgba(6,78,59,0.6);
+--shadow-lg:0 16px 48px rgba(0,0,0,0.5),0 4px 12px rgba(0,0,0,0.35);--r-xl:22px;
+--font-ui:'Inter Tight',system-ui,sans-serif;--font-mono:'JetBrains Mono',monospace;}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:var(--font-ui);font-size:13.5px}
+body{display:flex;align-items:flex-start;justify-content:center;padding:32px 16px}
+.card{background:var(--bg2);border:1px solid var(--border2);border-radius:var(--r-xl);box-shadow:var(--shadow-lg);overflow:hidden;width:340px}
+.card-header{padding:16px 18px 12px;border-bottom:1px solid rgba(255,255,255,0.06);display:flex;align-items:center;gap:10px}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 6px var(--green);flex-shrink:0}
+.card-title{font-size:1rem;font-weight:800;color:var(--accent-text)}
+.card-sub{font-size:0.72rem;color:var(--text3);font-family:var(--font-mono);margin-top:1px}
+.img-wrap{background:var(--bg3);border-bottom:1px solid rgba(255,255,255,0.06);overflow:hidden}
+.img-wrap img{width:100%;display:block}
+.card-footer{padding:12px 18px;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.badge{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:9999px;font-size:0.7rem;font-weight:600;font-family:var(--font-mono);background:var(--accent-soft);color:var(--accent-text);border:1px solid var(--accent-line)}
+.badge-green{background:var(--gd);color:var(--green);border-color:rgba(52,211,153,0.25)}
+.meta{font-size:0.72rem;color:var(--text3);font-family:var(--font-mono)}
+</style></head><body>
+<div class="card">
+  <div class="card-header"><div class="dot"></div>
+    <div><div class="card-title">${escHtml(entry?.name ?? mk)}</div>
+    <div class="card-sub">#${mk}${entry?.nickname ? ' · ' + escHtml(entry.nickname) : ''}</div></div>
+  </div>
+  <div class="img-wrap"><img src="${img}" alt="${escHtml(name)}"></div>
+  <div class="card-footer">
+    <span class="badge badge-green">✅ LSCG Outfit</span>
+    <span class="badge">${(entry?.versions?.length ?? 0)} Versionen</span>
+  </div>
+</div></body></html>`);
+  tab.document.close();
+}
+
 const LSCG_IDB_KEY      = 'BC_LSCG_OUTFITS_v3';
 const LSCG_IGNORE_KEY   = 'BC_LSCG_IGNORE_v1';
 const LSCG_FAV_KEY      = 'BC_LSCG_FAVS_v1';
@@ -4896,7 +5098,15 @@ function osSaveOutfitAsProfile(mk, vIdx) {
   if (PROFILES[trimmed] && !confirm('Profil "' + trimmed + '" existiert bereits. Überschreiben?')) return;
   PROFILES[trimmed] = { name: trimmed, date: d.toLocaleDateString('de-DE'), _outfitCode: v.code, items: [] };
   _saveProfiles();
-  showStatus('✅ Als Profil "' + trimmed + '" gespeichert', 'success');
+  // Screenshot vom LSCG-Eintrag ins Profil übernehmen (falls vorhanden und Profil noch keins hat)
+  const lscgImg = _getLscgScreenshot(mk);
+  if (lscgImg && !PROFILE_SCREENSHOTS[trimmed]) {
+    PROFILE_SCREENSHOTS[trimmed] = lscgImg;
+    _saveProfileScreenshots();
+    showStatus('✅ Als Profil "' + trimmed + '" gespeichert (inkl. Bild)', 'success');
+  } else {
+    showStatus('✅ Als Profil "' + trimmed + '" gespeichert', 'success');
+  }
 }
 
 function toggleOsChar(mk, hdrEl) {
@@ -4919,6 +5129,11 @@ function toggleOsChar(mk, hdrEl) {
   await _loadIgnoreSettings();
   const favSaved = await idbGet(LSCG_FAV_KEY);
   if (Array.isArray(favSaved)) _osFavs = new Set(favSaved);
+  const ssSaved = await idbGet(LSCG_SCREENSHOTS_KEY);
+  if (ssSaved && typeof ssSaved === 'object') {
+    LSCG_SCREENSHOTS = ssSaved;
+    console.log('[BCU] LSCG Screenshots geladen:', Object.keys(LSCG_SCREENSHOTS).length);
+  }
   const saved = await idbGet(LSCG_IDB_KEY);
   if (saved && typeof saved === 'object') {
     LSCG_DB = saved;
@@ -5061,8 +5276,15 @@ function renderOutfitScanTab() {
         + '</div>';
     }).join('');
 
+    const thumb = _getLscgScreenshot(mk);
+    const thumbHtml = thumb
+      ? '<div class="os-thumb-wrap" onclick="event.stopPropagation();openOsCanvasTab(\'' + mk + '\')" title="Vorschau öffnen">'
+          + '<img src="' + thumb + '" alt=""></div>'
+      : '<div class="os-thumb-wrap empty" onclick="event.stopPropagation();captureOsScreenshot(\'' + mk + '\')" title="Bild aufnehmen">📷</div>';
+
     return '<div class="os-char' + (isOpen ? ' open' : '') + (isFav ? ' os-fav' : '') + '" data-mk="' + escHtml(mk) + '">'
       + '<div class="os-char-hdr" onclick="toggleOsChar(\'' + mk + '\',this)">'
+      + thumbHtml
       + '<span class="os-chevron">▶</span>'
       + '<span class="os-name">' + nameHtml + '</span>'
       + '<span class="os-num">#' + escHtml(mk) + '</span>'

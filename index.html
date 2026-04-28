@@ -3103,6 +3103,7 @@ document.write('<scr'+'ipt src="outfit-import.js?_='+_cbv+'"><\/scr'+'ipt>');
     <input id="osSearchInput" class="os-search" type="text" placeholder="🔍 Name suchen…"
            oninput="osSearch(this.value)" value="">
     <button class="os-filter-btn" onclick="toggleIgnorePanel()" title="Gruppen-Filter">⚙ Filter</button>
+    <button class="btn btn-primary" onclick="captureAllMissingOsScreenshots()" title="Für alle Einträge ohne Bild ein Canvas-Bild aufnehmen" style="font-size:.68rem;padding:4px 10px">📸 Fehlende Bilder</button>
     <button class="btn btn-red" onclick="clearAllLscgOutfits()" title="Alle löschen">🗑️</button>
   </div>
   <div id="osIgnorePanel" class="os-ignore-panel" style="display:none">
@@ -3201,6 +3202,19 @@ document.write('<scr'+'ipt src="outfit-import.js?_='+_cbv+'"><\/scr'+'ipt>');
                color:var(--text3); transition:color .15s; margin-left:4px; }
 .os-fav-btn:hover { color:var(--accent); }
 .os-fav-btn.active { color:var(--accent); }
+
+/* ── LSCG Screenshot thumbnail ── */
+.os-thumb-wrap { flex-shrink:0; width:28px; height:56px; border-radius:4px;
+                 overflow:hidden; background:rgba(255,255,255,0.05);
+                 border:1px solid rgba(255,255,255,0.1); cursor:pointer;
+                 display:flex; align-items:center; justify-content:center; }
+.os-thumb-wrap img { width:100%; height:100%; object-fit:cover; display:block; }
+.os-thumb-wrap.empty { font-size:.75rem; color:var(--text3); transition:background .15s; }
+.os-thumb-wrap.empty:hover { background:rgba(255,255,255,0.1); color:var(--text2); }
+.os-capture-btn { background:none; border:1px solid rgba(255,255,255,0.12);
+                  border-radius:4px; color:var(--text3); font-size:.65rem; padding:2px 6px;
+                  cursor:pointer; white-space:nowrap; transition:background .15s; flex-shrink:0; }
+.os-capture-btn:hover { background:rgba(255,255,255,0.08); color:var(--text2); }
 </style>
 
 <!-- ══════════════════════════════════════════ -->
