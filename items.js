@@ -4652,6 +4652,14 @@ function importAllData() {
 const LSCG_IDB_KEY     = 'BC_LSCG_OUTFITS_v3';
 const LSCG_MAX_VERSIONS = 30;
 let LSCG_DB = {};
+const _osOpenSet = new Set(); // member keys currently expanded
+
+function toggleOsChar(mk) {
+  const el = document.querySelector('.os-char[data-mk="' + mk + '"]');
+  if (!el) return;
+  const nowOpen = el.classList.toggle('open');
+  if (nowOpen) _osOpenSet.add(mk); else _osOpenSet.delete(mk);
+}
 
 (async () => {
   const saved = await idbGet(LSCG_IDB_KEY);
@@ -4720,6 +4728,7 @@ function renderOutfitScanTab() {
 
   body.innerHTML = members.map(function(mk) {
     const entry   = LSCG_DB[mk];
+    const isOpen  = _osOpenSet.has(mk);
     const vs      = [...entry.versions].reverse(); // neueste zuerst
     const nameHtml = escHtml(entry.name ?? '?')
       + (entry.nickname ? ' <em class="os-nick">„' + escHtml(entry.nickname) + '"</em>' : '');
@@ -4738,8 +4747,9 @@ function renderOutfitScanTab() {
         + '</div>';
     }).join('');
 
-    return '<div class="os-char">'
-      + '<div class="os-char-hdr">'
+    return '<div class="os-char' + (isOpen ? ' open' : '') + '" data-mk="' + escHtml(mk) + '">'
+      + '<div class="os-char-hdr" onclick="toggleOsChar(' + JSON.stringify(mk) + ')">'
+      + '<span class="os-chevron">▶</span>'
       + '<span class="os-name">' + nameHtml + '</span>'
       + '<span class="os-num">#' + escHtml(mk) + '</span>'
       + '<span class="os-vcnt">' + entry.versions.length + 'x</span>'

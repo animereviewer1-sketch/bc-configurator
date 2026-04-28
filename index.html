@@ -3110,15 +3110,37 @@ document.write('<scr'+'ipt src="outfit-import.js?_='+_cbv+'"><\/scr'+'ipt>');
 .os-hint   { font-size:.7rem; color:var(--text3); flex:1; }
 .os-body   { padding:10px; overflow-y:auto; max-height:calc(100vh - 110px); display:flex; flex-direction:column; gap:8px; }
 .os-empty  { text-align:center; color:var(--text3); padding:56px 20px; font-size:.85rem; line-height:1.9; }
-/* Char-Block */
-.os-char     { background:var(--bg2); border:1px solid var(--border); border-radius:8px; overflow:hidden; }
-.os-char-hdr { display:flex; align-items:center; gap:8px; padding:7px 12px; background:var(--bg3); border-bottom:1px solid var(--border); }
+
+/* Char-Block — collapsible */
+.os-char        { background:var(--bg2); border:1px solid rgba(255,255,255,0.08); border-radius:8px; overflow:hidden;
+                  transition:border-color .18s; }
+.os-char:hover  { border-color:rgba(255,255,255,0.14); }
+.os-char.open   { border-color:rgba(255,255,255,0.12); }
+
+.os-char-hdr    { display:flex; align-items:center; gap:8px; padding:9px 12px;
+                  background:rgba(255,255,255,0.025); cursor:pointer; user-select:none;
+                  transition:background .15s; }
+.os-char-hdr:hover                   { background:rgba(255,255,255,0.045); }
+.os-char.open .os-char-hdr           { background:rgba(255,255,255,0.03); border-bottom:1px solid rgba(255,255,255,0.07); }
+
+.os-chevron     { color:var(--text3); font-size:.6rem; opacity:.6;
+                  transition:transform .22s cubic-bezier(.4,0,.2,1); }
+.os-char.open .os-chevron            { transform:rotate(90deg); opacity:1; }
+
 .os-name     { font-weight:700; font-size:.85rem; color:var(--text1); flex:1; }
-.os-nick     { color:var(--acc2); font-size:.75rem; font-weight:400; font-style:italic; }
-.os-num      { font-size:.7rem; color:var(--text3); }
-.os-vcnt     { font-size:.68rem; color:var(--text3); white-space:nowrap; }
-/* Versionen */
-.os-versions { display:flex; flex-direction:column; }
+.os-nick     { color:var(--accent-text); font-size:.73rem; font-weight:400; font-style:italic; }
+.os-num      { font-size:.63rem; color:var(--text3); font-family:var(--font-mono);
+               background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.08);
+               border-radius:5px; padding:1px 6px; }
+.os-vcnt     { font-size:.65rem; white-space:nowrap;
+               background:var(--accent-soft); color:var(--accent-text);
+               padding:2px 8px; border-radius:99px; font-weight:700;
+               border:1px solid var(--accent-line); }
+
+/* Versions body — hidden until open */
+.os-versions      { display:none; flex-direction:column; }
+.os-char.open .os-versions { display:flex; }
+
 .os-version  { display:grid; grid-template-columns:28px 1fr auto auto; align-items:center; gap:6px;
                padding:5px 12px; border-bottom:1px solid rgba(255,255,255,0.03); font-size:.7rem; }
 .os-version:last-child { border-bottom:none; }
