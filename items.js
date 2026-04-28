@@ -4935,16 +4935,25 @@ function captureOsScreenshot(mk, vIdx) {
           + '  var decoded=JSON.parse(LZString.decompressFromBase64(' + JSON.stringify(outfitCode) + '));'
           + '  if(Array.isArray(decoded)&&decoded.length>0){'
           + '    origApp=Player.Appearance.slice();'
-          // Zuerst Appearance komplett leeren, dann Bundle anwenden → kein Mix möglich
+          // Appearance leeren, dann Bundle anwenden
           + '    Player.Appearance=[];'
           + '    if(typeof CharacterAppearanceSetFromBundle==="function"){'
           + '      CharacterAppearanceSetFromBundle(Player,decoded,0,Player.AssetFamily);'
           + '    }else{'
           + '      decoded.forEach(function(item){'
-          + '        if(!item||!item.Group||!item.Name)return;'
-          + '        try{InventoryWear(Player,item.Name,item.Group,item.Color,0,null,item.Property,false);}catch(_e){}'
+          + '        if(!item||!item.Group)return;'
+          + '        try{InventoryWear(Player,item.Name||"",item.Group,item.Color,0,null,item.Property,false);}catch(_e){}'
           + '      });'
           + '    }'
+          // Nackte Körper-Gruppen (Name="") aus Original wiederherstellen,
+          // falls das Bundle diese Gruppen nicht enthält (z.B. ArmsLeft, HandsRight …)
+          + '    var bundleGroups=new Set(decoded.map(function(i){return i.Group;}));'
+          + '    origApp.forEach(function(item){'
+          + '      var gName=item.Asset.Group.Name;'
+          + '      if(!bundleGroups.has(gName)&&(!item.Asset.Name||item.Asset.Name==="")){'
+          + '        Player.Appearance.push(item);'
+          + '      }'
+          + '    });'
           + '    CharacterRefresh(Player,false,false);'
           + '    CharacterLoadCanvas(Player);'
           + '  }'
