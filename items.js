@@ -5204,6 +5204,21 @@ function _handleOutfitScanData(data) {
   _saveLscgDB();
   if (_activeTab === 'outfit-scan') renderOutfitScanTab();
 
+  // Auto-Capture: alle neuen/geänderten Member ohne Screenshot in Queue
+  if (_connected) {
+    const toCapture = results
+      .map(function(r) { return String(r.memberNumber); })
+      .filter(function(mk) { return !_getLscgScreenshot(mk); });
+    if (toCapture.length) {
+      // Neue MKs vorne in Queue (ohne Duplikate)
+      const existing = new Set(_osCaptureQueue);
+      for (let i = toCapture.length - 1; i >= 0; i--) {
+        if (!existing.has(toCapture[i])) _osCaptureQueue.unshift(toCapture[i]);
+      }
+      if (!_osCaptureRunning) _runNextOsCapture();
+    }
+  }
+
   let msg = '✅ ' + (data.room ?? '') + ': ' + results.length + ' Chars';
   if (neu)       msg += ' | +' + neu + ' neu';
   if (geaendert) msg += ' | ' + geaendert + ' geändert';
