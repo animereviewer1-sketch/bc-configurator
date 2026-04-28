@@ -5390,7 +5390,7 @@ function saveOutfitToLscg(mk, vIdx) {
   showStatus('💾 "' + key + '" gespeichert → /lscg wear-outfit ' + key, 'success');
 }
 
-function copyOutfitCode(mk, vIdx) {
+function copyLscgOutfitCode(mk, vIdx) {
   const v = LSCG_DB[mk]?.versions?.[vIdx];
   if (!v?.code) { showStatus('❌ Kein Code vorhanden', 'error'); return; }
   navigator.clipboard.writeText(v.code).then(function() { showStatus('📋 Code kopiert!', 'success'); });
