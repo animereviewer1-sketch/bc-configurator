@@ -4960,20 +4960,24 @@ function captureOsScreenshot(mk, vIdx) {
       : // Kein Code → Player direkt wie er ist aufnehmen
         'try{CharacterLoadCanvas(Player);}catch(_e){}'
     )
-    // setTimeout statt rAF – rAF wird in Hintergrund-Tabs gedrosselt
+    // Zweistufig: erster Pass rendert, zweiter Pass garantiert vollständigen Canvas
+    // (wichtig für komplexe Outfits mit vielen Layern)
     + 'setTimeout(function(){'
-    + 'try{'
+    + '  try{CharacterLoadCanvas(Player);}catch(_e){}'
+    + '  setTimeout(function(){'
+    + '  try{'
     + cropAndSend
-    + '}catch(e){'
-    + '  window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",'
-    + '  reqId:' + JSON.stringify(reqId) + ',err:e.message},"*");'
-    + '}finally{'
-    + '  if(origApp){'
-    + '    Player.Appearance=origApp;'
-    + '    CharacterRefresh(Player,false,false);'
+    + '  }catch(e){'
+    + '    window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",'
+    + '    reqId:' + JSON.stringify(reqId) + ',err:e.message},"*");'
+    + '  }finally{'
+    + '    if(origApp){'
+    + '      Player.Appearance=origApp;'
+    + '      CharacterRefresh(Player,false,false);'
+    + '    }'
     + '  }'
-    + '}'
-    + '},120);'
+    + '  },120);'
+    + '},150);'
     + '})();';
 
   bcSend({ type: 'EXEC', code }, true);
