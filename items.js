@@ -4896,8 +4896,8 @@ function captureOsScreenshot(mk, vIdx) {
   const outfitCode = v?.code ?? null;
   const reqId = 'os_' + Date.now() + '_' + mk;
   _pendingOsCapture[reqId] = { mk, fp };
-  // Direkt T.Canvas des Zielspielers erfassen – kein Outfit auf Player anwenden.
-  // Nur so stimmen Haare, Skin-Mods und alle character-spezifischen Assets.
+  // Direkt T.Canvas des Zielspielers erfassen.
+  // setTimeout statt requestAnimationFrame – rAF wird in Hintergrund-Tabs gedrosselt.
   const code = '(function(){'
     + 'var T=ChatRoomCharacter.find(function(ch){return ch.MemberNumber===' + memberNum + ';});'
     + 'if(!T){'
@@ -4906,14 +4906,12 @@ function captureOsScreenshot(mk, vIdx) {
     + '  return;'
     + '}'
     + 'try{CharacterLoadCanvas(T);}catch(_e){}'
-    + 'requestAnimationFrame(function(){'
-    + 'requestAnimationFrame(function(){'
+    + 'setTimeout(function(){'
     + 'try{'
     + '  var src=T.Canvas;'
     + '  if(!src||!src.width)throw new Error("Canvas leer");'
     + '  var oc=document.createElement("canvas");oc.width=src.width;oc.height=src.height;'
     + '  var ctx=oc.getContext("2d");ctx.drawImage(src,0,0);'
-    // Auto-crop: Threshold 5 um dunkle Items (schwarze Stiefel) zu erfassen
     + '  var id=ctx.getImageData(0,0,oc.width,oc.height);'
     + '  var px=id.data,W=oc.width,H=oc.height;'
     + '  var x0=W,x1=0,y0=H,y1=0;'
@@ -4938,8 +4936,7 @@ function captureOsScreenshot(mk, vIdx) {
     + '  window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",'
     + '  reqId:' + JSON.stringify(reqId) + ',err:e.message},"*");'
     + '}'
-    + '});'
-    + '});'
+    + '},150);'
     + '})();';
 
   bcSend({ type: 'EXEC', code }, true);
@@ -5150,15 +5147,47 @@ function osSearch(q) {
 }
 
 // ── Outfit anwenden (wie Outfit Import) ──────────────────────
+// Baut EXEC-Code der ein LZString-Outfit-Bundle auf Player anwendet.
+// Fehlende Nackt-Gruppen (ArmsLeft etc.) werden aus der aktuellen Player-Appearance ergänzt.
+function _oiBuildExecCode(code) {
+  if (!code) return '/* kein Code */';
+  const esc = JSON.stringify(code);
+  return '(function(){'
+    + 'try{'
+    + '  var decoded=JSON.parse(LZString.decompressFromBase64(' + esc + '));'
+    + '  if(!Array.isArray(decoded)||!decoded.length){console.warn("[BCU] Leeres Bundle");return;}'
+    // Nackt-Gruppen sichern bevor Appearance geleert wird
+    + '  var nakedItems=Player.Appearance.filter(function(i){return !i.Asset.Name||i.Asset.Name==="";});'
+    + '  var bundleGroups=new Set(decoded.map(function(i){return i.Group;}));'
+    + '  Player.Appearance=[];'
+    + '  if(typeof CharacterAppearanceSetFromBundle==="function"){'
+    + '    CharacterAppearanceSetFromBundle(Player,decoded,0,Player.AssetFamily);'
+    + '  }else{'
+    + '    decoded.forEach(function(item){'
+    + '      if(!item||!item.Group)return;'
+    + '      try{InventoryWear(Player,item.Name||"",item.Group,item.Color,0,null,item.Property,false);}catch(_e){}'
+    + '    });'
+    + '  }'
+    // Nackt-Gruppen die nicht im Bundle sind zurück einfügen (ArmsLeft, HandsLeft usw.)
+    + '  nakedItems.forEach(function(item){'
+    + '    if(!bundleGroups.has(item.Asset.Group.Name))Player.Appearance.push(item);'
+    + '  });'
+    + '  CharacterRefresh(Player,false,false);'
+    // Server-Sync nach Outfit-Apply
+    + '  setTimeout(function(){'
+    + '    if(typeof ServerPlayerAppearanceSync==="function")ServerPlayerAppearanceSync();'
+    + '    else if(typeof ServerSend==="function")ServerSend("AccountUpdate",{Appearance:Player.Appearance});'
+    + '  },200);'
+    + '}catch(e){console.error("[BCU] Outfit-Apply Fehler:",e.message);}'
+    + '})();';
+}
+
 function osApplyOutfit(mk, vIdx) {
   if (!_connected) { showStatus('❌ Nicht verbunden', 'error'); return; }
   const v = LSCG_DB[mk]?.versions?.[vIdx];
   if (!v?.code) { showStatus('❌ Kein Code', 'error'); return; }
-  try {
-    const execCode = _oiBuildExecCode(v.code);
-    bcSend({ type: 'EXEC', code: execCode });
-    showStatus('▶ Outfit von ' + escHtml(LSCG_DB[mk]?.name ?? mk) + ' wird angewendet…', 'info');
-  } catch(e) { showStatus('❌ ' + e.message, 'error'); }
+  bcSend({ type: 'EXEC', code: _oiBuildExecCode(v.code) });
+  showStatus('▶ Outfit von ' + escHtml(LSCG_DB[mk]?.name ?? mk) + ' wird angewendet…', 'info');
 }
 
 // ── Als Profil speichern ─────────────────────────────────────
