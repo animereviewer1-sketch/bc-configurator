@@ -4973,7 +4973,7 @@ function captureOsScreenshot(mk, vIdx) {
     + '    CharacterRefresh(Player,false,false);'
     + '  }'
     + '}'
-    + '},200);'
+    + '},120);'
     + '})();';
 
   bcSend({ type: 'EXEC', code }, true);
@@ -5023,7 +5023,7 @@ function _runNextOsCapture() {
   }
   _osCaptureRunning = true;
   const item = _osCaptureQueue.shift();
-  setTimeout(function() { captureOsScreenshot(item.mk, item.vIdx); }, 600);
+  setTimeout(function() { captureOsScreenshot(item.mk, item.vIdx); }, 50);
 }
 
 // ── Styled Tab für LSCG-Eintrag öffnen ───────────────
