@@ -4950,35 +4950,27 @@ function captureOsScreenshot(mk, vIdx) {
         + '  return;'
         + '}'
         + 'if(decoded){'
-        // Alle Gruppen die das Bundle abdeckt sowie alle "non-naked" Gruppen
-        // die NICHT im Bundle sind (Haare, Gesicht etc.) sichern
-        + '  var bundleGroups=new Set(decoded.map(function(i){return i.Group;}));'
-        // Alle Items sichern die NICHT vom Bundle überschrieben werden
-        // (Nackt-Items UND benannte Items wie Haare/Gesicht die nicht im Bundle sind)
-        + '  var keptItems=origApp.filter(function(i){'
-        + '    return !bundleGroups.has(i.Asset.Group.Name);'
-        + '  });'
-        // Array IN-PLACE leeren (splice statt = [] – BC hält interne Referenz!)
+        // 1-zu-1 Apply: Bundle exakt wie gespeichert anwenden, nichts vom Player mischen
+        // splice statt = [] → modifiziert das Array IN-PLACE, BC-interne Referenzen sehen die Änderung
         + '  Player.Appearance.splice(0,Player.Appearance.length);'
         + '  try{'
         + '    if(typeof CharacterAppearanceSetFromBundle==="function"){'
-        // Push=1: Items hinzufügen (Appearance wurde manuell geleert)
-        + '      CharacterAppearanceSetFromBundle(Player,decoded,1,Player.AssetFamily);'
+        + '      CharacterAppearanceSetFromBundle(Player,decoded,0,Player.AssetFamily);'
         + '    }else{'
         + '      decoded.forEach(function(item){'
         + '        if(!item||!item.Group)return;'
         + '        try{InventoryWear(Player,item.Name||"",item.Group,item.Color,0,null,item.Property,false);}catch(_e){}'
         + '      });'
         + '    }'
-        // Property-Fix: CharacterAppearanceSetFromBundle überträgt Craft/Konfigurationen manchmal nicht vollständig.
-        // Jedes Item aus dem Bundle explizit mit dem vollen Property-Objekt überschreiben.
+        // Property-Fix: Craft/Text-Konfigurationen (z.B. "DOLL") explizit setzen
+        // da CharacterAppearanceSetFromBundle diese manchmal nicht vollständig überträgt
         + '    decoded.forEach(function(bundleItem){'
         + '      if(!bundleItem||!bundleItem.Group||!bundleItem.Property)return;'
         + '      var worn=Player.Appearance.find(function(a){return a.Asset&&a.Asset.Group&&a.Asset.Group.Name===bundleItem.Group;});'
         + '      if(worn)worn.Property=JSON.parse(JSON.stringify(bundleItem.Property));'
         + '    });'
         + '  }catch(applyErr){'
-        // Apply-Fehler → Appearance wiederherstellen, Fehler melden
+        // Restore in-place (splice) weil origApp die Items des alten Arrays hält
         + '    Player.Appearance.splice(0,Player.Appearance.length);'
         + '    origApp.forEach(function(i){Player.Appearance.push(i);});'
         + '    CharacterRefresh(Player,false,false);'
@@ -4986,8 +4978,6 @@ function captureOsScreenshot(mk, vIdx) {
         + '    reqId:' + JSON.stringify(reqId) + ',err:"APPLY_FAIL:"+applyErr.message},"*");'
         + '    return;'
         + '  }'
-        // Items die nicht vom Bundle abgedeckt werden zurück einfügen (Haare, Gesicht, Nackt-Gruppen etc.)
-        + '  keptItems.forEach(function(item){Player.Appearance.push(item);});'
         + '  CharacterRefresh(Player,false,false);'
         + '}'
       : // Kein Code → Player direkt wie er ist aufnehmen
@@ -5157,31 +5147,32 @@ window.testOsOutfit = function(mk, vIdx) {
     + 'try{'
     + '  var decoded=JSON.parse(LZString.decompressFromBase64(' + JSON.stringify(outfitCode) + '));'
     + '  if(!Array.isArray(decoded)||!decoded.length){console.warn("[BCU] Leeres Bundle");return;}'
+    // Nackt-Gruppen sichern (ArmsLeft, HandsLeft etc.)
+    + '  var nakedItems=Player.Appearance.filter(function(i){return !i.Asset.Name||i.Asset.Name==="";});'
     + '  var bundleGroups=new Set(decoded.map(function(i){return i.Group;}));'
-    // Items die nicht vom Bundle abgedeckt werden sichern (Haare, Gesicht, Nackt-Gruppen etc.)
-    + '  var keptItems=Player.Appearance.filter(function(i){return !bundleGroups.has(i.Asset.Group.Name);});'
-    // In-place leeren
+    // splice statt = [] → modifiziert das Array IN-PLACE, BC-interne Referenzen sehen die Änderung
     + '  Player.Appearance.splice(0,Player.Appearance.length);'
     + '  if(typeof CharacterAppearanceSetFromBundle==="function"){'
-    + '    CharacterAppearanceSetFromBundle(Player,decoded,1,Player.AssetFamily);'
+    + '    CharacterAppearanceSetFromBundle(Player,decoded,0,Player.AssetFamily);'
     + '  }else{'
     + '    decoded.forEach(function(item){'
     + '      if(!item||!item.Group)return;'
     + '      try{InventoryWear(Player,item.Name||"",item.Group,item.Color,0,null,item.Property,false);}catch(_e){}'
     + '    });'
     + '  }'
-    // Property-Fix: Craft/Text-Konfigurationen explizit übertragen
+    // Property-Fix: Craft/Text (z.B. "DOLL") explizit setzen
     + '  decoded.forEach(function(bundleItem){'
     + '    if(!bundleItem||!bundleItem.Group||!bundleItem.Property)return;'
     + '    var worn=Player.Appearance.find(function(a){return a.Asset&&a.Asset.Group&&a.Asset.Group.Name===bundleItem.Group;});'
-    + '    if(worn){worn.Property=JSON.parse(JSON.stringify(bundleItem.Property));}'
+    + '    if(worn)worn.Property=JSON.parse(JSON.stringify(bundleItem.Property));'
     + '  });'
-    + '  keptItems.forEach(function(item){Player.Appearance.push(item);});'
+    // Nackt-Gruppen die nicht im Bundle sind zurück einfügen
+    + '  nakedItems.forEach(function(item){'
+    + '    if(!bundleGroups.has(item.Asset.Group.Name))Player.Appearance.push(item);'
+    + '  });'
     + '  CharacterRefresh(Player,false,false);'
     + '  CharacterLoadCanvas(Player);'
-    + '  console.log("[BCU] TEST-Apply fertig. Appearance-Items:",Player.Appearance.length);'
-    + '  console.log("[BCU] Bundle-Gruppen:",Array.from(bundleGroups).join(", "));'
-    + '  console.log("[BCU] Erhaltene Items (Haare/Gesicht etc.):",keptItems.map(function(i){return i.Asset.Group.Name;}));'
+    + '  console.log("[BCU] TEST-Apply fertig. Items:",Player.Appearance.length);'
     + '  var withCraft=decoded.filter(function(i){return i.Property&&i.Property.Craft;});'
     + '  if(withCraft.length)console.log("[BCU] Craft-Items:",withCraft.map(function(i){return i.Group+"="+i.Property.Craft.Name;}));'
     + '}catch(e){'
@@ -5406,27 +5397,29 @@ function _oiBuildExecCode(code) {
     + 'try{'
     + '  var decoded=JSON.parse(LZString.decompressFromBase64(' + esc + '));'
     + '  if(!Array.isArray(decoded)||!decoded.length){console.warn("[BCU] Leeres Bundle");return;}'
+    // Nackt-Gruppen sichern (ArmsLeft, HandsLeft etc. mit Name="")
+    + '  var nakedItems=Player.Appearance.filter(function(i){return !i.Asset.Name||i.Asset.Name==="";});'
     + '  var bundleGroups=new Set(decoded.map(function(i){return i.Group;}));'
-    // Items die NICHT vom Bundle abgedeckt werden sichern (inkl. Haare/Gesicht/Nackt)
-    + '  var keptItems=Player.Appearance.filter(function(i){return !bundleGroups.has(i.Asset.Group.Name);});'
-    // In-place leeren (splice statt = [] – BC hält interne Referenz!)
+    // splice statt = [] → modifiziert das Array IN-PLACE, BC-interne Referenzen sehen die Änderung
     + '  Player.Appearance.splice(0,Player.Appearance.length);'
     + '  if(typeof CharacterAppearanceSetFromBundle==="function"){'
-    + '    CharacterAppearanceSetFromBundle(Player,decoded,1,Player.AssetFamily);'
+    + '    CharacterAppearanceSetFromBundle(Player,decoded,0,Player.AssetFamily);'
     + '  }else{'
     + '    decoded.forEach(function(item){'
     + '      if(!item||!item.Group)return;'
     + '      try{InventoryWear(Player,item.Name||"",item.Group,item.Color,0,null,item.Property,false);}catch(_e){}'
     + '    });'
     + '  }'
-    // Property-Fix: Craft/Konfigurationen (z.B. eingeschriebener Text) explizit übertragen
+    // Property-Fix: Craft/Text (z.B. "DOLL") explizit setzen
     + '  decoded.forEach(function(bundleItem){'
     + '    if(!bundleItem||!bundleItem.Group||!bundleItem.Property)return;'
     + '    var worn=Player.Appearance.find(function(a){return a.Asset&&a.Asset.Group&&a.Asset.Group.Name===bundleItem.Group;});'
     + '    if(worn)worn.Property=JSON.parse(JSON.stringify(bundleItem.Property));'
     + '  });'
-    // Nicht-Bundle-Items zurück einfügen
-    + '  keptItems.forEach(function(item){Player.Appearance.push(item);});'
+    // Nackt-Gruppen die nicht im Bundle sind zurück einfügen
+    + '  nakedItems.forEach(function(item){'
+    + '    if(!bundleGroups.has(item.Asset.Group.Name))Player.Appearance.push(item);'
+    + '  });'
     + '  CharacterRefresh(Player,false,false);'
     // Server-Sync nach Outfit-Apply
     + '  setTimeout(function(){'
