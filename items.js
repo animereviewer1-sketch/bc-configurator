@@ -4976,27 +4976,34 @@ function captureOsScreenshot(mk, vIdx) {
         + '    if(!bundleGroups.has(item.Asset.Group.Name))Player.Appearance.push(item);'
         + '  });'
         + '  CharacterRefresh(Player,false,false);'
-        + '  CharacterLoadCanvas(Player);'
+        // Kein sofortiges CharacterLoadCanvas – erst nach Wartezeit damit BC
+        // alle Asset-Texturen (fremde Items) asynchron laden kann
         + '}'
       : // Kein Code → Player direkt wie er ist aufnehmen
-        'try{CharacterLoadCanvas(Player);}catch(_e){}'
+        'try{CharacterRefresh(Player,false,false);}catch(_e){}'
     )
-    // Zweistufig: erster Pass rendert, zweiter Pass garantiert vollständigen Canvas
+    // Dreistufig: erst warten (Assets laden), dann zweimal rendern, dann aufnehmen
+    // 1. Stufe: 350ms – BC lädt alle Texturen der fremden Kleidungsstücke
     + 'setTimeout(function(){'
     + '  try{CharacterLoadCanvas(Player);}catch(_e){}'
+    // 2. Stufe: 250ms – zweiter Render-Pass für komplexe Layer
     + '  setTimeout(function(){'
-    + '  try{'
+    + '    try{CharacterLoadCanvas(Player);}catch(_e){}'
+    // 3. Stufe: 150ms – finaler Canvas-Stand aufnehmen
+    + '    setTimeout(function(){'
+    + '    try{'
     + cropAndSend
-    + '  }catch(e){'
-    + '    window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",'
-    + '    reqId:' + JSON.stringify(reqId) + ',err:e.message},"*");'
-    + '  }finally{'
-    // origApp IMMER wiederherstellen (gesichert am Anfang)
-    + '    Player.Appearance=origApp;'
-    + '    CharacterRefresh(Player,false,false);'
-    + '  }'
-    + '  },120);'
-    + '},150);'
+    + '    }catch(e){'
+    + '      window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",'
+    + '      reqId:' + JSON.stringify(reqId) + ',err:e.message},"*");'
+    + '    }finally{'
+    // origApp IMMER wiederherstellen
+    + '      Player.Appearance=origApp;'
+    + '      CharacterRefresh(Player,false,false);'
+    + '    }'
+    + '    },150);'
+    + '  },250);'
+    + '},350);'
     + '})();';
 
   bcSend({ type: 'EXEC', code }, true);
