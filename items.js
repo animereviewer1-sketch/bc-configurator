@@ -4658,6 +4658,8 @@ function toggleOsChar(mk, hdrEl) {
   const el = hdrEl ? hdrEl.closest('.os-char') : document.querySelector('.os-char[data-mk="' + mk + '"]');
   if (!el) return;
   const nowOpen = el.classList.toggle('open');
+  const versDiv = el.querySelector('.os-versions');
+  if (versDiv) versDiv.style.display = nowOpen ? 'flex' : 'none';
   if (nowOpen) _osOpenSet.add(String(mk)); else _osOpenSet.delete(String(mk));
 }
 
@@ -4755,7 +4757,7 @@ function renderOutfitScanTab() {
       + '<span class="os-num">#' + escHtml(mk) + '</span>'
       + '<span class="os-vcnt">' + entry.versions.length + 'x</span>'
       + '</div>'
-      + '<div class="os-versions">' + versHtml + '</div>'
+      + '<div class="os-versions" style="' + (isOpen ? 'display:flex' : 'display:none') + ';flex-direction:column">' + versHtml + '</div>'
       + '</div>';
   }).join('');
 }
