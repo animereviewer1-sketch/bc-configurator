@@ -2913,7 +2913,7 @@ function deleteProfileByIdx(idx) {
 let _activeTab = 'items';
 function switchTab(tab) {
   _activeTab = tab;
-  ['items','outfit','curse','bot','log','money','events','rank','shop','outfit-import','lscg-outfit'].forEach(t => {
+  ['items','outfit','curse','bot','log','money','events','rank','shop','outfit-import','outfit-scan'].forEach(t => {
     document.getElementById('tab-'+t)?.classList.toggle('active', t===tab);
     document.getElementById('tab-'+t+'-btn')?.classList.toggle('active', t===tab);
   });
@@ -2925,7 +2925,7 @@ function switchTab(tab) {
   if (tab === 'rank')          { renderRankTab(); }
   if (tab === 'shop')          { renderShopTab(); }
   if (tab === 'outfit-import') { renderOutfitImportTab(); }
-  if (tab === 'lscg-outfit')   { renderLscgOutfitTab(); }
+  if (tab === 'outfit-scan')   { renderOutfitScanTab(); }
 
 }
 
