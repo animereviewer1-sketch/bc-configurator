@@ -4645,80 +4645,138 @@ function importAllData() {
 }
 
 // ══════════════════════════════════════════════════════════════
-//  OUTFIT SCAN TAB
-//  Scannt alle Chars im Raum, zeigt sie an, erlaubt direktes
-//  Speichern in LSCG via SetOutfitCode.
+//  LSCG OUTFIT TAB
+//  DB[memberNumber] = { name, nickname, versions: [{code, fingerprint, ts}] }
+//  Neue Version nur wenn Fingerprint (Group+Name+Color) sich ändert.
 // ══════════════════════════════════════════════════════════════
-let _outfitScanResults = [];
-let _outfitScanRoom    = '';
+const LSCG_IDB_KEY     = 'BC_LSCG_OUTFITS_v3';
+const LSCG_MAX_VERSIONS = 30;
+let LSCG_DB = {};
+
+(async () => {
+  const saved = await idbGet(LSCG_IDB_KEY);
+  if (saved && typeof saved === 'object') {
+    LSCG_DB = saved;
+    console.log('[BCU] LSCG Outfits geladen:', Object.keys(LSCG_DB).length, 'Chars');
+  }
+})();
+
+async function _saveLscgDB() { await idbSet(LSCG_IDB_KEY, LSCG_DB); }
 
 function scanOutfits() {
   if (!_connected) { showStatus('❌ Nicht verbunden mit BC', 'error'); return; }
   bcSend({ type: 'GET_OUTFIT_SCAN' });
-  showStatus('⏳ Scanne Outfits…', 'info');
+  showStatus('⏳ Scanne LSCG Outfits…', 'info');
 }
 
 function _handleOutfitScanData(data) {
   if (data.err) { showStatus('❌ Outfit-Scan: ' + data.err, 'error'); return; }
-  _outfitScanResults = data.results ?? [];
-  _outfitScanRoom    = data.room ?? '';
+  const results = data.results ?? [];
+  if (!results.length) return;
+
+  let neu = 0, geaendert = 0;
+  for (const r of results) {
+    const mk = String(r.memberNumber);
+    if (!LSCG_DB[mk]) { LSCG_DB[mk] = { name: r.name, nickname: r.nickname ?? null, versions: [] }; neu++; }
+    else { LSCG_DB[mk].name = r.name; LSCG_DB[mk].nickname = r.nickname ?? null; }
+
+    const entry = LSCG_DB[mk];
+    const last  = entry.versions[entry.versions.length - 1];
+    const fp    = r.fingerprint ?? '';
+
+    if (!last || (last.fingerprint ?? '') !== fp) {
+      // Outfit geändert oder erster Eintrag → neue Version
+      entry.versions.push({ code: r.code, fingerprint: fp, ts: r.ts ?? Date.now() });
+      if (entry.versions.length > LSCG_MAX_VERSIONS)
+        entry.versions = entry.versions.slice(-LSCG_MAX_VERSIONS);
+      if (entry.versions.length > 1) geaendert++;
+    } else if (r.code && !last.code) {
+      // Gleiches Outfit, aber Code fehlte → nachholen
+      last.code = r.code;
+    }
+  }
+
+  _saveLscgDB();
   if (_activeTab === 'outfit-scan') renderOutfitScanTab();
-  if (_outfitScanResults.length)
-    showStatus('✅ ' + _outfitScanRoom + ': ' + _outfitScanResults.length + ' Chars gescannt', 'success');
+
+  let msg = '✅ ' + (data.room ?? '') + ': ' + results.length + ' Chars';
+  if (neu)       msg += ' | +' + neu + ' neu';
+  if (geaendert) msg += ' | ' + geaendert + ' geändert';
+  showStatus(msg, 'success');
 }
 
 function renderOutfitScanTab() {
   const body = document.getElementById('outfitScanBody');
   if (!body) return;
 
-  if (!_outfitScanResults.length) {
-    body.innerHTML = '<div class="os-empty">Noch kein Scan.<br>Automatisch beim Raum-Beitritt oder ▶ Jetzt scannen klicken.</div>';
+  const members = Object.keys(LSCG_DB);
+  if (!members.length) {
+    body.innerHTML = '<div class="os-empty">Noch keine Outfits gespeichert.<br>Automatischer Scan beim Raum-Beitritt, oder ▶ Jetzt scannen.</div>';
     return;
   }
 
-  body.innerHTML = '<div class="os-list">' +
-    _outfitScanResults.map(function(r, idx) {
-      const hasCode  = !!r.code;
-      const nameHtml = escHtml(r.name ?? '?')
-        + (r.nickname ? ' <em class="os-nick">„' + escHtml(r.nickname) + '"</em>' : '');
-      return '<div class="os-char' + (hasCode ? '' : ' os-nocode') + '">'
-        + '<div class="os-char-left">'
-        + '<span class="os-name">' + nameHtml + '</span>'
-        + '<span class="os-num">#' + escHtml(String(r.memberNumber)) + '</span>'
-        + '</div>'
-        + '<div class="os-char-right">'
-        + (hasCode
-            ? '<button class="btn os-btn-save" onclick="saveOutfitToLscg(' + idx + ')" title="Direkt als LSCG-Outfit speichern">💾 In LSCG</button>'
-            : '<span class="os-warn">⚠ Kein Code</span>')
-        + (hasCode
-            ? '<button class="btn os-btn-copy" onclick="copyOutfitCode(' + idx + ')" title="Code in Zwischenablage">📋</button>'
-            : '')
-        + '</div>'
+  // Sortiert nach Name
+  members.sort((a, b) => (LSCG_DB[a].name ?? '').localeCompare(LSCG_DB[b].name ?? ''));
+
+  body.innerHTML = members.map(function(mk) {
+    const entry   = LSCG_DB[mk];
+    const vs      = [...entry.versions].reverse(); // neueste zuerst
+    const nameHtml = escHtml(entry.name ?? '?')
+      + (entry.nickname ? ' <em class="os-nick">„' + escHtml(entry.nickname) + '"</em>' : '');
+
+    const versHtml = vs.map(function(v, i) {
+      const realIdx = entry.versions.length - 1 - i;
+      const d = new Date(v.ts);
+      const ts = d.toLocaleDateString('de-DE', { day:'2-digit', month:'2-digit' })
+               + ' ' + d.toLocaleTimeString('de-DE', { hour:'2-digit', minute:'2-digit' });
+      const hasCode = !!v.code;
+      return '<div class="os-version' + (i === 0 ? ' os-latest' : '') + '">'
+        + '<span class="os-vnum">v' + (vs.length - i) + '</span>'
+        + '<span class="os-vts">' + ts + '</span>'
+        + (hasCode ? '<button class="os-btn-save" onclick="saveOutfitToLscg(' + JSON.stringify(mk) + ',' + realIdx + ')" title="In LSCG speichern">💾</button>' : '')
+        + (hasCode ? '<button class="os-btn-copy" onclick="copyOutfitCode(' + JSON.stringify(mk) + ',' + realIdx + ')" title="Code kopieren">📋</button>' : '<span class="os-warn">⚠</span>')
         + '</div>';
-    }).join('')
-    + '</div>';
+    }).join('');
+
+    return '<div class="os-char">'
+      + '<div class="os-char-hdr">'
+      + '<span class="os-name">' + nameHtml + '</span>'
+      + '<span class="os-num">#' + escHtml(mk) + '</span>'
+      + '<span class="os-vcnt">' + entry.versions.length + 'x</span>'
+      + '</div>'
+      + '<div class="os-versions">' + versHtml + '</div>'
+      + '</div>';
+  }).join('');
 }
 
-function saveOutfitToLscg(idx) {
-  const r = _outfitScanResults[idx];
-  if (!r?.code) { showStatus('❌ Kein Code vorhanden', 'error'); return; }
-  const today    = new Date();
-  const mmdd     = String(today.getMonth() + 1).padStart(2, '0') + String(today.getDate()).padStart(2, '0');
-  const safeName = (r.name ?? String(r.memberNumber)).replace(/[^a-zA-Z0-9_\-]/g, '_').substring(0, 20);
-  const key      = safeName + '_' + mmdd;
+function saveOutfitToLscg(mk, vIdx) {
+  const v = LSCG_DB[mk]?.versions?.[vIdx];
+  if (!v?.code) { showStatus('❌ Kein Code vorhanden', 'error'); return; }
+  const d = new Date(v.ts);
+  const mmdd = String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0');
+  const safeName = (LSCG_DB[mk]?.name ?? mk).replace(/[^a-zA-Z0-9_\-]/g, '_').substring(0, 20);
+  const key = safeName + '_' + mmdd;
   bcSend({
     type: 'EXEC',
     code: '(function(){try{'
-      + 'if(typeof LSCG_OUTFITS==="undefined"){alert("LSCG ist nicht geladen!");return;}'
-      + 'var _r=LSCG_OUTFITS.SetOutfitCode(' + JSON.stringify(key) + ',' + JSON.stringify(r.code) + ');'
-      + 'console.log("[BCU] LSCG Save ' + key + ':", _r===0?"SUCCESS":"Fehler "+_r);'
-      + '}catch(e){console.error("[BCU] LSCG Save Fehler:",e.message);}})();'
+      + 'if(typeof LSCG_OUTFITS==="undefined"){alert("LSCG nicht geladen!");return;}'
+      + 'var _r=LSCG_OUTFITS.SetOutfitCode(' + JSON.stringify(key) + ',' + JSON.stringify(v.code) + ');'
+      + 'console.log("[BCU] LSCG Save:", ' + JSON.stringify(key) + ', _r===0?"✅":"❌ "+_r);'
+      + '}catch(e){console.error("[BCU]",e.message);}})();'
   }, true);
-  showStatus('💾 Als "' + key + '" gespeichert → /lscg wear-outfit ' + key, 'success');
+  showStatus('💾 "' + key + '" gespeichert → /lscg wear-outfit ' + key, 'success');
 }
 
-function copyOutfitCode(idx) {
-  const r = _outfitScanResults[idx];
-  if (!r?.code) { showStatus('❌ Kein Code vorhanden', 'error'); return; }
-  navigator.clipboard.writeText(r.code).then(function() { showStatus('📋 Code kopiert!', 'success'); });
+function copyOutfitCode(mk, vIdx) {
+  const v = LSCG_DB[mk]?.versions?.[vIdx];
+  if (!v?.code) { showStatus('❌ Kein Code vorhanden', 'error'); return; }
+  navigator.clipboard.writeText(v.code).then(function() { showStatus('📋 Code kopiert!', 'success'); });
+}
+
+function clearAllLscgOutfits() {
+  if (!confirm('Alle gespeicherten LSCG-Outfits löschen?')) return;
+  LSCG_DB = {};
+  _saveLscgDB();
+  renderOutfitScanTab();
+  showStatus('🗑️ LSCG Outfits geleert', 'info');
 }

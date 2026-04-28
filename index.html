@@ -2192,7 +2192,7 @@ button { cursor: pointer; }
   <button class="tab-btn"        id="tab-rank-btn"          onclick="switchTab('rank')">🏆 Rang</button>
   <button class="tab-btn"        id="tab-shop-btn"          onclick="switchTab('shop')">🛒 Shop</button>
   <button class="tab-btn"        id="tab-outfit-import-btn" onclick="switchTab('outfit-import')">📥 Outfit Import</button>
-  <button class="tab-btn"        id="tab-outfit-scan-btn"   onclick="switchTab('outfit-scan')">👗 Outfits</button>
+  <button class="tab-btn"        id="tab-outfit-scan-btn"   onclick="switchTab('outfit-scan')">🧬 LSCG Outfits</button>
   <button class="tab-btn"        id="tab-settings-btn"      onclick="switchTab('settings')">⚙️ Einstellungen</button>
 </div>
 
@@ -3093,39 +3093,45 @@ document.write('<scr'+'ipt src="outfit-import.js?_='+_cbv+'"><\/scr'+'ipt>');
 </div>
 <!-- /tab-outfit-import -->
 
-<!-- ══ TAB: OUTFIT SCAN ══════════════════════════════════════════════ -->
+<!-- ══ TAB: LSCG OUTFITS ══════════════════════════════════════════════ -->
 <div id="tab-outfit-scan" class="tab-pane">
   <div class="os-header">
     <button class="btn btn-primary" onclick="scanOutfits()">▶ Jetzt scannen</button>
-    <span class="os-hint">Automatischer Scan beim Raum-Beitritt · 💾 speichert direkt in LSCG · 📋 kopiert den Code</span>
+    <span class="os-hint">Auto-Scan beim Raum-Beitritt · 💾 direkt in LSCG speichern · neue Version nur bei Outfit-Änderung</span>
+    <button class="btn btn-red" onclick="clearAllLscgOutfits()" title="Alle löschen">🗑️</button>
   </div>
   <div id="outfitScanBody" class="os-body"></div>
 </div>
 <!-- /tab-outfit-scan -->
 
 <style>
-/* ── Outfit Scan Tab ── */
-.os-header { display:flex; align-items:center; gap:12px; padding:10px 14px; border-bottom:1px solid var(--border); flex-wrap:wrap; }
-.os-hint { font-size:.7rem; color:var(--text3); flex:1; }
-.os-body { padding:10px; overflow-y:auto; max-height:calc(100vh - 110px); }
-.os-empty { text-align:center; color:var(--text3); padding:56px 20px; font-size:.85rem; line-height:1.9; }
-.os-list { display:flex; flex-direction:column; gap:6px; }
-.os-char { display:flex; align-items:center; justify-content:space-between; gap:10px;
-           background:var(--bg2); border:1px solid var(--border); border-radius:8px;
-           padding:9px 14px; }
-.os-char.os-nocode { opacity:.55; }
-.os-char-left { display:flex; flex-direction:column; gap:2px; min-width:0; flex:1; }
-.os-name { font-weight:700; font-size:.88rem; color:var(--text1); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.os-nick { color:var(--acc2); font-size:.75rem; font-weight:400; font-style:italic; }
-.os-num  { font-size:.7rem; color:var(--text3); }
-.os-char-right { display:flex; align-items:center; gap:6px; flex-shrink:0; }
-.os-warn { font-size:.7rem; color:#f87171; }
-.os-btn-save { background:rgba(99,102,241,0.18); border:1px solid rgba(99,102,241,0.4);
-               color:var(--accent-text); font-size:.72rem; padding:4px 10px; border-radius:5px;
+/* ── LSCG Outfit Tab ── */
+.os-header { display:flex; align-items:center; gap:10px; padding:10px 14px; border-bottom:1px solid var(--border); flex-wrap:wrap; }
+.os-hint   { font-size:.7rem; color:var(--text3); flex:1; }
+.os-body   { padding:10px; overflow-y:auto; max-height:calc(100vh - 110px); display:flex; flex-direction:column; gap:8px; }
+.os-empty  { text-align:center; color:var(--text3); padding:56px 20px; font-size:.85rem; line-height:1.9; }
+/* Char-Block */
+.os-char     { background:var(--bg2); border:1px solid var(--border); border-radius:8px; overflow:hidden; }
+.os-char-hdr { display:flex; align-items:center; gap:8px; padding:7px 12px; background:var(--bg3); border-bottom:1px solid var(--border); }
+.os-name     { font-weight:700; font-size:.85rem; color:var(--text1); flex:1; }
+.os-nick     { color:var(--acc2); font-size:.75rem; font-weight:400; font-style:italic; }
+.os-num      { font-size:.7rem; color:var(--text3); }
+.os-vcnt     { font-size:.68rem; color:var(--text3); white-space:nowrap; }
+/* Versionen */
+.os-versions { display:flex; flex-direction:column; }
+.os-version  { display:grid; grid-template-columns:28px 1fr auto auto; align-items:center; gap:6px;
+               padding:5px 12px; border-bottom:1px solid rgba(255,255,255,0.03); font-size:.7rem; }
+.os-version:last-child { border-bottom:none; }
+.os-version.os-latest  { background:rgba(99,102,241,0.07); }
+.os-vnum { color:var(--accent-text); font-weight:700; font-size:.66rem; }
+.os-vts  { color:var(--text3); font-size:.66rem; }
+.os-warn { color:#f87171; font-size:.7rem; }
+.os-btn-save { background:rgba(99,102,241,0.18); border:1px solid rgba(99,102,241,0.35);
+               color:var(--accent-text); font-size:.68rem; padding:2px 8px; border-radius:4px;
                cursor:pointer; white-space:nowrap; transition:background .15s; }
 .os-btn-save:hover { background:rgba(99,102,241,0.35); }
-.os-btn-copy { background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.15);
-               color:var(--text2); font-size:.72rem; padding:4px 8px; border-radius:5px;
+.os-btn-copy { background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.12);
+               color:var(--text2); font-size:.68rem; padding:2px 7px; border-radius:4px;
                cursor:pointer; transition:background .15s; }
 .os-btn-copy:hover { background:rgba(255,255,255,0.12); color:var(--text1); }
 </style>

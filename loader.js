@@ -731,7 +731,7 @@ window.CurseScanner = (() => {
   }
 
   window._BCU_serializeChar = function(C) {
-    let code = null;
+    let code = null, fingerprint = '';
     try {
       const fam = C.AssetFamily ?? 'Female3DCG';
       const items = [];
@@ -750,8 +750,12 @@ window.CurseScanner = (() => {
         if (v && typeof v === 'object') { if (_s2.has(v)) return undefined; _s2.add(v); }
         return v;
       }));
+      fingerprint = items.slice()
+        .sort((a, b) => a.Group.localeCompare(b.Group))
+        .map(i => i.Group + '\x1f' + i.Name + '\x1f' + JSON.stringify(i.Color ?? ''))
+        .join('\x1e');
     } catch(_e) { console.warn('[BCU] serializeChar:', _e); }
-    return { memberNumber: C.MemberNumber, name: C.Name, nickname: C.Nickname ?? null, code };
+    return { memberNumber: C.MemberNumber, name: C.Name, nickname: C.Nickname ?? null, code, fingerprint };
   };
 
   // ── PostMessage Listener ───────────────────────────────
