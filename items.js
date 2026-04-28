@@ -4987,81 +4987,69 @@ function captureOsScreenshot(mk, vIdx) {
 // Verwendung: debugOsScreenshot('102866', 0)
 //   mk    = Member-Nummer als String
 //   vIdx  = Versions-Index (0 = älteste, length-1 = neueste)
-window.debugOsScreenshot = function(mk, vIdx) {
+// Sicherer Debug: kein Apply, kein Game-Eingriff – nur Code analysieren
+// Aufruf aus Popup-Konsole: debugOsOutfit('102866', 0)
+window.debugOsOutfit = function(mk, vIdx) {
   mk = String(mk);
   vIdx = vIdx ?? 0;
   const v = LSCG_DB[mk]?.versions?.[vIdx];
   if (!v?.code) { console.error('[BCU] Kein Code für', mk, 'v', vIdx); return; }
   const outfitCode = v.code;
   const reqId = 'dbg_' + Date.now();
-  console.log('[BCU] Debug-Screenshot für #' + mk + ' v' + (vIdx+1));
+  console.log('[BCU] Analyse für #' + mk + ' v' + (vIdx+1) + ' – kein Spiel-Eingriff');
 
-  // Einmaliger Handler: zeigt das Bild als Overlay im Popup
+  // Handler für Analyse-Ergebnis
   const handler = function(ev) {
-    if (!ev.data || ev.data.app !== 'BCKonfigurator' || ev.data.type !== 'CANVAS_DEBUG_DATA' || ev.data.reqId !== reqId) return;
+    if (!ev.data || ev.data.app !== 'BCKonfigurator' || ev.data.type !== 'OUTFIT_DEBUG_RESULT' || ev.data.reqId !== reqId) return;
     window.removeEventListener('message', handler);
-    if (ev.data.err) { console.error('[BCU] Debug-Fehler:', ev.data.err); return; }
 
-    // Overlay im Popup anzeigen
-    const overlay = document.createElement('div');
-    overlay.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.92);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:16px';
-    const img = document.createElement('img');
-    img.src = ev.data.data;
-    img.style.cssText = 'max-height:calc(100vh - 80px);max-width:90vw;object-fit:contain;border-radius:8px;background:#111';
-    const info = document.createElement('div');
-    info.style.cssText = 'color:#aaa;font-size:.75rem;font-family:monospace';
-    info.textContent = ev.data.width + '×' + ev.data.height + 'px  |  #' + mk + ' v' + (vIdx+1);
-    const btn = document.createElement('button');
-    btn.textContent = '✕ Schließen';
-    btn.style.cssText = 'padding:6px 20px;border-radius:8px;border:1px solid rgba(255,255,255,0.2);background:rgba(255,255,255,0.08);color:#fff;cursor:pointer;font-size:.8rem';
-    btn.onclick = function() { overlay.remove(); };
-    overlay.onclick = function(e) { if (e.target === overlay) overlay.remove(); };
-    overlay.append(img, info, btn);
-    document.body.appendChild(overlay);
-    console.log('[BCU] Bild: ' + ev.data.width + '×' + ev.data.height + 'px');
+    const r = ev.data;
+    console.group('%c[BCU] Outfit-Analyse #' + mk + ' v' + (vIdx+1), 'color:#6ee7b7;font-weight:bold');
+    console.log('📦 Bundle: ' + r.total + ' Items  |  AssetFamily: ' + r.assetFamily);
+    if (r.missing.length) {
+      console.warn('❌ FEHLENDE Assets (' + r.missing.length + ') – werden nicht gerendert:');
+      r.missing.forEach(function(x) { console.warn('   [' + x.group + '] "' + x.name + '"'); });
+    } else {
+      console.log('✅ Alle Assets vorhanden');
+    }
+    if (r.naked.length) {
+      console.log('⚠️  Nackt-Gruppen im Bundle: ' + r.naked.join(', '));
+    }
+    if (r.missingNaked.length) {
+      console.log('ℹ️  Nackt-Gruppen fehlen im Bundle (werden ergänzt): ' + r.missingNaked.join(', '));
+    }
+    console.log('👤 Player AssetFamily: ' + r.assetFamily);
+    console.groupEnd();
   };
   window.addEventListener('message', handler);
 
+  // Reines Analyse-EXEC – ändert NICHTS am Spielstand
   const code = '(function(){'
-    + 'var origApp=null;'
     + 'try{'
     + '  var decoded=JSON.parse(LZString.decompressFromBase64(' + JSON.stringify(outfitCode) + '));'
-    + '  origApp=Player.Appearance.slice();'
-    + '  var nakedItems=origApp.filter(function(i){return !i.Asset.Name||i.Asset.Name==="";});'
-    + '  var bundleGroups=new Set(decoded.map(function(i){return i.Group;}));'
-    + '  Player.Appearance=[];'
-    + '  CharacterAppearanceSetFromBundle(Player,decoded,0,Player.AssetFamily);'
-    + '  nakedItems.forEach(function(item){'
-    + '    if(!bundleGroups.has(item.Asset.Group.Name))Player.Appearance.push(item);'
+    + '  var missing=[],naked=[];'
+    + '  decoded.forEach(function(item){'
+    + '    if(!item.Name||item.Name===""){naked.push(item.Group);return;}'
+    + '    var a=AssetGet(Player.AssetFamily,item.Group,item.Name);'
+    + '    if(!a)missing.push({group:item.Group,name:item.Name});'
     + '  });'
-    + '  CharacterRefresh(Player,false,false);'
-    + '  CharacterLoadCanvas(Player);'
+    + '  var bundleGroups=new Set(decoded.map(function(i){return i.Group;}));'
+    + '  var missingNaked=Player.Appearance'
+    + '    .filter(function(i){return !i.Asset.Name||i.Asset.Name==="";} )'
+    + '    .map(function(i){return i.Asset.Group.Name;})'
+    + '    .filter(function(g){return !bundleGroups.has(g);});'
+    + '  window.__BCK_popupRef.postMessage({'
+    + '    app:"BCKonfigurator",type:"OUTFIT_DEBUG_RESULT",reqId:' + JSON.stringify(reqId) + ','
+    + '    total:decoded.length,missing:missing,naked:naked,'
+    + '    missingNaked:missingNaked,assetFamily:Player.AssetFamily'
+    + '  },"*");'
     + '}catch(e){'
-    + '  window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_DEBUG_DATA",reqId:' + JSON.stringify(reqId) + ',err:e.message},"*");'
-    + '  return;'
+    + '  window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"OUTFIT_DEBUG_RESULT",'
+    + '    reqId:' + JSON.stringify(reqId) + ',error:e.message},"*");'
     + '}'
-    + 'setTimeout(function(){'
-    + '  try{CharacterLoadCanvas(Player);}catch(_e){}'
-    + '  setTimeout(function(){'
-    + '    try{'
-    + '      var src=Player.Canvas;'
-    + '      if(!src||!src.width)throw new Error("Canvas leer");'
-    // Vollbild ohne Crop → sieht man was wirklich gerendert wird
-    + '      var oc=document.createElement("canvas");oc.width=src.width;oc.height=src.height;'
-    + '      oc.getContext("2d").drawImage(src,0,0);'
-    + '      window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_DEBUG_DATA",'
-    + '        reqId:' + JSON.stringify(reqId) + ',data:oc.toDataURL("image/png"),width:src.width,height:src.height},"*");'
-    + '    }catch(e){'
-    + '      window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_DEBUG_DATA",reqId:' + JSON.stringify(reqId) + ',err:e.message},"*");'
-    + '    }finally{'
-    + '      if(origApp){Player.Appearance=origApp;CharacterRefresh(Player,false,false);}'
-    + '    }'
-    + '  },120);'
-    + '},150);'
     + '})();';
 
   bcSend({ type: 'EXEC', code }, true);
-  console.log('[BCU] Warte auf Bild…');
 };
 
 // ── Gestaffeltes Aufnehmen aller fehlenden Bilder ─────
