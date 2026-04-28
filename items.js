@@ -4906,12 +4906,30 @@ function captureOsScreenshot(mk, vIdx) {
     + 'var src=T.Canvas;'
     + 'if(!src||!src.width)throw new Error("Canvas leer");'
     + 'var oc=document.createElement("canvas");oc.width=src.width;oc.height=src.height;'
-    + 'oc.getContext("2d").drawImage(src,0,0);'
-    + 'var d=oc.toDataURL("image/jpeg",0.88);'
+    + 'var ctx=oc.getContext("2d");ctx.drawImage(src,0,0);'
+    // Auto-crop: scan pixels to find the character bounding box (remove black empty space)
+    + 'var id=ctx.getImageData(0,0,oc.width,oc.height);'
+    + 'var px=id.data,W=oc.width,H=oc.height;'
+    + 'var x0=W,x1=0,y0=H,y1=0;'
+    + 'for(var r=0;r<H;r++){for(var c=0;c<W;c++){'
+    + '  var ii=(r*W+c)*4;'
+    + '  if(px[ii]>12||px[ii+1]>12||px[ii+2]>12){'
+    + '    if(c<x0)x0=c;if(c>x1)x1=c;'
+    + '    if(r<y0)y0=r;if(r>y1)y1=r;'
+    + '  }'
+    + '}}'
+    + 'if(x1<x0){x0=0;y0=0;x1=W-1;y1=H-1;}'  // fallback: full canvas
+    + 'var pad=12;'
+    + 'x0=Math.max(0,x0-pad);y0=Math.max(0,y0-pad);'
+    + 'x1=Math.min(W-1,x1+pad);y1=Math.min(H-1,y1+pad);'
+    + 'var cw=x1-x0+1,ch=y1-y0+1;'
+    + 'var cc=document.createElement("canvas");cc.width=cw;cc.height=ch;'
+    + 'cc.getContext("2d").drawImage(oc,x0,y0,cw,ch,0,0,cw,ch);'
+    + 'var d=cc.toDataURL("image/jpeg",0.88);'
     + 'window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",'
     + 'reqId:' + JSON.stringify(reqId) + ',data:d,name:T.Nickname||T.Name,'
     + 'memberNumber:T.MemberNumber,itemCount:(T.Appearance||[]).length,'
-    + 'width:src.width,height:src.height},"*");'
+    + 'width:cw,height:ch},"*");'
     + '}catch(e){'
     + 'window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",'
     + 'reqId:' + JSON.stringify(reqId) + ',err:e.message},"*");'
@@ -5323,8 +5341,9 @@ function renderOutfitScanTab() {
       const fp       = v.fingerprint;
       const saved    = (fp && _lscgFpMap[fp]) ? _lscgFpMap[fp] : [];
       const hasCode  = !!v.code;
-      const vThumb   = _getLscgScreenshot(mk, fp);
+      // Strict lookup: only version-specific key, never the legacy mk fallback
       const vKey     = fp ? (mk + '|' + fp) : mk;
+      const vThumb   = LSCG_SCREENSHOTS[vKey] || null;
       const tagHtml  = saved.length
         ? '<span class="os-card-tag saved" title="' + saved.map(function(k){return escHtml(k);}).join(', ') + '">✅ PROFIL</span>'
         : '<span class="os-card-tag">v' + vNum + '</span>';
