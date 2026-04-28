@@ -4655,12 +4655,19 @@ let LSCG_DB = {};
 const _osOpenSet = new Set(); // member keys currently expanded
 
 function toggleOsChar(mk, hdrEl) {
-  const el = hdrEl ? hdrEl.closest('.os-char') : document.querySelector('.os-char[data-mk="' + mk + '"]');
+  const el = hdrEl
+    ? (typeof hdrEl.closest === 'function' ? hdrEl.closest('.os-char') : hdrEl.parentElement)
+    : document.querySelector('[data-mk="' + mk + '"]');
   if (!el) return;
   const nowOpen = el.classList.toggle('open');
   const versDiv = el.querySelector('.os-versions');
   if (versDiv) versDiv.style.display = nowOpen ? 'flex' : 'none';
-  if (nowOpen) _osOpenSet.add(String(mk)); else _osOpenSet.delete(String(mk));
+  if (nowOpen) {
+    _osOpenSet.add(String(mk));
+    setTimeout(function() { el.scrollIntoView({ behavior:'smooth', block:'nearest' }); }, 50);
+  } else {
+    _osOpenSet.delete(String(mk));
+  }
 }
 
 (async () => {
