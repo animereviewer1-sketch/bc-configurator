@@ -4742,13 +4742,13 @@ function renderOutfitScanTab() {
       return '<div class="os-version' + (i === 0 ? ' os-latest' : '') + '">'
         + '<span class="os-vnum">v' + (vs.length - i) + '</span>'
         + '<span class="os-vts">' + ts + '</span>'
-        + (hasCode ? '<button class="os-btn-save" onclick="saveOutfitToLscg(' + JSON.stringify(mk) + ',' + realIdx + ')" title="In LSCG speichern">💾</button>' : '')
-        + (hasCode ? '<button class="os-btn-copy" onclick="copyOutfitCode(' + JSON.stringify(mk) + ',' + realIdx + ')" title="Code kopieren">📋</button>' : '<span class="os-warn">⚠</span>')
+        + (hasCode ? '<button class="os-btn-save" onclick="saveOutfitToLscg(\'' + mk + '\',' + realIdx + ')" title="In LSCG speichern">💾</button>' : '')
+        + (hasCode ? '<button class="os-btn-copy" onclick="copyOutfitCode(\'' + mk + '\',' + realIdx + ')" title="Code kopieren">📋</button>' : '<span class="os-warn">⚠</span>')
         + '</div>';
     }).join('');
 
     return '<div class="os-char' + (isOpen ? ' open' : '') + '" data-mk="' + escHtml(mk) + '">'
-      + '<div class="os-char-hdr" onclick="toggleOsChar(' + JSON.stringify(mk) + ')">'
+      + '<div class="os-char-hdr" onclick="toggleOsChar(\'' + mk + '\')">'
       + '<span class="os-chevron">▶</span>'
       + '<span class="os-name">' + nameHtml + '</span>'
       + '<span class="os-num">#' + escHtml(mk) + '</span>'
