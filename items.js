@@ -4983,6 +4983,58 @@ function captureOsScreenshot(mk, vIdx) {
   bcSend({ type: 'EXEC', code }, true);
 }
 
+// ── Screenshot-Debug: Aufruf aus Popup-Konsole ────────
+// Verwendung: debugOsScreenshot('102866', 0)
+//   mk    = Member-Nummer als String
+//   vIdx  = Versions-Index (0 = älteste, length-1 = neueste)
+window.debugOsScreenshot = function(mk, vIdx) {
+  mk = String(mk);
+  vIdx = vIdx ?? 0;
+  const v = LSCG_DB[mk]?.versions?.[vIdx];
+  if (!v?.code) { console.error('[BCU] Kein Code für', mk, 'v', vIdx); return; }
+  const outfitCode = v.code;
+  console.log('[BCU] Debug-Screenshot für #' + mk + ' v' + (vIdx+1) + ' (' + (v.fingerprint?.substring(0,8) ?? '?') + '...)');
+
+  const code = '(function(){'
+    + 'var origApp=null;'
+    + 'try{'
+    + '  var decoded=JSON.parse(LZString.decompressFromBase64(' + JSON.stringify(outfitCode) + '));'
+    + '  origApp=Player.Appearance.slice();'
+    + '  var nakedItems=origApp.filter(function(i){return !i.Asset.Name||i.Asset.Name==="";});'
+    + '  var bundleGroups=new Set(decoded.map(function(i){return i.Group;}));'
+    + '  Player.Appearance=[];'
+    + '  CharacterAppearanceSetFromBundle(Player,decoded,0,Player.AssetFamily);'
+    + '  nakedItems.forEach(function(item){'
+    + '    if(!bundleGroups.has(item.Asset.Group.Name))Player.Appearance.push(item);'
+    + '  });'
+    + '  CharacterRefresh(Player,false,false);'
+    + '  CharacterLoadCanvas(Player);'
+    + '}catch(e){console.error("[BCU] Apply-Fehler:",e.message);return;}'
+    + 'setTimeout(function(){'
+    + '  try{CharacterLoadCanvas(Player);}catch(_e){}'
+    + '  setTimeout(function(){'
+    + '    try{'
+    + '      var src=Player.Canvas;'
+    + '      if(!src||!src.width){console.error("[BCU] Canvas leer");return;}'
+    // Vollbild ohne Crop öffnen → zeigt was wirklich gerendert wird
+    + '      var oc=document.createElement("canvas");oc.width=src.width;oc.height=src.height;'
+    + '      oc.getContext("2d").drawImage(src,0,0);'
+    + '      var w=window.open();'
+    + '      w.document.write("<img src=\\""+oc.toDataURL("image/png")+"\\" style=\\"background:#000;max-width:100%\\">");'
+    + '      console.log("[BCU] Screenshot geöffnet: "+src.width+"x"+src.height+"px");'
+    + '    }catch(e){console.error("[BCU] Screenshot-Fehler:",e.message);}'
+    + '    finally{'
+    + '      if(origApp){Player.Appearance=origApp;CharacterRefresh(Player,false,false);}'
+    + '      console.log("[BCU] Outfit wiederhergestellt");'
+    + '    }'
+    + '  },120);'
+    + '},150);'
+    + '})();';
+
+  bcSend({ type: 'EXEC', code }, true);
+  console.log('[BCU] EXEC gesendet – Bild öffnet sich im BC-Fenster als neuer Tab');
+};
+
 // ── Gestaffeltes Aufnehmen aller fehlenden Bilder ─────
 function captureAllMissingOsScreenshots() {
   if (!_connected) { showStatus('❌ Nicht verbunden mit BC', 'error'); return; }
