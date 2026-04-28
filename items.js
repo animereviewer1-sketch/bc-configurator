@@ -2502,6 +2502,123 @@ function _handleScreenshotData(data) {
   imgEl.src = data.data;
 }
 
+// ── Canvas-Vorschau: öffnet TARGET.Canvas als styled Tab ─
+const _pendingCanvasPreview = {};
+
+function openCanvasPreview() {
+  if (!_connected) { showStatus('❌ Nicht verbunden mit BC', 'error'); return; }
+
+  const mode = document.getElementById('targetMode')?.value;
+  let memberNum = null;
+  if (mode === 'other') {
+    const sel = document.getElementById('targetMember')?.value;
+    const dir = document.getElementById('targetMemberDirect')?.value;
+    const raw = sel || dir;
+    if (raw) memberNum = parseInt(raw, 10);
+  }
+
+  const reqId = 'cv_' + Date.now();
+  _pendingCanvasPreview[reqId] = true;
+
+  const targetExpr = memberNum
+    ? 'ChatRoomCharacter.find(function(c){return c.MemberNumber===' + memberNum + ';})'
+    : 'Player';
+
+  const code = '(function(){'
+    + 'var T=' + targetExpr + ';'
+    + 'if(!T){window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",reqId:' + JSON.stringify(reqId) + ',err:"Spieler nicht im Raum"},"*");return;}'
+    + 'try{CharacterLoadCanvas(T);}catch(e){}'
+    + 'requestAnimationFrame(function(){'
+    + 'try{'
+    + 'var src=T.Canvas;'
+    + 'if(!src||!src.width)throw new Error("Canvas leer");'
+    + 'var oc=document.createElement("canvas");oc.width=src.width;oc.height=src.height;'
+    + 'oc.getContext("2d").drawImage(src,0,0);'
+    + 'var d=oc.toDataURL("image/png");'
+    + 'window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",reqId:' + JSON.stringify(reqId) + ','
+    + 'data:d,name:T.Nickname||T.Name,memberNumber:T.MemberNumber,'
+    + 'itemCount:(T.Appearance||[]).length,width:src.width,height:src.height},"*");'
+    + '}catch(e){'
+    + 'window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",reqId:' + JSON.stringify(reqId) + ',err:e.message},"*");'
+    + '}'
+    + '});'
+    + '})();';
+
+  bcSend({ type: 'EXEC', code }, true);
+  showStatus('🖼 Canvas wird geladen…', 'info');
+}
+
+function _handleCanvasPreviewData(data) {
+  if (!_pendingCanvasPreview[data.reqId]) return;
+  delete _pendingCanvasPreview[data.reqId];
+
+  if (data.err) { showStatus('❌ Canvas-Vorschau: ' + data.err, 'error'); return; }
+  if (!data.data) { showStatus('❌ Canvas-Vorschau: Keine Daten', 'error'); return; }
+
+  const name      = data.name      || '–';
+  const membNum   = data.memberNumber ?? '–';
+  const itemCount = data.itemCount  ?? '–';
+  const w         = data.width      ?? '–';
+  const h         = data.height     ?? '–';
+
+  const tab = window.open('', '_blank');
+  if (!tab) { showStatus('❌ Popup blockiert – bitte Popup-Blocker deaktivieren', 'error'); return; }
+
+  tab.document.write(`<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<title>#${membNum} – ${name}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0d0d0f;--bg2:#141418;--bg3:#1a1a20;
+  --border:rgba(255,255,255,0.06);--border2:rgba(255,255,255,0.12);
+  --accent:oklch(72% 0.13 58);--accent-text:oklch(82% 0.1 62);
+  --accent-soft:oklch(72% 0.13 58 / 0.14);--accent-line:oklch(72% 0.13 58 / 0.35);
+  --text:#f4f2ee;--text2:#a8a69f;--text3:#6d6b66;
+  --green:#34d399;--gd:rgba(6,78,59,0.6);
+  --shadow-lg:0 16px 48px rgba(0,0,0,0.5),0 4px 12px rgba(0,0,0,0.35);
+  --r-xl:22px;--font-ui:'Inter Tight',system-ui,sans-serif;--font-mono:'JetBrains Mono',monospace;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:var(--font-ui);font-size:13.5px}
+body{display:flex;align-items:flex-start;justify-content:center;padding:32px 16px}
+.card{background:var(--bg2);border:1px solid var(--border2);border-radius:var(--r-xl);box-shadow:var(--shadow-lg);overflow:hidden;width:340px}
+.card-header{padding:16px 18px 12px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 6px var(--green);flex-shrink:0}
+.card-title{font-size:1rem;font-weight:800;color:var(--accent-text)}
+.card-sub{font-size:0.72rem;color:var(--text3);font-family:var(--font-mono);margin-top:1px}
+.img-wrap{background:var(--bg3);display:flex;align-items:center;justify-content:center;border-bottom:1px solid var(--border);overflow:hidden}
+.img-wrap img{width:100%;display:block}
+.card-footer{padding:12px 18px;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.badge{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:9999px;font-size:0.7rem;font-weight:600;font-family:var(--font-mono);background:var(--accent-soft);color:var(--accent-text);border:1px solid var(--accent-line)}
+.badge-green{background:var(--gd);color:var(--green);border-color:rgba(52,211,153,0.25)}
+.meta{font-size:0.72rem;color:var(--text3);font-family:var(--font-mono)}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="card-header">
+    <div class="dot"></div>
+    <div>
+      <div class="card-title">${name}</div>
+      <div class="card-sub">#${membNum}</div>
+    </div>
+  </div>
+  <div class="img-wrap"><img src="${data.data}" alt="${name}"></div>
+  <div class="card-footer">
+    <span class="badge badge-green">✅ Canvas OK</span>
+    <span class="badge">${itemCount} Items</span>
+    <span class="meta">${w}\xd7${h}px</span>
+  </div>
+</div>
+</body></html>`);
+  tab.document.close();
+  showStatus('🖼 Canvas-Vorschau geöffnet', 'success');
+}
+
 // ── Fallback: Screenshot manuell hochladen ────────────
 function uploadProfileScreenshot(pname) {
   const name = _profileNameMap[pname] || pname;
@@ -4207,6 +4324,10 @@ window.addEventListener('message', function(ev) {
 
     case 'SCREENSHOT_DATA':
       _handleScreenshotData(ev.data);
+      break;
+
+    case 'CANVAS_PREVIEW_DATA':
+      _handleCanvasPreviewData(ev.data);
       break;
 
     case 'OUTFIT_SCAN_DATA':
