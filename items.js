@@ -4655,9 +4655,12 @@ function importAllData() {
 // ══════════════════════════════════════════════════════════════
 const LSCG_IDB_KEY      = 'BC_LSCG_OUTFITS_v3';
 const LSCG_IGNORE_KEY   = 'BC_LSCG_IGNORE_v1';
+const LSCG_FAV_KEY      = 'BC_LSCG_FAVS_v1';
 const LSCG_MAX_VERSIONS = 30;
 let LSCG_DB = {};
-const _osOpenSet = new Set();
+const _osOpenSet  = new Set();
+let _osFavs       = new Set();   // member keys die favorisiert sind
+let _osSearchQuery = '';          // aktueller Suchbegriff
 let _lscgFpMap   = {};
 
 // Ignorierte Gruppen: Prefixe + exakte Namen
@@ -4733,6 +4736,48 @@ function toggleIgnorePanel() {
   if (!open) document.getElementById('osIgnoreInput').value = getIgnoreText();
 }
 
+// ── Favoriten ────────────────────────────────────────────────
+function toggleOsFav(mk) {
+  if (_osFavs.has(mk)) _osFavs.delete(mk); else _osFavs.add(mk);
+  idbSet(LSCG_FAV_KEY, [..._osFavs]);
+  renderOutfitScanTab();
+}
+
+// ── Suche ────────────────────────────────────────────────────
+function osSearch(q) {
+  _osSearchQuery = q.trim().toLowerCase();
+  renderOutfitScanTab();
+}
+
+// ── Outfit anwenden (wie Outfit Import) ──────────────────────
+function osApplyOutfit(mk, vIdx) {
+  if (!_connected) { showStatus('❌ Nicht verbunden', 'error'); return; }
+  const v = LSCG_DB[mk]?.versions?.[vIdx];
+  if (!v?.code) { showStatus('❌ Kein Code', 'error'); return; }
+  try {
+    const execCode = _oiBuildExecCode(v.code);
+    bcSend({ type: 'EXEC', code: execCode });
+    showStatus('▶ Outfit von ' + escHtml(LSCG_DB[mk]?.name ?? mk) + ' wird angewendet…', 'info');
+  } catch(e) { showStatus('❌ ' + e.message, 'error'); }
+}
+
+// ── Als Profil speichern ─────────────────────────────────────
+function osSaveOutfitAsProfile(mk, vIdx) {
+  const v    = LSCG_DB[mk]?.versions?.[vIdx];
+  if (!v?.code) { showStatus('❌ Kein Code', 'error'); return; }
+  const entry = LSCG_DB[mk];
+  const d     = new Date(v.ts);
+  const vNum  = vIdx + 1;
+  const def   = (entry?.name ?? mk) + ' v' + vNum;
+  const name  = prompt('Profilname:', def);
+  if (!name?.trim()) return;
+  const trimmed = name.trim();
+  if (PROFILES[trimmed] && !confirm('Profil "' + trimmed + '" existiert bereits. Überschreiben?')) return;
+  PROFILES[trimmed] = { name: trimmed, date: d.toLocaleDateString('de-DE'), _outfitCode: v.code, items: [] };
+  _saveProfiles();
+  showStatus('✅ Als Profil "' + trimmed + '" gespeichert', 'success');
+}
+
 function toggleOsChar(mk, hdrEl) {
   const el = hdrEl
     ? (typeof hdrEl.closest === 'function' ? hdrEl.closest('.os-char') : hdrEl.parentElement)
@@ -4751,6 +4796,8 @@ function toggleOsChar(mk, hdrEl) {
 
 (async () => {
   await _loadIgnoreSettings();
+  const favSaved = await idbGet(LSCG_FAV_KEY);
+  if (Array.isArray(favSaved)) _osFavs = new Set(favSaved);
   const saved = await idbGet(LSCG_IDB_KEY);
   if (saved && typeof saved === 'object') {
     LSCG_DB = saved;
@@ -4831,52 +4878,75 @@ function renderOutfitScanTab() {
   const body = document.getElementById('outfitScanBody');
   if (!body) return;
 
-  const members = Object.keys(LSCG_DB);
+  // Suche aktualisieren
+  const searchEl = document.getElementById('osSearchInput');
+  if (searchEl && document.activeElement !== searchEl) searchEl.value = _osSearchQuery;
+
+  let members = Object.keys(LSCG_DB);
   if (!members.length) {
     body.innerHTML = '<div class="os-empty">Noch keine Outfits gespeichert.<br>Automatischer Scan beim Raum-Beitritt, oder ▶ Jetzt scannen.</div>';
     return;
   }
 
-  // Sortiert nach Name
-  members.sort((a, b) => (LSCG_DB[a].name ?? '').localeCompare(LSCG_DB[b].name ?? ''));
+  // Suche filtern
+  if (_osSearchQuery) {
+    members = members.filter(function(mk) {
+      const e = LSCG_DB[mk];
+      const haystack = ((e.name ?? '') + ' ' + (e.nickname ?? '') + ' ' + mk).toLowerCase();
+      return haystack.includes(_osSearchQuery);
+    });
+    if (!members.length) {
+      body.innerHTML = '<div class="os-empty">Keine Ergebnisse für „' + escHtml(_osSearchQuery) + '"</div>';
+      return;
+    }
+  }
+
+  // Sortierung: Favs zuerst, dann alphabetisch
+  members.sort(function(a, b) {
+    const fa = _osFavs.has(a), fb = _osFavs.has(b);
+    if (fa !== fb) return fa ? -1 : 1;
+    return (LSCG_DB[a].name ?? '').localeCompare(LSCG_DB[b].name ?? '');
+  });
 
   body.innerHTML = members.map(function(mk) {
-    const entry   = LSCG_DB[mk];
-    const isOpen  = _osOpenSet.has(mk);
-    const vs      = [...entry.versions].reverse(); // neueste zuerst
+    const entry  = LSCG_DB[mk];
+    const isOpen = _osOpenSet.has(mk);
+    const isFav  = _osFavs.has(mk);
     const nameHtml = escHtml(entry.name ?? '?')
       + (entry.nickname ? ' <em class="os-nick">„' + escHtml(entry.nickname) + '"</em>' : '');
 
-    const versHtml = vs.map(function(v, i) {
+    const versHtml = [...entry.versions].reverse().map(function(v, i) {
       const realIdx   = entry.versions.length - 1 - i;
-      const vNum      = vs.length - i;
+      const vNum      = entry.versions.length - i;
       const d         = new Date(v.ts);
       const ts        = d.toLocaleDateString('de-DE', { day:'2-digit', month:'2-digit' })
                       + ' ' + d.toLocaleTimeString('de-DE', { hour:'2-digit', minute:'2-digit' });
       const hasCode   = !!v.code;
       const fp        = v.fingerprint;
       const savedKeys = (fp && _lscgFpMap[fp]) ? _lscgFpMap[fp] : [];
-      const savedBadge = savedKeys.length > 0
+      const savedBadge = savedKeys.length
         ? '<span class="os-saved-badge" title="Gespeichert als: ' + savedKeys.join(', ') + '">✅ ' + savedKeys.map(function(k){ return escHtml(k); }).join(', ') + '</span>'
-        : '';
+        : '<span></span>';
       const rowClass = 'os-version' + (i === 0 ? ' os-latest' : '') + (savedKeys.length ? ' os-already-saved' : '');
 
       return '<div class="' + rowClass + '">'
         + '<span class="os-vnum">v' + vNum + '</span>'
         + '<span class="os-vts">' + ts + '</span>'
-        + (hasCode ? '<span class="os-codelen">' + v.code.length + ' Z</span>' : '<span class="os-warn">⚠ kein Code</span>')
+        + (hasCode ? '<span class="os-codelen">' + v.code.length + ' Z</span>' : '<span class="os-warn">⚠ kein Code</span>')
         + savedBadge
-        + (hasCode ? '<button class="os-btn-save" onclick="saveOutfitToLscg(\'' + mk + '\',' + realIdx + ')" title="In LSCG speichern">💾</button>' : '')
+        + (hasCode ? '<button class="os-btn-apply" onclick="osApplyOutfit(\'' + mk + '\',' + realIdx + ')" title="Outfit anwenden">▶ Anwenden</button>' : '')
+        + (hasCode ? '<button class="os-btn-profile" onclick="osSaveOutfitAsProfile(\'' + mk + '\',' + realIdx + ')" title="Als Profil speichern">💾 Profil</button>' : '')
         + (hasCode ? '<button class="os-btn-copy" onclick="copyOutfitCode(\'' + mk + '\',' + realIdx + ')" title="Code kopieren">📋</button>' : '')
         + '</div>';
     }).join('');
 
-    return '<div class="os-char' + (isOpen ? ' open' : '') + '" data-mk="' + escHtml(mk) + '">'
+    return '<div class="os-char' + (isOpen ? ' open' : '') + (isFav ? ' os-fav' : '') + '" data-mk="' + escHtml(mk) + '">'
       + '<div class="os-char-hdr" onclick="toggleOsChar(\'' + mk + '\',this)">'
       + '<span class="os-chevron">▶</span>'
       + '<span class="os-name">' + nameHtml + '</span>'
       + '<span class="os-num">#' + escHtml(mk) + '</span>'
       + '<span class="os-vcnt">' + entry.versions.length + 'x</span>'
+      + '<button class="os-fav-btn' + (isFav ? ' active' : '') + '" onclick="event.stopPropagation();toggleOsFav(\'' + mk + '\')" title="Favorit">' + (isFav ? '★' : '☆') + '</button>'
       + '</div>'
       + '<div class="os-versions" style="' + (isOpen ? 'display:flex' : 'display:none') + ';flex-direction:column">' + versHtml + '</div>'
       + '</div>';

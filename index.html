@@ -3096,8 +3096,9 @@ document.write('<scr'+'ipt src="outfit-import.js?_='+_cbv+'"><\/scr'+'ipt>');
 <!-- ══ TAB: LSCG OUTFITS ══════════════════════════════════════════════ -->
 <div id="tab-outfit-scan" class="tab-pane">
   <div class="os-header">
-    <button class="btn btn-primary" onclick="scanOutfits()">▶ Jetzt scannen</button>
-    <span class="os-hint">Auto-Scan beim Raum-Beitritt · 💾 in LSCG speichern · neue Version nur bei Outfit-Änderung</span>
+    <button class="btn btn-primary" onclick="scanOutfits()">▶ Scannen</button>
+    <input id="osSearchInput" class="os-search" type="text" placeholder="🔍 Name suchen…"
+           oninput="osSearch(this.value)" value="">
     <button class="os-filter-btn" onclick="toggleIgnorePanel()" title="Gruppen-Filter">⚙ Filter</button>
     <button class="btn btn-red" onclick="clearAllLscgOutfits()" title="Alle löschen">🗑️</button>
   </div>
@@ -3115,8 +3116,12 @@ document.write('<scr'+'ipt src="outfit-import.js?_='+_cbv+'"><\/scr'+'ipt>');
 
 <style>
 /* ── LSCG Outfit Tab ── */
-.os-header { display:flex; align-items:center; gap:10px; padding:10px 14px; border-bottom:1px solid var(--border); flex-wrap:wrap; }
+.os-header { display:flex; align-items:center; gap:8px; padding:10px 14px; border-bottom:1px solid var(--border); flex-wrap:wrap; }
 .os-hint   { font-size:.7rem; color:var(--text3); flex:1; }
+.os-search { flex:1; min-width:140px; max-width:240px; background:var(--bg4); border:1px solid var(--border2);
+             border-radius:6px; color:var(--text1); font-size:.78rem; padding:5px 10px;
+             outline:none; transition:border-color .15s; }
+.os-search:focus { border-color:var(--accent-line); }
 .os-filter-btn { font-size:.72rem; padding:4px 10px; border-radius:6px; cursor:pointer;
                  background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12);
                  color:var(--text2); transition:background .15s; }
@@ -3137,6 +3142,7 @@ document.write('<scr'+'ipt src="outfit-import.js?_='+_cbv+'"><\/scr'+'ipt>');
                   transition:border-color .18s; flex-shrink:0; }
 .os-char:hover  { border-color:rgba(255,255,255,0.14); }
 .os-char.open   { border-color:rgba(255,255,255,0.12); }
+.os-char.os-fav { border-color:oklch(72% 0.13 58 / 0.45); }
 
 .os-char-hdr    { display:flex; align-items:center; gap:8px; padding:9px 12px;
                   background:rgba(255,255,255,0.025); cursor:pointer; user-select:none;
@@ -3165,8 +3171,8 @@ document.write('<scr'+'ipt src="outfit-import.js?_='+_cbv+'"><\/scr'+'ipt>');
                     background:rgba(255,255,255,0.015); }
 .os-char.open .os-versions { display:flex; }
 
-.os-version  { display:grid; grid-template-columns:36px 110px 55px 1fr auto auto; align-items:center; gap:8px;
-               padding:8px 14px; border-bottom:1px solid rgba(255,255,255,0.05); min-height:36px; }
+.os-version  { display:grid; grid-template-columns:36px 110px 50px 1fr auto auto auto; align-items:center; gap:6px;
+               padding:7px 14px; border-bottom:1px solid rgba(255,255,255,0.05); min-height:34px; }
 .os-version:last-child { border-bottom:none; }
 .os-version.os-latest       { background:rgba(99,102,241,0.10); }
 .os-version.os-already-saved{ background:rgba(52,211,153,0.07); }
@@ -3174,15 +3180,24 @@ document.write('<scr'+'ipt src="outfit-import.js?_='+_cbv+'"><\/scr'+'ipt>');
 .os-vts      { color:var(--text2); font-size:.72rem; }
 .os-codelen  { color:var(--text3); font-size:.63rem; font-family:var(--font-mono); }
 .os-warn     { color:#f87171; font-size:.75rem; font-weight:600; grid-column:span 4; }
-.os-saved-badge { font-size:.66rem; color:#34d399; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.os-btn-save { background:rgba(99,102,241,0.18); border:1px solid rgba(99,102,241,0.35);
-               color:var(--accent-text); font-size:.68rem; padding:2px 8px; border-radius:4px;
-               cursor:pointer; white-space:nowrap; transition:background .15s; }
-.os-btn-save:hover { background:rgba(99,102,241,0.35); }
+.os-saved-badge { font-size:.64rem; color:#34d399; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.os-btn-apply   { background:rgba(52,211,153,0.14); border:1px solid rgba(52,211,153,0.3);
+                  color:#34d399; font-size:.68rem; padding:3px 9px; border-radius:4px;
+                  cursor:pointer; white-space:nowrap; transition:background .15s; }
+.os-btn-apply:hover { background:rgba(52,211,153,0.28); }
+.os-btn-profile { background:rgba(99,102,241,0.14); border:1px solid rgba(99,102,241,0.3);
+                  color:var(--accent-text); font-size:.68rem; padding:3px 9px; border-radius:4px;
+                  cursor:pointer; white-space:nowrap; transition:background .15s; }
+.os-btn-profile:hover { background:rgba(99,102,241,0.3); }
 .os-btn-copy { background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.12);
-               color:var(--text2); font-size:.68rem; padding:2px 7px; border-radius:4px;
+               color:var(--text2); font-size:.68rem; padding:3px 7px; border-radius:4px;
                cursor:pointer; transition:background .15s; }
 .os-btn-copy:hover { background:rgba(255,255,255,0.12); color:var(--text1); }
+/* Fav button */
+.os-fav-btn  { background:none; border:none; cursor:pointer; font-size:.9rem; padding:0 2px;
+               color:var(--text3); transition:color .15s; margin-left:4px; }
+.os-fav-btn:hover { color:var(--accent); }
+.os-fav-btn.active { color:var(--accent); }
 </style>
 
 <!-- ══════════════════════════════════════════ -->

@@ -730,6 +730,25 @@ window.CurseScanner = (() => {
     } catch(_) { return undefined; }
   }
 
+  // Thumbnail aus C.Canvas extrahieren (80×160px JPEG)
+  function _BCU_captureThumb(C) {
+    try {
+      const src = C.Canvas;
+      if (!src || !src.width) return null;
+      const W = 80, H = 160;
+      const oc  = document.createElement('canvas');
+      oc.width  = W; oc.height = H;
+      const ctx = oc.getContext('2d');
+      // BC-Canvas ist typisch 500px breit, Charakter mittig — crop auf Charakter-Bereich
+      const sw = src.width, sh = src.height;
+      const aspect = sh / sw;
+      // Charakter nimmt ca. 60% der Canvas-Breite mittig ein
+      const cx = sw * 0.2, cw = sw * 0.6, cy = 0, ch = sh;
+      ctx.drawImage(src, cx, cy, cw, ch, 0, 0, W, H);
+      return oc.toDataURL('image/jpeg', 0.55);
+    } catch(_e) { return null; } // SecurityError bei tainted canvas → kein Thumbnail
+  }
+
   window._BCU_serializeChar = function(C) {
     let code = null, fingerprint = '';
     try {
@@ -755,7 +774,8 @@ window.CurseScanner = (() => {
         .map(i => i.Group + '\x1f' + i.Name + '\x1f' + JSON.stringify(i.Color ?? ''))
         .join('\x1e');
     } catch(_e) { console.warn('[BCU] serializeChar:', _e); }
-    return { memberNumber: C.MemberNumber, name: C.Name, nickname: C.Nickname ?? null, code, fingerprint };
+    const thumb = _BCU_captureThumb(C);
+    return { memberNumber: C.MemberNumber, name: C.Name, nickname: C.Nickname ?? null, code, fingerprint, thumb };
   };
 
   // ── PostMessage Listener ───────────────────────────────
