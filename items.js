@@ -4993,7 +4993,34 @@ window.debugOsScreenshot = function(mk, vIdx) {
   const v = LSCG_DB[mk]?.versions?.[vIdx];
   if (!v?.code) { console.error('[BCU] Kein Code für', mk, 'v', vIdx); return; }
   const outfitCode = v.code;
-  console.log('[BCU] Debug-Screenshot für #' + mk + ' v' + (vIdx+1) + ' (' + (v.fingerprint?.substring(0,8) ?? '?') + '...)');
+  const reqId = 'dbg_' + Date.now();
+  console.log('[BCU] Debug-Screenshot für #' + mk + ' v' + (vIdx+1));
+
+  // Einmaliger Handler: zeigt das Bild als Overlay im Popup
+  const handler = function(ev) {
+    if (!ev.data || ev.data.app !== 'BCKonfigurator' || ev.data.type !== 'CANVAS_DEBUG_DATA' || ev.data.reqId !== reqId) return;
+    window.removeEventListener('message', handler);
+    if (ev.data.err) { console.error('[BCU] Debug-Fehler:', ev.data.err); return; }
+
+    // Overlay im Popup anzeigen
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.92);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:16px';
+    const img = document.createElement('img');
+    img.src = ev.data.data;
+    img.style.cssText = 'max-height:calc(100vh - 80px);max-width:90vw;object-fit:contain;border-radius:8px;background:#111';
+    const info = document.createElement('div');
+    info.style.cssText = 'color:#aaa;font-size:.75rem;font-family:monospace';
+    info.textContent = ev.data.width + '×' + ev.data.height + 'px  |  #' + mk + ' v' + (vIdx+1);
+    const btn = document.createElement('button');
+    btn.textContent = '✕ Schließen';
+    btn.style.cssText = 'padding:6px 20px;border-radius:8px;border:1px solid rgba(255,255,255,0.2);background:rgba(255,255,255,0.08);color:#fff;cursor:pointer;font-size:.8rem';
+    btn.onclick = function() { overlay.remove(); };
+    overlay.onclick = function(e) { if (e.target === overlay) overlay.remove(); };
+    overlay.append(img, info, btn);
+    document.body.appendChild(overlay);
+    console.log('[BCU] Bild: ' + ev.data.width + '×' + ev.data.height + 'px');
+  };
+  window.addEventListener('message', handler);
 
   const code = '(function(){'
     + 'var origApp=null;'
@@ -5009,30 +5036,32 @@ window.debugOsScreenshot = function(mk, vIdx) {
     + '  });'
     + '  CharacterRefresh(Player,false,false);'
     + '  CharacterLoadCanvas(Player);'
-    + '}catch(e){console.error("[BCU] Apply-Fehler:",e.message);return;}'
+    + '}catch(e){'
+    + '  window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_DEBUG_DATA",reqId:' + JSON.stringify(reqId) + ',err:e.message},"*");'
+    + '  return;'
+    + '}'
     + 'setTimeout(function(){'
     + '  try{CharacterLoadCanvas(Player);}catch(_e){}'
     + '  setTimeout(function(){'
     + '    try{'
     + '      var src=Player.Canvas;'
-    + '      if(!src||!src.width){console.error("[BCU] Canvas leer");return;}'
-    // Vollbild ohne Crop öffnen → zeigt was wirklich gerendert wird
+    + '      if(!src||!src.width)throw new Error("Canvas leer");'
+    // Vollbild ohne Crop → sieht man was wirklich gerendert wird
     + '      var oc=document.createElement("canvas");oc.width=src.width;oc.height=src.height;'
     + '      oc.getContext("2d").drawImage(src,0,0);'
-    + '      var w=window.open();'
-    + '      w.document.write("<img src=\\""+oc.toDataURL("image/png")+"\\" style=\\"background:#000;max-width:100%\\">");'
-    + '      console.log("[BCU] Screenshot geöffnet: "+src.width+"x"+src.height+"px");'
-    + '    }catch(e){console.error("[BCU] Screenshot-Fehler:",e.message);}'
-    + '    finally{'
+    + '      window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_DEBUG_DATA",'
+    + '        reqId:' + JSON.stringify(reqId) + ',data:oc.toDataURL("image/png"),width:src.width,height:src.height},"*");'
+    + '    }catch(e){'
+    + '      window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_DEBUG_DATA",reqId:' + JSON.stringify(reqId) + ',err:e.message},"*");'
+    + '    }finally{'
     + '      if(origApp){Player.Appearance=origApp;CharacterRefresh(Player,false,false);}'
-    + '      console.log("[BCU] Outfit wiederhergestellt");'
     + '    }'
     + '  },120);'
     + '},150);'
     + '})();';
 
   bcSend({ type: 'EXEC', code }, true);
-  console.log('[BCU] EXEC gesendet – Bild öffnet sich im BC-Fenster als neuer Tab');
+  console.log('[BCU] Warte auf Bild…');
 };
 
 // ── Gestaffeltes Aufnehmen aller fehlenden Bilder ─────
