@@ -5210,11 +5210,16 @@ function _handleOutfitScanData(data) {
   showStatus(msg, 'success');
 }
 
+// Item-Anzahl aus LZString-Code berechnen
+function _osItemCount(code) {
+  if (!code) return 0;
+  try { return JSON.parse(LZString.decompressFromBase64(code)).length; } catch(e) { return 0; }
+}
+
 function renderOutfitScanTab() {
   const body = document.getElementById('outfitScanBody');
   if (!body) return;
 
-  // Suche aktualisieren
   const searchEl = document.getElementById('osSearchInput');
   if (searchEl && document.activeElement !== searchEl) searchEl.value = _osSearchQuery;
 
@@ -5224,20 +5229,18 @@ function renderOutfitScanTab() {
     return;
   }
 
-  // Suche filtern
   if (_osSearchQuery) {
     members = members.filter(function(mk) {
       const e = LSCG_DB[mk];
-      const haystack = ((e.name ?? '') + ' ' + (e.nickname ?? '') + ' ' + mk).toLowerCase();
-      return haystack.includes(_osSearchQuery);
+      const h = ((e.name ?? '') + ' ' + (e.nickname ?? '') + ' ' + mk).toLowerCase();
+      return h.includes(_osSearchQuery);
     });
     if (!members.length) {
-      body.innerHTML = '<div class="os-empty">Keine Ergebnisse für „' + escHtml(_osSearchQuery) + '"</div>';
+      body.innerHTML = '<div class="os-empty">Keine Ergebnisse f\xfcr „' + escHtml(_osSearchQuery) + '“</div>';
       return;
     }
   }
 
-  // Sortierung: Favs zuerst, dann alphabetisch
   members.sort(function(a, b) {
     const fa = _osFavs.has(a), fb = _osFavs.has(b);
     if (fa !== fb) return fa ? -1 : 1;
@@ -5245,55 +5248,113 @@ function renderOutfitScanTab() {
   });
 
   body.innerHTML = members.map(function(mk) {
-    const entry  = LSCG_DB[mk];
-    const isOpen = _osOpenSet.has(mk);
-    const isFav  = _osFavs.has(mk);
-    const nameHtml = escHtml(entry.name ?? '?')
-      + (entry.nickname ? ' <em class="os-nick">„' + escHtml(entry.nickname) + '"</em>' : '');
+    const entry = LSCG_DB[mk];
+    const isFav = _osFavs.has(mk);
+    const thumb = _getLscgScreenshot(mk);
+    const letter = escHtml(((entry.name ?? mk)[0] ?? '?').toUpperCase());
 
-    const versHtml = [...entry.versions].reverse().map(function(v, i) {
-      const realIdx   = entry.versions.length - 1 - i;
-      const vNum      = entry.versions.length - i;
-      const d         = new Date(v.ts);
-      const ts        = d.toLocaleDateString('de-DE', { day:'2-digit', month:'2-digit' })
-                      + ' ' + d.toLocaleTimeString('de-DE', { hour:'2-digit', minute:'2-digit' });
-      const hasCode   = !!v.code;
-      const fp        = v.fingerprint;
-      const savedKeys = (fp && _lscgFpMap[fp]) ? _lscgFpMap[fp] : [];
-      const savedBadge = savedKeys.length
-        ? '<span class="os-saved-badge" title="Gespeichert als: ' + savedKeys.join(', ') + '">✅ ' + savedKeys.map(function(k){ return escHtml(k); }).join(', ') + '</span>'
-        : '<span></span>';
-      const rowClass = 'os-version' + (i === 0 ? ' os-latest' : '') + (savedKeys.length ? ' os-already-saved' : '');
+    const cards = [...entry.versions].reverse().map(function(v, i) {
+      const realIdx = entry.versions.length - 1 - i;
+      const vNum    = entry.versions.length - i;
+      const d       = new Date(v.ts);
+      const ts      = d.toLocaleDateString('de-DE', { day:'2-digit', month:'2-digit', year:'2-digit' });
+      const itemCnt = _osItemCount(v.code);
+      const fp      = v.fingerprint;
+      const saved   = (fp && _lscgFpMap[fp]) ? _lscgFpMap[fp] : [];
+      const hasCode = !!v.code;
+      const tagHtml = saved.length
+        ? '<span class="os-card-tag saved" title="' + saved.map(function(k){return escHtml(k);}).join(', ') + '">✅ PROFIL</span>'
+        : '<span class="os-card-tag">v' + vNum + '</span>';
+      const thumbContent = thumb
+        ? '<img src="' + escHtml(thumb) + '" alt="">'
+        : '<div class="os-card-placeholder">' + letter + '</div>';
+      const delBtn = thumb
+        ? '<button class="os-card-del" onclick="event.stopPropagation();deleteOsScreenshot(\'' + mk + '\')" title="Bild l\xf6schen">🗑</button>'
+        : '';
+      const hintIcon = thumb
+        ? '<span class="os-card-hint">🔍</span>'
+        : '<span class="os-card-hint">📸</span>';
 
-      return '<div class="' + rowClass + '">'
-        + '<span class="os-vnum">v' + vNum + '</span>'
-        + '<span class="os-vts">' + ts + '</span>'
-        + (hasCode ? '<span class="os-codelen">' + v.code.length + ' Z</span>' : '<span class="os-warn">⚠ kein Code</span>')
-        + savedBadge
-        + (hasCode ? '<button class="os-btn-apply" onclick="osApplyOutfit(\'' + mk + '\',' + realIdx + ')" title="Outfit anwenden">▶ Anwenden</button>' : '')
-        + (hasCode ? '<button class="os-btn-profile" onclick="osSaveOutfitAsProfile(\'' + mk + '\',' + realIdx + ')" title="Als Profil speichern">💾 Profil</button>' : '')
-        + (hasCode ? '<button class="os-btn-copy" onclick="copyOutfitCode(\'' + mk + '\',' + realIdx + ')" title="Code kopieren">📋</button>' : '')
+      return '<div class="os-card">'
+        + '<div class="os-card-thumb" onclick="osThumbClick(\'' + mk + '\',' + realIdx + ')">'
+        + thumbContent + tagHtml
+        + '<button class="os-card-fav' + (isFav ? ' on' : '') + '" onclick="event.stopPropagation();toggleOsFav(\'' + mk + '\')">' + (isFav ? '⭐' : '☆') + '</button>'
+        + delBtn + hintIcon
+        + '</div>'
+        + '<div class="os-card-name">v' + vNum + (i === 0 ? ' <span style="font-size:.6rem;color:var(--green)">neu</span>' : '') + '</div>'
+        + '<div class="os-card-meta">' + (hasCode ? itemCnt + ' Items' : '⚠ kein Code') + ' \xb7 ' + ts + '</div>'
+        + '<div class="os-card-actions">'
+        + (hasCode ? '<button class="os-card-btn primary" onclick="osApplyOutfit(\'' + mk + '\',' + realIdx + ')">▶ Run</button>' : '')
+        + '<button class="os-card-btn' + (isFav ? ' fav-on' : '') + '" onclick="toggleOsFav(\'' + mk + '\')">⭐</button>'
+        + (hasCode ? '<button class="os-card-btn" onclick="osSaveOutfitAsProfile(\'' + mk + '\',' + realIdx + ')" title="Als Profil speichern">💾</button>' : '')
+        + '</div>'
         + '</div>';
     }).join('');
 
-    const thumb = _getLscgScreenshot(mk);
-    const thumbHtml = thumb
-      ? '<div class="os-thumb-wrap" onclick="event.stopPropagation();openOsCanvasTab(\'' + mk + '\')" title="Vorschau öffnen">'
-          + '<img src="' + thumb + '" alt=""></div>'
-      : '<div class="os-thumb-wrap empty" onclick="event.stopPropagation();captureOsScreenshot(\'' + mk + '\')" title="Bild aufnehmen">📷</div>';
+    const nameHtml = escHtml(entry.name ?? mk)
+      + (entry.nickname ? ' <span class="os-member-nick">„' + escHtml(entry.nickname) + '“</span>' : '');
 
-    return '<div class="os-char' + (isOpen ? ' open' : '') + (isFav ? ' os-fav' : '') + '" data-mk="' + escHtml(mk) + '">'
-      + '<div class="os-char-hdr" onclick="toggleOsChar(\'' + mk + '\',this)">'
-      + thumbHtml
-      + '<span class="os-chevron">▶</span>'
-      + '<span class="os-name">' + nameHtml + '</span>'
-      + '<span class="os-num">#' + escHtml(mk) + '</span>'
-      + '<span class="os-vcnt">' + entry.versions.length + 'x</span>'
-      + '<button class="os-fav-btn' + (isFav ? ' active' : '') + '" onclick="event.stopPropagation();toggleOsFav(\'' + mk + '\')" title="Favorit">' + (isFav ? '★' : '☆') + '</button>'
+    return '<div class="os-member-block open' + (isFav ? ' os-fav' : '') + '" id="osm_' + escHtml(mk) + '">'
+      + '<div class="os-member-hdr" onclick="toggleOsMember(\'' + mk + '\')">'
+      + '<span class="os-member-name">' + nameHtml + '</span>'
+      + '<span class="os-member-num">#' + escHtml(mk) + '</span>'
+      + '<span class="os-member-vcnt">' + entry.versions.length + 'x</span>'
+      + '<button class="os-member-fav' + (isFav ? ' on' : '') + '" onclick="event.stopPropagation();toggleOsFav(\'' + mk + '\')">' + (isFav ? '⭐' : '☆') + '</button>'
+      + '<span class="os-member-chevron">▶</span>'
       + '</div>'
-      + '<div class="os-versions" style="' + (isOpen ? 'display:flex' : 'display:none') + ';flex-direction:column">' + versHtml + '</div>'
+      + '<div class="os-member-rows"><div class="os-strip">' + cards + '</div></div>'
       + '</div>';
   }).join('');
+}
+
+function toggleOsMember(mk) {
+  const el = document.getElementById('osm_' + mk);
+  if (el) el.classList.toggle('open');
+}
+
+// Thumbnail-Klick: Lightbox wenn Bild vorhanden, sonst Capture starten
+function osThumbClick(mk) {
+  if (_getLscgScreenshot(mk)) {
+    openOsLightbox(mk);
+  } else {
+    captureOsScreenshot(mk);
+    showStatus('📸 Bild wird aufgenommen…', 'info');
+  }
+}
+
+// Lightbox (Gro\xdfansicht im Tool)
+let _osLightboxMk = null;
+
+function openOsLightbox(mk) {
+  const img = _getLscgScreenshot(mk);
+  if (!img) return;
+  const entry = LSCG_DB[mk];
+  _osLightboxMk = mk;
+  document.getElementById('osLbImg').src   = img;
+  document.getElementById('osLbName').textContent = entry ? (entry.name ?? mk) : mk;
+  document.getElementById('osLbSub').textContent  = '#' + mk + (entry?.nickname ? ' \xb7 „' + entry.nickname + '“' : '');
+  document.getElementById('osLightbox').classList.add('open');
+}
+
+function closeOsLightbox() {
+  document.getElementById('osLightbox').classList.remove('open');
+  document.getElementById('osLbImg').src = '';
+  _osLightboxMk = null;
+}
+
+function deleteOsScreenshotFromLb() {
+  if (!_osLightboxMk) return;
+  deleteOsScreenshot(_osLightboxMk);
+  closeOsLightbox();
+}
+
+// Screenshot l\xf6schen
+function deleteOsScreenshot(mk) {
+  if (!LSCG_SCREENSHOTS[mk]) return;
+  delete LSCG_SCREENSHOTS[mk];
+  _saveLscgScreenshots();
+  if (_activeTab === 'outfit-scan') renderOutfitScanTab();
+  showStatus('🗑️ Bild f\xfcr #' + mk + ' gel\xf6scht', 'info');
 }
 
 function saveOutfitToLscg(mk, vIdx) {
