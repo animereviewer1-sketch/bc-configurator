@@ -2551,13 +2551,12 @@ function openCanvasPreview() {
 function _handleCanvasPreviewData(data) {
   // ── LSCG-Capture (reqId beginnt mit 'os_') ──────────
   if (_pendingOsCapture[data.reqId] !== undefined) {
-    const mk = _pendingOsCapture[data.reqId];
+    const { mk, fp } = _pendingOsCapture[data.reqId];
     delete _pendingOsCapture[data.reqId];
 
     if (data.err) {
       showStatus('❌ #' + mk + ': ' + data.err, 'error');
     } else if (data.data) {
-      // Bild auf max 520px Breite verkleinern
       const imgEl = new Image();
       imgEl.onload = function() {
         const MAX_W = 520, MAX_H = 1040;
@@ -2567,20 +2566,21 @@ function _handleCanvasPreviewData(data) {
         const oc = document.createElement('canvas');
         oc.width = w; oc.height = h;
         oc.getContext('2d').drawImage(imgEl, 0, 0, w, h);
-        LSCG_SCREENSHOTS[mk] = oc.toDataURL('image/jpeg', 0.88);
+        const dataUrl = oc.toDataURL('image/jpeg', 0.88);
+        // Versionsspezifisch speichern: mk|fp (falls fp bekannt)
+        const storeKey = fp ? (mk + '|' + fp) : mk;
+        LSCG_SCREENSHOTS[storeKey] = dataUrl;
         _saveLscgScreenshots();
-        _syncLscgScreenshotToProfiles(mk);
+        _syncLscgScreenshotToProfiles(mk, fp);
         if (_activeTab === 'outfit-scan') renderOutfitScanTab();
-        showStatus('✅ Bild für #' + mk + ' gespeichert', 'success');
-        // Falls Tab-Vorschau angefordert war
+        showStatus('✅ Bild gespeichert', 'success');
         if (_pendingOsTab === mk) {
           _pendingOsTab = null;
-          _openOsTab(mk, LSCG_SCREENSHOTS[mk], LSCG_DB[mk]?.name ?? mk, LSCG_DB[mk]);
+          openOsLightbox(mk);
         }
       };
       imgEl.src = data.data;
     }
-    // nächste Capture aus Queue
     _runNextOsCapture();
     return;
   }
@@ -4823,17 +4823,38 @@ async function _saveLscgScreenshots() {
 
 // Gibt das beste verfügbare Bild für mk zurück:
 // 1. Direkt gespeichert  2. Vom passenden Profil (gleicher Fingerprint)
-function _getLscgScreenshot(mk) {
+// Screenshot für eine bestimmte Version holen (Schlüssel: mk|fp)
+// Fallback: älteres mk-Only Bild oder Profil-Screenshot mit gleichem Fingerprint
+function _getLscgScreenshot(mk, fp) {
+  const vKey = fp ? (mk + '|' + fp) : null;
+  // 1. Versions-spezifisch
+  if (vKey && LSCG_SCREENSHOTS[vKey]) return LSCG_SCREENSHOTS[vKey];
+  // 2. Legacy: per-mk (altes Format)
   if (LSCG_SCREENSHOTS[mk]) return LSCG_SCREENSHOTS[mk];
-  // Fallback: Profil mit gleichem Fingerprint hat Screenshot?
+  // 3. Fallback: Profil mit gleichem Fingerprint
+  if (fp) {
+    const keys = _lscgFpMap[fp] ?? [];
+    for (const k of keys) {
+      if (PROFILE_SCREENSHOTS[k]) return PROFILE_SCREENSHOTS[k];
+    }
+  }
+  return null;
+}
+
+// Gibt das beste verfügbare Bild für irgendeinen Member-Fingerprint zurück (für Header/Lightbox)
+function _getAnyLscgScreenshot(mk) {
+  if (LSCG_SCREENSHOTS[mk]) return LSCG_SCREENSHOTS[mk];
   const entry = LSCG_DB[mk];
   if (!entry?.versions) return null;
   for (const v of entry.versions) {
     const fp = v.fingerprint;
-    if (!fp) continue;
-    const keys = _lscgFpMap[fp] ?? [];
-    for (const k of keys) {
-      if (PROFILE_SCREENSHOTS[k]) return PROFILE_SCREENSHOTS[k];
+    const vKey = fp ? (mk + '|' + fp) : null;
+    if (vKey && LSCG_SCREENSHOTS[vKey]) return LSCG_SCREENSHOTS[vKey];
+    if (fp) {
+      const keys = _lscgFpMap[fp] ?? [];
+      for (const k of keys) {
+        if (PROFILE_SCREENSHOTS[k]) return PROFILE_SCREENSHOTS[k];
+      }
     }
   }
   return null;
@@ -4865,12 +4886,15 @@ const _pendingOsCapture = {};  // reqId → mk
 let   _osCaptureQueue   = [];
 let   _osCaptureRunning = false;
 
-function captureOsScreenshot(mk) {
+function captureOsScreenshot(mk, vIdx) {
   if (!_connected) { showStatus('❌ Nicht verbunden mit BC', 'error'); return; }
   const memberNum = parseInt(mk, 10);
   if (isNaN(memberNum)) return;
+  const fp = (vIdx !== undefined && vIdx !== null)
+    ? (LSCG_DB[mk]?.versions?.[vIdx]?.fingerprint ?? null)
+    : null;
   const reqId = 'os_' + Date.now() + '_' + mk;
-  _pendingOsCapture[reqId] = mk;
+  _pendingOsCapture[reqId] = { mk, fp };
 
   const code = '(function(){'
     + 'var T=ChatRoomCharacter.find(function(c){return c.MemberNumber===' + memberNum + ';});'
@@ -4901,18 +4925,30 @@ function captureOsScreenshot(mk) {
 // ── Gestaffeltes Aufnehmen aller fehlenden Bilder ─────
 function captureAllMissingOsScreenshots() {
   if (!_connected) { showStatus('❌ Nicht verbunden mit BC', 'error'); return; }
-  const missing = Object.keys(LSCG_DB).filter(function(mk) { return !_getLscgScreenshot(mk); });
-  if (!missing.length) { showStatus('✅ Alle Einträge haben bereits ein Bild', 'success'); return; }
-  _osCaptureQueue = missing.slice();
-  showStatus('📸 ' + missing.length + ' Bilder werden aufgenommen…', 'info');
+  // Build a queue of {mk, vIdx} pairs that have no screenshot yet
+  const queue = [];
+  Object.keys(LSCG_DB).forEach(function(mk) {
+    const versions = LSCG_DB[mk]?.versions;
+    if (!Array.isArray(versions)) return;
+    versions.forEach(function(v, vIdx) {
+      const fp  = v?.fingerprint ?? null;
+      const key = fp ? (mk + '|' + fp) : mk;
+      if (!LSCG_SCREENSHOTS[key]) {
+        queue.push({ mk, vIdx });
+      }
+    });
+  });
+  if (!queue.length) { showStatus('✅ Alle Versionen haben bereits ein Bild', 'success'); return; }
+  _osCaptureQueue = queue;
+  showStatus('📸 ' + queue.length + ' Bilder werden aufgenommen…', 'info');
   if (!_osCaptureRunning) _runNextOsCapture();
 }
 
 function _runNextOsCapture() {
   if (!_osCaptureQueue.length) { _osCaptureRunning = false; return; }
   _osCaptureRunning = true;
-  const mk = _osCaptureQueue.shift();
-  setTimeout(function() { captureOsScreenshot(mk); }, 600);
+  const item = _osCaptureQueue.shift();
+  setTimeout(function() { captureOsScreenshot(item.mk, item.vIdx); }, 600);
 }
 
 // ── Styled Tab für LSCG-Eintrag öffnen ───────────────
@@ -5204,17 +5240,24 @@ function _handleOutfitScanData(data) {
   _saveLscgDB();
   if (_activeTab === 'outfit-scan') renderOutfitScanTab();
 
-  // Auto-Capture: alle neuen/geänderten Member ohne Screenshot in Queue
+  // Auto-Capture: alle neuen Versionen ohne Screenshot in Queue
   if (_connected) {
-    const toCapture = results
-      .map(function(r) { return String(r.memberNumber); })
-      .filter(function(mk) { return !_getLscgScreenshot(mk); });
+    const existingKeys = new Set(_osCaptureQueue.map(function(i) { return i.mk + '|' + i.vIdx; }));
+    const toCapture = [];
+    results.forEach(function(r) {
+      const mk = String(r.memberNumber);
+      const versions = LSCG_DB[mk]?.versions;
+      if (!Array.isArray(versions)) return;
+      versions.forEach(function(v, vIdx) {
+        const fp  = v?.fingerprint ?? null;
+        const key = fp ? (mk + '|' + fp) : mk;
+        if (!LSCG_SCREENSHOTS[key] && !existingKeys.has(mk + '|' + vIdx)) {
+          toCapture.push({ mk, vIdx });
+        }
+      });
+    });
     if (toCapture.length) {
-      // Neue MKs vorne in Queue (ohne Duplikate)
-      const existing = new Set(_osCaptureQueue);
-      for (let i = toCapture.length - 1; i >= 0; i--) {
-        if (!existing.has(toCapture[i])) _osCaptureQueue.unshift(toCapture[i]);
-      }
+      for (let i = toCapture.length - 1; i >= 0; i--) _osCaptureQueue.unshift(toCapture[i]);
       if (!_osCaptureRunning) _runNextOsCapture();
     }
   }
@@ -5269,39 +5312,43 @@ function renderOutfitScanTab() {
   try { body.innerHTML = members.map(function(mk) {
     const entry = LSCG_DB[mk];
     const isFav = _osFavs.has(mk);
-    const thumb = _getLscgScreenshot(mk);
     const letter = escHtml(((entry.name ?? mk)[0] ?? '?').toUpperCase());
 
     const cards = [...entry.versions].reverse().map(function(v, i) {
-      const realIdx = entry.versions.length - 1 - i;
-      const vNum    = entry.versions.length - i;
-      const d       = new Date(v.ts);
-      const ts      = d.toLocaleDateString('de-DE', { day:'2-digit', month:'2-digit', year:'2-digit' });
-      const itemCnt = _osItemCount(v.code);
-      const fp      = v.fingerprint;
-      const saved   = (fp && _lscgFpMap[fp]) ? _lscgFpMap[fp] : [];
-      const hasCode = !!v.code;
-      const tagHtml = saved.length
+      const realIdx  = entry.versions.length - 1 - i;
+      const vNum     = entry.versions.length - i;
+      const d        = new Date(v.ts);
+      const ts       = d.toLocaleDateString('de-DE', { day:'2-digit', month:'2-digit', year:'2-digit' });
+      const itemCnt  = _osItemCount(v.code);
+      const fp       = v.fingerprint;
+      const saved    = (fp && _lscgFpMap[fp]) ? _lscgFpMap[fp] : [];
+      const hasCode  = !!v.code;
+      const vThumb   = _getLscgScreenshot(mk, fp);
+      const vKey     = fp ? (mk + '|' + fp) : mk;
+      const tagHtml  = saved.length
         ? '<span class="os-card-tag saved" title="' + saved.map(function(k){return escHtml(k);}).join(', ') + '">✅ PROFIL</span>'
         : '<span class="os-card-tag">v' + vNum + '</span>';
-      const thumbContent = thumb
-        ? '<img src="' + escHtml(thumb) + '" alt="">'
+      const thumbContent = vThumb
+        ? '<img src="' + escHtml(vThumb) + '" alt="">'
         : '<div class="os-card-placeholder">' + letter + '</div>';
-      const delBtn = thumb
-        ? '<button class="os-card-del" onclick="event.stopPropagation();deleteOsScreenshot(\'' + mk + '\')" title="Bild l\xf6schen">🗑</button>'
+      const delBtn = vThumb
+        ? '<button class="os-card-del" onclick="event.stopPropagation();deleteOsScreenshotKey(\'' + vKey + '\')" title="Bild löschen">🗑</button>'
         : '';
-      const hintIcon = thumb
+      const hintIcon = vThumb
         ? '<span class="os-card-hint">🔍</span>'
         : '<span class="os-card-hint">📸</span>';
+      const thumbClick = vThumb
+        ? 'openOsLightboxVersion(\'' + mk + '\',' + realIdx + ')'
+        : 'captureOsScreenshot(\'' + mk + '\',' + realIdx + ');showStatus(\'\uD83D\uDCF8 Bild wird aufgenommen…\',\'info\')';
 
       return '<div class="os-card">'
-        + '<div class="os-card-thumb" onclick="osThumbClick(\'' + mk + '\',' + realIdx + ')">'
+        + '<div class="os-card-thumb" onclick="' + thumbClick + '">'
         + thumbContent + tagHtml
         + '<button class="os-card-fav' + (isFav ? ' on' : '') + '" onclick="event.stopPropagation();toggleOsFav(\'' + mk + '\')">' + (isFav ? '⭐' : '☆') + '</button>'
         + delBtn + hintIcon
         + '</div>'
         + '<div class="os-card-name">v' + vNum + (i === 0 ? ' <span style="font-size:.6rem;color:var(--green)">neu</span>' : '') + '</div>'
-        + '<div class="os-card-meta">' + (hasCode ? itemCnt + ' Items' : '⚠ kein Code') + ' \xb7 ' + ts + '</div>'
+        + '<div class="os-card-meta">' + (hasCode ? itemCnt + ' Items' : '⚠ kein Code') + ' · ' + ts + '</div>'
         + '<div class="os-card-actions">'
         + (hasCode ? '<button class="os-card-btn primary" onclick="osApplyOutfit(\'' + mk + '\',' + realIdx + ')">▶ Run</button>' : '')
         + '<button class="os-card-btn' + (isFav ? ' fav-on' : '') + '" onclick="toggleOsFav(\'' + mk + '\')">⭐</button>'
@@ -5346,38 +5393,72 @@ function osThumbClick(mk) {
 }
 
 // Lightbox (Gro\xdfansicht im Tool)
-let _osLightboxMk = null;
+let _osLightboxMk  = null;
+let _osLightboxKey = null;  // version-specific key (mk|fp) or null
 
 function openOsLightbox(mk) {
   const img = _getLscgScreenshot(mk);
   if (!img) return;
   const entry = LSCG_DB[mk];
-  _osLightboxMk = mk;
+  _osLightboxMk  = mk;
+  _osLightboxKey = null;
   document.getElementById('osLbImg').src   = img;
   document.getElementById('osLbName').textContent = entry ? (entry.name ?? mk) : mk;
-  document.getElementById('osLbSub').textContent  = '#' + mk + (entry?.nickname ? ' \xb7 „' + entry.nickname + '“' : '');
+  document.getElementById('osLbSub').textContent  = '#' + mk + (entry?.nickname ? ' · „' + entry.nickname + '”' : '');
+  document.getElementById('osLightbox').classList.add('open');
+}
+
+function openOsLightboxVersion(mk, vIdx) {
+  const v   = LSCG_DB[mk]?.versions?.[vIdx];
+  const fp  = v?.fingerprint ?? null;
+  const key = fp ? (mk + '|' + fp) : mk;
+  const img = LSCG_SCREENSHOTS[key] || _getLscgScreenshot(mk, fp);
+  if (!img) return;
+  const entry = LSCG_DB[mk];
+  const d   = v?.ts ? new Date(v.ts) : null;
+  const dateStr = d ? d.toLocaleDateString('de-DE') : '';
+  _osLightboxMk  = mk;
+  _osLightboxKey = key;
+  document.getElementById('osLbImg').src   = img;
+  document.getElementById('osLbName').textContent = entry ? (entry.name ?? mk) : mk;
+  document.getElementById('osLbSub').textContent  = '#' + mk
+    + (entry?.nickname ? ' · „' + entry.nickname + '”' : '')
+    + (dateStr ? ' · v' + (vIdx + 1) + ' · ' + dateStr : '');
   document.getElementById('osLightbox').classList.add('open');
 }
 
 function closeOsLightbox() {
   document.getElementById('osLightbox').classList.remove('open');
   document.getElementById('osLbImg').src = '';
-  _osLightboxMk = null;
+  _osLightboxMk  = null;
+  _osLightboxKey = null;
 }
 
 function deleteOsScreenshotFromLb() {
-  if (!_osLightboxMk) return;
-  deleteOsScreenshot(_osLightboxMk);
+  if (_osLightboxKey) {
+    deleteOsScreenshotKey(_osLightboxKey);
+  } else if (_osLightboxMk) {
+    deleteOsScreenshot(_osLightboxMk);
+  }
   closeOsLightbox();
 }
 
-// Screenshot l\xf6schen
+// Screenshot löschen (legacy per-member)
 function deleteOsScreenshot(mk) {
   if (!LSCG_SCREENSHOTS[mk]) return;
   delete LSCG_SCREENSHOTS[mk];
   _saveLscgScreenshots();
   if (_activeTab === 'outfit-scan') renderOutfitScanTab();
-  showStatus('🗑️ Bild f\xfcr #' + mk + ' gel\xf6scht', 'info');
+  showStatus('🗑️ Bild für #' + mk + ' gelöscht', 'info');
+}
+
+// Screenshot löschen (version-specific key)
+function deleteOsScreenshotKey(key) {
+  if (!LSCG_SCREENSHOTS[key]) return;
+  delete LSCG_SCREENSHOTS[key];
+  _saveLscgScreenshots();
+  if (_activeTab === 'outfit-scan') renderOutfitScanTab();
+  showStatus('🗑️ Bild gelöscht', 'info');
 }
 
 function saveOutfitToLscg(mk, vIdx) {
