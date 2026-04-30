@@ -4923,9 +4923,17 @@ function captureOsScreenshot(mk, vIdx) {
       + '}'
     : 'try{CharacterRefresh(Player,false,false);}catch(_e){}';
 
+  // Hilfsfunktion: Server über Appearance informieren (identisch zu Run-Button)
+  const syncToServer = ''
+    + 'if(typeof ServerPlayerAppearanceSync==="function")ServerPlayerAppearanceSync();'
+    + 'else if(typeof ServerSend==="function")ServerSend("AccountUpdate",{Appearance:Player.Appearance});';
+
   const code = '(function(){'
     + 'var origApp=Player.Appearance.slice();'
     + applyPart
+    // Sofort nach Apply: Server benachrichtigen (wie Run-Button), damit Server-Sync
+    // nicht innerhalb der 600ms das Outfit wieder überschreibt
+    + (outfitCode ? syncToServer : '')
     + 'setTimeout(function(){'
     + '  CharacterRefresh(Player,false,false);'
     + '  CharacterLoadCanvas(Player);'
@@ -4958,9 +4966,14 @@ function captureOsScreenshot(mk, vIdx) {
     + '    }catch(e){'
     + '      window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",reqId:' + J_reqId + ',err:e.message},"*");'
     + '    }finally{'
+    // Originaloutfit wiederherstellen
     + '      Player.Appearance.splice(0,Player.Appearance.length);'
     + '      origApp.forEach(function(i){Player.Appearance.push(i);});'
     + '      CharacterRefresh(Player,false,false);'
+    // Server auch über die Wiederherstellung informieren
+    + '      setTimeout(function(){'
+    + '        ' + syncToServer
+    + '      },200);'
     + '    }'
     + '  },800);'
     + '},600);'
