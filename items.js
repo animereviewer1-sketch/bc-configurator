@@ -4956,38 +4956,40 @@ try {
 }
 ` : `try { CharacterRefresh(Player, false, false); } catch(_e) {}`}
 setTimeout(function(){
-  try { CharacterRefresh(Player, false, false); CharacterLoadCanvas(Player); } catch(_e) {}
+  CharacterRefresh(Player, false, false);
+  CharacterLoadCanvas(Player);
   setTimeout(function(){
     try {
-      // MainCanvas hat volle Farben (DrawCharacter compositet dort).
-      // Nur linke 55% nehmen – rechts sind UI-Elemente.
-      var src = MainCanvas.canvas;
+      // Player.Canvas: schwarzer Hintergrund, nur Charakter, keine UI
+      var src = Player.Canvas;
       if (!src || !src.width) throw new Error("Canvas leer");
-      var W = src.width, H = src.height;
-      var capW = Math.floor(W * 0.55);
-      var tmp = document.createElement("canvas");
-      tmp.width = capW; tmp.height = H;
-      tmp.getContext("2d").drawImage(src, 0, 0, capW, H, 0, 0, capW, H);
-      var id = tmp.getContext("2d").getImageData(0, 0, capW, H);
-      var px = id.data;
-      var x0=capW, x1=0, y0=H, y1=0;
+      var oc = document.createElement("canvas");
+      oc.width = src.width; oc.height = src.height;
+      oc.getContext("2d").drawImage(src, 0, 0);
+      var id = oc.getContext("2d").getImageData(0, 0, oc.width, oc.height);
+      var px = id.data, W = oc.width, H = oc.height;
+      var x0=W, x1=0, y0=H, y1=0;
       for (var r=0; r<H; r++) {
-        for (var c=0; c<capW; c++) {
-          var ii=(r*capW+c)*4;
+        for (var c=0; c<W; c++) {
+          var ii=(r*W+c)*4;
           if (px[ii]>5 || px[ii+1]>5 || px[ii+2]>5) {
             if(c<x0)x0=c; if(c>x1)x1=c;
             if(r<y0)y0=r; if(r>y1)y1=r;
           }
         }
       }
-      if (x1<x0) { x0=0; y0=0; x1=capW-1; y1=H-1; }
+      if (x1<x0) { x0=0; y0=0; x1=W-1; y1=H-1; }
       var pad=20;
       x0=Math.max(0,x0-pad); y0=Math.max(0,y0-pad);
-      x1=Math.min(capW-1,x1+pad); y1=Math.min(H-1,y1+pad);
+      x1=Math.min(W-1,x1+pad); y1=Math.min(H-1,y1+pad);
       var cw=x1-x0+1, ch=y1-y0+1;
       var cc = document.createElement("canvas");
       cc.width=cw; cc.height=ch;
-      cc.getContext("2d").drawImage(src, x0, y0, cw, ch, 0, 0, cw, ch);
+      // Schwarzen Hintergrund explizit setzen
+      var ctx2 = cc.getContext("2d");
+      ctx2.fillStyle = "#000";
+      ctx2.fillRect(0, 0, cw, ch);
+      ctx2.drawImage(oc, x0, y0, cw, ch, 0, 0, cw, ch);
       var d = cc.toDataURL("image/jpeg", 0.88);
       window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",reqId:${J_reqId},data:d,width:cw,height:ch},"*");
     } catch(e) {
@@ -5431,6 +5433,15 @@ function osApplyOutfit(mk, vIdx) {
   showStatus('▶ Outfit von ' + escHtml(LSCG_DB[mk]?.name ?? mk) + ' wird angewendet…', 'info');
 }
 
+// ── Outfit-Code in Zwischenablage kopieren ───────────────────
+function osCopyCode(mk, vIdx) {
+  const v = LSCG_DB[mk]?.versions?.[vIdx];
+  if (!v?.code) { showStatus('❌ Kein Code', 'error'); return; }
+  navigator.clipboard.writeText(v.code)
+    .then(function() { showStatus('📋 Code kopiert!', 'success'); })
+    .catch(function() { showStatus('❌ Kopieren fehlgeschlagen', 'error'); });
+}
+
 // ── Als Profil speichern ─────────────────────────────────────
 function osSaveOutfitAsProfile(mk, vIdx) {
   const v    = LSCG_DB[mk]?.versions?.[vIdx];
@@ -5675,6 +5686,7 @@ function renderOutfitScanTab() {
         + '<div class="os-card-actions">'
         + repairBtn
         + (!isBroken && hasCode ? '<button class="os-card-btn primary" onclick="osApplyOutfit(\'' + mk + '\',' + realIdx + ')">▶ Run</button>' : '')
+        + (!isBroken && hasCode ? '<button class="os-card-btn" onclick="osCopyCode(\'' + mk + '\',' + realIdx + ')" title="Code in Zwischenablage">📋</button>' : '')
         + '<button class="os-card-btn' + (isFav ? ' fav-on' : '') + '" onclick="toggleOsFav(\'' + mk + '\')">' + (isFav ? '⭐' : '☆') + '</button>'
         + (!isBroken && hasCode ? '<button class="os-card-btn" onclick="osSaveOutfitAsProfile(\'' + mk + '\',' + realIdx + ')" title="Als Profil speichern">💾</button>' : '')
         + '<button class="os-card-btn danger" onclick="deleteLscgVersion(\'' + mk + '\',' + realIdx + ')" title="Version löschen">🗑</button>'
