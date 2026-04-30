@@ -4907,107 +4907,95 @@ function captureOsScreenshot(mk, vIdx) {
   _pendingOsCapture[reqId] = { mk, fp };
   if (outfitCode) _osCaptureNeedSync = true;
 
-  // Crop-Helper als String
-  const cropAndSend = ''
-    + 'var src=Player.Canvas;'
-    + 'if(!src||!src.width)throw new Error("Canvas leer");'
-    + 'var oc=document.createElement("canvas");oc.width=src.width;oc.height=src.height;'
-    + 'var ctx=oc.getContext("2d");ctx.drawImage(src,0,0);'
-    + 'var id=ctx.getImageData(0,0,oc.width,oc.height);'
-    + 'var px=id.data,W=oc.width,H=oc.height;'
-    + 'var x0=W,x1=0,y0=H,y1=0;'
-    + 'for(var r=0;r<H;r++){for(var c2=0;c2<W;c2++){'
-    + '  var ii=(r*W+c2)*4;'
-    + '  if(px[ii]>5||px[ii+1]>5||px[ii+2]>5){'
-    + '    if(c2<x0)x0=c2;if(c2>x1)x1=c2;'
-    + '    if(r<y0)y0=r;if(r>y1)y1=r;'
-    + '  }'
-    + '}}'
-    + 'if(x1<x0){x0=0;y0=0;x1=W-1;y1=H-1;}'
-    + 'var pad=20;'
-    + 'x0=Math.max(0,x0-pad);y0=Math.max(0,y0-pad);'
-    + 'x1=Math.min(W-1,x1+pad);y1=Math.min(H-1,y1+pad);'
-    + 'var cw=x1-x0+1,ch=y1-y0+1;'
-    + 'var cc=document.createElement("canvas");cc.width=cw;cc.height=ch;'
-    + 'cc.getContext("2d").drawImage(oc,x0,y0,cw,ch,0,0,cw,ch);'
-    + 'var d=cc.toDataURL("image/jpeg",0.88);'
-    + 'window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",'
-    + 'reqId:' + JSON.stringify(reqId) + ',data:d,width:cw,height:ch},"*");';
+  // Werte sicher als JSON-Strings einbetten (kein Quoting-Problem)
+  const J_code  = outfitCode ? JSON.stringify(outfitCode) : 'null';
+  const J_reqId = JSON.stringify(reqId);
 
-  // ── Neue Screenshot-Logik: Run-Button-Pfad → Screenshot → Restore ──
-  // Gleicher Apply-Code wie _oiBuildExecCode (der funktionierende Run-Button),
-  // nur ohne ServerPlayerAppearanceSync. Nach dem Render sofort Screenshot + Restore.
-  const code = '(function(){'
-    + 'var origApp=Player.Appearance.slice();'
-    + (outfitCode
-      ? 'var decoded=null;'
-        + 'try{'
-        + '  decoded=JSON.parse(LZString.decompressFromBase64(' + JSON.stringify(outfitCode) + '));'
-        + '  if(!Array.isArray(decoded)||!decoded.length)decoded=null;'
-        + '}catch(e){'
-        + '  window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",'
-        + '  reqId:' + JSON.stringify(reqId) + ',err:"DECODE_FAIL:"+e.message},"*");'
-        + '  return;'
-        + '}'
-        + 'if(!decoded){'
-        + '  window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",'
-        + '  reqId:' + JSON.stringify(reqId) + ',err:"DECODE_FAIL:Leeres Bundle"},"*");'
-        + '  return;'
-        + '}'
-        // === Exakt gleicher Apply-Pfad wie Run-Button ===
-        + 'try{'
-        // Nackt-Gruppen sichern (ArmsLeft, HandsLeft etc. mit Name="")
-        + '  var nakedItems=Player.Appearance.filter(function(i){return !i.Asset||!i.Asset.Name||i.Asset.Name==="";});'
-        + '  var bundleGroups=new Set(decoded.map(function(i){return i.Group;}));'
-        // In-place leeren, damit BC-interne Referenzen die Änderung sehen
-        + '  Player.Appearance.splice(0,Player.Appearance.length);'
-        + '  if(typeof CharacterAppearanceSetFromBundle==="function"){'
-        + '    CharacterAppearanceSetFromBundle(Player,decoded,0,Player.AssetFamily);'
-        + '  }else{'
-        + '    decoded.forEach(function(item){'
-        + '      if(!item||!item.Group)return;'
-        + '      try{InventoryWear(Player,item.Name||"",item.Group,item.Color,0,null,item.Property,false);}catch(_e){}'
-        + '    });'
-        + '  }'
-        // Property-Fix: Craft/Text (z.B. "DOLL") explizit setzen
-        + '  decoded.forEach(function(bundleItem){'
-        + '    if(!bundleItem||!bundleItem.Group||!bundleItem.Property)return;'
-        + '    var worn=Player.Appearance.find(function(a){return a.Asset&&a.Asset.Group&&a.Asset.Group.Name===bundleItem.Group;});'
-        + '    if(worn)worn.Property=JSON.parse(JSON.stringify(bundleItem.Property));'
-        + '  });'
-        // Nackt-Gruppen die nicht im Bundle sind zurück einfügen
-        + '  nakedItems.forEach(function(item){'
-        + '    if(!bundleGroups.has(item.Asset.Group.Name))Player.Appearance.push(item);'
-        + '  });'
-        + '  CharacterRefresh(Player,false,false);'
-        + '  CharacterLoadCanvas(Player);'
-        + '}catch(applyErr){'
-        // Bei Fehler sofort Restore + Fehlermeldung
-        + '  Player.Appearance.splice(0,Player.Appearance.length);'
-        + '  origApp.forEach(function(i){Player.Appearance.push(i);});'
-        + '  CharacterRefresh(Player,false,false);'
-        + '  window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",'
-        + '  reqId:' + JSON.stringify(reqId) + ',err:"APPLY_FAIL:"+applyErr.message},"*");'
-        + '  return;'
-        + '}'
-      : // Kein Code → Player-Aussehen direkt aufnehmen
-        'try{CharacterRefresh(Player,false,false);CharacterLoadCanvas(Player);}catch(_e){}'
-    )
-    // Kurz warten bis BC den Canvas gerendert hat, dann Screenshot + sofortiger Restore
-    + 'setTimeout(function(){'
-    + '  try{'
-    + cropAndSend
-    + '  }catch(e){'
-    + '    window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",'
-    + '    reqId:' + JSON.stringify(reqId) + ',err:e.message},"*");'
-    + '  }finally{'
-    // Restore in-place – Outfit sofort zurück
-    + '    Player.Appearance.splice(0,Player.Appearance.length);'
-    + '    origApp.forEach(function(i){Player.Appearance.push(i);});'
-    + '    CharacterRefresh(Player,false,false);'
-    + '  }'
-    + '},400);'
-    + '})();';
+  const code = `(function(){
+var origApp = Player.Appearance.slice();
+${outfitCode ? `
+var decoded = null;
+try {
+  decoded = JSON.parse(LZString.decompressFromBase64(${J_code}));
+  if (!Array.isArray(decoded) || !decoded.length) decoded = null;
+} catch(e) {
+  window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",reqId:${J_reqId},err:"DECODE_FAIL:"+e.message},"*");
+  return;
+}
+if (!decoded) {
+  window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",reqId:${J_reqId},err:"DECODE_FAIL:Leeres Bundle"},"*");
+  return;
+}
+try {
+  var nakedItems = Player.Appearance.filter(function(i){ return !i.Asset || !i.Asset.Name || i.Asset.Name === ""; });
+  var bundleGroups = new Set(decoded.map(function(i){ return i.Group; }));
+  Player.Appearance.splice(0, Player.Appearance.length);
+  if (typeof CharacterAppearanceSetFromBundle === "function") {
+    CharacterAppearanceSetFromBundle(Player, decoded, 0, Player.AssetFamily);
+  } else {
+    decoded.forEach(function(item){
+      if (!item || !item.Group) return;
+      try { InventoryWear(Player, item.Name||"", item.Group, item.Color, 0, null, item.Property, false); } catch(_e) {}
+    });
+  }
+  decoded.forEach(function(b){
+    if (!b || !b.Group || !b.Property) return;
+    var w = Player.Appearance.find(function(a){ return a.Asset && a.Asset.Group && a.Asset.Group.Name === b.Group; });
+    if (w) w.Property = JSON.parse(JSON.stringify(b.Property));
+  });
+  nakedItems.forEach(function(item){
+    if (!bundleGroups.has(item.Asset.Group.Name)) Player.Appearance.push(item);
+  });
+  CharacterRefresh(Player, false, false);
+} catch(applyErr) {
+  Player.Appearance.splice(0, Player.Appearance.length);
+  origApp.forEach(function(i){ Player.Appearance.push(i); });
+  CharacterRefresh(Player, false, false);
+  window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",reqId:${J_reqId},err:"APPLY_FAIL:"+applyErr.message},"*");
+  return;
+}
+` : `try { CharacterRefresh(Player, false, false); } catch(_e) {}`}
+setTimeout(function(){
+  try { CharacterRefresh(Player, false, false); CharacterLoadCanvas(Player); } catch(_e) {}
+  setTimeout(function(){
+    try {
+      var src = Player.Canvas;
+      if (!src || !src.width) throw new Error("Canvas leer");
+      var oc = document.createElement("canvas");
+      oc.width = src.width; oc.height = src.height;
+      oc.getContext("2d").drawImage(src, 0, 0);
+      var id = oc.getContext("2d").getImageData(0, 0, oc.width, oc.height);
+      var px = id.data, W = oc.width, H = oc.height;
+      var x0=W, x1=0, y0=H, y1=0;
+      for (var r=0; r<H; r++) {
+        for (var c=0; c<W; c++) {
+          var ii=(r*W+c)*4;
+          if (px[ii]>5 || px[ii+1]>5 || px[ii+2]>5) {
+            if(c<x0)x0=c; if(c>x1)x1=c;
+            if(r<y0)y0=r; if(r>y1)y1=r;
+          }
+        }
+      }
+      if (x1<x0) { x0=0; y0=0; x1=W-1; y1=H-1; }
+      var pad=20;
+      x0=Math.max(0,x0-pad); y0=Math.max(0,y0-pad);
+      x1=Math.min(W-1,x1+pad); y1=Math.min(H-1,y1+pad);
+      var cw=x1-x0+1, ch=y1-y0+1;
+      var cc = document.createElement("canvas");
+      cc.width=cw; cc.height=ch;
+      cc.getContext("2d").drawImage(oc, x0, y0, cw, ch, 0, 0, cw, ch);
+      var d = cc.toDataURL("image/jpeg", 0.88);
+      window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",reqId:${J_reqId},data:d,width:cw,height:ch},"*");
+    } catch(e) {
+      window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",reqId:${J_reqId},err:e.message},"*");
+    } finally {
+      Player.Appearance.splice(0, Player.Appearance.length);
+      origApp.forEach(function(i){ Player.Appearance.push(i); });
+      CharacterRefresh(Player, false, false);
+    }
+  }, 800);
+}, 600);
+})();`;
 
   bcSend({ type: 'EXEC', code }, true);
 }
