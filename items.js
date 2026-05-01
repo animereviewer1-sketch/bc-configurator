@@ -4932,51 +4932,84 @@ function captureOsScreenshot(mk, vIdx) {
     + 'var origApp=Player.Appearance.slice();'
     + applyPart
     // Sofort nach Apply: Server benachrichtigen (wie Run-Button), damit Server-Sync
-    // nicht innerhalb der 600ms das Outfit wieder überschreibt
+    // nicht innerhalb der Wartezeit das Outfit wieder überschreibt
     + (outfitCode ? syncToServer : '')
-    + 'setTimeout(function(){'
+
+    // ── Stabilisierungs-Loop ────────────────────────────────────
+    // Statt fester Delays: CharacterRefresh+CharacterLoadCanvas wiederholen
+    // und Canvas-Hash vergleichen. Erst wenn zwei aufeinander folgende Frames
+    // identisch sind (Texturen fertig geladen), wird der Screenshot gemacht.
+    // Timeout nach 16 Checks × 500ms = max. ~8 Sekunden.
+    + 'var _prevHash=null,_checksDone=0,_maxChecks=16;'
+
+    // Hash-Funktion: 200 gleichmäßig verteilte Pixel-Tripel zusammenfassen
+    + 'function _canvasHash(canvas){'
+    + '  try{'
+    + '    var ctx=canvas.getContext("2d");'
+    + '    var d=ctx.getImageData(0,0,canvas.width,canvas.height).data;'
+    + '    var r=0,len=d.length/4,step=Math.max(1,Math.floor(len/200));'
+    + '    for(var i=0;i<len;i+=step){var ix=i*4;r=((r*31)|0)+d[ix]+d[ix+1]+d[ix+2];}'
+    + '    return r;'
+    + '  }catch(_e){return -1;}'
+    + '}'
+
+    // Crop + Encode + postMessage
+    + 'function _sendCapture(){'
+    + '  try{'
+    + '    var src=Player.Canvas;'
+    + '    if(!src||!src.width)throw new Error("Canvas leer");'
+    + '    var oc=document.createElement("canvas");oc.width=src.width;oc.height=src.height;'
+    + '    oc.getContext("2d").drawImage(src,0,0);'
+    + '    var id=oc.getContext("2d").getImageData(0,0,oc.width,oc.height);'
+    + '    var px=id.data,W=oc.width,H=oc.height;'
+    + '    var x0=W,x1=0,y0=H,y1=0;'
+    + '    for(var r=0;r<H;r++){for(var c=0;c<W;c++){'
+    + '      var ii=(r*W+c)*4;'
+    + '      if(px[ii]>5||px[ii+1]>5||px[ii+2]>5){'
+    + '        if(c<x0)x0=c;if(c>x1)x1=c;if(r<y0)y0=r;if(r>y1)y1=r;'
+    + '      }'
+    + '    }}'
+    + '    if(x1<x0){x0=0;y0=0;x1=W-1;y1=H-1;}'
+    + '    var pad=20;'
+    + '    x0=Math.max(0,x0-pad);y0=Math.max(0,y0-pad);'
+    + '    x1=Math.min(W-1,x1+pad);y1=Math.min(H-1,y1+pad);'
+    + '    var cw=x1-x0+1,ch=y1-y0+1;'
+    + '    var cc=document.createElement("canvas");cc.width=cw;cc.height=ch;'
+    + '    var ctx2=cc.getContext("2d");'
+    + '    ctx2.fillStyle="#000";ctx2.fillRect(0,0,cw,ch);'
+    + '    ctx2.drawImage(oc,x0,y0,cw,ch,0,0,cw,ch);'
+    + '    var data=cc.toDataURL("image/jpeg",0.88);'
+    + '    window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",reqId:' + J_reqId + ',data:data,width:cw,height:ch},"*");'
+    + '  }catch(e){'
+    + '    window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",reqId:' + J_reqId + ',err:e.message},"*");'
+    + '  }finally{'
+    // Originaloutfit wiederherstellen
+    + '    Player.Appearance.splice(0,Player.Appearance.length);'
+    + '    origApp.forEach(function(i){Player.Appearance.push(i);});'
+    + '    CharacterRefresh(Player,false,false);'
+    // Server über Wiederherstellung informieren
+    + '    setTimeout(function(){' + syncToServer + '},200);'
+    + '  }'
+    + '}'
+
+    // Render-Check: Refresh + LoadCanvas, dann 400ms warten und Hash vergleichen
+    + 'function _renderCheck(){'
     + '  CharacterRefresh(Player,false,false);'
     + '  CharacterLoadCanvas(Player);'
     + '  setTimeout(function(){'
-    + '    try{'
-    + '      var src=Player.Canvas;'
-    + '      if(!src||!src.width)throw new Error("Canvas leer");'
-    + '      var oc=document.createElement("canvas");oc.width=src.width;oc.height=src.height;'
-    + '      oc.getContext("2d").drawImage(src,0,0);'
-    + '      var id=oc.getContext("2d").getImageData(0,0,oc.width,oc.height);'
-    + '      var px=id.data,W=oc.width,H=oc.height;'
-    + '      var x0=W,x1=0,y0=H,y1=0;'
-    + '      for(var r=0;r<H;r++){for(var c=0;c<W;c++){'
-    + '        var ii=(r*W+c)*4;'
-    + '        if(px[ii]>5||px[ii+1]>5||px[ii+2]>5){'
-    + '          if(c<x0)x0=c;if(c>x1)x1=c;if(r<y0)y0=r;if(r>y1)y1=r;'
-    + '        }'
-    + '      }}'
-    + '      if(x1<x0){x0=0;y0=0;x1=W-1;y1=H-1;}'
-    + '      var pad=20;'
-    + '      x0=Math.max(0,x0-pad);y0=Math.max(0,y0-pad);'
-    + '      x1=Math.min(W-1,x1+pad);y1=Math.min(H-1,y1+pad);'
-    + '      var cw=x1-x0+1,ch=y1-y0+1;'
-    + '      var cc=document.createElement("canvas");cc.width=cw;cc.height=ch;'
-    + '      var ctx2=cc.getContext("2d");'
-    + '      ctx2.fillStyle="#000";ctx2.fillRect(0,0,cw,ch);'
-    + '      ctx2.drawImage(oc,x0,y0,cw,ch,0,0,cw,ch);'
-    + '      var d=cc.toDataURL("image/jpeg",0.88);'
-    + '      window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",reqId:' + J_reqId + ',data:d,width:cw,height:ch},"*");'
-    + '    }catch(e){'
-    + '      window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",reqId:' + J_reqId + ',err:e.message},"*");'
-    + '    }finally{'
-    // Originaloutfit wiederherstellen
-    + '      Player.Appearance.splice(0,Player.Appearance.length);'
-    + '      origApp.forEach(function(i){Player.Appearance.push(i);});'
-    + '      CharacterRefresh(Player,false,false);'
-    // Server auch über die Wiederherstellung informieren
-    + '      setTimeout(function(){'
-    + '        ' + syncToServer
-    + '      },200);'
+    + '    var h=_canvasHash(Player.Canvas);'
+    + '    if(h===_prevHash||_checksDone>=_maxChecks){'
+    // Canvas stabil (oder Timeout) → Screenshot machen
+    + '      _sendCapture();'
+    + '    }else{'
+    + '      _prevHash=h;_checksDone++;'
+    + '      setTimeout(_renderCheck,500);'
     + '    }'
-    + '  },800);'
-    + '},600);'
+    + '  },400);'
+    + '}'
+
+    // Erst nach 1200ms starten: BC-Game-Loop muss Outfit einmal verarbeitet haben
+    + 'setTimeout(_renderCheck,1200);'
     + '})();';
 
   bcSend({ type: 'EXEC', code }, true);
