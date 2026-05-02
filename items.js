@@ -4463,17 +4463,22 @@ const _missCount   = {};  // memberNum → aufeinanderfolgende Fehlscans
 
 // ── Auto-Scan: Craft/Curse + LSCG-Outfits ─────────────────────
 // Wird beim Room-Join und wenn jemand jointed ausgelöst.
-let _autoScanCooldown = false;  // verhindert Doppel-Trigger
+let _autoScanCooldown     = false;  // verhindert Doppel-Trigger
+let _autoScanPendingCurse = false;  // Craft/Curse-Scan wartet auf Outfit-Scan-Abschluss
+
 function _triggerAutoScan(reason) {
   if (!_connected || _autoScanCooldown) return;
   _autoScanCooldown = true;
   setTimeout(function() { _autoScanCooldown = false; }, 8000); // 8s cooldown
 
   console.log('[BCU] Auto-Scan ausgelöst:', reason);
-  bcSend({ type: 'SCAN_CURSES', _auto: true }, true);
-  // _auto: true → loader gibt Flag durch → kein Auto-Screenshot-Capture
+
+  // Schritt 1: LSCG-Outfit-Scan zuerst.
+  // _auto: true → kein Auto-Screenshot-Capture, _auto wird vom loader durchgereicht.
+  _autoScanPendingCurse = true;
   bcSend({ type: 'GET_OUTFIT_SCAN', _auto: true }, true);
   bcSend({ type: 'GET_LSCG_OUTFITS' }, true);
+  // Schritt 2 (SCAN_CURSES) folgt in _handleOutfitScanData sobald Outfit-Scan fertig ist.
 
   // UI-Indikator aktualisieren
   _updateAutoScanBadge(reason);
@@ -5676,6 +5681,13 @@ function _handleOutfitScanData(data) {
   if (neu)       msg += ' | +' + neu + ' neu';
   if (geaendert) msg += ' | ' + geaendert + ' geändert';
   showStatus(msg, data._auto ? 'info' : 'success');
+
+  // Schritt 2: Craft/Curse-Scan nachschalten sobald Outfit-Scan fertig ist.
+  // So überschreiben sie sich nicht gegenseitig.
+  if (data._auto && _autoScanPendingCurse) {
+    _autoScanPendingCurse = false;
+    bcSend({ type: 'SCAN_CURSES', _auto: true }, true);
+  }
 }
 
 // Item-Anzahl aus LZString-Code berechnen
