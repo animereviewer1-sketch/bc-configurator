@@ -4471,7 +4471,8 @@ function _triggerAutoScan(reason) {
 
   console.log('[BCU] Auto-Scan ausgelöst:', reason);
   bcSend({ type: 'SCAN_CURSES', _auto: true }, true);
-  bcSend({ type: 'GET_OUTFIT_SCAN' }, true);
+  // _auto: true → loader gibt Flag durch → kein Auto-Screenshot-Capture
+  bcSend({ type: 'GET_OUTFIT_SCAN', _auto: true }, true);
   bcSend({ type: 'GET_LSCG_OUTFITS' }, true);
 
   // UI-Indikator aktualisieren
@@ -5656,8 +5657,9 @@ function _handleOutfitScanData(data) {
   _saveLscgDB();
   if (_activeTab === 'outfit-scan') renderOutfitScanTab();
 
-  // Auto-Capture: alle neuen Versionen ohne Screenshot in Queue
-  if (_connected) {
+  // Auto-Capture: nur bei MANUELLEM Scan (nicht beim Auto-Scan durch Join/Player-Join).
+  // Beim Auto-Scan würde BC noch am Laden sein und Screenshots des Originaloutfits liefern.
+  if (_connected && !data._auto) {
     const existingKeys = new Set(_osCaptureQueue.map(function(i) { return i.mk + '|' + i.vIdx; }));
     const toCapture = [];
     results.forEach(function(r) {
@@ -5681,7 +5683,7 @@ function _handleOutfitScanData(data) {
   let msg = '✅ ' + (data.room ?? '') + ': ' + results.length + ' Chars';
   if (neu)       msg += ' | +' + neu + ' neu';
   if (geaendert) msg += ' | ' + geaendert + ' geändert';
-  showStatus(msg, 'success');
+  showStatus(msg, data._auto ? 'info' : 'success');
 }
 
 // Item-Anzahl aus LZString-Code berechnen

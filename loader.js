@@ -982,7 +982,8 @@ window.CurseScanner = (() => {
               .filter(c => c?.MemberNumber && !_s.has(c.MemberNumber) && _s.add(c.MemberNumber));
             const _room = (typeof ChatRoomData !== 'undefined' && ChatRoomData?.Name) ? ChatRoomData.Name : 'Unbekannt';
             const _results = _chars.map(window._BCU_serializeChar);
-            src.postMessage({ app: APP, type: 'OUTFIT_SCAN_DATA', results: _results, room: _room }, ALLOWED_ORIGIN);
+            // _auto Flag durchreichen: verhindert Auto-Screenshots bei automatischen Scans
+            src.postMessage({ app: APP, type: 'OUTFIT_SCAN_DATA', results: _results, room: _room, _auto: ev.data._auto === true }, ALLOWED_ORIGIN);
             BCK.ok('[OutfitScan] ' + _results.length + ' Chars @ ' + _room);
           } catch(ex) {
             src.postMessage({ app: APP, type: 'OUTFIT_SCAN_DATA', err: ex.message }, ALLOWED_ORIGIN);
