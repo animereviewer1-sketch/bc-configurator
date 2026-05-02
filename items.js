@@ -5399,22 +5399,44 @@ function _buildApplyCode(code) {
   return ''
     + 'var decoded=JSON.parse(LZString.decompressFromBase64(' + esc + '));'
     + 'if(!Array.isArray(decoded)||!decoded.length){console.warn("[BCU] Leeres Bundle");return;}'
-    + 'var nakedItems=Player.Appearance.filter(function(i){return !i.Asset.Name||i.Asset.Name==="";});'
+    // Nackte Body-Items sichern (leere Asset-Namen = interne BC-Pflicht-Items)
+    + 'var nakedItems=Player.Appearance.filter(function(i){return i.Asset&&(!i.Asset.Name||i.Asset.Name==="");});'
     + 'var bundleGroups=new Set(decoded.map(function(i){return i.Group;}));'
     + 'Player.Appearance.splice(0,Player.Appearance.length);'
+    // Priorität 1: CharacterAppearanceSetFromBundle (native BC, beste Kompatibilität)
     + 'if(typeof CharacterAppearanceSetFromBundle==="function"){'
     + '  CharacterAppearanceSetFromBundle(Player,decoded,0,Player.AssetFamily);'
+    + '}else if(typeof AssetGet==="function"){'
+    // Priorität 2: AssetGet + direktes Einfügen – OHNE InventoryWear-Permission-Checks.
+    // InventoryWear überspringt Items die Voraussetzungen nicht erfüllen, weshalb
+    // Outfits unvollständig gerendert werden. Direktes Einfügen repliziert was
+    // CharacterAppearanceSetFromBundle intern tut.
+    + '  decoded.forEach(function(item){'
+    + '    if(!item||!item.Group)return;'
+    + '    var asset=AssetGet(Player.AssetFamily,item.Group,item.Name||"");'
+    + '    if(!asset)return;'
+    + '    Player.Appearance.push({'
+    + '      Asset:asset,'
+    + '      Color:item.Color,'
+    + '      Difficulty:item.Difficulty||0,'
+    + '      Property:item.Property?JSON.parse(JSON.stringify(item.Property)):{},'
+    + '      Model:undefined'
+    + '    });'
+    + '  });'
     + '}else{'
+    // Priorität 3: InventoryWear als letzter Fallback (kann Items überspringen)
     + '  decoded.forEach(function(item){'
     + '    if(!item||!item.Group)return;'
     + '    try{InventoryWear(Player,item.Name||"",item.Group,item.Color,0,null,item.Property,false);}catch(_e){}'
     + '  });'
+    // Properties nachträglich setzen, da InventoryWear sie ggf. ignoriert
+    + '  decoded.forEach(function(bundleItem){'
+    + '    if(!bundleItem||!bundleItem.Group||!bundleItem.Property)return;'
+    + '    var worn=Player.Appearance.find(function(a){return a.Asset&&a.Asset.Group&&a.Asset.Group.Name===bundleItem.Group;});'
+    + '    if(worn)worn.Property=JSON.parse(JSON.stringify(bundleItem.Property));'
+    + '  });'
     + '}'
-    + 'decoded.forEach(function(bundleItem){'
-    + '  if(!bundleItem||!bundleItem.Group||!bundleItem.Property)return;'
-    + '  var worn=Player.Appearance.find(function(a){return a.Asset&&a.Asset.Group&&a.Asset.Group.Name===bundleItem.Group;});'
-    + '  if(worn)worn.Property=JSON.parse(JSON.stringify(bundleItem.Property));'
-    + '});'
+    // Nackte Items wieder einfügen falls nicht im Bundle
     + 'nakedItems.forEach(function(item){'
     + '  if(!bundleGroups.has(item.Asset.Group.Name))Player.Appearance.push(item);'
     + '});'
