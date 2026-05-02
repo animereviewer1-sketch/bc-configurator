@@ -4973,39 +4973,31 @@ function captureOsScreenshot(mk, vIdx) {
     + 'else if(typeof ServerSend==="function")ServerSend("AccountUpdate",{Appearance:Player.Appearance});';
 
   const code = '(function(){'
+    // Generation-Counter: jeder Screenshot erhöht ihn. Der 300ms-Verify-Timer
+    // prüft ob er noch "der Eigentümer" ist – falls ein neuer Screenshot gestartet
+    // hat (Counter erhöht), bricht er ab statt das Outfit zu überschreiben.
+    + 'window.__BCU_captureGen=(window.__BCU_captureGen||0)+1;'
+    + 'var myGen=window.__BCU_captureGen;'
     + 'var origApp=Player.Appearance.slice();'
     + applyPart
-    // KEIN syncToServer beim Apply: Screenshot ist jetzt schnell (~200ms),
-    // der Server kommt in dieser Zeit nicht dazwischen. Ohne diesen Aufruf
-    // gibt es keine Server-Antwort in Flight die das Outfit nach der
-    // Wiederherstellung nochmal überschreiben könnte.
 
     // ── Stabilisierungs-Loop ────────────────────────────────────
     // Timeout nach 6 Checks × 150ms = max. ~1 Sekunde.
     + 'var _prevHash=null,_checksDone=0,_maxChecks=6;'
 
-    // Hilfsfunktion: Original-Appearance wiederherstellen
+    // Hilfsfunktion: Original-Appearance wiederherstellen + Server-Sync
     + 'function _restoreAndSync(){'
+    // Sofort wiederherstellen
     + '  Player.Appearance.splice(0,Player.Appearance.length);'
     + '  origApp.forEach(function(i){Player.Appearance.push(i);});'
     + '  CharacterRefresh(Player,false,false);'
-    // 300ms warten, dann prüfen ob die Wiederherstellung noch gilt
-    // (ein verspätetes Server-Paket könnte sie überschrieben haben)
+    // 300ms warten, dann nur noch syncToServer – KEIN Restore mehr.
+    // Verify-Check entfernt: er feuerte während des nächsten Screenshots
+    // und überschrieb dessen Outfit mit dem Original (Race Condition).
+    // Stattdessen: Generation prüfen – wenn ein neuer Screenshot läuft,
+    // diesen Sync komplett überspringen (der neue Screenshot macht seinen eigenen).
     + '  setTimeout(function(){'
-    + '    var ok=(Player.Appearance.length===origApp.length);'
-    // Sicherheits-Check: erstes und letztes Item müssen übereinstimmen
-    + '    if(ok&&origApp.length>0){'
-    + '      var fa=Player.Appearance[0],la=Player.Appearance[Player.Appearance.length-1];'
-    + '      var fo=origApp[0],lo=origApp[origApp.length-1];'
-    + '      ok=(fa&&fo&&fa.Asset===fo.Asset)&&(la&&lo&&la.Asset===lo.Asset);'
-    + '    }'
-    + '    if(!ok){'
-    // Nochmal herstellen falls überschrieben
-    + '      Player.Appearance.splice(0,Player.Appearance.length);'
-    + '      origApp.forEach(function(i){Player.Appearance.push(i);});'
-    + '      CharacterRefresh(Player,false,false);'
-    + '    }'
-    // Erst jetzt – nach verifizierter Wiederherstellung – den Server updaten
+    + '    if(window.__BCU_captureGen!==myGen)return;'
     + '    ' + syncToServer
     + '  },300);'
     + '}'
