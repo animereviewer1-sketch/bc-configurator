@@ -4931,16 +4931,40 @@ function captureOsScreenshot(mk, vIdx) {
   const code = '(function(){'
     + 'var origApp=Player.Appearance.slice();'
     + applyPart
-    // Sofort nach Apply: Server benachrichtigen (wie Run-Button), damit Server-Sync
-    // nicht innerhalb der Wartezeit das Outfit wieder überschreibt
-    + (outfitCode ? syncToServer : '')
+    // KEIN syncToServer beim Apply: Screenshot ist jetzt schnell (~200ms),
+    // der Server kommt in dieser Zeit nicht dazwischen. Ohne diesen Aufruf
+    // gibt es keine Server-Antwort in Flight die das Outfit nach der
+    // Wiederherstellung nochmal überschreiben könnte.
 
     // ── Stabilisierungs-Loop ────────────────────────────────────
-    // Statt fester Delays: CharacterRefresh+CharacterLoadCanvas wiederholen
-    // und Canvas-Hash vergleichen. Erst wenn zwei aufeinander folgende Frames
-    // identisch sind (Texturen fertig geladen), wird der Screenshot gemacht.
     // Timeout nach 6 Checks × 150ms = max. ~1 Sekunde.
     + 'var _prevHash=null,_checksDone=0,_maxChecks=6;'
+
+    // Hilfsfunktion: Original-Appearance wiederherstellen
+    + 'function _restoreAndSync(){'
+    + '  Player.Appearance.splice(0,Player.Appearance.length);'
+    + '  origApp.forEach(function(i){Player.Appearance.push(i);});'
+    + '  CharacterRefresh(Player,false,false);'
+    // 300ms warten, dann prüfen ob die Wiederherstellung noch gilt
+    // (ein verspätetes Server-Paket könnte sie überschrieben haben)
+    + '  setTimeout(function(){'
+    + '    var ok=(Player.Appearance.length===origApp.length);'
+    // Sicherheits-Check: erstes und letztes Item müssen übereinstimmen
+    + '    if(ok&&origApp.length>0){'
+    + '      var fa=Player.Appearance[0],la=Player.Appearance[Player.Appearance.length-1];'
+    + '      var fo=origApp[0],lo=origApp[origApp.length-1];'
+    + '      ok=(fa&&fo&&fa.Asset===fo.Asset)&&(la&&lo&&la.Asset===lo.Asset);'
+    + '    }'
+    + '    if(!ok){'
+    // Nochmal herstellen falls überschrieben
+    + '      Player.Appearance.splice(0,Player.Appearance.length);'
+    + '      origApp.forEach(function(i){Player.Appearance.push(i);});'
+    + '      CharacterRefresh(Player,false,false);'
+    + '    }'
+    // Erst jetzt – nach verifizierter Wiederherstellung – den Server updaten
+    + '    ' + syncToServer
+    + '  },300);'
+    + '}'
 
     // Hash-Funktion: 200 gleichmäßig verteilte Pixel-Tripel zusammenfassen
     + 'function _canvasHash(canvas){'
@@ -4953,7 +4977,7 @@ function captureOsScreenshot(mk, vIdx) {
     + '  }catch(_e){return -1;}'
     + '}'
 
-    // Crop + Encode + postMessage
+    // Crop + Encode + postMessage, danach immer Wiederherstellung
     + 'function _sendCapture(){'
     + '  try{'
     + '    var src=Player.Canvas;'
@@ -4983,12 +5007,8 @@ function captureOsScreenshot(mk, vIdx) {
     + '  }catch(e){'
     + '    window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",reqId:' + J_reqId + ',err:e.message},"*");'
     + '  }finally{'
-    // Originaloutfit wiederherstellen
-    + '    Player.Appearance.splice(0,Player.Appearance.length);'
-    + '    origApp.forEach(function(i){Player.Appearance.push(i);});'
-    + '    CharacterRefresh(Player,false,false);'
-    // Server über Wiederherstellung informieren
-    + '    setTimeout(function(){' + syncToServer + '},200);'
+    // Immer wiederherstellen – egal ob Erfolg oder Fehler
+    + '    _restoreAndSync();'
     + '  }'
     + '}'
 
