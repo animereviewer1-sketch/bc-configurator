@@ -4192,6 +4192,12 @@ window.addEventListener('message', function(ev) {
         // Sofort Raum scannen + Interval starten
         bcSend({ type: 'GET_PLAYER' }, true);
         startRoomScan();
+        // Auto-Scan: Craft/Curse + LSCG-Outfits beim Room-Join
+        // Kurzes Delay damit BC die Raum-Daten geladen hat
+        setTimeout(function() {
+          if (!_connected) return;
+          _triggerAutoScan('join');
+        }, 2000);
       }
       break;
 
@@ -4455,6 +4461,32 @@ let _lastRoomMembers   = [];    // letzter bekannter Raum-Snapshot
 const GRACE_NEEDED = 2;  // 2 × 5s = 10s grace for sync drops
 const _missCount   = {};  // memberNum → aufeinanderfolgende Fehlscans
 
+// ── Auto-Scan: Craft/Curse + LSCG-Outfits ─────────────────────
+// Wird beim Room-Join und wenn jemand jointed ausgelöst.
+let _autoScanCooldown = false;  // verhindert Doppel-Trigger
+function _triggerAutoScan(reason) {
+  if (!_connected || _autoScanCooldown) return;
+  _autoScanCooldown = true;
+  setTimeout(function() { _autoScanCooldown = false; }, 8000); // 8s cooldown
+
+  console.log('[BCU] Auto-Scan ausgelöst:', reason);
+  bcSend({ type: 'SCAN_CURSES', _auto: true }, true);
+  bcSend({ type: 'GET_OUTFIT_SCAN' }, true);
+  bcSend({ type: 'GET_LSCG_OUTFITS' }, true);
+
+  // UI-Indikator aktualisieren
+  _updateAutoScanBadge(reason);
+}
+
+function _updateAutoScanBadge(reason) {
+  const time = new Date().toLocaleTimeString();
+  const label = reason === 'join' ? '🚪 Join' : ('👤 +' + reason);
+  ['csAutoScanStatus', 'osAutoScanStatus'].forEach(function(id) {
+    const el = document.getElementById(id);
+    if (el) { el.textContent = '🔄 Auto-Scan: ' + label + ' ' + time; el.style.display = ''; }
+  });
+}
+
 function scanRoom() {
   if (!_connected) return;
   const btn = document.getElementById('roomRefreshBtn');
@@ -4483,6 +4515,17 @@ function renderRoomMembers(data) {
   _myMemberNumber = data.memberNumber;
   const freshMembers = data.members ?? [];
   const freshNums    = new Set(freshMembers.map(m => m.num));
+
+  // ── Neue Spieler erkennen → Auto-Scan auslösen ───────────────────────────
+  const prevNums = new Set(_lastRoomMembers.map(function(m) { return m.num; }));
+  const newJoiners = freshMembers.filter(function(m) {
+    return m.num !== _myMemberNumber && !prevNums.has(m.num);
+  });
+  if (newJoiners.length > 0) {
+    const names = newJoiners.map(function(m) { return m.name; }).join(', ');
+    // Kurzes Delay: BC braucht etwas um Appearance des Neuen zu laden
+    setTimeout(function() { _triggerAutoScan(names); }, 1500);
+  }
 
   // ── Grace-Period-Logik ────────────────────────────────────────────────────
   // Frische Spieler: Miss-Zähler auf 0 zurücksetzen
