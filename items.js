@@ -4939,8 +4939,8 @@ function captureOsScreenshot(mk, vIdx) {
     // Statt fester Delays: CharacterRefresh+CharacterLoadCanvas wiederholen
     // und Canvas-Hash vergleichen. Erst wenn zwei aufeinander folgende Frames
     // identisch sind (Texturen fertig geladen), wird der Screenshot gemacht.
-    // Timeout nach 16 Checks × 500ms = max. ~8 Sekunden.
-    + 'var _prevHash=null,_checksDone=0,_maxChecks=16;'
+    // Timeout nach 8 Checks × 300ms = max. ~3 Sekunden.
+    + 'var _prevHash=null,_checksDone=0,_maxChecks=8;'
 
     // Hash-Funktion: 200 gleichmäßig verteilte Pixel-Tripel zusammenfassen
     + 'function _canvasHash(canvas){'
@@ -4992,7 +4992,7 @@ function captureOsScreenshot(mk, vIdx) {
     + '  }'
     + '}'
 
-    // Render-Check: Refresh + LoadCanvas, dann 400ms warten und Hash vergleichen
+    // Render-Check: Refresh + LoadCanvas, dann 200ms warten und Hash vergleichen
     + 'function _renderCheck(){'
     + '  CharacterRefresh(Player,false,false);'
     + '  CharacterLoadCanvas(Player);'
@@ -5003,13 +5003,13 @@ function captureOsScreenshot(mk, vIdx) {
     + '      _sendCapture();'
     + '    }else{'
     + '      _prevHash=h;_checksDone++;'
-    + '      setTimeout(_renderCheck,500);'
+    + '      setTimeout(_renderCheck,300);'
     + '    }'
-    + '  },400);'
+    + '  },200);'
     + '}'
 
-    // Erst nach 1200ms starten: BC-Game-Loop muss Outfit einmal verarbeitet haben
-    + 'setTimeout(_renderCheck,1200);'
+    // Nach 400ms starten: reicht für einen BC-Game-Loop-Durchlauf
+    + 'setTimeout(_renderCheck,400);'
     + '})();';
 
   bcSend({ type: 'EXEC', code }, true);
