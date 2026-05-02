@@ -4939,8 +4939,8 @@ function captureOsScreenshot(mk, vIdx) {
     // Statt fester Delays: CharacterRefresh+CharacterLoadCanvas wiederholen
     // und Canvas-Hash vergleichen. Erst wenn zwei aufeinander folgende Frames
     // identisch sind (Texturen fertig geladen), wird der Screenshot gemacht.
-    // Timeout nach 8 Checks × 300ms = max. ~3 Sekunden.
-    + 'var _prevHash=null,_checksDone=0,_maxChecks=8;'
+    // Timeout nach 6 Checks × 150ms = max. ~1 Sekunde.
+    + 'var _prevHash=null,_checksDone=0,_maxChecks=6;'
 
     // Hash-Funktion: 200 gleichmäßig verteilte Pixel-Tripel zusammenfassen
     + 'function _canvasHash(canvas){'
@@ -4992,24 +4992,23 @@ function captureOsScreenshot(mk, vIdx) {
     + '  }'
     + '}'
 
-    // Render-Check: Refresh + LoadCanvas, dann 200ms warten und Hash vergleichen
+    // Render-Check: Refresh + LoadCanvas, dann 100ms warten und Hash vergleichen
     + 'function _renderCheck(){'
     + '  CharacterRefresh(Player,false,false);'
     + '  CharacterLoadCanvas(Player);'
     + '  setTimeout(function(){'
     + '    var h=_canvasHash(Player.Canvas);'
     + '    if(h===_prevHash||_checksDone>=_maxChecks){'
-    // Canvas stabil (oder Timeout) → Screenshot machen
     + '      _sendCapture();'
     + '    }else{'
     + '      _prevHash=h;_checksDone++;'
-    + '      setTimeout(_renderCheck,300);'
+    + '      setTimeout(_renderCheck,150);'
     + '    }'
-    + '  },200);'
+    + '  },100);'
     + '}'
 
-    // Nach 400ms starten: reicht für einen BC-Game-Loop-Durchlauf
-    + 'setTimeout(_renderCheck,400);'
+    // Nach 100ms starten – so früh wie möglich
+    + 'setTimeout(_renderCheck,100);'
     + '})();';
 
   bcSend({ type: 'EXEC', code }, true);
