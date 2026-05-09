@@ -4193,11 +4193,19 @@ window.addEventListener('message', function(ev) {
         bcSend({ type: 'GET_PLAYER' }, true);
         startRoomScan();
         // Auto-Scan: Craft/Curse + LSCG-Outfits beim Room-Join
-        // Kurzes Delay damit BC die Raum-Daten geladen hat
+        // Erster Scan nach 3s – BC braucht Zeit um ChatRoomCharacter zu befüllen
         setTimeout(function() {
           if (!_connected) return;
           _triggerAutoScan('join');
-        }, 2000);
+        }, 3000);
+        // Zweiter LSCG-Scan nach 16s: fängt Charaktere die später ankamen.
+        // Cooldown wird gezielt zurückgesetzt damit der Retry immer läuft.
+        setTimeout(function() {
+          if (!_connected) return;
+          _lscgScanCooldown = false;
+          _triggerLscgScan('join-retry');
+          _updateAutoScanBadge('join-retry');
+        }, 16000);
       }
       break;
 
@@ -4495,7 +4503,7 @@ function _triggerAutoScan(reason) {
 
 function _updateAutoScanBadge(reason) {
   const time = new Date().toLocaleTimeString();
-  const label = reason === 'join' ? '🚪 Join' : ('👤 +' + reason);
+  const label = reason === 'join' ? '🚪 Join' : reason === 'join-retry' ? '🔁 Join-Retry' : ('👤 +' + reason);
   ['csAutoScanStatus', 'osAutoScanStatus'].forEach(function(id) {
     const el = document.getElementById(id);
     if (el) { el.textContent = '🔄 Auto-Scan: ' + label + ' ' + time; el.style.display = ''; }
