@@ -4462,26 +4462,35 @@ const GRACE_NEEDED = 2;  // 2 × 5s = 10s grace for sync drops
 const _missCount   = {};  // memberNum → aufeinanderfolgende Fehlscans
 
 // ── Auto-Scan: Craft/Curse + LSCG-Outfits ─────────────────────
-// Wird beim Room-Join und wenn jemand jointed ausgelöst.
-let _autoScanCooldown     = false;  // verhindert Doppel-Trigger
-let _autoScanPendingCurse = false;  // Craft/Curse-Scan wartet auf Outfit-Scan-Abschluss
+// Beide Scanner sind vollständig unabhängig mit eigenem Cooldown.
+// So können sie nicht durch den anderen geblockt oder gecancelt werden.
+let _lscgScanCooldown  = false;   // Cooldown nur für LSCG-Outfit-Scan
+let _curseScanCooldown = false;   // Cooldown nur für Craft/Curse-Scan
 
-function _triggerAutoScan(reason) {
-  if (!_connected || _autoScanCooldown) return;
-  _autoScanCooldown = true;
-  setTimeout(function() { _autoScanCooldown = false; }, 8000); // 8s cooldown
-
-  console.log('[BCU] Auto-Scan ausgelöst:', reason);
-
-  // Schritt 1: LSCG-Outfit-Scan zuerst.
-  // _auto: true → kein Auto-Screenshot-Capture, _auto wird vom loader durchgereicht.
-  _autoScanPendingCurse = true;
+function _triggerLscgScan(reason) {
+  if (!_connected || _lscgScanCooldown) return;
+  _lscgScanCooldown = true;
+  setTimeout(function() { _lscgScanCooldown = false; }, 12000);
+  console.log('[BCU] LSCG-Scan:', reason);
   bcSend({ type: 'GET_OUTFIT_SCAN', _auto: true }, true);
   bcSend({ type: 'GET_LSCG_OUTFITS' }, true);
-  // Schritt 2 (SCAN_CURSES) folgt in _handleOutfitScanData sobald Outfit-Scan fertig ist.
+}
 
-  // UI-Indikator aktualisieren
-  _updateAutoScanBadge(reason);
+function _triggerCurseScan(reason) {
+  if (!_connected || _curseScanCooldown) return;
+  _curseScanCooldown = true;
+  setTimeout(function() { _curseScanCooldown = false; }, 12000);
+  console.log('[BCU] Curse-Scan:', reason);
+  bcSend({ type: 'SCAN_CURSES', _auto: true }, true);
+}
+
+function _triggerAutoScan(reason) {
+  if (!_connected) return;
+  const lscgStarted  = !_lscgScanCooldown;
+  const curseStarted = !_curseScanCooldown;
+  _triggerLscgScan(reason);
+  _triggerCurseScan(reason);
+  if (lscgStarted || curseStarted) _updateAutoScanBadge(reason);
 }
 
 function _updateAutoScanBadge(reason) {
@@ -5626,7 +5635,7 @@ function _handleLscgOutfitsData(data) {
 function _handleOutfitScanData(data) {
   if (data.err) { showStatus('❌ Outfit-Scan: ' + data.err, 'error'); return; }
   const results = data.results ?? [];
-  if (!results.length) return;
+  if (!results.length) { if (_activeTab === 'outfit-scan') renderOutfitScanTab(); return; }
 
   let neu = 0, geaendert = 0;
   for (const r of results) {
@@ -5682,12 +5691,6 @@ function _handleOutfitScanData(data) {
   if (geaendert) msg += ' | ' + geaendert + ' geändert';
   showStatus(msg, data._auto ? 'info' : 'success');
 
-  // Schritt 2: Craft/Curse-Scan nachschalten sobald Outfit-Scan fertig ist.
-  // So überschreiben sie sich nicht gegenseitig.
-  if (data._auto && _autoScanPendingCurse) {
-    _autoScanPendingCurse = false;
-    bcSend({ type: 'SCAN_CURSES', _auto: true }, true);
-  }
 }
 
 // Item-Anzahl aus LZString-Code berechnen
