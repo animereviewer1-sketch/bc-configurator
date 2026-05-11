@@ -4211,15 +4211,13 @@ window.addEventListener('message', function(ev) {
           if (!_connected) return;
           _triggerAutoScan('join');
         }, 3000);
-        // Zweiter LSCG-Scan nach 10s: fängt Charaktere die später ankamen.
-        // Cooldown (5s) läuft nach dem 3s-Scan bei ~8s ab; 10s lässt noch 2s Puffer.
-        // Cooldown wird zusätzlich gezielt zurückgesetzt damit der Retry immer läuft.
+        // Zweiter LSCG-Scan nach 12s: fängt Charaktere die beim ersten Scan (3s) noch
+        // nicht fertig geladen hatten. Direkt aufrufen (kein Debounce-Reset nötig).
         setTimeout(function() {
           if (!_connected) return;
-          _lscgScanCooldown = false;
           _triggerLscgScan('join-retry');
           _updateAutoScanBadge('join-retry');
-        }, 10000);
+        }, 12000);
       }
       break;
 
@@ -4484,35 +4482,36 @@ const GRACE_NEEDED = 2;  // 2 × 5s = 10s grace for sync drops
 const _missCount   = {};  // memberNum → aufeinanderfolgende Fehlscans
 
 // ── Auto-Scan: Craft/Curse + LSCG-Outfits ─────────────────────
-// Beide Scanner sind vollständig unabhängig mit eigenem Cooldown.
-// So können sie nicht durch den anderen geblockt oder gecancelt werden.
-let _lscgScanCooldown  = false;   // Cooldown nur für LSCG-Outfit-Scan
-let _curseScanCooldown = false;   // Cooldown nur für Craft/Curse-Scan
+// Debounce statt Cooldown: Rapid-Fire-Events werden zu einem einzigen Scan zusammengefasst.
+// Beide Scanner laufen immer synchron – kein gegenseitiges Blockieren mehr.
+let _autoScanDebounce  = null;   // gemeinsamer Debounce-Timer
+let _autoScanLastReason = '';    // Grund des letzten Events für Badge
 
 function _triggerLscgScan(reason) {
-  if (!_connected || _lscgScanCooldown) return;
-  _lscgScanCooldown = true;
-  setTimeout(function() { _lscgScanCooldown = false; }, 5000);
+  if (!_connected) return;
   console.log('[BCU] LSCG-Scan:', reason);
   bcSend({ type: 'GET_OUTFIT_SCAN', _auto: true }, true);
   bcSend({ type: 'GET_LSCG_OUTFITS' }, true);
 }
 
 function _triggerCurseScan(reason) {
-  if (!_connected || _curseScanCooldown) return;
-  _curseScanCooldown = true;
-  setTimeout(function() { _curseScanCooldown = false; }, 5000);
+  if (!_connected) return;
   console.log('[BCU] Curse-Scan:', reason);
   bcSend({ type: 'SCAN_CURSES', _auto: true }, true);
 }
 
 function _triggerAutoScan(reason) {
   if (!_connected) return;
-  const lscgStarted  = !_lscgScanCooldown;
-  const curseStarted = !_curseScanCooldown;
-  _triggerLscgScan(reason);
-  _triggerCurseScan(reason);
-  if (lscgStarted || curseStarted) _updateAutoScanBadge(reason);
+  // Letzten Grund merken (wichtig wenn mehrere Events kommen bevor Debounce feuert)
+  _autoScanLastReason = reason;
+  clearTimeout(_autoScanDebounce);
+  _autoScanDebounce = setTimeout(function() {
+    _autoScanDebounce = null;
+    if (!_connected) return;
+    _triggerLscgScan(_autoScanLastReason);
+    _triggerCurseScan(_autoScanLastReason);
+    _updateAutoScanBadge(_autoScanLastReason);
+  }, 1500);
 }
 
 function _updateAutoScanBadge(reason) {
@@ -4560,8 +4559,9 @@ function renderRoomMembers(data) {
   });
   if (newJoiners.length > 0) {
     const names = newJoiners.map(function(m) { return m.name; }).join(', ');
-    // Kurzes Delay: BC braucht etwas um Appearance des Neuen zu laden
-    setTimeout(function() { _triggerAutoScan(names); }, 1500);
+    // _triggerAutoScan hat eingebauten 1.5s Debounce – direkt aufrufen.
+    // Mehrere schnell-joinende Spieler werden automatisch zu einem Scan zusammengefasst.
+    _triggerAutoScan(names);
   }
 
   // ── Grace-Period-Logik ────────────────────────────────────────────────────

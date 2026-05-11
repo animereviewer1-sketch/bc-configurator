@@ -1044,6 +1044,7 @@ window.CurseScanner = (() => {
               database:  result.database,
               lscgTable: result.lscgTable,
               lscgCache: result.lscgCache,
+              _auto: ev.data._auto === true,
             }, ALLOWED_ORIGIN);
             BCK.ok('CURSE_DATA gesendet: ' + Object.keys(result.database).length + ' Crafts');
           } catch (ex) {
