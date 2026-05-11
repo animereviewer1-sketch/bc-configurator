@@ -3582,7 +3582,7 @@ function _renderCurseOwnerRows(ownerNum) {
       + (neuType === 'cursed' ? '<span class="neu-badge neu-cursed">🔮 Neu</span>' : '')
       + '</div>'
       + '<div class="cg-spacer"></div>'
-      + '<div class="cg-comment"><textarea class="curse-comment-input" placeholder="Notiz..." data-rowid="' + rowId + '" onchange="saveCurseCommentById(this.dataset.rowid,this.value)">' + escHtml(comment) + '</textarea></div>'
+      + '<div class="cg-comment"><textarea class="curse-comment-input" placeholder="Notiz..." data-rowid="' + rowId + '" oninput="_debounceCurseComment(this)" onchange="saveCurseCommentById(this.dataset.rowid,this.value)">' + escHtml(comment) + '</textarea></div>'
       + '<div class="cg-actions">'
       + '<button class="curse-apply-btn" data-rid="' + rowId + '" data-tgt="" onclick="wearCurseByData(this)" title="Auf mich anwenden">\uD83D\uDC64</button>'
       + (_selectedMemberNum ? '<button class="curse-apply-btn other" data-rid="' + rowId + '" data-tgt="' + _selectedMemberNum + '" onclick="wearCurseByData(this)" title="Auf #' + _selectedMemberNum + '">\uD83D\uDC65 #' + _selectedMemberNum + '</button>' : '')
@@ -3648,6 +3648,19 @@ function toggleCurseDetail(detId, rowId) {
   // Make sure owner block stays open
   const block = det.closest('.curse-owner-block');
   if (open && block) block.classList.add('open');
+}
+
+// Debounce-Speicherung während des Tippens (500ms nach letzter Eingabe).
+// Verhindert Kommentar-Verlust wenn renderCurseTab den DOM neu baut bevor onchange feuert.
+const _commentDebounceTimers = {};
+function _debounceCurseComment(el) {
+  const rowId = el.dataset.rowid;
+  if (!rowId) return;
+  clearTimeout(_commentDebounceTimers[rowId]);
+  _commentDebounceTimers[rowId] = setTimeout(function() {
+    saveCurseCommentById(rowId, el.value);
+    delete _commentDebounceTimers[rowId];
+  }, 500);
 }
 
 function saveCurseCommentById(rowId, val) {
@@ -4198,14 +4211,15 @@ window.addEventListener('message', function(ev) {
           if (!_connected) return;
           _triggerAutoScan('join');
         }, 3000);
-        // Zweiter LSCG-Scan nach 16s: fängt Charaktere die später ankamen.
-        // Cooldown wird gezielt zurückgesetzt damit der Retry immer läuft.
+        // Zweiter LSCG-Scan nach 10s: fängt Charaktere die später ankamen.
+        // Cooldown (5s) läuft nach dem 3s-Scan bei ~8s ab; 10s lässt noch 2s Puffer.
+        // Cooldown wird zusätzlich gezielt zurückgesetzt damit der Retry immer läuft.
         setTimeout(function() {
           if (!_connected) return;
           _lscgScanCooldown = false;
           _triggerLscgScan('join-retry');
           _updateAutoScanBadge('join-retry');
-        }, 16000);
+        }, 10000);
       }
       break;
 
@@ -4478,7 +4492,7 @@ let _curseScanCooldown = false;   // Cooldown nur für Craft/Curse-Scan
 function _triggerLscgScan(reason) {
   if (!_connected || _lscgScanCooldown) return;
   _lscgScanCooldown = true;
-  setTimeout(function() { _lscgScanCooldown = false; }, 12000);
+  setTimeout(function() { _lscgScanCooldown = false; }, 5000);
   console.log('[BCU] LSCG-Scan:', reason);
   bcSend({ type: 'GET_OUTFIT_SCAN', _auto: true }, true);
   bcSend({ type: 'GET_LSCG_OUTFITS' }, true);
@@ -4487,7 +4501,7 @@ function _triggerLscgScan(reason) {
 function _triggerCurseScan(reason) {
   if (!_connected || _curseScanCooldown) return;
   _curseScanCooldown = true;
-  setTimeout(function() { _curseScanCooldown = false; }, 12000);
+  setTimeout(function() { _curseScanCooldown = false; }, 5000);
   console.log('[BCU] Curse-Scan:', reason);
   bcSend({ type: 'SCAN_CURSES', _auto: true }, true);
 }
