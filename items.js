@@ -2424,9 +2424,10 @@ function captureProfileScreenshot(pname) {
 let _slideshowTimer  = null;
 let _slideshowQueue  = [];
 let _slideshowTotal  = 0;
+let _slideshowPaused = false; // true = pausiert (Disconnect), wartet auf Reconnect
 
 function toggleProfileSlideshow() {
-  if (_slideshowTimer !== null || _slideshowQueue.length) {
+  if (_slideshowTimer !== null || _slideshowQueue.length || _slideshowPaused) {
     _stopProfileSlideshow();
     showStatus('⏹ Auto-Screenshot gestoppt', 'info');
     return;
@@ -2492,8 +2493,15 @@ function _runNextSlideshow() {
     const btn = document.getElementById('profileSlideshowBtn');
     if (btn) btn.textContent = '⏹ Stop (' + remaining + ')';
     // Kein _slideshowTimer mehr – _handleCanvasPreviewData ruft _runNextSlideshow() nach Capture auf
+  } else if (!_connected) {
+    // Nicht verbunden → Slideshow pausieren, Profil zurück in Queue
+    _slideshowQueue.unshift(name);
+    _slideshowPaused = true;
+    showStatus('⏸ Slideshow pausiert – warte auf Reconnect…', 'info');
+    const pauseBtn = document.getElementById('profileSlideshowBtn');
+    if (pauseBtn) pauseBtn.textContent = '⏸ Pausiert (' + _slideshowQueue.length + ')';
   } else {
-    // Profil nicht vorhanden oder nicht verbunden → direkt zum nächsten überspringen
+    // Profil nicht vorhanden → überspringen
     _runNextSlideshow();
   }
 }
@@ -2503,6 +2511,7 @@ function _stopProfileSlideshow() {
   _slideshowTimer = null;
   _slideshowQueue = [];
   _slideshowTotal = 0;
+  _slideshowPaused = false;
   // Laufende Canvas-Captures abbrechen + Timeouts clearen
   Object.values(_pendingProfileCapture).forEach(e => clearTimeout(e?.timeoutId));
   Object.keys(_pendingProfileCapture).forEach(k => delete _pendingProfileCapture[k]);
@@ -4300,6 +4309,21 @@ window.addEventListener('message', function(ev) {
           _triggerLscgScan('join-retry');
           _updateAutoScanBadge('join-retry');
         }, 12000);
+        // Slideshow-Resume: war sie wegen Disconnect pausiert → nach 5s fortsetzen
+        // (5s Wartezeit damit BC Raum betreten + Outfit-System laden kann)
+        if (_slideshowPaused && _slideshowQueue.length) {
+          _slideshowPaused = false;
+          showStatus('▶ Slideshow wird nach Reconnect fortgesetzt…', 'info');
+          const resumeBtn = document.getElementById('profileSlideshowBtn');
+          if (resumeBtn) resumeBtn.textContent = '⏹ Stop (' + _slideshowQueue.length + ')';
+          setTimeout(function() {
+            if (_connected && _slideshowQueue.length && !_slideshowPaused) {
+              // Originaloutfit neu sichern – kann sich durch Reconnect geändert haben
+              bcSend({ type: 'EXEC', code: '(function(){window.__BCU_slideshowOrig=Player.Appearance.slice();})();' }, true);
+              setTimeout(_runNextSlideshow, 500);
+            }
+          }, 5000);
+        }
       }
       break;
 
@@ -5190,11 +5214,9 @@ function captureOsScreenshot(mk, vIdx) {
 }
 
 // ── Profil-Screenshot via Player.Canvas ─────────────────────
-// Zwei-EXEC-Ansatz:
-//   EXEC 1 (optional): Outfit anwenden (LZString-Bundle via _buildApplyCode)
-//   EXEC 2 (nach Delay): Capture – exakt wie captureProfileScreenshot (bewiesenermaßen funktional)
-// outfitCode = LZString-Bundle-String  → Outfit anwenden + 600ms warten + capture
-// outfitCode = null/undefined          → direkt capture (Outfit wurde extern angewendet)
+// EXEC 1: Standard-Outfit wiederherstellen → Profil-Outfit anwenden → Snapshot speichern
+// EXEC 2: Snapshot-Verifikation (stimmen Items noch?) → Canvas aufnehmen
+// Zwischen jedem Profil wird garantiert das Originaloutfit wiederhergestellt.
 function captureProfileViaCanvas(name, outfitCode) {
   if (!_connected) return;
   const reqId = 'ps_' + Date.now() + '_' + String(name).replace(/[^a-zA-Z0-9]/g, '').slice(0, 16);
@@ -5202,40 +5224,90 @@ function captureProfileViaCanvas(name, outfitCode) {
 
   console.log('[BCU] captureProfileViaCanvas:', name, 'hasCode:', !!outfitCode, 'reqId:', reqId);
 
-  // EXEC 1: Outfit anwenden (nur wenn LZString-Bundle vorhanden)
+  // EXEC 1: Restore → Apply → Snapshot
   if (outfitCode) {
-    let applyExec;
+    let applyCode;
     try {
-      applyExec = '(function(){try{'
-        + _buildApplyCode(outfitCode)
-        + '}catch(e){console.error("[BCU] Apply-Fehler:",e.message);}})();';
+      applyCode = _buildApplyCode(outfitCode);
     } catch (buildErr) {
       console.error('[BCU] captureProfileViaCanvas _buildApplyCode Fehler:', buildErr.message);
       showStatus('❌ Profil-Code-Fehler: ' + buildErr.message, 'error');
       _runNextSlideshow();
       return;
     }
+
+    const applyExec = '(function(){'
+      // Default: kein Snapshot → EXEC 2 überspringt Verifikation
+      + 'window.__BCU_expectedItems=null;'
+      + 'window.__BCU_expectedReqId=' + J_reqId + ';'
+      + 'try{'
+      // 1. Standard-Outfit wiederherstellen (verhindert Item-Overflow zwischen Profilen)
+      + 'if(window.__BCU_slideshowOrig){'
+      + '  Player.Appearance.splice(0,Player.Appearance.length);'
+      + '  window.__BCU_slideshowOrig.forEach(function(i){Player.Appearance.push(i);});'
+      + '}'
+      // 2. Profil-Outfit anwenden (endet mit CharacterRefresh)
+      + applyCode
+      // 3. Snapshot der tatsächlich angelegten Items (nur BC-bekannte, nicht-nackte Items)
+      + 'var _snap={};'
+      + 'Player.Appearance.forEach(function(a){'
+      + '  if(a.Asset&&a.Asset.Group&&a.Asset.Name&&a.Asset.Name!==""){'
+      + '    _snap[a.Asset.Group.Name]=a.Asset.Name;'
+      + '  }'
+      + '});'
+      + 'window.__BCU_expectedItems=_snap;'
+      + '}catch(e){console.error("[BCU] Apply-Fehler:",e.message);}'
+      + '})();';
+
     bcSend({ type: 'EXEC', code: applyExec }, true);
   }
 
-  // Timeout-Fallback: wenn BC binnen 10s nicht antwortet → Slideshow fortsetzen
-  const captureDelay = outfitCode ? 700 : 100;
+  // Timeout-Fallback: bei Disconnect → pausieren, sonst überspringen
+  const captureDelay = outfitCode ? 900 : 100;
   const timeoutId = setTimeout(function() {
     if (_pendingProfileCapture[reqId] !== undefined) {
       console.warn('[BCU] captureProfileViaCanvas timeout:', name, reqId);
       delete _pendingProfileCapture[reqId];
-      showStatus('⏭ Screenshot-Timeout "' + name + '" – übersprungen', 'info');
-      _runNextSlideshow();
+      if (!_connected) {
+        _slideshowQueue.unshift(name);
+        _slideshowPaused = true;
+        showStatus('⏸ Slideshow pausiert (Disconnect) – "' + name + '" wird wiederholt', 'info');
+        const pauseBtn = document.getElementById('profileSlideshowBtn');
+        if (pauseBtn) pauseBtn.textContent = '⏸ Pausiert (' + _slideshowQueue.length + ')';
+      } else {
+        showStatus('⏭ Screenshot-Timeout "' + name + '" – übersprungen', 'info');
+        _runNextSlideshow();
+      }
     }
   }, captureDelay + 9000);
 
   _pendingProfileCapture[reqId] = { name, timeoutId };
 
-  // EXEC 2: Capture nach Delay – identisch zu captureProfileScreenshot (funktioniert)
+  // EXEC 2: Verifikation + Canvas-Capture
   const captureCode = '(function(){'
     + 'CharacterRefresh(Player,false,false);'
     + 'CharacterLoadCanvas(Player);'
     + 'setTimeout(function(){'
+    // ── Verifikation ──────────────────────────────────────────
+    // Prüfen ob die Items nach Apply noch korrekt in Player.Appearance sind.
+    // Schlägt fehl wenn ein anderes Mod/Skript das Outfit verändert hat.
+    + '  var exp=window.__BCU_expectedItems;'
+    + '  var expId=window.__BCU_expectedReqId;'
+    + '  if(exp!==null&&exp!==undefined&&expId===' + J_reqId + '){'
+    + '    var bad=[];'
+    + '    Object.keys(exp).forEach(function(g){'
+    + '      var worn=Player.Appearance.find(function(a){'
+    + '        return a.Asset&&a.Asset.Group&&a.Asset.Group.Name===g;'
+    + '      });'
+    + '      var wornName=worn&&worn.Asset?worn.Asset.Name:null;'
+    + '      if(wornName!==exp[g])bad.push(g+"/"+exp[g]);'
+    + '    });'
+    + '    if(bad.length>0){'
+    + '      window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",reqId:' + J_reqId + ',err:"Outfit falsch: "+bad.slice(0,4).join(", ")},"*");'
+    + '      return;'
+    + '    }'
+    + '  }'
+    // ── Canvas aufnehmen ──────────────────────────────────────
     + '  try{'
     + '    var src=Player.Canvas;'
     + '    if(!src||!src.width)throw new Error("Canvas leer");'
@@ -5259,7 +5331,7 @@ function captureProfileViaCanvas(name, outfitCode) {
     + '})();';
 
   setTimeout(function() {
-    if (_pendingProfileCapture[reqId] === undefined) return; // bereits per Timeout abgebrochen
+    if (_pendingProfileCapture[reqId] === undefined) return;
     console.log('[BCU] captureProfileViaCanvas: capture EXEC →', reqId);
     bcSend({ type: 'EXEC', code: captureCode }, true);
   }, captureDelay);
