@@ -5237,9 +5237,14 @@ function captureProfileViaCanvas(name, outfitCode) {
     }
 
     const applyExec = '(function(){'
-      // Default: kein Snapshot → EXEC 2 überspringt Verifikation
+      // Default: null = Apply fehlgeschlagen → EXEC 2 macht KEINEN Screenshot
       + 'window.__BCU_expectedItems=null;'
       + 'window.__BCU_expectedReqId=' + J_reqId + ';'
+      // Server-Sync vorübergehend deaktivieren – verhindert AccountUpdate während des Screenshots
+      + 'var _srv=typeof ServerSend!=="undefined"?ServerSend:null;'
+      + 'var _sync=typeof ServerPlayerAppearanceSync!=="undefined"?ServerPlayerAppearanceSync:null;'
+      + 'if(_srv)ServerSend=function(t){if(t!=="AccountUpdate")return _srv.apply(this,arguments);};'
+      + 'if(_sync)ServerPlayerAppearanceSync=function(){};'
       + 'try{'
       // 1. Standard-Outfit wiederherstellen (verhindert Item-Overflow zwischen Profilen)
       + 'if(window.__BCU_slideshowOrig){'
@@ -5257,6 +5262,11 @@ function captureProfileViaCanvas(name, outfitCode) {
       + '});'
       + 'window.__BCU_expectedItems=_snap;'
       + '}catch(e){console.error("[BCU] Apply-Fehler:",e.message);}'
+      + 'finally{'
+      // Server-Sync immer wiederherstellen (auch bei Fehler)
+      + 'if(_srv)ServerSend=_srv;'
+      + 'if(_sync)ServerPlayerAppearanceSync=_sync;'
+      + '}'
       + '})();';
 
     bcSend({ type: 'EXEC', code: applyExec }, true);
@@ -5290,10 +5300,15 @@ function captureProfileViaCanvas(name, outfitCode) {
     + 'setTimeout(function(){'
     // ── Verifikation ──────────────────────────────────────────
     // Prüfen ob die Items nach Apply noch korrekt in Player.Appearance sind.
-    // Schlägt fehl wenn ein anderes Mod/Skript das Outfit verändert hat.
+    // Schlägt fehl wenn Apply fehlschlug oder ein Mod/Skript das Outfit verändert hat.
     + '  var exp=window.__BCU_expectedItems;'
     + '  var expId=window.__BCU_expectedReqId;'
-    + '  if(exp!==null&&exp!==undefined&&expId===' + J_reqId + '){'
+    + '  if(expId===' + J_reqId + '){'
+    + '    if(exp===null||exp===undefined){'
+    // Apply fehlgeschlagen (Exception, leeres Bundle, o.ä.) → kein Screenshot
+    + '      window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",reqId:' + J_reqId + ',err:"Apply fehlgeschlagen – kein Screenshot"},"*");'
+    + '      return;'
+    + '    }'
     + '    var bad=[];'
     + '    Object.keys(exp).forEach(function(g){'
     + '      var worn=Player.Appearance.find(function(a){'
