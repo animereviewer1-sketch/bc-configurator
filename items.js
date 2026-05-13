@@ -5187,7 +5187,19 @@ function captureOsScreenshot(mk, vIdx) {
 function captureProfileViaCanvas(name, outfitCode) {
   if (!_connected) return;
   const reqId = 'ps_' + Date.now() + '_' + String(name).replace(/[^a-zA-Z0-9]/g, '').slice(0, 16);
-  _pendingProfileCapture[reqId] = name;
+
+  // Timeout-Fallback: wenn BC binnen 8s nicht antwortet → Slideshow fortsetzen
+  const timeoutId = setTimeout(function() {
+    if (_pendingProfileCapture[reqId] !== undefined) {
+      console.warn('[BCU] captureProfileViaCanvas timeout:', name, reqId);
+      delete _pendingProfileCapture[reqId];
+      showStatus('⏭ Screenshot-Timeout "' + name + '" – übersprungen', 'info');
+      _runNextSlideshow();
+    }
+  }, 8000);
+
+  _pendingProfileCapture[reqId] = { name, timeoutId };
+  console.log('[BCU] captureProfileViaCanvas:', name, 'hasCode:', !!outfitCode, 'reqId:', reqId);
 
   const J_reqId = JSON.stringify(reqId);
 
@@ -5195,43 +5207,46 @@ function captureProfileViaCanvas(name, outfitCode) {
     + 'if(typeof ServerPlayerAppearanceSync==="function")ServerPlayerAppearanceSync();'
     + 'else if(typeof ServerSend==="function")ServerSend("AccountUpdate",{Appearance:Player.Appearance});';
 
-  // Apply-Teil: erst auf slideshowOrig zurück, dann Profil-Outfit anwenden
+  // Fehler-Rückkanal: schickt Fehlermeldung zurück und stellt Outfit wieder her
+  const sendErr = 'function _sendErr(msg){'
+    + '  try{window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",reqId:' + J_reqId + ',err:msg},"*");}catch(_e){}'
+    + '  _restoreAndSync();'
+    + '}';
+
   const applyPart = outfitCode
     ? 'try{'
       + _buildApplyCode(outfitCode)
       + '}catch(applyErr){'
-      + '  Player.Appearance.splice(0,Player.Appearance.length);'
-      + '  origApp.forEach(function(i){Player.Appearance.push(i);});'
-      + '  CharacterRefresh(Player,false,false);'
-      + '  window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",reqId:' + J_reqId + ',err:"APPLY_FAIL:"+applyErr.message},"*");'
+      + '  _sendErr("APPLY_FAIL:"+applyErr.message);'
       + '  return;'
       + '}'
     : 'try{CharacterRefresh(Player,false,false);}catch(_e){}';
 
   const code = '(function(){'
+    + 'try{'
     + 'window.__BCU_captureGen=(window.__BCU_captureGen||0)+1;'
     + 'var myGen=window.__BCU_captureGen;'
-    // Originaloutfit: slideshowOrig wenn Slideshow läuft, sonst aktuelles Outfit
-    + 'var origApp=window.__BCU_slideshowOrig?window.__BCU_slideshowOrig.slice():Player.Appearance.slice();'
-    // Immer zuerst auf Original zurück damit kein Slot-Überlauf aus vorherigem Profil
+    // origApp: slideshowOrig wenn Slideshow läuft, sonst aktuelles Outfit
+    + 'var origApp=(window.__BCU_slideshowOrig||Player.Appearance).slice();'
+    // Restore auf Original (verhindert Slot-Überlauf aus vorherigem Profil)
     + 'Player.Appearance.splice(0,Player.Appearance.length);'
     + 'origApp.forEach(function(i){Player.Appearance.push(i);});'
-    + 'CharacterRefresh(Player,false,false);'
-    + applyPart
-    + 'var _prevHash=null,_checksDone=0,_maxChecks=6;'
     + 'function _restoreAndSync(){'
-    + '  Player.Appearance.splice(0,Player.Appearance.length);'
-    + '  origApp.forEach(function(i){Player.Appearance.push(i);});'
-    + '  CharacterRefresh(Player,false,false);'
+    + '  try{'
+    + '    Player.Appearance.splice(0,Player.Appearance.length);'
+    + '    origApp.forEach(function(i){Player.Appearance.push(i);});'
+    + '    CharacterRefresh(Player,false,false);'
+    + '  }catch(_e){}'
     + '  setTimeout(function(){'
     + '    if(window.__BCU_captureGen!==myGen)return;'
     + '    ' + syncToServer
     + '  },300);'
     + '}'
-    + 'function _canvasHash(canvas){'
+    + sendErr
+    + applyPart
+    + 'function _canvasHash(c){'
     + '  try{'
-    + '    var ctx=canvas.getContext("2d");'
-    + '    var d=ctx.getImageData(0,0,canvas.width,canvas.height).data;'
+    + '    var d=c.getContext("2d").getImageData(0,0,c.width,c.height).data;'
     + '    var r=0,len=d.length/4,step=Math.max(1,Math.floor(len/200));'
     + '    for(var i=0;i<len;i+=step){var ix=i*4;r=((r*31)|0)+d[ix]+d[ix+1]+d[ix+2];}'
     + '    return r;'
@@ -5248,9 +5263,7 @@ function captureProfileViaCanvas(name, outfitCode) {
     + '    var x0=W,x1=0,y0=H,y1=0;'
     + '    for(var r=0;r<H;r++){for(var c=0;c<W;c++){'
     + '      var ii=(r*W+c)*4;'
-    + '      if(px[ii]>5||px[ii+1]>5||px[ii+2]>5){'
-    + '        if(c<x0)x0=c;if(c>x1)x1=c;if(r<y0)y0=r;if(r>y1)y1=r;'
-    + '      }'
+    + '      if(px[ii]>5||px[ii+1]>5||px[ii+2]>5){if(c<x0)x0=c;if(c>x1)x1=c;if(r<y0)y0=r;if(r>y1)y1=r;}'
     + '    }}'
     + '    if(x1<x0){x0=0;y0=0;x1=W-1;y1=H-1;}'
     + '    var pad=20;'
@@ -5258,31 +5271,42 @@ function captureProfileViaCanvas(name, outfitCode) {
     + '    x1=Math.min(W-1,x1+pad);y1=Math.min(H-1,y1+pad);'
     + '    var cw=x1-x0+1,ch=y1-y0+1;'
     + '    var cc=document.createElement("canvas");cc.width=cw;cc.height=ch;'
-    + '    var ctx2=cc.getContext("2d");'
-    + '    ctx2.fillStyle="#000";ctx2.fillRect(0,0,cw,ch);'
+    + '    var ctx2=cc.getContext("2d");ctx2.fillStyle="#000";ctx2.fillRect(0,0,cw,ch);'
     + '    ctx2.drawImage(oc,x0,y0,cw,ch,0,0,cw,ch);'
-    + '    var data=cc.toDataURL("image/jpeg",0.88);'
-    + '    window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",reqId:' + J_reqId + ',data:data,width:cw,height:ch},"*");'
+    + '    window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",reqId:' + J_reqId + ',data:cc.toDataURL("image/jpeg",0.88),width:cw,height:ch},"*");'
     + '  }catch(e){'
-    + '    window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",reqId:' + J_reqId + ',err:e.message},"*");'
-    + '  }finally{'
-    + '    _restoreAndSync();'
+    + '    _sendErr(e.message);'
+    + '    return;'
     + '  }'
+    + '  _restoreAndSync();'
     + '}'
+    + 'var _prevHash=null,_checksDone=0,_maxChecks=8;'
     + 'function _renderCheck(){'
-    + '  CharacterRefresh(Player,false,false);'
-    + '  CharacterLoadCanvas(Player);'
+    + '  try{'
+    + '    CharacterRefresh(Player,false,false);'
+    + '    if(typeof CharacterLoadCanvas==="function")CharacterLoadCanvas(Player);'
+    + '  }catch(re){'
+    + '    _sendErr("REFRESH_ERR:"+re.message);'
+    + '    return;'
+    + '  }'
     + '  setTimeout(function(){'
-    + '    var h=_canvasHash(Player.Canvas);'
-    + '    if(h===_prevHash||_checksDone>=_maxChecks){'
-    + '      _sendCapture();'
-    + '    }else{'
-    + '      _prevHash=h;_checksDone++;'
-    + '      setTimeout(_renderCheck,150);'
+    + '    try{'
+    + '      var h=_canvasHash(Player.Canvas);'
+    + '      if(h===_prevHash||_checksDone>=_maxChecks){'
+    + '        _sendCapture();'
+    + '      }else{'
+    + '        _prevHash=h;_checksDone++;'
+    + '        setTimeout(_renderCheck,200);'
+    + '      }'
+    + '    }catch(ce){'
+    + '      _sendErr("HASH_ERR:"+ce.message);'
     + '    }'
-    + '  },100);'
+    + '  },150);'
     + '}'
-    + 'setTimeout(_renderCheck,100);'
+    + 'setTimeout(_renderCheck,200);'
+    + '}catch(topErr){'
+    + '  try{window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",reqId:' + J_reqId + ',err:"TOP_ERR:"+topErr.message},"*");}catch(_e){}'
+    + '}'
     + '})();';
 
   bcSend({ type: 'EXEC', code }, true);
