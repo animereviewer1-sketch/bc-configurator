@@ -2473,15 +2473,19 @@ function _runNextSlideshow() {
       + '  CharacterRefresh(Player,false,false);'
       + '}';
     if (p._outfitCode) {
-      // captureProfileViaCanvas: Restore + Apply + Canvas-Capture in einem einzigen EXEC
-      // Kein separater Apply-Step nötig – alles passiert in BC direkt
+      // LSCG-Profil: LZString-Bundle → captureProfileViaCanvas sendet Apply-EXEC + Capture-EXEC
       captureProfileViaCanvas(name, p._outfitCode);
     } else {
-      // Kein gespeicherter Outfit-Code: Profil aus UI laden, dann Canvas-Capture
+      // Normales Profil: raw-JS-Code aus UI → Apply als EXEC senden, dann captureProfileViaCanvas(null)
       loadProfile(name);
       setTimeout(() => {
-        const code = document.getElementById('outfitCode')?.value?.trim() || null;
-        captureProfileViaCanvas(name, code);
+        const rawCode = document.getElementById('outfitCode')?.value?.trim();
+        if (rawCode) {
+          // Apply via raw JS (wie Run-Button) – funktioniert bewiesenermaßen
+          bcSend({ type: 'EXEC', code: '(function(){\n' + rawCode + '\n})();' }, true);
+        }
+        // Capture nach Apply – captureProfileViaCanvas mit null = kein Apply-EXEC, nur Capture
+        captureProfileViaCanvas(name, null);
       }, 80);
     }
     showStatus('📸 (' + done + '/' + _slideshowTotal + ') "' + name + '" – noch ' + remaining + ' übrig', 'info');
@@ -5185,14 +5189,37 @@ function captureOsScreenshot(mk, vIdx) {
   bcSend({ type: 'EXEC', code }, true);
 }
 
-// ── Profil-Screenshot via Player.Canvas (wie LSCG-Outfit) ─────
-// Strukturell identisch zu captureOsScreenshot (die bewährte Referenz).
-// Einziger Unterschied: origApp kommt aus window.__BCU_slideshowOrig (Slideshow-Start-Appearance).
+// ── Profil-Screenshot via Player.Canvas ─────────────────────
+// Zwei-EXEC-Ansatz:
+//   EXEC 1 (optional): Outfit anwenden (LZString-Bundle via _buildApplyCode)
+//   EXEC 2 (nach Delay): Capture – exakt wie captureProfileScreenshot (bewiesenermaßen funktional)
+// outfitCode = LZString-Bundle-String  → Outfit anwenden + 600ms warten + capture
+// outfitCode = null/undefined          → direkt capture (Outfit wurde extern angewendet)
 function captureProfileViaCanvas(name, outfitCode) {
   if (!_connected) return;
   const reqId = 'ps_' + Date.now() + '_' + String(name).replace(/[^a-zA-Z0-9]/g, '').slice(0, 16);
+  const J_reqId = JSON.stringify(reqId);
 
-  // Timeout-Fallback: wenn BC binnen 8s nicht antwortet → Slideshow fortsetzen
+  console.log('[BCU] captureProfileViaCanvas:', name, 'hasCode:', !!outfitCode, 'reqId:', reqId);
+
+  // EXEC 1: Outfit anwenden (nur wenn LZString-Bundle vorhanden)
+  if (outfitCode) {
+    let applyExec;
+    try {
+      applyExec = '(function(){try{'
+        + _buildApplyCode(outfitCode)
+        + '}catch(e){console.error("[BCU] Apply-Fehler:",e.message);}})();';
+    } catch (buildErr) {
+      console.error('[BCU] captureProfileViaCanvas _buildApplyCode Fehler:', buildErr.message);
+      showStatus('❌ Profil-Code-Fehler: ' + buildErr.message, 'error');
+      _runNextSlideshow();
+      return;
+    }
+    bcSend({ type: 'EXEC', code: applyExec }, true);
+  }
+
+  // Timeout-Fallback: wenn BC binnen 10s nicht antwortet → Slideshow fortsetzen
+  const captureDelay = outfitCode ? 700 : 100;
   const timeoutId = setTimeout(function() {
     if (_pendingProfileCapture[reqId] !== undefined) {
       console.warn('[BCU] captureProfileViaCanvas timeout:', name, reqId);
@@ -5200,71 +5227,15 @@ function captureProfileViaCanvas(name, outfitCode) {
       showStatus('⏭ Screenshot-Timeout "' + name + '" – übersprungen', 'info');
       _runNextSlideshow();
     }
-  }, 8000);
+  }, captureDelay + 9000);
 
   _pendingProfileCapture[reqId] = { name, timeoutId };
-  console.log('[BCU] captureProfileViaCanvas:', name, 'hasCode:', !!outfitCode,
-    'codeType:', typeof outfitCode, 'reqId:', reqId);
 
-  const J_reqId = JSON.stringify(reqId);
-
-  const syncToServer = ''
-    + 'if(typeof ServerPlayerAppearanceSync==="function")ServerPlayerAppearanceSync();'
-    + 'else if(typeof ServerSend==="function")ServerSend("AccountUpdate",{Appearance:Player.Appearance});';
-
-  // _buildApplyCode auf Popup-Seite ausführen – wirft wenn outfitCode ungültig
-  let applyPart;
-  try {
-    applyPart = outfitCode
-      ? 'try{'
-        + _buildApplyCode(outfitCode)
-        + '}catch(applyErr){'
-        + '  Player.Appearance.splice(0,Player.Appearance.length);'
-        + '  origApp.forEach(function(i){Player.Appearance.push(i);});'
-        + '  CharacterRefresh(Player,false,false);'
-        + '  window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",reqId:' + J_reqId + ',err:"APPLY_FAIL:"+applyErr.message},"*");'
-        + '  return;'
-        + '}'
-      : 'try{CharacterRefresh(Player,false,false);}catch(_e){}';
-  } catch (buildErr) {
-    console.error('[BCU] captureProfileViaCanvas _buildApplyCode Fehler:', buildErr.message,
-      '| codeType:', typeof outfitCode, '| len:', outfitCode ? String(outfitCode).length : 0);
-    clearTimeout(timeoutId);
-    delete _pendingProfileCapture[reqId];
-    showStatus('❌ Profil-Code-Fehler: ' + buildErr.message, 'error');
-    _runNextSlideshow();
-    return;
-  }
-
-  // BC-seitiger Code: exakt gleiche Struktur wie captureOsScreenshot
-  console.log('[BCU] captureProfileViaCanvas: EXEC wird gesendet...');
-  const code = '(function(){'
-    // Generation-Counter: verhindert Race-Condition beim Restore
-    + 'window.__BCU_captureGen=(window.__BCU_captureGen||0)+1;'
-    + 'var myGen=window.__BCU_captureGen;'
-    // origApp: Slideshow-Ursprungs-Appearance (vor dem ersten Profil gespeichert)
-    + 'var origApp=(window.__BCU_slideshowOrig||Player.Appearance).slice();'
-    + applyPart
-    + 'var _prevHash=null,_checksDone=0,_maxChecks=6;'
-    + 'function _restoreAndSync(){'
-    + '  Player.Appearance.splice(0,Player.Appearance.length);'
-    + '  origApp.forEach(function(i){Player.Appearance.push(i);});'
-    + '  CharacterRefresh(Player,false,false);'
-    + '  setTimeout(function(){'
-    + '    if(window.__BCU_captureGen!==myGen)return;'
-    + '    ' + syncToServer
-    + '  },300);'
-    + '}'
-    + 'function _canvasHash(canvas){'
-    + '  try{'
-    + '    var ctx=canvas.getContext("2d");'
-    + '    var d=ctx.getImageData(0,0,canvas.width,canvas.height).data;'
-    + '    var r=0,len=d.length/4,step=Math.max(1,Math.floor(len/200));'
-    + '    for(var i=0;i<len;i+=step){var ix=i*4;r=((r*31)|0)+d[ix]+d[ix+1]+d[ix+2];}'
-    + '    return r;'
-    + '  }catch(_e){return -1;}'
-    + '}'
-    + 'function _sendCapture(){'
+  // EXEC 2: Capture nach Delay – identisch zu captureProfileScreenshot (funktioniert)
+  const captureCode = '(function(){'
+    + 'CharacterRefresh(Player,false,false);'
+    + 'CharacterLoadCanvas(Player);'
+    + 'setTimeout(function(){'
     + '  try{'
     + '    var src=Player.Canvas;'
     + '    if(!src||!src.width)throw new Error("Canvas leer");'
@@ -5273,47 +5244,25 @@ function captureProfileViaCanvas(name, outfitCode) {
     + '    var id=oc.getContext("2d").getImageData(0,0,oc.width,oc.height);'
     + '    var px=id.data,W=oc.width,H=oc.height;'
     + '    var x0=W,x1=0,y0=H,y1=0;'
-    + '    for(var r=0;r<H;r++){for(var c=0;c<W;c++){'
-    + '      var ii=(r*W+c)*4;'
-    + '      if(px[ii]>5||px[ii+1]>5||px[ii+2]>5){'
-    + '        if(c<x0)x0=c;if(c>x1)x1=c;if(r<y0)y0=r;if(r>y1)y1=r;'
-    + '      }'
-    + '    }}'
+    + '    for(var r=0;r<H;r++){for(var c=0;c<W;c++){var ii=(r*W+c)*4;if(px[ii]>5||px[ii+1]>5||px[ii+2]>5){if(c<x0)x0=c;if(c>x1)x1=c;if(r<y0)y0=r;if(r>y1)y1=r;}}}'
     + '    if(x1<x0){x0=0;y0=0;x1=W-1;y1=H-1;}'
-    + '    var pad=20;'
-    + '    x0=Math.max(0,x0-pad);y0=Math.max(0,y0-pad);'
-    + '    x1=Math.min(W-1,x1+pad);y1=Math.min(H-1,y1+pad);'
+    + '    var pad=20;x0=Math.max(0,x0-pad);y0=Math.max(0,y0-pad);x1=Math.min(W-1,x1+pad);y1=Math.min(H-1,y1+pad);'
     + '    var cw=x1-x0+1,ch=y1-y0+1;'
     + '    var cc=document.createElement("canvas");cc.width=cw;cc.height=ch;'
-    + '    var ctx2=cc.getContext("2d");'
-    + '    ctx2.fillStyle="#000";ctx2.fillRect(0,0,cw,ch);'
+    + '    var ctx2=cc.getContext("2d");ctx2.fillStyle="#000";ctx2.fillRect(0,0,cw,ch);'
     + '    ctx2.drawImage(oc,x0,y0,cw,ch,0,0,cw,ch);'
-    + '    var data=cc.toDataURL("image/jpeg",0.88);'
-    + '    window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",reqId:' + J_reqId + ',data:data,width:cw,height:ch},"*");'
+    + '    window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",reqId:' + J_reqId + ',data:cc.toDataURL("image/jpeg",0.88)},"*");'
     + '  }catch(e){'
     + '    window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",reqId:' + J_reqId + ',err:e.message},"*");'
-    + '  }finally{'
-    + '    _restoreAndSync();'
     + '  }'
-    + '}'
-    + 'function _renderCheck(){'
-    + '  CharacterRefresh(Player,false,false);'
-    + '  CharacterLoadCanvas(Player);'
-    + '  setTimeout(function(){'
-    + '    var h=_canvasHash(Player.Canvas);'
-    + '    if(h===_prevHash||_checksDone>=_maxChecks){'
-    + '      _sendCapture();'
-    + '    }else{'
-    + '      _prevHash=h;_checksDone++;'
-    + '      setTimeout(_renderCheck,150);'
-    + '    }'
-    + '  },100);'
-    + '}'
-    + 'setTimeout(_renderCheck,100);'
+    + '},250);'
     + '})();';
 
-  console.log('[BCU] captureProfileViaCanvas: bcSend EXEC, len:', code.length);
-  bcSend({ type: 'EXEC', code }, true);
+  setTimeout(function() {
+    if (_pendingProfileCapture[reqId] === undefined) return; // bereits per Timeout abgebrochen
+    console.log('[BCU] captureProfileViaCanvas: capture EXEC →', reqId);
+    bcSend({ type: 'EXEC', code: captureCode }, true);
+  }, captureDelay);
 }
 
 // ── Screenshot-Debug: Aufruf aus Popup-Konsole ────────
