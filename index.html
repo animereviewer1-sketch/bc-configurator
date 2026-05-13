@@ -2478,6 +2478,8 @@ button { cursor: pointer; }
             <input class="outfit-search" id="profileSearch" placeholder="🔍 Profil suchen..." oninput="_debouncedRenderProfileList()" style="width:140px;font-size:.69rem;padding:3px 8px">
             <span class="filter-chip profile-fc on" data-filter="all" onclick="setProfileFilter('all')" style="font-size:.65rem;padding:3px 9px">Alle</span>
             <span class="filter-chip profile-fc" data-filter="fav" onclick="setProfileFilter('fav')" title="Nur Favoriten" style="font-size:.65rem;padding:3px 9px">⭐ Favs</span>
+            <span class="filter-chip profile-fc" data-filter="withshot" onclick="setProfileFilter('withshot')" title="Nur Profile mit Screenshot" style="font-size:.65rem;padding:3px 9px">📷 Mit Bild</span>
+            <span class="filter-chip profile-fc" data-filter="noshot" onclick="setProfileFilter('noshot')" title="Nur Profile ohne Screenshot" style="font-size:.65rem;padding:3px 9px">🚫 Ohne Bild</span>
             <span class="filter-chip profile-fc" data-filter="noold" onclick="setProfileFilter('noold')" title="(old)-Profile ausblenden" style="font-size:.65rem;padding:3px 9px">🙈 (old) aus</span>
             <button class="btn btn-primary" id="profileSlideshowBtn" onclick="toggleProfileSlideshow()" title="Alle Profile ohne Screenshot im 5s-Takt ausführen und fotografieren" style="font-size:.65rem;padding:3px 9px">📸 Auto-Screenshot</button>
             <button class="btn" onclick="clearAllProfileScreenshots()" title="Alle Profil-Screenshots löschen (Profile bleiben erhalten)" style="font-size:.65rem;padding:3px 9px;color:#fb7185;border-color:rgba(251,113,133,0.3)">🖼️ Alle Bilder löschen</button>

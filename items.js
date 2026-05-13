@@ -2080,9 +2080,11 @@ function renderProfileList() {
   const q = (document.getElementById('profileSearch')?.value || '').toLowerCase();
   let keys = Object.keys(PROFILES).filter(k => !q || k.toLowerCase().includes(q));
   // Favoriten-Filter
-  if (_profileFilter === 'fav') keys = keys.filter(k => PROFILE_FAVS.has(k));
+  if (_profileFilter === 'fav')     keys = keys.filter(k => PROFILE_FAVS.has(k));
+  if (_profileFilter === 'withshot') keys = keys.filter(k => !!PROFILE_SCREENSHOTS[k]);
+  if (_profileFilter === 'noshot')  keys = keys.filter(k => !PROFILE_SCREENSHOTS[k]);
   // (old) ausblenden – alle Profile deren Owner "(old)" im Namen hat
-  if (_profileFilter === 'noold') keys = keys.filter(k => !/\(old\)/i.test(_profileOwnerOf(k)));
+  if (_profileFilter === 'noold')  keys = keys.filter(k => !/\(old\)/i.test(_profileOwnerOf(k)));
   document.querySelectorAll('.profile-fc').forEach(chip => chip.classList.toggle('on', chip.dataset.filter === _profileFilter));
   if (!keys.length) {
     el.innerHTML = '<p style="color:var(--text3);font-size:.8rem">Noch keine Profile gespeichert.</p>';
@@ -2421,13 +2423,14 @@ function captureProfileScreenshot(pname) {
 }
 
 // ── Auto-Screenshot Slideshow ─────────────────────────
-let _slideshowTimer  = null;
-let _slideshowQueue  = [];
-let _slideshowTotal  = 0;
-let _slideshowPaused = false; // true = pausiert (Disconnect), wartet auf Reconnect
+let _slideshowTimer   = null;
+let _slideshowQueue   = [];
+let _slideshowTotal   = 0;
+let _slideshowPaused  = false; // true = pausiert (Disconnect), wartet auf Reconnect
+let _slideshowRunning = false; // true sobald Slideshow läuft (auch wenn Queue leer aber Capture läuft)
 
 function toggleProfileSlideshow() {
-  if (_slideshowTimer !== null || _slideshowQueue.length || _slideshowPaused) {
+  if (_slideshowRunning || _slideshowTimer !== null || _slideshowQueue.length || _slideshowPaused) {
     _stopProfileSlideshow();
     showStatus('⏹ Auto-Screenshot gestoppt', 'info');
     return;
@@ -2437,6 +2440,7 @@ function toggleProfileSlideshow() {
 
 function _startProfileSlideshow() {
   if (!_connected) { showStatus('❌ Nicht verbunden mit BC', 'error'); return; }
+  _slideshowRunning = true;
   // Originaloutfit vor dem Start sichern – wird vor jedem Profil wiederhergestellt
   // damit Haare/Slots aus Profil N nicht in Profil N+1 überlaufen.
   bcSend({ type: 'EXEC', code: '(function(){window.__BCU_slideshowOrig=Player.Appearance.slice();})();' }, true);
@@ -2508,10 +2512,11 @@ function _runNextSlideshow() {
 
 function _stopProfileSlideshow() {
   clearTimeout(_slideshowTimer);
-  _slideshowTimer = null;
-  _slideshowQueue = [];
-  _slideshowTotal = 0;
-  _slideshowPaused = false;
+  _slideshowTimer   = null;
+  _slideshowQueue   = [];
+  _slideshowTotal   = 0;
+  _slideshowPaused  = false;
+  _slideshowRunning = false;
   // Laufende Canvas-Captures abbrechen + Timeouts clearen
   Object.values(_pendingProfileCapture).forEach(e => clearTimeout(e?.timeoutId));
   Object.keys(_pendingProfileCapture).forEach(k => delete _pendingProfileCapture[k]);
