@@ -2499,7 +2499,8 @@ function _stopProfileSlideshow() {
   _slideshowTimer = null;
   _slideshowQueue = [];
   _slideshowTotal = 0;
-  // Laufende Canvas-Captures abbrechen (Antworten werden dann ignoriert)
+  // Laufende Canvas-Captures abbrechen + Timeouts clearen
+  Object.values(_pendingProfileCapture).forEach(e => clearTimeout(e?.timeoutId));
   Object.keys(_pendingProfileCapture).forEach(k => delete _pendingProfileCapture[k]);
   // Originaloutfit nach dem Slideshow wiederherstellen + Server-Sync
   if (_connected) {
@@ -2638,8 +2639,11 @@ function _handleCanvasPreviewData(data) {
 
   // ── Profil-Canvas-Capture (reqId beginnt mit 'ps_') ──────────
   if (_pendingProfileCapture[data.reqId] !== undefined) {
-    const name = _pendingProfileCapture[data.reqId];
+    const entry = _pendingProfileCapture[data.reqId];
+    const name = entry?.name ?? entry; // Kompatibilität: früher war es ein String
+    clearTimeout(entry?.timeoutId);
     delete _pendingProfileCapture[data.reqId];
+    console.log('[BCU] ps_ capture empfangen:', name, 'err:', data.err || 'none');
 
     if (data.err) {
       showStatus('⚠️ Profil-Screenshot "' + name + '": ' + data.err, 'error');
@@ -5199,7 +5203,8 @@ function captureProfileViaCanvas(name, outfitCode) {
   }, 8000);
 
   _pendingProfileCapture[reqId] = { name, timeoutId };
-  console.log('[BCU] captureProfileViaCanvas:', name, 'hasCode:', !!outfitCode, 'reqId:', reqId);
+  console.log('[BCU] captureProfileViaCanvas:', name, 'hasCode:', !!outfitCode,
+    'codeType:', typeof outfitCode, 'reqId:', reqId);
 
   const J_reqId = JSON.stringify(reqId);
 
@@ -5213,7 +5218,10 @@ function captureProfileViaCanvas(name, outfitCode) {
     + '  _restoreAndSync();'
     + '}';
 
-  const applyPart = outfitCode
+  // _buildApplyCode separat in try-catch – wirft wenn outfitCode kein gültiger String ist
+  let applyPart;
+  try {
+    applyPart = outfitCode
     ? 'try{'
       + _buildApplyCode(outfitCode)
       + '}catch(applyErr){'
@@ -5221,7 +5229,17 @@ function captureProfileViaCanvas(name, outfitCode) {
       + '  return;'
       + '}'
     : 'try{CharacterRefresh(Player,false,false);}catch(_e){}';
+  } catch (buildErr) {
+    console.error('[BCU] captureProfileViaCanvas _buildApplyCode Fehler:', buildErr.message,
+      '| codeType:', typeof outfitCode, '| len:', outfitCode ? String(outfitCode).length : 0);
+    clearTimeout(timeoutId);
+    delete _pendingProfileCapture[reqId];
+    showStatus('❌ Profil-Code-Fehler: ' + buildErr.message, 'error');
+    _runNextSlideshow();
+    return;
+  }
 
+  console.log('[BCU] captureProfileViaCanvas: EXEC wird gesendet, codeLen wird berechnet...');
   const code = '(function(){'
     + 'try{'
     + 'window.__BCU_captureGen=(window.__BCU_captureGen||0)+1;'
@@ -5309,6 +5327,7 @@ function captureProfileViaCanvas(name, outfitCode) {
     + '}'
     + '})();';
 
+  console.log('[BCU] captureProfileViaCanvas: bcSend EXEC, len:', code.length);
   bcSend({ type: 'EXEC', code }, true);
 }
 
