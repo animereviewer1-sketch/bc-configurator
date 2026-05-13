@@ -2478,19 +2478,15 @@ function _runNextSlideshow() {
       + '  CharacterRefresh(Player,false,false);'
       + '}';
     if (p._outfitCode) {
-      // LSCG-Profil: LZString-Bundle → captureProfileViaCanvas sendet Apply-EXEC + Capture-EXEC
-      captureProfileViaCanvas(name, p._outfitCode);
+      // LSCG-Profil: LZString-Bundle → single EXEC (apply + capture atomar)
+      captureProfileViaCanvas(name, p._outfitCode, null);
     } else {
-      // Normales Profil: raw-JS-Code aus UI → Apply als EXEC senden, dann captureProfileViaCanvas(null)
+      // Normales Profil: raw-JS-Code aus UI → in single EXEC einbetten
       loadProfile(name);
       setTimeout(() => {
-        const rawCode = document.getElementById('outfitCode')?.value?.trim();
-        if (rawCode) {
-          // Apply via raw JS (wie Run-Button) – funktioniert bewiesenermaßen
-          bcSend({ type: 'EXEC', code: '(function(){\n' + rawCode + '\n})();' }, true);
-        }
-        // Capture nach Apply – captureProfileViaCanvas mit null = kein Apply-EXEC, nur Capture
-        captureProfileViaCanvas(name, null);
+        const rawCode = document.getElementById('outfitCode')?.value?.trim() || null;
+        // rawCode wird als rawApplyCode übergeben → single EXEC (restore + apply + capture)
+        captureProfileViaCanvas(name, null, rawCode);
       }, 80);
     }
     showStatus('📸 (' + done + '/' + _slideshowTotal + ') "' + name + '" – noch ' + remaining + ' übrig', 'info');
@@ -5219,19 +5215,22 @@ function captureOsScreenshot(mk, vIdx) {
 }
 
 // ── Profil-Screenshot via Player.Canvas ─────────────────────
-// EXEC 1: Standard-Outfit wiederherstellen → Profil-Outfit anwenden → Snapshot speichern
-// EXEC 2: Snapshot-Verifikation (stimmen Items noch?) → Canvas aufnehmen
-// Zwischen jedem Profil wird garantiert das Originaloutfit wiederhergestellt.
-function captureProfileViaCanvas(name, outfitCode) {
+// Ein einziger EXEC (wie captureOsScreenshot):
+//   Restore → Server-Sync deaktivieren → Apply → Snapshot → Render-Loop → Verify → Capture → Restore
+// Kein Zeitfenster für fremde EXECs, kein Server-Update während des Screenshots.
+// outfitCode  = LZString-Bundle (LSCG-Profil) oder null
+// rawApplyCode = roher JS-Code (normales Profil) oder null
+// Genau einer der beiden kann gesetzt sein. Wenn beide null: nur Capture (kein Apply).
+function captureProfileViaCanvas(name, outfitCode, rawApplyCode) {
   if (!_connected) return;
   const reqId = 'ps_' + Date.now() + '_' + String(name).replace(/[^a-zA-Z0-9]/g, '').slice(0, 16);
   const J_reqId = JSON.stringify(reqId);
 
-  console.log('[BCU] captureProfileViaCanvas:', name, 'hasCode:', !!outfitCode, 'reqId:', reqId);
+  console.log('[BCU] captureProfileViaCanvas:', name, 'hasCode:', !!outfitCode, 'hasRaw:', !!rawApplyCode, 'reqId:', reqId);
 
-  // EXEC 1: Restore → Apply → Snapshot
+  // Popup-seitig: _buildApplyCode ausführen (wirft wenn outfitCode ungültig)
+  let applyCode = '';
   if (outfitCode) {
-    let applyCode;
     try {
       applyCode = _buildApplyCode(outfitCode);
     } catch (buildErr) {
@@ -5240,45 +5239,9 @@ function captureProfileViaCanvas(name, outfitCode) {
       _runNextSlideshow();
       return;
     }
-
-    const applyExec = '(function(){'
-      // Default: null = Apply fehlgeschlagen → EXEC 2 macht KEINEN Screenshot
-      + 'window.__BCU_expectedItems=null;'
-      + 'window.__BCU_expectedReqId=' + J_reqId + ';'
-      // Server-Sync vorübergehend deaktivieren – verhindert AccountUpdate während des Screenshots
-      + 'var _srv=typeof ServerSend!=="undefined"?ServerSend:null;'
-      + 'var _sync=typeof ServerPlayerAppearanceSync!=="undefined"?ServerPlayerAppearanceSync:null;'
-      + 'if(_srv)ServerSend=function(t){if(t!=="AccountUpdate")return _srv.apply(this,arguments);};'
-      + 'if(_sync)ServerPlayerAppearanceSync=function(){};'
-      + 'try{'
-      // 1. Standard-Outfit wiederherstellen (verhindert Item-Overflow zwischen Profilen)
-      + 'if(window.__BCU_slideshowOrig){'
-      + '  Player.Appearance.splice(0,Player.Appearance.length);'
-      + '  window.__BCU_slideshowOrig.forEach(function(i){Player.Appearance.push(i);});'
-      + '}'
-      // 2. Profil-Outfit anwenden (endet mit CharacterRefresh)
-      + applyCode
-      // 3. Snapshot der tatsächlich angelegten Items (nur BC-bekannte, nicht-nackte Items)
-      + 'var _snap={};'
-      + 'Player.Appearance.forEach(function(a){'
-      + '  if(a.Asset&&a.Asset.Group&&a.Asset.Name&&a.Asset.Name!==""){'
-      + '    _snap[a.Asset.Group.Name]=a.Asset.Name;'
-      + '  }'
-      + '});'
-      + 'window.__BCU_expectedItems=_snap;'
-      + '}catch(e){console.error("[BCU] Apply-Fehler:",e.message);}'
-      + 'finally{'
-      // Server-Sync immer wiederherstellen (auch bei Fehler)
-      + 'if(_srv)ServerSend=_srv;'
-      + 'if(_sync)ServerPlayerAppearanceSync=_sync;'
-      + '}'
-      + '})();';
-
-    bcSend({ type: 'EXEC', code: applyExec }, true);
   }
 
-  // Timeout-Fallback: bei Disconnect → pausieren, sonst überspringen
-  const captureDelay = outfitCode ? 900 : 100;
+  // Timeout-Fallback: bei Disconnect pausieren, sonst überspringen
   const timeoutId = setTimeout(function() {
     if (_pendingProfileCapture[reqId] !== undefined) {
       console.warn('[BCU] captureProfileViaCanvas timeout:', name, reqId);
@@ -5294,41 +5257,102 @@ function captureProfileViaCanvas(name, outfitCode) {
         _runNextSlideshow();
       }
     }
-  }, captureDelay + 9000);
+  }, 12000);
 
   _pendingProfileCapture[reqId] = { name, timeoutId };
 
-  // EXEC 2: Verifikation + Canvas-Capture
-  const captureCode = '(function(){'
-    + 'CharacterRefresh(Player,false,false);'
-    + 'CharacterLoadCanvas(Player);'
-    + 'setTimeout(function(){'
-    // ── Verifikation ──────────────────────────────────────────
-    // Prüfen ob die Items nach Apply noch korrekt in Player.Appearance sind.
-    // Schlägt fehl wenn Apply fehlschlug oder ein Mod/Skript das Outfit verändert hat.
-    + '  var exp=window.__BCU_expectedItems;'
-    + '  var expId=window.__BCU_expectedReqId;'
-    + '  if(expId===' + J_reqId + '){'
-    + '    if(exp===null||exp===undefined){'
-    // Apply fehlgeschlagen (Exception, leeres Bundle, o.ä.) → kein Screenshot
-    + '      window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",reqId:' + J_reqId + ',err:"Apply fehlgeschlagen – kein Screenshot"},"*");'
-    + '      return;'
-    + '    }'
+  // syncToServer: nur beim Restore nach dem Screenshot (wie captureOsScreenshot)
+  const syncToServer = ''
+    + 'if(typeof ServerPlayerAppearanceSync==="function")ServerPlayerAppearanceSync();'
+    + 'else if(typeof ServerSend==="function")ServerSend("AccountUpdate",{Appearance:Player.Appearance});';
+
+  // Einziger EXEC: alles atomar – kein Zeitfenster für fremde EXECs
+  // applyBlock = vollständiger try/catch-Block mit Fehler-Reporting für den EXEC
+  const _errSend = 'if(_srv)ServerSend=_srv;if(_sync)ServerPlayerAppearanceSync=_sync;'
+    + 'window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",reqId:' + J_reqId + ',err:"APPLY_FAIL:"+applyErr.message},"*");'
+    + 'return;';
+  let applyBlock;
+  if (outfitCode) {
+    // LZString-Bundle: applyCode endet mit CharacterRefresh(Player,false,false)
+    applyBlock = 'try{' + applyCode + '}catch(applyErr){' + _errSend + '}';
+  } else if (rawApplyCode) {
+    // Roher JS-Code: in Closure einbetten + CharacterRefresh danach
+    applyBlock = 'try{(function(){\n' + rawApplyCode + '\n})();CharacterRefresh(Player,false,false);}catch(applyErr){' + _errSend + '}';
+  } else {
+    // Kein Code: nur Refresh (Profil ohne Outfit-Code)
+    applyBlock = 'try{CharacterRefresh(Player,false,false);}catch(_e){}';
+  }
+
+  const code = '(function(){'
+    // Generation-Counter: verhindert Race-Condition beim Restore
+    + 'window.__BCU_captureGen=(window.__BCU_captureGen||0)+1;'
+    + 'var myGen=window.__BCU_captureGen;'
+    // origApp: Slideshow-Originaloutfit (vor erstem Profil gesichert)
+    + 'var origApp=(window.__BCU_slideshowOrig||Player.Appearance).slice();'
+
+    // ── Server-Sync während Screenshot deaktivieren ────────────
+    // Wie LSCG-Outfit: Apply nur lokal, kein AccountUpdate an den Server.
+    + 'var _srv=typeof ServerSend!=="undefined"?ServerSend:null;'
+    + 'var _sync=typeof ServerPlayerAppearanceSync!=="undefined"?ServerPlayerAppearanceSync:null;'
+    + 'if(_srv)ServerSend=function(t){if(t!=="AccountUpdate")return _srv.apply(this,arguments);};'
+    + 'if(_sync)ServerPlayerAppearanceSync=function(){};'
+
+    // ── 1. Standard-Outfit wiederherstellen ───────────────────
+    + 'Player.Appearance.splice(0,Player.Appearance.length);'
+    + 'origApp.forEach(function(i){Player.Appearance.push(i);});'
+
+    // ── 2. Profil-Outfit anwenden ─────────────────────────────
+    + applyBlock
+
+    // ── 3. Snapshot direkt nach Apply ────────────────────────
+    // Unmittelbar nach Apply aufnehmen – kein anderer EXEC kann dazwischenfunken.
+    + 'var _snap={};'
+    + 'Player.Appearance.forEach(function(a){'
+    + '  if(a.Asset&&a.Asset.Group&&a.Asset.Name&&a.Asset.Name!==""){'
+    + '    _snap[a.Asset.Group.Name]=a.Asset.Name;'
+    + '  }'
+    + '});'
+
+    // Server-Sync jetzt wieder aktivieren (Restore am Ende darf synchen)
+    + 'if(_srv)ServerSend=_srv;'
+    + 'if(_sync)ServerPlayerAppearanceSync=_sync;'
+
+    // ── Hilfsfunktionen ───────────────────────────────────────
+    + 'var _prevHash=null,_checksDone=0,_maxChecks=6;'
+    + 'function _restoreAndSync(){'
+    + '  Player.Appearance.splice(0,Player.Appearance.length);'
+    + '  origApp.forEach(function(i){Player.Appearance.push(i);});'
+    + '  CharacterRefresh(Player,false,false);'
+    + '  setTimeout(function(){'
+    + '    if(window.__BCU_captureGen!==myGen)return;'
+    + '    ' + syncToServer
+    + '  },300);'
+    + '}'
+    + 'function _canvasHash(canvas){'
+    + '  try{'
+    + '    var ctx=canvas.getContext("2d");'
+    + '    var d=ctx.getImageData(0,0,canvas.width,canvas.height).data;'
+    + '    var r=0,len=d.length/4,step=Math.max(1,Math.floor(len/200));'
+    + '    for(var i=0;i<len;i+=step){var ix=i*4;r=((r*31)|0)+d[ix]+d[ix+1]+d[ix+2];}'
+    + '    return r;'
+    + '  }catch(_e){return -1;}'
+    + '}'
+    + 'function _sendCapture(){'
+    + '  try{'
+    // ── 4. Verifikation: Items müssen noch dem Snapshot entsprechen ──
     + '    var bad=[];'
-    + '    Object.keys(exp).forEach(function(g){'
+    + '    Object.keys(_snap).forEach(function(g){'
     + '      var worn=Player.Appearance.find(function(a){'
     + '        return a.Asset&&a.Asset.Group&&a.Asset.Group.Name===g;'
     + '      });'
     + '      var wornName=worn&&worn.Asset?worn.Asset.Name:null;'
-    + '      if(wornName!==exp[g])bad.push(g+"/"+exp[g]);'
+    + '      if(wornName!==_snap[g])bad.push(g+"/"+_snap[g]);'
     + '    });'
     + '    if(bad.length>0){'
     + '      window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",reqId:' + J_reqId + ',err:"Outfit falsch: "+bad.slice(0,4).join(", ")},"*");'
-    + '      return;'
+    + '      _restoreAndSync();return;'
     + '    }'
-    + '  }'
-    // ── Canvas aufnehmen ──────────────────────────────────────
-    + '  try{'
+    // ── 5. Canvas aufnehmen ───────────────────────────────────
     + '    var src=Player.Canvas;'
     + '    if(!src||!src.width)throw new Error("Canvas leer");'
     + '    var oc=document.createElement("canvas");oc.width=src.width;oc.height=src.height;'
@@ -5336,7 +5360,10 @@ function captureProfileViaCanvas(name, outfitCode) {
     + '    var id=oc.getContext("2d").getImageData(0,0,oc.width,oc.height);'
     + '    var px=id.data,W=oc.width,H=oc.height;'
     + '    var x0=W,x1=0,y0=H,y1=0;'
-    + '    for(var r=0;r<H;r++){for(var c=0;c<W;c++){var ii=(r*W+c)*4;if(px[ii]>5||px[ii+1]>5||px[ii+2]>5){if(c<x0)x0=c;if(c>x1)x1=c;if(r<y0)y0=r;if(r>y1)y1=r;}}}'
+    + '    for(var r=0;r<H;r++){for(var c=0;c<W;c++){'
+    + '      var ii=(r*W+c)*4;'
+    + '      if(px[ii]>5||px[ii+1]>5||px[ii+2]>5){if(c<x0)x0=c;if(c>x1)x1=c;if(r<y0)y0=r;if(r>y1)y1=r;}'
+    + '    }}'
     + '    if(x1<x0){x0=0;y0=0;x1=W-1;y1=H-1;}'
     + '    var pad=20;x0=Math.max(0,x0-pad);y0=Math.max(0,y0-pad);x1=Math.min(W-1,x1+pad);y1=Math.min(H-1,y1+pad);'
     + '    var cw=x1-x0+1,ch=y1-y0+1;'
@@ -5346,15 +5373,29 @@ function captureProfileViaCanvas(name, outfitCode) {
     + '    window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",reqId:' + J_reqId + ',data:cc.toDataURL("image/jpeg",0.88)},"*");'
     + '  }catch(e){'
     + '    window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",reqId:' + J_reqId + ',err:e.message},"*");'
+    + '  }finally{'
+    + '    _restoreAndSync();'
     + '  }'
-    + '},250);'
+    + '}'
+    // Render-Loop: wie captureOsScreenshot
+    + 'function _renderCheck(){'
+    + '  CharacterRefresh(Player,false,false);'
+    + '  CharacterLoadCanvas(Player);'
+    + '  setTimeout(function(){'
+    + '    var h=_canvasHash(Player.Canvas);'
+    + '    if(h===_prevHash||_checksDone>=_maxChecks){'
+    + '      _sendCapture();'
+    + '    }else{'
+    + '      _prevHash=h;_checksDone++;'
+    + '      setTimeout(_renderCheck,150);'
+    + '    }'
+    + '  },100);'
+    + '}'
+    + 'setTimeout(_renderCheck,100);'
     + '})();';
 
-  setTimeout(function() {
-    if (_pendingProfileCapture[reqId] === undefined) return;
-    console.log('[BCU] captureProfileViaCanvas: capture EXEC →', reqId);
-    bcSend({ type: 'EXEC', code: captureCode }, true);
-  }, captureDelay);
+  console.log('[BCU] captureProfileViaCanvas: EXEC len:', code.length);
+  bcSend({ type: 'EXEC', code }, true);
 }
 
 // ── Screenshot-Debug: Aufruf aus Popup-Konsole ────────
