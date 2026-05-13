@@ -5186,8 +5186,8 @@ function captureOsScreenshot(mk, vIdx) {
 }
 
 // ── Profil-Screenshot via Player.Canvas (wie LSCG-Outfit) ─────
-// Restore Original → Outfit anwenden → Stabilisierungs-Loop → Player.Canvas capture → Restore
-// Schneller und zeigt nur den Charakter (kein UI-Hintergrund).
+// Strukturell identisch zu captureOsScreenshot (die bewährte Referenz).
+// Einziger Unterschied: origApp kommt aus window.__BCU_slideshowOrig (Slideshow-Start-Appearance).
 function captureProfileViaCanvas(name, outfitCode) {
   if (!_connected) return;
   const reqId = 'ps_' + Date.now() + '_' + String(name).replace(/[^a-zA-Z0-9]/g, '').slice(0, 16);
@@ -5212,23 +5212,20 @@ function captureProfileViaCanvas(name, outfitCode) {
     + 'if(typeof ServerPlayerAppearanceSync==="function")ServerPlayerAppearanceSync();'
     + 'else if(typeof ServerSend==="function")ServerSend("AccountUpdate",{Appearance:Player.Appearance});';
 
-  // Fehler-Rückkanal: schickt Fehlermeldung zurück und stellt Outfit wieder her
-  const sendErr = 'function _sendErr(msg){'
-    + '  try{window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",reqId:' + J_reqId + ',err:msg},"*");}catch(_e){}'
-    + '  _restoreAndSync();'
-    + '}';
-
-  // _buildApplyCode separat in try-catch – wirft wenn outfitCode kein gültiger String ist
+  // _buildApplyCode auf Popup-Seite ausführen – wirft wenn outfitCode ungültig
   let applyPart;
   try {
     applyPart = outfitCode
-    ? 'try{'
-      + _buildApplyCode(outfitCode)
-      + '}catch(applyErr){'
-      + '  _sendErr("APPLY_FAIL:"+applyErr.message);'
-      + '  return;'
-      + '}'
-    : 'try{CharacterRefresh(Player,false,false);}catch(_e){}';
+      ? 'try{'
+        + _buildApplyCode(outfitCode)
+        + '}catch(applyErr){'
+        + '  Player.Appearance.splice(0,Player.Appearance.length);'
+        + '  origApp.forEach(function(i){Player.Appearance.push(i);});'
+        + '  CharacterRefresh(Player,false,false);'
+        + '  window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",reqId:' + J_reqId + ',err:"APPLY_FAIL:"+applyErr.message},"*");'
+        + '  return;'
+        + '}'
+      : 'try{CharacterRefresh(Player,false,false);}catch(_e){}';
   } catch (buildErr) {
     console.error('[BCU] captureProfileViaCanvas _buildApplyCode Fehler:', buildErr.message,
       '| codeType:', typeof outfitCode, '| len:', outfitCode ? String(outfitCode).length : 0);
@@ -5239,57 +5236,80 @@ function captureProfileViaCanvas(name, outfitCode) {
     return;
   }
 
-  // Alle Hilfsfunktionen AUSSERHALB des try-Blocks definieren,
-  // damit setTimeout-Callbacks sie sicher referenzieren können.
-  // (function-declarations in try-Blöcken haben in manchen Engines block-scope)
-  console.log('[BCU] captureProfileViaCanvas: EXEC wird gesendet, codeLen wird berechnet...');
+  // BC-seitiger Code: exakt gleiche Struktur wie captureOsScreenshot
+  console.log('[BCU] captureProfileViaCanvas: EXEC wird gesendet...');
   const code = '(function(){'
-    // Vars am IIFE-Level – sichtbar für alle internen Funktionen
-    + 'var myGen=0,origApp=[],_prevHash=null,_checksDone=0,_maxChecks=8;'
-    // ── Hilfsfunktionen (kein try-Block hier!) ────────────────────
+    // Generation-Counter: verhindert Race-Condition beim Restore
+    + 'window.__BCU_captureGen=(window.__BCU_captureGen||0)+1;'
+    + 'var myGen=window.__BCU_captureGen;'
+    // origApp: Slideshow-Ursprungs-Appearance (vor dem ersten Profil gespeichert)
+    + 'var origApp=(window.__BCU_slideshowOrig||Player.Appearance).slice();'
+    + applyPart
+    + 'var _prevHash=null,_checksDone=0,_maxChecks=6;'
     + 'function _restoreAndSync(){'
-    + '  try{Player.Appearance.splice(0,Player.Appearance.length);origApp.forEach(function(i){Player.Appearance.push(i);});CharacterRefresh(Player,false,false);}catch(_e){}'
-    + '  setTimeout(function(){if(window.__BCU_captureGen===myGen){' + syncToServer + '}},300);'
+    + '  Player.Appearance.splice(0,Player.Appearance.length);'
+    + '  origApp.forEach(function(i){Player.Appearance.push(i);});'
+    + '  CharacterRefresh(Player,false,false);'
+    + '  setTimeout(function(){'
+    + '    if(window.__BCU_captureGen!==myGen)return;'
+    + '    ' + syncToServer
+    + '  },300);'
     + '}'
-    + sendErr   // function _sendErr(msg){...}
-    + 'function _canvasHash(c){try{var d=c.getContext("2d").getImageData(0,0,c.width,c.height).data;var r=0,len=d.length/4,step=Math.max(1,Math.floor(len/200));for(var i=0;i<len;i+=step){var ix=i*4;r=((r*31)|0)+d[ix]+d[ix+1]+d[ix+2];}return r;}catch(_e){return -1;}}'
+    + 'function _canvasHash(canvas){'
+    + '  try{'
+    + '    var ctx=canvas.getContext("2d");'
+    + '    var d=ctx.getImageData(0,0,canvas.width,canvas.height).data;'
+    + '    var r=0,len=d.length/4,step=Math.max(1,Math.floor(len/200));'
+    + '    for(var i=0;i<len;i+=step){var ix=i*4;r=((r*31)|0)+d[ix]+d[ix+1]+d[ix+2];}'
+    + '    return r;'
+    + '  }catch(_e){return -1;}'
+    + '}'
     + 'function _sendCapture(){'
     + '  try{'
-    + '    var src=Player.Canvas;if(!src||!src.width)throw new Error("Canvas leer");'
+    + '    var src=Player.Canvas;'
+    + '    if(!src||!src.width)throw new Error("Canvas leer");'
     + '    var oc=document.createElement("canvas");oc.width=src.width;oc.height=src.height;'
     + '    oc.getContext("2d").drawImage(src,0,0);'
     + '    var id=oc.getContext("2d").getImageData(0,0,oc.width,oc.height);'
-    + '    var px=id.data,W=oc.width,H=oc.height,x0=W,x1=0,y0=H,y1=0;'
-    + '    for(var r=0;r<H;r++){for(var c=0;c<W;c++){var ii=(r*W+c)*4;if(px[ii]>5||px[ii+1]>5||px[ii+2]>5){if(c<x0)x0=c;if(c>x1)x1=c;if(r<y0)y0=r;if(r>y1)y1=r;}}}'
+    + '    var px=id.data,W=oc.width,H=oc.height;'
+    + '    var x0=W,x1=0,y0=H,y1=0;'
+    + '    for(var r=0;r<H;r++){for(var c=0;c<W;c++){'
+    + '      var ii=(r*W+c)*4;'
+    + '      if(px[ii]>5||px[ii+1]>5||px[ii+2]>5){'
+    + '        if(c<x0)x0=c;if(c>x1)x1=c;if(r<y0)y0=r;if(r>y1)y1=r;'
+    + '      }'
+    + '    }}'
     + '    if(x1<x0){x0=0;y0=0;x1=W-1;y1=H-1;}'
-    + '    var pad=20,cw=(Math.min(W-1,x1+pad))-(Math.max(0,x0-pad))+1,ch=(Math.min(H-1,y1+pad))-(Math.max(0,y0-pad))+1;'
-    + '    var sx=Math.max(0,x0-pad),sy=Math.max(0,y0-pad);'
+    + '    var pad=20;'
+    + '    x0=Math.max(0,x0-pad);y0=Math.max(0,y0-pad);'
+    + '    x1=Math.min(W-1,x1+pad);y1=Math.min(H-1,y1+pad);'
+    + '    var cw=x1-x0+1,ch=y1-y0+1;'
     + '    var cc=document.createElement("canvas");cc.width=cw;cc.height=ch;'
-    + '    var ctx2=cc.getContext("2d");ctx2.fillStyle="#000";ctx2.fillRect(0,0,cw,ch);'
-    + '    ctx2.drawImage(oc,sx,sy,cw,ch,0,0,cw,ch);'
-    + '    window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",reqId:' + J_reqId + ',data:cc.toDataURL("image/jpeg",0.88),width:cw,height:ch},"*");'
+    + '    var ctx2=cc.getContext("2d");'
+    + '    ctx2.fillStyle="#000";ctx2.fillRect(0,0,cw,ch);'
+    + '    ctx2.drawImage(oc,x0,y0,cw,ch,0,0,cw,ch);'
+    + '    var data=cc.toDataURL("image/jpeg",0.88);'
+    + '    window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",reqId:' + J_reqId + ',data:data,width:cw,height:ch},"*");'
+    + '  }catch(e){'
+    + '    window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",reqId:' + J_reqId + ',err:e.message},"*");'
+    + '  }finally{'
     + '    _restoreAndSync();'
-    + '  }catch(e){_sendErr(e.message);}'
+    + '  }'
     + '}'
     + 'function _renderCheck(){'
-    + '  try{CharacterRefresh(Player,false,false);if(typeof CharacterLoadCanvas==="function")CharacterLoadCanvas(Player);}catch(re){_sendErr("REFRESH_ERR:"+re.message);return;}'
+    + '  CharacterRefresh(Player,false,false);'
+    + '  CharacterLoadCanvas(Player);'
     + '  setTimeout(function(){'
-    + '    try{var h=_canvasHash(Player.Canvas);if(h===_prevHash||_checksDone>=_maxChecks){_sendCapture();}else{_prevHash=h;_checksDone++;setTimeout(_renderCheck,200);}}'
-    + '    catch(ce){_sendErr("HASH_ERR:"+ce.message);}'
-    + '  },150);'
+    + '    var h=_canvasHash(Player.Canvas);'
+    + '    if(h===_prevHash||_checksDone>=_maxChecks){'
+    + '      _sendCapture();'
+    + '    }else{'
+    + '      _prevHash=h;_checksDone++;'
+    + '      setTimeout(_renderCheck,150);'
+    + '    }'
+    + '  },100);'
     + '}'
-    // ── Ausführungslogik im try-Block ─────────────────────────────
-    + 'try{'
-    + '  window.__BCU_captureGen=(window.__BCU_captureGen||0)+1;'
-    + '  myGen=window.__BCU_captureGen;'
-    + '  origApp=(window.__BCU_slideshowOrig||Player.Appearance).slice();'
-    + '  Player.Appearance.splice(0,Player.Appearance.length);'
-    + '  origApp.forEach(function(i){Player.Appearance.push(i);});'
-    + '  ' + applyPart
-    + '  setTimeout(_renderCheck,200);'
-    + '}catch(topErr){'
-    + '  _sendErr("TOP_ERR:"+topErr.message);'
-    + '}'
+    + 'setTimeout(_renderCheck,100);'
     + '})();';
 
   console.log('[BCU] captureProfileViaCanvas: bcSend EXEC, len:', code.length);
