@@ -2415,6 +2415,9 @@ function toggleProfileSlideshow() {
 
 function _startProfileSlideshow() {
   if (!_connected) { showStatus('❌ Nicht verbunden mit BC', 'error'); return; }
+  // Originaloutfit vor dem Start sichern – wird vor jedem Profil wiederhergestellt
+  // damit Haare/Slots aus Profil N nicht in Profil N+1 überlaufen.
+  bcSend({ type: 'EXEC', code: '(function(){window.__BCU_slideshowOrig=Player.Appearance.slice();})();' }, true);
   // Alle Profile ohne Screenshot sammeln
   _slideshowQueue = Object.keys(PROFILES).filter(n => !PROFILE_SCREENSHOTS[n]);
   _slideshowTotal  = _slideshowQueue.length;
@@ -2440,15 +2443,32 @@ function _runNextSlideshow() {
   // Profil ausführen (lädt Outfit in BC)
   const p = PROFILES[name];
   if (p && _connected) {
+    // Restore-Präambel: stellt Originaloutfit wieder her bevor das Profil-Outfit angewendet wird.
+    // So überlaufen Haare/Slots aus Profil N nicht in Profil N+1.
+    const restorePreamble = ''
+      + 'if(window.__BCU_slideshowOrig){'
+      + '  Player.Appearance.splice(0,Player.Appearance.length);'
+      + '  window.__BCU_slideshowOrig.forEach(function(i){Player.Appearance.push(i);});'
+      + '  CharacterRefresh(Player,false,false);'
+      + '}';
     if (p._outfitCode) {
-      if (typeof _oiBuildExecCode === 'function') {
-        bcSend({ type: 'EXEC', code: _oiBuildExecCode(p._outfitCode) }, true);
-      } else {
-        bcSend({ type: 'EXEC', code: '(function(){try{var _d=LZString.decompressFromBase64(' + JSON.stringify(p._outfitCode) + ');var _a=JSON.parse(_d);if(Array.isArray(_a)){ServerPlayerInventoryLoad(_a);CharacterRefresh(Player,true,false);}}catch(e){}})();' }, true);
-      }
+      // Restore + Profil-Outfit in einem EXEC – kein Slot-Überlauf mehr möglich
+      const code = '(function(){'
+        + 'try{'
+        + restorePreamble
+        + _buildApplyCode(p._outfitCode)
+        + '  setTimeout(function(){'
+        + '    if(typeof ServerPlayerAppearanceSync==="function")ServerPlayerAppearanceSync();'
+        + '    else if(typeof ServerSend==="function")ServerSend("AccountUpdate",{Appearance:Player.Appearance});'
+        + '  },200);'
+        + '}catch(e){console.error("[BCU] Slideshow-Apply Fehler:",e.message);}'
+        + '})();';
+      bcSend({ type: 'EXEC', code }, true);
       // Screenshot nach Render-Pause
       setTimeout(() => captureProfileScreenshot(name), 1800);
     } else {
+      // Erst restoren, dann Profil aus UI laden
+      bcSend({ type: 'EXEC', code: '(function(){' + restorePreamble + '})();' }, true);
       loadProfile(name);
       setTimeout(() => {
         const code = document.getElementById('outfitCode')?.value?.trim();
@@ -2470,6 +2490,18 @@ function _stopProfileSlideshow() {
   _slideshowTimer = null;
   _slideshowQueue = [];
   _slideshowTotal = 0;
+  // Originaloutfit nach dem Slideshow wiederherstellen + Server-Sync
+  if (_connected) {
+    bcSend({ type: 'EXEC', code: '(function(){'
+      + 'if(!window.__BCU_slideshowOrig)return;'
+      + 'Player.Appearance.splice(0,Player.Appearance.length);'
+      + 'window.__BCU_slideshowOrig.forEach(function(i){Player.Appearance.push(i);});'
+      + 'CharacterRefresh(Player,false,false);'
+      + 'if(typeof ServerPlayerAppearanceSync==="function")ServerPlayerAppearanceSync();'
+      + 'else if(typeof ServerSend==="function")ServerSend("AccountUpdate",{Appearance:Player.Appearance});'
+      + 'window.__BCU_slideshowOrig=null;'
+      + '})();' }, true);
+  }
   const btn = document.getElementById('profileSlideshowBtn');
   if (btn) { btn.textContent = '📸 Auto-Screenshot'; btn.classList.remove('btn-red'); btn.classList.add('btn-primary'); }
 }
@@ -5975,6 +6007,16 @@ function deleteLscgVersion(mk, vIdx) {
   _saveLscgDB();
   renderOutfitScanTab();
   showStatus('🗑️ Version v' + vNum + ' gelöscht', 'info');
+}
+
+function clearAllProfileScreenshots() {
+  const count = Object.keys(PROFILE_SCREENSHOTS).length;
+  if (!count) { showStatus('ℹ️ Keine Profil-Bilder vorhanden', 'info'); return; }
+  if (!confirm('Alle ' + count + ' Profil-Screenshots löschen?\n\nDie Profile selbst bleiben erhalten.')) return;
+  PROFILE_SCREENSHOTS = {};
+  _saveProfileScreenshots();
+  renderProfileList();
+  showStatus('🗑️ Alle Profil-Screenshots gelöscht', 'info');
 }
 
 function clearAllLscgScreenshots() {
