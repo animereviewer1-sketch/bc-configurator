@@ -5268,7 +5268,7 @@ function captureProfileViaCanvas(name, outfitCode, rawApplyCode) {
 
   // Einziger EXEC: alles atomar – kein Zeitfenster für fremde EXECs
   // applyBlock = vollständiger try/catch-Block mit Fehler-Reporting für den EXEC
-  const _errSend = 'if(_srv)ServerSend=_srv;if(_sync)ServerPlayerAppearanceSync=_sync;'
+  const _errSend = 'if(_srv)ServerSend=_srv;if(_sync)ServerPlayerAppearanceSync=_sync;if(_chatUpd)ChatRoomCharacterUpdate=_chatUpd;'
     + 'window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",reqId:' + J_reqId + ',err:"APPLY_FAIL:"+applyErr.message},"*");'
     + 'return;';
   let applyBlock;
@@ -5291,11 +5291,14 @@ function captureProfileViaCanvas(name, outfitCode, rawApplyCode) {
     + 'var origApp=(window.__BCU_slideshowOrig||Player.Appearance).slice();'
 
     // ── Server-Sync während Screenshot deaktivieren ────────────
-    // Wie LSCG-Outfit: Apply nur lokal, kein AccountUpdate an den Server.
+    // Blockiert ALLE Server-Sends + Room-Broadcast (ChatRoomCharacterUpdate)
+    // damit kein anderer Spieler im Raum die Outfit-Änderung sieht.
     + 'var _srv=typeof ServerSend!=="undefined"?ServerSend:null;'
     + 'var _sync=typeof ServerPlayerAppearanceSync!=="undefined"?ServerPlayerAppearanceSync:null;'
-    + 'if(_srv)ServerSend=function(t){if(t!=="AccountUpdate")return _srv.apply(this,arguments);};'
+    + 'var _chatUpd=typeof ChatRoomCharacterUpdate!=="undefined"?ChatRoomCharacterUpdate:null;'
+    + 'if(_srv)ServerSend=function(){};'
     + 'if(_sync)ServerPlayerAppearanceSync=function(){};'
+    + 'if(_chatUpd)ChatRoomCharacterUpdate=function(){};'
 
     // ── 1. Standard-Outfit wiederherstellen ───────────────────
     + 'Player.Appearance.splice(0,Player.Appearance.length);'
@@ -5316,6 +5319,7 @@ function captureProfileViaCanvas(name, outfitCode, rawApplyCode) {
     // Server-Sync jetzt wieder aktivieren (Restore am Ende darf synchen)
     + 'if(_srv)ServerSend=_srv;'
     + 'if(_sync)ServerPlayerAppearanceSync=_sync;'
+    + 'if(_chatUpd)ChatRoomCharacterUpdate=_chatUpd;'
 
     // ── Hilfsfunktionen ───────────────────────────────────────
     + 'var _prevHash=null,_checksDone=0,_maxChecks=6;'
