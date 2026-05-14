@@ -5261,6 +5261,18 @@ function captureProfileViaCanvas(name, outfitCode, rawApplyCode) {
 
   _pendingProfileCapture[reqId] = { name, timeoutId };
 
+  // rawApplyCode bereinigen: Sync-Aufrufe am Ende des generierten Codes entfernen.
+  // Der generierte Code endet typischerweise mit:
+  //   CharacterRefresh(TARGET,false,false);
+  //   setTimeout(()=>{ ServerPlayerAppearanceSync(); ChatRoomCharacterUpdate(TARGET); ... },1200);
+  // Diese Zeilen würden Server-Updates auslösen – für den Screenshot nicht erwünscht.
+  if (rawApplyCode) {
+    rawApplyCode = rawApplyCode.split('\n').filter(function(line) {
+      return !line.includes('ServerPlayerAppearanceSync') &&
+             !line.includes('ChatRoomCharacterUpdate');
+    }).join('\n');
+  }
+
   // ── Identisch zu captureOsScreenshot – bewiesenermaßen funktionierend ──
   // applyPart: LZString-Bundle, raw JS-Code, oder nur Refresh
   const _restoreCode = ''
