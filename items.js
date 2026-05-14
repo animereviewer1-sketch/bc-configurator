@@ -5261,76 +5261,59 @@ function captureProfileViaCanvas(name, outfitCode, rawApplyCode) {
 
   _pendingProfileCapture[reqId] = { name, timeoutId };
 
-  // syncToServer: nur beim Restore nach dem Screenshot (wie captureOsScreenshot)
-  const syncToServer = ''
-    + 'if(typeof ServerPlayerAppearanceSync==="function")ServerPlayerAppearanceSync();'
-    + 'else if(typeof ServerSend==="function")ServerSend("AccountUpdate",{Appearance:Player.Appearance});';
-
-  // Einziger EXEC: alles atomar – kein Zeitfenster für fremde EXECs
-  // applyBlock = vollständiger try/catch-Block mit Fehler-Reporting für den EXEC
-  const _errSend = 'if(_srv)ServerSend=_srv;if(_sync)ServerPlayerAppearanceSync=_sync;if(_chatUpd)ChatRoomCharacterUpdate=_chatUpd;'
-    + 'window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",reqId:' + J_reqId + ',err:"APPLY_FAIL:"+applyErr.message},"*");'
-    + 'return;';
+  // ── CLONE-APPROACH ────────────────────────────────────────────
+  // Player.Appearance wird NIEMALS angefasst.
+  // Stattdessen: _clone von Player erstellen, Outfit darauf anwenden,
+  // von _clone.Canvas capturen. P2 sieht KEINE Änderung.
+  //
+  // Trick: IIFE mit "var Player=_clone" – applyCode/rawApplyCode
+  // referenzieren "Player" und greifen damit auf den Clone zu,
+  // ohne die globale Player-Variable zu berühren.
+  const _applyErr = 'window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",reqId:' + J_reqId + ',err:"APPLY_FAIL:"+applyErr.message},"*");return;';
   let applyBlock;
   if (outfitCode) {
-    // LZString-Bundle: applyCode endet mit CharacterRefresh(Player,false,false)
-    applyBlock = 'try{' + applyCode + '}catch(applyErr){' + _errSend + '}';
+    // applyCode endet mit CharacterRefresh(Player,false,false) → trifft _clone
+    applyBlock = 'try{(function(){var Player=_clone;' + applyCode + '})();}catch(applyErr){' + _applyErr + '}';
   } else if (rawApplyCode) {
-    // Roher JS-Code: in Closure einbetten + CharacterRefresh danach
-    applyBlock = 'try{(function(){\n' + rawApplyCode + '\n})();CharacterRefresh(Player,false,false);}catch(applyErr){' + _errSend + '}';
+    // rawApplyCode: Player-Referenzen im raw-Code treffen _clone
+    applyBlock = 'try{(function(){var Player=_clone;\n' + rawApplyCode + '\n;try{CharacterRefresh(Player,false,false);}catch(_e){}})();}catch(applyErr){' + _applyErr + '}';
   } else {
-    // Kein Code: nur Refresh (Profil ohne Outfit-Code)
-    applyBlock = 'try{CharacterRefresh(Player,false,false);}catch(_e){}';
+    applyBlock = 'try{CharacterRefresh(_clone,false,false);}catch(_e){}';
   }
 
   const code = '(function(){'
-    // Generation-Counter: verhindert Race-Condition beim Restore
     + 'window.__BCU_captureGen=(window.__BCU_captureGen||0)+1;'
     + 'var myGen=window.__BCU_captureGen;'
-    // origApp: Slideshow-Originaloutfit (vor erstem Profil gesichert)
-    + 'var origApp=(window.__BCU_slideshowOrig||Player.Appearance).slice();'
 
-    // ── Server-Sync während Screenshot deaktivieren ────────────
-    // Blockiert ALLE Server-Sends + Room-Broadcast (ChatRoomCharacterUpdate)
-    // damit kein anderer Spieler im Raum die Outfit-Änderung sieht.
-    + 'var _srv=typeof ServerSend!=="undefined"?ServerSend:null;'
-    + 'var _sync=typeof ServerPlayerAppearanceSync!=="undefined"?ServerPlayerAppearanceSync:null;'
-    + 'var _chatUpd=typeof ChatRoomCharacterUpdate!=="undefined"?ChatRoomCharacterUpdate:null;'
-    + 'if(_srv)ServerSend=function(){};'
-    + 'if(_sync)ServerPlayerAppearanceSync=function(){};'
-    + 'if(_chatUpd)ChatRoomCharacterUpdate=function(){};'
+    // ── Clone erstellen (Player.Appearance bleibt unberührt) ──
+    + 'var _clone={};'
+    + 'for(var _k in Player){_clone[_k]=Player[_k];}'
+    // Eigene Appearance-Kopie (shallow – Items selbst werden nicht mutiert)
+    + '_clone.Appearance=Player.Appearance.map(function(i){return Object.assign({},i);});'
+    // Eigener Canvas – Player.Canvas bleibt unverändert
+    + '_clone.Canvas=document.createElement("canvas");'
+    + '_clone.Canvas.width=Player.Canvas?Player.Canvas.width:500;'
+    + '_clone.Canvas.height=Player.Canvas?Player.Canvas.height:1000;'
+    + '_clone.DrawAppearance=[];'
+    // IsPlayer() → false: BC broadcastet nur echte Player-Chars
+    + '_clone.IsPlayer=function(){return false;};'
 
-    // ── 1. Standard-Outfit wiederherstellen ───────────────────
-    + 'Player.Appearance.splice(0,Player.Appearance.length);'
-    + 'origApp.forEach(function(i){Player.Appearance.push(i);});'
-
-    // ── 2. Profil-Outfit anwenden ─────────────────────────────
+    // ── Outfit auf Clone anwenden ──────────────────────────────
     + applyBlock
 
-    // ── 3. Snapshot direkt nach Apply ────────────────────────
-    // Unmittelbar nach Apply aufnehmen – kein anderer EXEC kann dazwischenfunken.
+    // ── Snapshot von Clone-Appearance ─────────────────────────
     + 'var _snap={};'
-    + 'Player.Appearance.forEach(function(a){'
+    + '_clone.Appearance.forEach(function(a){'
     + '  if(a.Asset&&a.Asset.Group&&a.Asset.Name&&a.Asset.Name!==""){'
     + '    _snap[a.Asset.Group.Name]=a.Asset.Name;'
     + '  }'
     + '});'
 
-    // Server-Sync jetzt wieder aktivieren (Restore am Ende darf synchen)
-    + 'if(_srv)ServerSend=_srv;'
-    + 'if(_sync)ServerPlayerAppearanceSync=_sync;'
-    + 'if(_chatUpd)ChatRoomCharacterUpdate=_chatUpd;'
-
     // ── Hilfsfunktionen ───────────────────────────────────────
     + 'var _prevHash=null,_checksDone=0,_maxChecks=6;'
-    + 'function _restoreAndSync(){'
-    + '  Player.Appearance.splice(0,Player.Appearance.length);'
-    + '  origApp.forEach(function(i){Player.Appearance.push(i);});'
-    + '  CharacterRefresh(Player,false,false);'
-    + '  setTimeout(function(){'
-    + '    if(window.__BCU_captureGen!==myGen)return;'
-    + '    ' + syncToServer
-    + '  },300);'
+    // _done: stellt sicher dass Player korrekt gerendert bleibt
+    + 'function _done(){'
+    + '  try{if(window.__BCU_captureGen===myGen)CharacterRefresh(Player,false,false);}catch(_e){}'
     + '}'
     + 'function _canvasHash(canvas){'
     + '  try{'
@@ -5343,10 +5326,10 @@ function captureProfileViaCanvas(name, outfitCode, rawApplyCode) {
     + '}'
     + 'function _sendCapture(){'
     + '  try{'
-    // ── 4. Verifikation: Items müssen noch dem Snapshot entsprechen ──
+    // Verifikation: Clone-Appearance muss noch dem Snapshot entsprechen
     + '    var bad=[];'
     + '    Object.keys(_snap).forEach(function(g){'
-    + '      var worn=Player.Appearance.find(function(a){'
+    + '      var worn=_clone.Appearance.find(function(a){'
     + '        return a.Asset&&a.Asset.Group&&a.Asset.Group.Name===g;'
     + '      });'
     + '      var wornName=worn&&worn.Asset?worn.Asset.Name:null;'
@@ -5354,10 +5337,10 @@ function captureProfileViaCanvas(name, outfitCode, rawApplyCode) {
     + '    });'
     + '    if(bad.length>0){'
     + '      window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",reqId:' + J_reqId + ',err:"Outfit falsch: "+bad.slice(0,4).join(", ")},"*");'
-    + '      _restoreAndSync();return;'
+    + '      _done();return;'
     + '    }'
-    // ── 5. Canvas aufnehmen ───────────────────────────────────
-    + '    var src=Player.Canvas;'
+    // Canvas von Clone (nicht Player!) capturen
+    + '    var src=_clone.Canvas;'
     + '    if(!src||!src.width)throw new Error("Canvas leer");'
     + '    var oc=document.createElement("canvas");oc.width=src.width;oc.height=src.height;'
     + '    oc.getContext("2d").drawImage(src,0,0);'
@@ -5378,15 +5361,14 @@ function captureProfileViaCanvas(name, outfitCode, rawApplyCode) {
     + '  }catch(e){'
     + '    window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",reqId:' + J_reqId + ',err:e.message},"*");'
     + '  }finally{'
-    + '    _restoreAndSync();'
+    + '    _done();'
     + '  }'
     + '}'
-    // Render-Loop: wie captureOsScreenshot
+    // Render-Loop auf Clone (nicht Player)
     + 'function _renderCheck(){'
-    + '  CharacterRefresh(Player,false,false);'
-    + '  CharacterLoadCanvas(Player);'
+    + '  CharacterLoadCanvas(_clone);'
     + '  setTimeout(function(){'
-    + '    var h=_canvasHash(Player.Canvas);'
+    + '    var h=_canvasHash(_clone.Canvas);'
     + '    if(h===_prevHash||_checksDone>=_maxChecks){'
     + '      _sendCapture();'
     + '    }else{'
