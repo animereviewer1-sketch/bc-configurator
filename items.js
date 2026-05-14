@@ -5261,59 +5261,46 @@ function captureProfileViaCanvas(name, outfitCode, rawApplyCode) {
 
   _pendingProfileCapture[reqId] = { name, timeoutId };
 
-  // ── CLONE-APPROACH ────────────────────────────────────────────
-  // Player.Appearance wird NIEMALS angefasst.
-  // Stattdessen: _clone von Player erstellen, Outfit darauf anwenden,
-  // von _clone.Canvas capturen. P2 sieht KEINE Änderung.
-  //
-  // Trick: IIFE mit "var Player=_clone" – applyCode/rawApplyCode
-  // referenzieren "Player" und greifen damit auf den Clone zu,
-  // ohne die globale Player-Variable zu berühren.
-  const _applyErr = 'window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",reqId:' + J_reqId + ',err:"APPLY_FAIL:"+applyErr.message},"*");return;';
-  let applyBlock;
+  // ── Identisch zu captureOsScreenshot – bewiesenermaßen funktionierend ──
+  // applyPart: LZString-Bundle, raw JS-Code, oder nur Refresh
+  const _restoreCode = ''
+    + 'Player.Appearance.splice(0,Player.Appearance.length);'
+    + 'origApp.forEach(function(i){Player.Appearance.push(i);});'
+    + 'CharacterRefresh(Player,false,false);';
+  const _applyErrCode = _restoreCode
+    + 'window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",reqId:' + J_reqId + ',err:"APPLY_FAIL:"+applyErr.message},"*");'
+    + 'return;';
+
+  let applyPart;
   if (outfitCode) {
-    // applyCode endet mit CharacterRefresh(Player,false,false) → trifft _clone
-    applyBlock = 'try{(function(){var Player=_clone;' + applyCode + '})();}catch(applyErr){' + _applyErr + '}';
+    applyPart = 'try{' + applyCode + '}catch(applyErr){' + _applyErrCode + '}';
   } else if (rawApplyCode) {
-    // rawApplyCode: Player-Referenzen im raw-Code treffen _clone
-    applyBlock = 'try{(function(){var Player=_clone;\n' + rawApplyCode + '\n;try{CharacterRefresh(Player,false,false);}catch(_e){}})();}catch(applyErr){' + _applyErr + '}';
+    applyPart = 'try{'
+      + '(function(){\n' + rawApplyCode + '\n})();'
+      + 'CharacterRefresh(Player,false,false);'
+      + '}catch(applyErr){' + _applyErrCode + '}';
   } else {
-    applyBlock = 'try{CharacterRefresh(_clone,false,false);}catch(_e){}';
+    applyPart = 'try{CharacterRefresh(Player,false,false);}catch(_e){}';
   }
+
+  const syncToServer = ''
+    + 'if(typeof ServerPlayerAppearanceSync==="function")ServerPlayerAppearanceSync();'
+    + 'else if(typeof ServerSend==="function")ServerSend("AccountUpdate",{Appearance:Player.Appearance});';
 
   const code = '(function(){'
     + 'window.__BCU_captureGen=(window.__BCU_captureGen||0)+1;'
     + 'var myGen=window.__BCU_captureGen;'
-
-    // ── Clone erstellen (Player.Appearance bleibt unberührt) ──
-    + 'var _clone={};'
-    + 'for(var _k in Player){_clone[_k]=Player[_k];}'
-    // Eigene Appearance-Kopie (shallow – Items selbst werden nicht mutiert)
-    + '_clone.Appearance=Player.Appearance.map(function(i){return Object.assign({},i);});'
-    // Eigener Canvas – Player.Canvas bleibt unverändert
-    + '_clone.Canvas=document.createElement("canvas");'
-    + '_clone.Canvas.width=Player.Canvas?Player.Canvas.width:500;'
-    + '_clone.Canvas.height=Player.Canvas?Player.Canvas.height:1000;'
-    + '_clone.DrawAppearance=[];'
-    // IsPlayer() → false: BC broadcastet nur echte Player-Chars
-    + '_clone.IsPlayer=function(){return false;};'
-
-    // ── Outfit auf Clone anwenden ──────────────────────────────
-    + applyBlock
-
-    // ── Snapshot von Clone-Appearance ─────────────────────────
-    + 'var _snap={};'
-    + '_clone.Appearance.forEach(function(a){'
-    + '  if(a.Asset&&a.Asset.Group&&a.Asset.Name&&a.Asset.Name!==""){'
-    + '    _snap[a.Asset.Group.Name]=a.Asset.Name;'
-    + '  }'
-    + '});'
-
-    // ── Hilfsfunktionen ───────────────────────────────────────
+    + 'var origApp=Player.Appearance.slice();'
+    + applyPart
     + 'var _prevHash=null,_checksDone=0,_maxChecks=6;'
-    // _done: stellt sicher dass Player korrekt gerendert bleibt
-    + 'function _done(){'
-    + '  try{if(window.__BCU_captureGen===myGen)CharacterRefresh(Player,false,false);}catch(_e){}'
+    + 'function _restoreAndSync(){'
+    + '  Player.Appearance.splice(0,Player.Appearance.length);'
+    + '  origApp.forEach(function(i){Player.Appearance.push(i);});'
+    + '  CharacterRefresh(Player,false,false);'
+    + '  setTimeout(function(){'
+    + '    if(window.__BCU_captureGen!==myGen)return;'
+    + '    ' + syncToServer
+    + '  },300);'
     + '}'
     + 'function _canvasHash(canvas){'
     + '  try{'
@@ -5326,21 +5313,7 @@ function captureProfileViaCanvas(name, outfitCode, rawApplyCode) {
     + '}'
     + 'function _sendCapture(){'
     + '  try{'
-    // Verifikation: Clone-Appearance muss noch dem Snapshot entsprechen
-    + '    var bad=[];'
-    + '    Object.keys(_snap).forEach(function(g){'
-    + '      var worn=_clone.Appearance.find(function(a){'
-    + '        return a.Asset&&a.Asset.Group&&a.Asset.Group.Name===g;'
-    + '      });'
-    + '      var wornName=worn&&worn.Asset?worn.Asset.Name:null;'
-    + '      if(wornName!==_snap[g])bad.push(g+"/"+_snap[g]);'
-    + '    });'
-    + '    if(bad.length>0){'
-    + '      window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",reqId:' + J_reqId + ',err:"Outfit falsch: "+bad.slice(0,4).join(", ")},"*");'
-    + '      _done();return;'
-    + '    }'
-    // Canvas von Clone (nicht Player!) capturen
-    + '    var src=_clone.Canvas;'
+    + '    var src=Player.Canvas;'
     + '    if(!src||!src.width)throw new Error("Canvas leer");'
     + '    var oc=document.createElement("canvas");oc.width=src.width;oc.height=src.height;'
     + '    oc.getContext("2d").drawImage(src,0,0);'
@@ -5352,23 +5325,26 @@ function captureProfileViaCanvas(name, outfitCode, rawApplyCode) {
     + '      if(px[ii]>5||px[ii+1]>5||px[ii+2]>5){if(c<x0)x0=c;if(c>x1)x1=c;if(r<y0)y0=r;if(r>y1)y1=r;}'
     + '    }}'
     + '    if(x1<x0){x0=0;y0=0;x1=W-1;y1=H-1;}'
-    + '    var pad=20;x0=Math.max(0,x0-pad);y0=Math.max(0,y0-pad);x1=Math.min(W-1,x1+pad);y1=Math.min(H-1,y1+pad);'
+    + '    var pad=20;'
+    + '    x0=Math.max(0,x0-pad);y0=Math.max(0,y0-pad);'
+    + '    x1=Math.min(W-1,x1+pad);y1=Math.min(H-1,y1+pad);'
     + '    var cw=x1-x0+1,ch=y1-y0+1;'
     + '    var cc=document.createElement("canvas");cc.width=cw;cc.height=ch;'
-    + '    var ctx2=cc.getContext("2d");ctx2.fillStyle="#000";ctx2.fillRect(0,0,cw,ch);'
+    + '    var ctx2=cc.getContext("2d");'
+    + '    ctx2.fillStyle="#000";ctx2.fillRect(0,0,cw,ch);'
     + '    ctx2.drawImage(oc,x0,y0,cw,ch,0,0,cw,ch);'
     + '    window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",reqId:' + J_reqId + ',data:cc.toDataURL("image/jpeg",0.88)},"*");'
     + '  }catch(e){'
     + '    window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",reqId:' + J_reqId + ',err:e.message},"*");'
     + '  }finally{'
-    + '    _done();'
+    + '    _restoreAndSync();'
     + '  }'
     + '}'
-    // Render-Loop auf Clone (nicht Player)
     + 'function _renderCheck(){'
-    + '  CharacterLoadCanvas(_clone);'
+    + '  CharacterRefresh(Player,false,false);'
+    + '  CharacterLoadCanvas(Player);'
     + '  setTimeout(function(){'
-    + '    var h=_canvasHash(_clone.Canvas);'
+    + '    var h=_canvasHash(Player.Canvas);'
     + '    if(h===_prevHash||_checksDone>=_maxChecks){'
     + '      _sendCapture();'
     + '    }else{'
