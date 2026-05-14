@@ -5283,24 +5283,20 @@ function captureProfileViaCanvas(name, outfitCode, rawApplyCode) {
     applyPart = 'try{CharacterRefresh(Player,false,false);}catch(_e){}';
   }
 
-  const syncToServer = ''
-    + 'if(typeof ServerPlayerAppearanceSync==="function")ServerPlayerAppearanceSync();'
-    + 'else if(typeof ServerSend==="function")ServerSend("AccountUpdate",{Appearance:Player.Appearance});';
-
   const code = '(function(){'
     + 'window.__BCU_captureGen=(window.__BCU_captureGen||0)+1;'
     + 'var myGen=window.__BCU_captureGen;'
-    + 'var origApp=Player.Appearance.slice();'
+    // origApp IMMER aus __BCU_slideshowOrig – wird einmal bei Slideshow-Start gespeichert.
+    // Nie aus Player.Appearance.slice() – sonst cascading-Fehler wenn ein Restore schiefläuft.
+    + 'var origApp=(window.__BCU_slideshowOrig||Player.Appearance).slice();'
     + applyPart
     + 'var _prevHash=null,_checksDone=0,_maxChecks=6;'
-    + 'function _restoreAndSync(){'
+    // _restore: NUR lokaler Restore, KEIN Server-Update.
+    // Server-Sync passiert einmalig beim Slideshow-Stop (_stopProfileSlideshow).
+    + 'function _restore(){'
     + '  Player.Appearance.splice(0,Player.Appearance.length);'
     + '  origApp.forEach(function(i){Player.Appearance.push(i);});'
     + '  CharacterRefresh(Player,false,false);'
-    + '  setTimeout(function(){'
-    + '    if(window.__BCU_captureGen!==myGen)return;'
-    + '    ' + syncToServer
-    + '  },300);'
     + '}'
     + 'function _canvasHash(canvas){'
     + '  try{'
@@ -5337,7 +5333,7 @@ function captureProfileViaCanvas(name, outfitCode, rawApplyCode) {
     + '  }catch(e){'
     + '    window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",reqId:' + J_reqId + ',err:e.message},"*");'
     + '  }finally{'
-    + '    _restoreAndSync();'
+    + '    _restore();'
     + '  }'
     + '}'
     + 'function _renderCheck(){'
