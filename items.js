@@ -6049,8 +6049,8 @@ function renderOutfitScanTab() {
       const vNum     = entry.versions.length - i;
       const d        = new Date(v.ts);
       const ts       = d.toLocaleDateString('de-DE', { day:'2-digit', month:'2-digit', year:'2-digit' });
-      const itemCnt  = _osItemCount(v.code, fp || (mk + '_' + realIdx));
       const fp       = v.fingerprint;
+      const itemCnt  = _osItemCount(v.code, fp || (mk + '_' + realIdx));
       const saved    = (fp && _lscgFpMap[fp]) ? _lscgFpMap[fp] : [];
       const hasCode  = !!v.code;
       // Strict lookup: only version-specific key, never the legacy mk fallback
