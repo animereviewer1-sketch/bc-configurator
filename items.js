@@ -2483,11 +2483,11 @@ function _runNextSlideshow() {
     } else {
       // Normales Profil: raw-JS-Code aus UI → in single EXEC einbetten
       loadProfile(name);
+      // 20ms reichen – loadProfile ist synchron, wir brauchen nur einen Microtask-Flush
       setTimeout(() => {
         const rawCode = document.getElementById('outfitCode')?.value?.trim() || null;
-        // rawCode wird als rawApplyCode übergeben → single EXEC (restore + apply + capture)
         captureProfileViaCanvas(name, null, rawCode);
-      }, 80);
+      }, 20);
     }
     showStatus('📸 (' + done + '/' + _slideshowTotal + ') "' + name + '" – noch ' + remaining + ' übrig', 'info');
     const btn = document.getElementById('profileSlideshowBtn');
@@ -5302,7 +5302,7 @@ function captureProfileViaCanvas(name, outfitCode, rawApplyCode) {
     // Nie aus Player.Appearance.slice() – sonst cascading-Fehler wenn ein Restore schiefläuft.
     + 'var origApp=(window.__BCU_slideshowOrig||Player.Appearance).slice();'
     + applyPart
-    + 'var _prevHash=null,_checksDone=0,_maxChecks=6;'
+    + 'var _prevHash=null,_checksDone=0,_maxChecks=4;'
     // _restore: NUR lokaler Restore, KEIN Server-Update.
     // Server-Sync passiert einmalig beim Slideshow-Stop (_stopProfileSlideshow).
     + 'function _restore(){'
@@ -5357,11 +5357,11 @@ function captureProfileViaCanvas(name, outfitCode, rawApplyCode) {
     + '      _sendCapture();'
     + '    }else{'
     + '      _prevHash=h;_checksDone++;'
-    + '      setTimeout(_renderCheck,150);'
+    + '      setTimeout(_renderCheck,80);'
     + '    }'
-    + '  },100);'
+    + '  },60);'
     + '}'
-    + 'setTimeout(_renderCheck,100);'
+    + 'setTimeout(_renderCheck,60);'
     + '})();';
 
   console.log('[BCU] captureProfileViaCanvas: EXEC len:', code.length);
