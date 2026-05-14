@@ -2680,8 +2680,8 @@ function _handleCanvasPreviewData(data) {
       };
       imgEl.src = data.data;
     }
-    // Slideshow weiterlaufen lassen (auch bei Fehler)
-    _runNextSlideshow();
+    // Kleiner Delay zwischen Screenshots: verhindert BC ErrorRateLimited
+    setTimeout(_runNextSlideshow, 250);
     return;
   }
 
@@ -5241,21 +5241,28 @@ function captureProfileViaCanvas(name, outfitCode, rawApplyCode) {
     }
   }
 
-  // Timeout-Fallback: bei Disconnect pausieren, sonst überspringen
+  // Timeout-Fallback: pausieren + Profil wiederholen (nie überspringen)
   const timeoutId = setTimeout(function() {
     if (_pendingProfileCapture[reqId] !== undefined) {
       console.warn('[BCU] captureProfileViaCanvas timeout:', name, reqId);
       delete _pendingProfileCapture[reqId];
-      if (!_connected) {
-        _slideshowQueue.unshift(name);
-        _slideshowPaused = true;
-        showStatus('⏸ Slideshow pausiert (Disconnect) – "' + name + '" wird wiederholt', 'info');
-        const pauseBtn = document.getElementById('profileSlideshowBtn');
-        if (pauseBtn) pauseBtn.textContent = '⏸ Pausiert (' + _slideshowQueue.length + ')';
-      } else {
-        showStatus('⏭ Screenshot-Timeout "' + name + '" – übersprungen', 'info');
-        _runNextSlideshow();
-      }
+      // Profil immer zurück in Queue – wird wiederholt
+      _slideshowQueue.unshift(name);
+      _slideshowPaused = true;
+      const reason = _connected ? 'Timeout' : 'Disconnect';
+      showStatus('⏸ Slideshow pausiert (' + reason + ') – "' + name + '" wird wiederholt', 'info');
+      const pauseBtn = document.getElementById('profileSlideshowBtn');
+      if (pauseBtn) pauseBtn.textContent = '⏸ Pausiert (' + _slideshowQueue.length + ')';
+      // Nach 5s automatisch fortsetzen wenn wieder verbunden
+      setTimeout(function() {
+        if (_slideshowPaused && _connected && _slideshowRunning) {
+          _slideshowPaused = false;
+          showStatus('▶ Slideshow wird fortgesetzt…', 'info');
+          const btn = document.getElementById('profileSlideshowBtn');
+          if (btn) btn.textContent = '⏹ Stop (' + _slideshowQueue.length + ')';
+          _runNextSlideshow();
+        }
+      }, 5000);
     }
   }, 12000);
 
@@ -5267,9 +5274,14 @@ function captureProfileViaCanvas(name, outfitCode, rawApplyCode) {
   //   setTimeout(()=>{ ServerPlayerAppearanceSync(); ChatRoomCharacterUpdate(TARGET); ... },1200);
   // Diese Zeilen würden Server-Updates auslösen – für den Screenshot nicht erwünscht.
   if (rawApplyCode) {
+    // Sync-Aufrufe + redundante CharacterRefresh/setTimeout-Blöcke entfernen.
+    // CharacterRefresh rufen wir selbst nach der IIFE auf.
     rawApplyCode = rawApplyCode.split('\n').filter(function(line) {
-      return !line.includes('ServerPlayerAppearanceSync') &&
-             !line.includes('ChatRoomCharacterUpdate');
+      const t = line.trim();
+      return !t.includes('ServerPlayerAppearanceSync') &&
+             !t.includes('ChatRoomCharacterUpdate') &&
+             !t.startsWith('CharacterRefresh(') &&
+             !(t.startsWith('setTimeout(') && t.includes('1200'));
     }).join('\n');
   }
 
@@ -5302,7 +5314,7 @@ function captureProfileViaCanvas(name, outfitCode, rawApplyCode) {
     // Nie aus Player.Appearance.slice() – sonst cascading-Fehler wenn ein Restore schiefläuft.
     + 'var origApp=(window.__BCU_slideshowOrig||Player.Appearance).slice();'
     + applyPart
-    + 'var _prevHash=null,_checksDone=0,_maxChecks=4;'
+    + 'var _prevHash=null,_checksDone=0,_maxChecks=3;'
     // _restore: NUR lokaler Restore, KEIN Server-Update.
     // Server-Sync passiert einmalig beim Slideshow-Stop (_stopProfileSlideshow).
     + 'function _restore(){'
@@ -5357,11 +5369,11 @@ function captureProfileViaCanvas(name, outfitCode, rawApplyCode) {
     + '      _sendCapture();'
     + '    }else{'
     + '      _prevHash=h;_checksDone++;'
-    + '      setTimeout(_renderCheck,80);'
+    + '      setTimeout(_renderCheck,50);'
     + '    }'
-    + '  },60);'
+    + '  },40);'
     + '}'
-    + 'setTimeout(_renderCheck,60);'
+    + 'setTimeout(_renderCheck,40);'
     + '})();';
 
   console.log('[BCU] captureProfileViaCanvas: EXEC len:', code.length);
@@ -5978,9 +5990,17 @@ function _handleOutfitScanData(data) {
 }
 
 // Item-Anzahl aus LZString-Code berechnen
-function _osItemCount(code) {
+// Cache: fingerprint/key → item count (LZString+JSON.parse nur einmalig pro Version)
+const _itemCountCache = {};
+function _osItemCount(code, cacheKey) {
   if (!code) return 0;
-  try { return JSON.parse(LZString.decompressFromBase64(code)).length; } catch(e) { return 0; }
+  const k = cacheKey || code.slice(0, 32);
+  if (_itemCountCache[k] !== undefined) return _itemCountCache[k];
+  try {
+    const n = JSON.parse(LZString.decompressFromBase64(code)).length;
+    _itemCountCache[k] = n;
+    return n;
+  } catch(e) { _itemCountCache[k] = 0; return 0; }
 }
 
 function renderOutfitScanTab() {
@@ -6018,7 +6038,8 @@ function renderOutfitScanTab() {
     return (LSCG_DB[a].name ?? '').localeCompare(LSCG_DB[b].name ?? '');
   });
 
-  try { body.innerHTML = members.map(function(mk) {
+  // Hilfsfunktion: einen Member-Block als HTML-String bauen
+  function _buildMemberHtml(mk) {
     const entry = LSCG_DB[mk];
     const isFav = _osFavs.has(mk);
     const letter = escHtml(((entry.name ?? mk)[0] ?? '?').toUpperCase());
@@ -6028,7 +6049,7 @@ function renderOutfitScanTab() {
       const vNum     = entry.versions.length - i;
       const d        = new Date(v.ts);
       const ts       = d.toLocaleDateString('de-DE', { day:'2-digit', month:'2-digit', year:'2-digit' });
-      const itemCnt  = _osItemCount(v.code);
+      const itemCnt  = _osItemCount(v.code, fp || (mk + '_' + realIdx));
       const fp       = v.fingerprint;
       const saved    = (fp && _lscgFpMap[fp]) ? _lscgFpMap[fp] : [];
       const hasCode  = !!v.code;
@@ -6094,7 +6115,25 @@ function renderOutfitScanTab() {
       + '</div>'
       + '<div class="os-member-rows"><div class="os-strip">' + cards + '</div></div>'
       + '</div>';
-  }).join('');
+  }
+
+  // Erst die ersten 30 sofort rendern, Rest via setTimeout nachladen
+  // → Main-Thread bleibt responsiv, kein 5s-Freeze bei großen DBs
+  const CHUNK = 30;
+  try {
+    body.innerHTML = members.slice(0, CHUNK).map(_buildMemberHtml).join('');
+    if (members.length > CHUNK) {
+      const rest = members.slice(CHUNK);
+      let i = 0;
+      function _renderChunk() {
+        const slice = rest.slice(i, i + CHUNK);
+        if (!slice.length) return;
+        body.insertAdjacentHTML('beforeend', slice.map(_buildMemberHtml).join(''));
+        i += CHUNK;
+        if (i < rest.length) setTimeout(_renderChunk, 0);
+      }
+      setTimeout(_renderChunk, 0);
+    }
   } catch(err) {
     console.error('[BCU] renderOutfitScanTab error:', err);
     body.innerHTML = '<div class="os-empty" style="color:#fb7185">⚠ Render-Fehler: ' + err.message + '</div>';
