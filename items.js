@@ -3332,17 +3332,12 @@ function _handleCurseData(data) {
   CURSE_DB         = data.database    ?? {};
   CURSE_LSCG       = data.lscgTable   ?? {};
   CURSE_CACHE_LSCG = data.lscgCache   ?? {};
-  // Cursed-Items: ZuletztGescannt NUR für echte Neuzugänge setzen.
-  // Bestehende Einträge behalten ihren alten Timestamp (oder bleiben ohne → kein Badge).
+  // Cursed-Items: ZuletztGescannt bei JEDEM Live-Scan aktualisieren.
+  // So bekommt jede Person die gerade im Raum ist den 🔮 Neu-Badge – auch bei Outfit-Flag.
   const _now = Date.now();
   Object.keys(CURSE_DB).forEach(k => {
     if (CURSE_DB[k].IstCursed) {
-      if (!prevDB[k]) {
-        CURSE_DB[k].ZuletztGescannt = _now;                        // echter Neuzugang → Timestamp
-      } else if (prevDB[k].ZuletztGescannt) {
-        CURSE_DB[k].ZuletztGescannt = prevDB[k].ZuletztGescannt;  // bestehend → alten Wert behalten
-      }
-      // kein else: bestehender Eintrag ohne Timestamp bleibt ohne → kein 🔮 Neu
+      CURSE_DB[k].ZuletztGescannt = _now;  // immer aktueller Timestamp
     }
   });
   _updateCurseStats();
@@ -3411,13 +3406,13 @@ function toggleCurseFilterPanel(e) {
 function _getNeuType(entry) {
   const k   = (entry.Besitzer?.Nummer ?? '') + ':' + entry.ItemName + ':' + entry.CraftName;
   const now = Date.now();
-  // Outfit-Tag gesetzt → nie Neu (fuer beide Typen)
-  if (CURSE_OUTFIT_FLAGS[k]) return false;
   if (entry.IstCursed) {
-    // Curse-Neu: kein Outfit-Tag + in letzter Stunde gescannt
+    // Curse-Neu: in letzter Stunde gescannt → Neu; egal ob Outfit-Tag gesetzt
     const fresh = entry.ZuletztGescannt && now - entry.ZuletztGescannt < 3600000;
     return fresh ? 'cursed' : false;
   }
+  // Normal-Items: Outfit-Tag gesetzt → nie Neu
+  if (CURSE_OUTFIT_FLAGS[k]) return false;
   // Normal-Neu: nie angewendet → immer Neu; angewendet → noch 5min sichtbar, dann weg
   const appliedAt = CURSE_APPLIED_TS[k];
   if (!appliedAt) return 'normal';
