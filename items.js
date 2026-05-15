@@ -3970,31 +3970,36 @@ function _updateCurseDefaultOutfitBtn() {
   }
 }
 
-// Klick auf Button → aktuelles Outfit aus BC lesen und merken
+// Klick auf Button → aktuelles Outfit 1:1 per EXEC aus BC lesen und merken.
+// CharacterAppearanceBundle(Player) gibt genau das Bundle zurück das BC intern verwendet
+// und das CharacterAppearanceSetFromBundle (= _buildApplyCode) direkt wieder einlesen kann.
+let _pendingDefaultOutfitCapture = null; // reqId
 function captureAndSetCurseDefaultOutfit() {
   if (!_connected) { showStatus('❌ Nicht verbunden mit BC', 'error'); return; }
   const reqId = 'cdo_' + Date.now();
-  _pendingOutfitSave[reqId] = function(items) {
-    if (!items?.length) { showStatus('❌ Kein Outfit erhalten', 'error'); return; }
-    // Appearance-Items → BC Bundle-Format (Großbuchstaben) → LZString
-    // _buildApplyCode erwartet genau dieses Format: { Group, Name, Color, Difficulty, Property }
-    const { filteredItems } = _applyHairBaseline(items);
-    const bundleItems = filteredItems.map(function(i) {
-      return {
-        Group:      i.group,
-        Name:       i.asset,
-        Color:      i.colors ?? '#ffffff',
-        Difficulty: i.difficulty ?? 0,
-        Property:   i.property ?? {},
-      };
-    });
-    CURSE_DEFAULT_OUTFIT_CODE = LZString.compressToBase64(JSON.stringify(bundleItems));
-    CURSE_DEFAULT_OUTFIT_DATE = new Date().toLocaleString('de-DE', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
-    _saveCurseDefaultOutfit();
-    _updateCurseDefaultOutfitBtn();
-    showStatus('🏠 Standard-Outfit gemerkt (' + bundleItems.length + ' Items)', 'success');
-  };
-  bcSend({ type: 'GET_CHAR_APPEARANCE', memberNum: null, reqId });
+  _pendingDefaultOutfitCapture = reqId;
+  const J_reqId = JSON.stringify(reqId);
+  const code = '(function(){'
+    + 'try{'
+    + '  var bundle;'
+    + '  if(typeof CharacterAppearanceBundle==="function"){'
+    + '    bundle=CharacterAppearanceBundle(Player);'
+    + '  }else{'
+    // Fallback: manuell aus Player.Appearance
+    + '    bundle=Player.Appearance.map(function(i){'
+    + '      return{Group:i.Asset.Group.Name,Name:i.Asset.Name,Color:i.Color,'
+    + '        Difficulty:i.Difficulty||0,Property:i.Property?JSON.parse(JSON.stringify(i.Property)):{}};'
+    + '    });'
+    + '  }'
+    + '  var compressed=LZString.compressToBase64(JSON.stringify(bundle));'
+    + '  window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"DEFAULT_OUTFIT_DATA",'
+    + '    reqId:' + J_reqId + ',data:compressed,count:bundle.length},"*");'
+    + '}catch(e){'
+    + '  window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"DEFAULT_OUTFIT_DATA",'
+    + '    reqId:' + J_reqId + ',err:e.message},"*");'
+    + '}'
+    + '})();';
+  bcSend({ type: 'EXEC', code }, true);
   showStatus('⏳ Lese aktuelles Outfit…', 'info');
 }
 
@@ -4608,6 +4613,18 @@ window.addEventListener('message', function(ev) {
       delete _pendingOutfitSave[ev.data.reqId];
       if (ev.data.err) { showStatus('\u274c Outfit-Laden fehlgeschlagen: ' + ev.data.err, 'error'); break; }
       _cb(ev.data.items ?? [], ev.data.name ?? '');
+      break;
+    }
+
+    case 'DEFAULT_OUTFIT_DATA': {
+      if (ev.data.reqId !== _pendingDefaultOutfitCapture) break;
+      _pendingDefaultOutfitCapture = null;
+      if (ev.data.err) { showStatus('\u274c Standard-Outfit Fehler: ' + ev.data.err, 'error'); break; }
+      CURSE_DEFAULT_OUTFIT_CODE = ev.data.data;
+      CURSE_DEFAULT_OUTFIT_DATE = new Date().toLocaleString('de-DE', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
+      _saveCurseDefaultOutfit();
+      _updateCurseDefaultOutfitBtn();
+      showStatus('\ud83c\udfe0 Standard-Outfit gemerkt (' + (ev.data.count ?? '?') + ' Items)', 'success');
       break;
     }
 
