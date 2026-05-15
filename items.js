@@ -3927,6 +3927,8 @@ let CURSE_DEFAULT_OUTFIT_DATE = null;  // Datum als String für die Anzeige
 
 (function _loadCurseDefaultOutfit() {
   try {
+    // v2 = korrektes Bundle-Format (Group/Name/Color). v1 war falsches Profil-Format → ignorieren.
+    localStorage.removeItem('BC_CURSE_DEFAULT_OUTFIT_v1');
     const raw = localStorage.getItem('BC_CURSE_DEFAULT_OUTFIT_v2');
     if (raw) {
       const parsed = JSON.parse(raw);
@@ -3974,14 +3976,23 @@ function captureAndSetCurseDefaultOutfit() {
   const reqId = 'cdo_' + Date.now();
   _pendingOutfitSave[reqId] = function(items) {
     if (!items?.length) { showStatus('❌ Kein Outfit erhalten', 'error'); return; }
-    // Appearance-Items → profile-Format → LZString
+    // Appearance-Items → BC Bundle-Format (Großbuchstaben) → LZString
+    // _buildApplyCode erwartet genau dieses Format: { Group, Name, Color, Difficulty, Property }
     const { filteredItems } = _applyHairBaseline(items);
-    const profileItems = filteredItems.map(_appearanceItemToProfile);
-    CURSE_DEFAULT_OUTFIT_CODE = LZString.compressToBase64(JSON.stringify(profileItems));
+    const bundleItems = filteredItems.map(function(i) {
+      return {
+        Group:      i.group,
+        Name:       i.asset,
+        Color:      i.colors ?? '#ffffff',
+        Difficulty: i.difficulty ?? 0,
+        Property:   i.property ?? {},
+      };
+    });
+    CURSE_DEFAULT_OUTFIT_CODE = LZString.compressToBase64(JSON.stringify(bundleItems));
     CURSE_DEFAULT_OUTFIT_DATE = new Date().toLocaleString('de-DE', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
     _saveCurseDefaultOutfit();
     _updateCurseDefaultOutfitBtn();
-    showStatus('🏠 Standard-Outfit gemerkt (' + profileItems.length + ' Items)', 'success');
+    showStatus('🏠 Standard-Outfit gemerkt (' + bundleItems.length + ' Items)', 'success');
   };
   bcSend({ type: 'GET_CHAR_APPEARANCE', memberNum: null, reqId });
   showStatus('⏳ Lese aktuelles Outfit…', 'info');
