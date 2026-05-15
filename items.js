@@ -3172,7 +3172,7 @@ function switchTab(tab) {
     document.getElementById('tab-'+t+'-btn')?.classList.toggle('active', t===tab);
   });
   if (tab === 'outfit')        { renderOutfitList(); renderOutfitMemberChips(); renderProfileList(); _autoOutfitCode(); }
-  if (tab === 'curse')         { renderCurseTab(); }
+  if (tab === 'curse')         { renderCurseTab(); _updateCurseDefaultOutfitBtn(); }
   if (tab === 'bot')           { renderBotTab(); }
   if (tab === 'log')           { renderLogTab(); }
   if (tab === 'money')         { renderMoneyTab(); }
@@ -3890,7 +3890,8 @@ function _uniqueProfileName(base) {
 }
 
 // Core save helper – called after we have the item list (online or fallback)
-function _doSaveProfile(items, defaultName, keepHairGroups) {
+// afterSave: optional callback, called after successful save (e.g. to apply default outfit)
+function _doSaveProfile(items, defaultName, keepHairGroups, afterSave) {
   const suggested = _uniqueProfileName(defaultName);
   const name = prompt('Profil-Name:', suggested);
   if (!name?.trim()) return;
@@ -3905,16 +3906,98 @@ function _doSaveProfile(items, defaultName, keepHairGroups) {
   try {
     _saveProfiles();
     showStatus('✅ Profil "' + trimmed + '" gespeichert (' + items.length + ' Items) – nutzbar in Bot-Triggern!', 'success');
+    if (typeof afterSave === 'function') afterSave();
   } catch(e) { showStatus('❌ Speichern fehlgeschlagen: ' + e.message, 'error'); }
 }
 
+// ── Curse Standard-Outfit ─────────────────────────────────────────────────────
+// Nach jedem "💾 Profil"-Speichern im Curse-Tab wird dieses Profil automatisch ausgerüstet.
+let CURSE_DEFAULT_OUTFIT_NAME = null;
+try { CURSE_DEFAULT_OUTFIT_NAME = localStorage.getItem('BC_CURSE_DEFAULT_OUTFIT_v1') || null; } catch {}
+
+function _saveCurseDefaultOutfit() {
+  try {
+    if (CURSE_DEFAULT_OUTFIT_NAME) localStorage.setItem('BC_CURSE_DEFAULT_OUTFIT_v1', CURSE_DEFAULT_OUTFIT_NAME);
+    else localStorage.removeItem('BC_CURSE_DEFAULT_OUTFIT_v1');
+  } catch {}
+  _updateCurseDefaultOutfitBtn();
+}
+
+function _updateCurseDefaultOutfitBtn() {
+  const btn = document.getElementById('curseDefaultOutfitBtn');
+  if (!btn) return;
+  if (CURSE_DEFAULT_OUTFIT_NAME) {
+    btn.textContent = '🏠 ' + CURSE_DEFAULT_OUTFIT_NAME;
+    btn.title = 'Standard-Outfit: ' + CURSE_DEFAULT_OUTFIT_NAME + ' (klicken zum Ändern)';
+    btn.style.background = 'rgba(52,211,153,0.15)';
+    btn.style.borderColor = 'rgba(52,211,153,0.4)';
+    btn.style.color = '#6ee7b7';
+  } else {
+    btn.textContent = '🏠 Standard-Outfit';
+    btn.title = 'Standard-Outfit definieren – wird nach jedem Profil-Speichern ausgerüstet';
+    btn.style.background = '';
+    btn.style.borderColor = '';
+    btn.style.color = '';
+  }
+}
+
+function openCurseDefaultOutfitPanel() {
+  const panel = document.getElementById('curseDefaultOutfitPanel');
+  if (!panel) return;
+  const isOpen = panel.style.display !== 'none';
+  if (isOpen) { panel.style.display = 'none'; return; }
+  // Dropdown mit allen Profilen befüllen
+  const sel = document.getElementById('curseDefaultOutfitSel');
+  if (sel) {
+    const keys = Object.keys(PROFILES).sort((a, b) => a.localeCompare(b));
+    sel.innerHTML = '<option value="">-- Kein Standard-Outfit --</option>'
+      + keys.map(k => '<option value="' + escHtml(k) + '"' + (k === CURSE_DEFAULT_OUTFIT_NAME ? ' selected' : '') + '>' + escHtml(k) + '</option>').join('');
+  }
+  panel.style.display = 'flex';
+}
+
+function setCurseDefaultOutfitFromSel() {
+  const sel = document.getElementById('curseDefaultOutfitSel');
+  CURSE_DEFAULT_OUTFIT_NAME = sel?.value || null;
+  _saveCurseDefaultOutfit();
+  document.getElementById('curseDefaultOutfitPanel').style.display = 'none';
+  showStatus(CURSE_DEFAULT_OUTFIT_NAME
+    ? '✅ Standard-Outfit gesetzt: "' + CURSE_DEFAULT_OUTFIT_NAME + '"'
+    : '✅ Standard-Outfit entfernt', 'success');
+}
+
+// Wendet das Standard-Outfit an – wird nach erfolgreichem Profil-Speichern aufgerufen
+function _applyCurseDefaultOutfit() {
+  if (!CURSE_DEFAULT_OUTFIT_NAME) return;
+  if (!_connected) { showStatus('⚠️ Standard-Outfit: nicht verbunden', 'info'); return; }
+  const p = PROFILES[CURSE_DEFAULT_OUTFIT_NAME];
+  if (!p) { showStatus('⚠️ Standard-Outfit "' + CURSE_DEFAULT_OUTFIT_NAME + '" nicht mehr vorhanden', 'info'); return; }
+  if (p._outfitCode) {
+    const execCode = (typeof _oiBuildExecCode === 'function')
+      ? _oiBuildExecCode(p._outfitCode)
+      : '(function(){ try { var _d=LZString.decompressFromBase64(' + JSON.stringify(p._outfitCode) + '); var _a=JSON.parse(_d); if(Array.isArray(_a)){ ServerPlayerInventoryLoad(_a); CharacterRefresh(Player,true,false); } } catch(e){ console.error("[OI]",e); } })();';
+    bcSend({ type: 'EXEC', code: execCode });
+    showStatus('🏠 Standard-Outfit "' + CURSE_DEFAULT_OUTFIT_NAME + '" ausgerüstet', 'success');
+    return;
+  }
+  loadProfile(CURSE_DEFAULT_OUTFIT_NAME);
+  setTimeout(function() {
+    const code = document.getElementById('outfitCode')?.value?.trim();
+    if (!code) { showStatus('⚠️ Standard-Outfit: Kein Code generiert', 'info'); return; }
+    bcSend({ type: 'EXEC', code: '(function(){\n' + code + '\n})();' });
+    showStatus('🏠 Standard-Outfit "' + CURSE_DEFAULT_OUTFIT_NAME + '" ausgerüstet', 'success');
+  }, 80);
+}
+// ── Ende Standard-Outfit ──────────────────────────────────────────────────────
+
 // Request full Appearance for ownerNum, then call cb(items, charName)
 // Falls back to CURSE_DB-only if not connected
-function _fetchOutfitAndSave(ownerNum, defaultName, fallbackItems) {
+// afterSave: optional callback forwarded to _doSaveProfile (e.g. _applyCurseDefaultOutfit)
+function _fetchOutfitAndSave(ownerNum, defaultName, fallbackItems, afterSave) {
   if (!_connected) {
     if (!fallbackItems?.length) { showStatus('❌ Nicht verbunden und keine lokalen Daten', 'error'); return; }
     showStatus('⚠️ Nicht verbunden – nur Curse-Items aus DB gespeichert', 'info');
-    _doSaveProfile(fallbackItems, defaultName);
+    _doSaveProfile(fallbackItems, defaultName, undefined, afterSave);
     return;
   }
 
@@ -3925,14 +4008,14 @@ function _fetchOutfitAndSave(ownerNum, defaultName, fallbackItems) {
     if (!items?.length) {
       if (fallbackItems?.length) {
         showStatus('⚠️ Outfit leer – Fallback auf Curse-Einträge', 'info');
-        _doSaveProfile(fallbackItems, defaultName);
+        _doSaveProfile(fallbackItems, defaultName, undefined, afterSave);
       } else {
         showStatus('❌ Keine Items erhalten', 'error');
       }
       return;
     }
     const { filteredItems, keepHairGroups } = _applyHairBaseline(items);
-    _doSaveProfile(filteredItems.map(_appearanceItemToProfile), defaultName, keepHairGroups);
+    _doSaveProfile(filteredItems.map(_appearanceItemToProfile), defaultName, keepHairGroups, afterSave);
   };
 
   bcSend({ type: 'GET_CHAR_APPEARANCE', memberNum: tgtNum, reqId });
@@ -3977,7 +4060,7 @@ function curseSaveAsProfile(rowIdOrDbKey) {
   const craftName = entry.CraftName || entry.ItemName || 'Curse';
   const ownerName = entry.Besitzer?.Name || (entry.Besitzer?.Nummer ? '#' + entry.Besitzer.Nummer : 'Player');
   const defaultName = craftName + ' - ' + ownerName;
-  _fetchOutfitAndSave(null, defaultName, [_curseEntryToProfileItem(entry)]);
+  _fetchOutfitAndSave(null, defaultName, [_curseEntryToProfileItem(entry)], _applyCurseDefaultOutfit);
 }
 
 // Button: 💾 Alle speichern (Owner-Header) → "{OwnerName} Outfit" (Sammlung mehrerer Items)
@@ -3994,7 +4077,7 @@ function curseSaveAllAsProfile(ownerNum) {
   }
   if (flagged > 0) _saveCurseOutfitFlags();
   const defaultName = ownerName + ' Outfit';
-  _fetchOutfitAndSave(null, defaultName, entries.map(_curseEntryToProfileItem));
+  _fetchOutfitAndSave(null, defaultName, entries.map(_curseEntryToProfileItem), _applyCurseDefaultOutfit);
 }
 
 // ── Export / Import ───────────────────────────────────

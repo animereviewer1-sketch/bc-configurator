@@ -2606,6 +2606,7 @@ document.write('<scr'+'ipt src="items.js?_='+_cbv+'"><\/scr'+'ipt>');
     <button class="btn btn-primary" onclick="curseAutoMarkOutfit()" title="Kommentare mit 'outfit' automatisch als Outfit markieren">📝 Auto-Mark</button>
     <button class="btn btn-red" onclick="clearAllOutfitFlags()" title="Alle Outfit-Tags von allen Items entfernen – zum Neu-Anfangen">🗑️ Outfit-Tags leeren</button>
     <button class="btn btn-red" onclick="curseClear()" title="Alle gespeicherten Einträge löschen">🗑️ Leeren</button>
+    <button class="btn btn-primary" id="curseDefaultOutfitBtn" onclick="openCurseDefaultOutfitPanel()" title="Standard-Outfit definieren – wird nach jedem 💾 Profil-Speichern automatisch ausgerüstet" style="white-space:nowrap">🏠 Standard-Outfit</button>
     <div class="curse-stats">
       <div class="curse-stat">Crafts: <span id="csStat-total">0</span></div>
       <div class="curse-stat">🔮 Cursed: <span id="csStat-cursed">0</span></div>
@@ -2614,6 +2615,13 @@ document.write('<scr'+'ipt src="items.js?_='+_cbv+'"><\/scr'+'ipt>');
     </div>
     <span id="csScanStatus" style="font-size:.7rem;color:var(--text3)"></span>
     <span id="csAutoScanStatus" style="display:none;font-size:.68rem;color:var(--accent-text)"></span>
+  </div>
+  <!-- Standard-Outfit Auswahl-Panel (versteckt bis Button geklickt) -->
+  <div id="curseDefaultOutfitPanel" style="display:none;align-items:center;gap:10px;padding:8px 18px;background:rgba(52,211,153,0.06);border-bottom:1px solid rgba(52,211,153,0.2);font-size:.75rem;color:var(--text2)">
+    <span style="flex-shrink:0;color:#6ee7b7;font-weight:600">🏠 Standard-Outfit nach Profil-Speichern:</span>
+    <select id="curseDefaultOutfitSel" style="flex:1;max-width:320px;background:var(--bg2);border:1px solid rgba(52,211,153,0.3);border-radius:6px;color:var(--text);padding:4px 8px;font-size:.75rem"></select>
+    <button onclick="setCurseDefaultOutfitFromSel()" style="background:rgba(52,211,153,0.15);border:1px solid rgba(52,211,153,0.4);color:#6ee7b7;cursor:pointer;font-size:.72rem;padding:4px 12px;border-radius:6px;white-space:nowrap">✅ Übernehmen</button>
+    <button onclick="document.getElementById('curseDefaultOutfitPanel').style.display='none'" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:.85rem;padding:2px 6px" title="Schließen">✕</button>
   </div>
   <div id="csChangeBadge" style="display:none;padding:4px 10px;font-size:.68rem;background:var(--bg3);border-bottom:1px solid var(--border);color:var(--text2)">
   </div>
