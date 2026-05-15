@@ -3965,30 +3965,30 @@ function _doSaveProfile(items, defaultName, keepHairGroups, afterSave) {
 let CURSE_DEFAULT_OUTFIT_CODE = null;  // LZString-komprimiertes Appearance-Bundle
 let CURSE_DEFAULT_OUTFIT_DATE = null;  // Datum als String für die Anzeige
 
-(function _loadCurseDefaultOutfit() {
-  try {
-    // v2 = korrektes Bundle-Format (Group/Name/Color). v1 war falsches Profil-Format → ignorieren.
-    localStorage.removeItem('BC_CURSE_DEFAULT_OUTFIT_v1');
-    const raw = localStorage.getItem('BC_CURSE_DEFAULT_OUTFIT_v2');
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      CURSE_DEFAULT_OUTFIT_CODE = parsed.code || null;
-      CURSE_DEFAULT_OUTFIT_DATE = parsed.date || null;
-    }
-  } catch {}
-})();
+// IDB-Schlüssel (v3 = IDB statt localStorage, Bundle-Format)
+const _CURSE_DEFAULT_OUTFIT_IDB_KEY = 'BC_CURSE_DEFAULT_OUTFIT_v3';
+
+// Beim Start aus IDB laden (async – Button wird nach dem Laden aktualisiert)
+idbGet(_CURSE_DEFAULT_OUTFIT_IDB_KEY).then(function(d) {
+  if (d && d.code) {
+    CURSE_DEFAULT_OUTFIT_CODE = d.code;
+    CURSE_DEFAULT_OUTFIT_DATE = d.date || null;
+    _updateCurseDefaultOutfitBtn();
+  }
+});
+// Alte localStorage-Einträge aufräumen
+try { localStorage.removeItem('BC_CURSE_DEFAULT_OUTFIT_v1'); } catch {}
+try { localStorage.removeItem('BC_CURSE_DEFAULT_OUTFIT_v2'); } catch {}
 
 function _saveCurseDefaultOutfit() {
-  try {
-    if (CURSE_DEFAULT_OUTFIT_CODE) {
-      localStorage.setItem('BC_CURSE_DEFAULT_OUTFIT_v2', JSON.stringify({
-        code: CURSE_DEFAULT_OUTFIT_CODE,
-        date: CURSE_DEFAULT_OUTFIT_DATE,
-      }));
-    } else {
-      localStorage.removeItem('BC_CURSE_DEFAULT_OUTFIT_v2');
-    }
-  } catch {}
+  if (CURSE_DEFAULT_OUTFIT_CODE) {
+    idbSet(_CURSE_DEFAULT_OUTFIT_IDB_KEY, {
+      code: CURSE_DEFAULT_OUTFIT_CODE,
+      date: CURSE_DEFAULT_OUTFIT_DATE,
+    });
+  } else {
+    idbSet(_CURSE_DEFAULT_OUTFIT_IDB_KEY, null);
+  }
 }
 
 function _updateCurseDefaultOutfitBtn() {
