@@ -3340,9 +3340,11 @@ function _handleCurseData(data) {
   CURSE_LSCG       = data.lscgTable   ?? {};
   CURSE_CACHE_LSCG = data.lscgCache   ?? {};
   // Cursed-Items: ZuletztGescannt nur für Personen aktualisieren die JETZT im Raum sind.
-  // _lastRoomMembers enthält die aktuellen Raum-Member → nur deren Items bekommen den Neu-Badge.
+  // data.roomMembers kommt direkt vom BC-Scan-Zeitpunkt → kein Raumwechsel-Race-Condition.
   const _now = Date.now();
-  const _roomNums = new Set(_lastRoomMembers.map(function(m) { return String(m.num); }));
+  const _roomNums = data.roomMembers?.length
+    ? new Set(data.roomMembers.map(String))
+    : new Set(_lastRoomMembers.map(function(m) { return String(m.num); })); // Fallback
   Object.keys(CURSE_DB).forEach(k => {
     const entry = CURSE_DB[k];
     if (!entry.IstCursed) return;
@@ -3358,7 +3360,8 @@ function _handleCurseData(data) {
   });
 
   // ── Scan-Meta: Raum + Zeitpunkt für alle aktuellen Raum-Member speichern ───
-  if (_roomNums.size > 0) {
+  // Nur wenn ein Raumname vorhanden (echter Live-Scan, nicht nur DB-Reload)
+  if (_roomNums.size > 0 && data.room) {
     const _scanRoom = data.room || null;
     const _scanTime = new Date().toLocaleString('de-DE', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
     // Alle Owner-Nummern die in CURSE_DB vorkommen und gerade im Raum sind
@@ -3555,12 +3558,19 @@ function renderCurseTab() {
     const k2 = (e.Besitzer?.Nummer ?? '') + ':' + e.ItemName + ':' + e.CraftName;
     return _getEffectiveGruppe(e, k2) === slotFilter;
   });
-  if (searchTerm)  entries = entries.filter(e =>
-    e.CraftName?.toLowerCase().includes(searchTerm) ||
-    e.ItemName?.toLowerCase().includes(searchTerm)  ||
-    e.Gruppe?.toLowerCase().includes(searchTerm)    ||
-    e.Besitzer?.Name?.toLowerCase().includes(searchTerm)
-  );
+  if (searchTerm)  entries = entries.filter(e => {
+    if (e.CraftName?.toLowerCase().includes(searchTerm))        return true;
+    if (e.ItemName?.toLowerCase().includes(searchTerm))         return true;
+    if (e.Gruppe?.toLowerCase().includes(searchTerm))           return true;
+    if (e.Besitzer?.Name?.toLowerCase().includes(searchTerm))   return true;
+    // Kommentar durchsuchen
+    const dbKey = (e.Besitzer?.Nummer ?? '') + ':' + e.ItemName + ':' + e.CraftName;
+    if (CURSE_COMMENTS[dbKey]?.toLowerCase().includes(searchTerm)) return true;
+    // Raumname durchsuchen
+    const ownerMeta = CURSE_SCAN_META[String(e.Besitzer?.Nummer ?? '')];
+    if (ownerMeta?.room?.toLowerCase().includes(searchTerm))    return true;
+    return false;
+  });
 
   if (!entries.length) {
     empty.style.display = '';

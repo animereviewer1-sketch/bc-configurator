@@ -1040,12 +1040,18 @@ window.CurseScanner = (() => {
           try {
             const result = window.CurseScanner.scan();
             const _curseRoom = (typeof ChatRoomData !== 'undefined' && ChatRoomData?.Name) ? ChatRoomData.Name : null;
+            // roomMembers: Member-Nummern die JETZT im Raum sind (zum Scan-Zeitpunkt auf BC-Seite)
+            // Verlässlicher als _lastRoomMembers im Popup (das bei Raumwechsel schon veraltet sein kann)
+            const _curseRoomMembers = (typeof ChatRoomCharacter !== 'undefined' && Array.isArray(ChatRoomCharacter))
+              ? ChatRoomCharacter.map(c => c.MemberNumber).filter(Boolean)
+              : [];
             src.postMessage({
               app: APP, type: 'CURSE_DATA',
               database:  result.database,
               lscgTable: result.lscgTable,
               lscgCache: result.lscgCache,
               room: _curseRoom,
+              roomMembers: _curseRoomMembers,
               _auto: ev.data._auto === true,
             }, ALLOWED_ORIGIN);
             BCK.ok('CURSE_DATA gesendet: ' + Object.keys(result.database).length + ' Crafts');
