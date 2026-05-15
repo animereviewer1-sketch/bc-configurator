@@ -3332,13 +3332,22 @@ function _handleCurseData(data) {
   CURSE_DB         = data.database    ?? {};
   CURSE_LSCG       = data.lscgTable   ?? {};
   CURSE_CACHE_LSCG = data.lscgCache   ?? {};
-  // Cursed-Items: ZuletztGescannt bei JEDEM Live-Scan aktualisieren.
-  // So bekommt jede Person die gerade im Raum ist den 🔮 Neu-Badge – auch bei Outfit-Flag.
+  // Cursed-Items: ZuletztGescannt nur für Personen aktualisieren die JETZT im Raum sind.
+  // _lastRoomMembers enthält die aktuellen Raum-Member → nur deren Items bekommen den Neu-Badge.
   const _now = Date.now();
+  const _roomNums = new Set(_lastRoomMembers.map(function(m) { return String(m.num); }));
   Object.keys(CURSE_DB).forEach(k => {
-    if (CURSE_DB[k].IstCursed) {
-      CURSE_DB[k].ZuletztGescannt = _now;  // immer aktueller Timestamp
+    const entry = CURSE_DB[k];
+    if (!entry.IstCursed) return;
+    const ownerNum = String(entry.Besitzer?.Nummer ?? '');
+    if (_roomNums.has(ownerNum)) {
+      // Person ist gerade im Raum → Neu-Badge setzen (auch mit Outfit-Flag)
+      entry.ZuletztGescannt = _now;
+    } else if (prevDB[k]?.ZuletztGescannt) {
+      // Person nicht im Raum → alten Timestamp behalten
+      entry.ZuletztGescannt = prevDB[k].ZuletztGescannt;
     }
+    // kein else: kein alter Timestamp → bleibt ohne → kein Badge
   });
   _updateCurseStats();
   _populateSlotFilter();
@@ -3911,82 +3920,95 @@ function _doSaveProfile(items, defaultName, keepHairGroups, afterSave) {
 }
 
 // ── Curse Standard-Outfit ─────────────────────────────────────────────────────
-// Nach jedem "💾 Profil"-Speichern im Curse-Tab wird dieses Profil automatisch ausgerüstet.
-let CURSE_DEFAULT_OUTFIT_NAME = null;
-try { CURSE_DEFAULT_OUTFIT_NAME = localStorage.getItem('BC_CURSE_DEFAULT_OUTFIT_v1') || null; } catch {}
+// Speichert das aktuell getragene Outfit (Player.Appearance) als LZString-Bundle.
+// Nach jedem "💾 Profil"-Speichern im Curse-Tab wird es automatisch wieder ausgerüstet.
+let CURSE_DEFAULT_OUTFIT_CODE = null;  // LZString-komprimiertes Appearance-Bundle
+let CURSE_DEFAULT_OUTFIT_DATE = null;  // Datum als String für die Anzeige
+
+(function _loadCurseDefaultOutfit() {
+  try {
+    const raw = localStorage.getItem('BC_CURSE_DEFAULT_OUTFIT_v2');
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      CURSE_DEFAULT_OUTFIT_CODE = parsed.code || null;
+      CURSE_DEFAULT_OUTFIT_DATE = parsed.date || null;
+    }
+  } catch {}
+})();
 
 function _saveCurseDefaultOutfit() {
   try {
-    if (CURSE_DEFAULT_OUTFIT_NAME) localStorage.setItem('BC_CURSE_DEFAULT_OUTFIT_v1', CURSE_DEFAULT_OUTFIT_NAME);
-    else localStorage.removeItem('BC_CURSE_DEFAULT_OUTFIT_v1');
+    if (CURSE_DEFAULT_OUTFIT_CODE) {
+      localStorage.setItem('BC_CURSE_DEFAULT_OUTFIT_v2', JSON.stringify({
+        code: CURSE_DEFAULT_OUTFIT_CODE,
+        date: CURSE_DEFAULT_OUTFIT_DATE,
+      }));
+    } else {
+      localStorage.removeItem('BC_CURSE_DEFAULT_OUTFIT_v2');
+    }
   } catch {}
-  _updateCurseDefaultOutfitBtn();
 }
 
 function _updateCurseDefaultOutfitBtn() {
   const btn = document.getElementById('curseDefaultOutfitBtn');
   if (!btn) return;
-  if (CURSE_DEFAULT_OUTFIT_NAME) {
-    btn.textContent = '🏠 ' + CURSE_DEFAULT_OUTFIT_NAME;
-    btn.title = 'Standard-Outfit: ' + CURSE_DEFAULT_OUTFIT_NAME + ' (klicken zum Ändern)';
+  if (CURSE_DEFAULT_OUTFIT_CODE) {
+    btn.textContent = '🏠 Standard-Outfit ✓';
+    btn.title = 'Standard-Outfit gespeichert am ' + (CURSE_DEFAULT_OUTFIT_DATE || '?')
+      + '\nKlicken → aktuelles Outfit neu merken\nRechtsklick → entfernen';
     btn.style.background = 'rgba(52,211,153,0.15)';
     btn.style.borderColor = 'rgba(52,211,153,0.4)';
     btn.style.color = '#6ee7b7';
   } else {
     btn.textContent = '🏠 Standard-Outfit';
-    btn.title = 'Standard-Outfit definieren – wird nach jedem Profil-Speichern ausgerüstet';
+    btn.title = 'Klicken → aktuelles Outfit merken und nach jedem 💾 Profil automatisch ausrüsten';
     btn.style.background = '';
     btn.style.borderColor = '';
     btn.style.color = '';
   }
 }
 
-function openCurseDefaultOutfitPanel() {
-  const panel = document.getElementById('curseDefaultOutfitPanel');
-  if (!panel) return;
-  const isOpen = panel.style.display !== 'none';
-  if (isOpen) { panel.style.display = 'none'; return; }
-  // Dropdown mit allen Profilen befüllen
-  const sel = document.getElementById('curseDefaultOutfitSel');
-  if (sel) {
-    const keys = Object.keys(PROFILES).sort((a, b) => a.localeCompare(b));
-    sel.innerHTML = '<option value="">-- Kein Standard-Outfit --</option>'
-      + keys.map(k => '<option value="' + escHtml(k) + '"' + (k === CURSE_DEFAULT_OUTFIT_NAME ? ' selected' : '') + '>' + escHtml(k) + '</option>').join('');
-  }
-  panel.style.display = 'flex';
+// Klick auf Button → aktuelles Outfit aus BC lesen und merken
+function captureAndSetCurseDefaultOutfit() {
+  if (!_connected) { showStatus('❌ Nicht verbunden mit BC', 'error'); return; }
+  const reqId = 'cdo_' + Date.now();
+  _pendingOutfitSave[reqId] = function(items) {
+    if (!items?.length) { showStatus('❌ Kein Outfit erhalten', 'error'); return; }
+    // Appearance-Items → profile-Format → LZString
+    const { filteredItems } = _applyHairBaseline(items);
+    const profileItems = filteredItems.map(_appearanceItemToProfile);
+    CURSE_DEFAULT_OUTFIT_CODE = LZString.compressToBase64(JSON.stringify(profileItems));
+    CURSE_DEFAULT_OUTFIT_DATE = new Date().toLocaleString('de-DE', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
+    _saveCurseDefaultOutfit();
+    _updateCurseDefaultOutfitBtn();
+    showStatus('🏠 Standard-Outfit gemerkt (' + profileItems.length + ' Items)', 'success');
+  };
+  bcSend({ type: 'GET_CHAR_APPEARANCE', memberNum: null, reqId });
+  showStatus('⏳ Lese aktuelles Outfit…', 'info');
 }
 
-function setCurseDefaultOutfitFromSel() {
-  const sel = document.getElementById('curseDefaultOutfitSel');
-  CURSE_DEFAULT_OUTFIT_NAME = sel?.value || null;
+// Rechtsklick → Standard-Outfit entfernen
+function clearCurseDefaultOutfit(e) {
+  e.preventDefault();
+  if (!CURSE_DEFAULT_OUTFIT_CODE) return;
+  CURSE_DEFAULT_OUTFIT_CODE = null;
+  CURSE_DEFAULT_OUTFIT_DATE = null;
   _saveCurseDefaultOutfit();
-  document.getElementById('curseDefaultOutfitPanel').style.display = 'none';
-  showStatus(CURSE_DEFAULT_OUTFIT_NAME
-    ? '✅ Standard-Outfit gesetzt: "' + CURSE_DEFAULT_OUTFIT_NAME + '"'
-    : '✅ Standard-Outfit entfernt', 'success');
+  _updateCurseDefaultOutfitBtn();
+  showStatus('🗑️ Standard-Outfit entfernt', 'info');
 }
 
 // Wendet das Standard-Outfit an – wird nach erfolgreichem Profil-Speichern aufgerufen
 function _applyCurseDefaultOutfit() {
-  if (!CURSE_DEFAULT_OUTFIT_NAME) return;
+  if (!CURSE_DEFAULT_OUTFIT_CODE) return;
   if (!_connected) { showStatus('⚠️ Standard-Outfit: nicht verbunden', 'info'); return; }
-  const p = PROFILES[CURSE_DEFAULT_OUTFIT_NAME];
-  if (!p) { showStatus('⚠️ Standard-Outfit "' + CURSE_DEFAULT_OUTFIT_NAME + '" nicht mehr vorhanden', 'info'); return; }
-  if (p._outfitCode) {
-    const execCode = (typeof _oiBuildExecCode === 'function')
-      ? _oiBuildExecCode(p._outfitCode)
-      : '(function(){ try { var _d=LZString.decompressFromBase64(' + JSON.stringify(p._outfitCode) + '); var _a=JSON.parse(_d); if(Array.isArray(_a)){ ServerPlayerInventoryLoad(_a); CharacterRefresh(Player,true,false); } } catch(e){ console.error("[OI]",e); } })();';
-    bcSend({ type: 'EXEC', code: execCode });
-    showStatus('🏠 Standard-Outfit "' + CURSE_DEFAULT_OUTFIT_NAME + '" ausgerüstet', 'success');
-    return;
+  try {
+    const applyCode = _buildApplyCode(CURSE_DEFAULT_OUTFIT_CODE);
+    bcSend({ type: 'EXEC', code: '(function(){' + applyCode + '})();' });
+    showStatus('🏠 Standard-Outfit ausgerüstet', 'success');
+  } catch(e) {
+    showStatus('❌ Standard-Outfit konnte nicht angewendet werden: ' + e.message, 'error');
   }
-  loadProfile(CURSE_DEFAULT_OUTFIT_NAME);
-  setTimeout(function() {
-    const code = document.getElementById('outfitCode')?.value?.trim();
-    if (!code) { showStatus('⚠️ Standard-Outfit: Kein Code generiert', 'info'); return; }
-    bcSend({ type: 'EXEC', code: '(function(){\n' + code + '\n})();' });
-    showStatus('🏠 Standard-Outfit "' + CURSE_DEFAULT_OUTFIT_NAME + '" ausgerüstet', 'success');
-  }, 80);
 }
 // ── Ende Standard-Outfit ──────────────────────────────────────────────────────
 
