@@ -3260,6 +3260,13 @@ let CURSE_DB    = {};   // key → entry (from CurseScanner.database)
 let CURSE_LSCG  = {};   // key → entry (from CurseScanner.lscgTable)
 let CURSE_CACHE_LSCG = {}; // from lscgCache
 
+// ── Scan-Meta: Raum + Zeitpunkt pro Owner ────────────────────────────────────
+// ownerNum (string) → { room: string, time: string }
+// Wird bei jedem Scan für die aktuell im Raum anwesenden Personen aktualisiert.
+let CURSE_SCAN_META = {};
+idbGet('BC_CURSE_SCAN_META_v1').then(function(d) { if (d && typeof d === 'object') CURSE_SCAN_META = d; });
+function _saveCurseScanMeta() { idbSet('BC_CURSE_SCAN_META_v1', CURSE_SCAN_META); }
+
 // Comments: persisted in IndexedDB
 let CURSE_COMMENTS = {};
 function _saveCurseComments() { idbSet('BC_CURSE_COMMENTS_v1', CURSE_COMMENTS); }
@@ -3349,6 +3356,22 @@ function _handleCurseData(data) {
     }
     // kein else: kein alter Timestamp → bleibt ohne → kein Badge
   });
+
+  // ── Scan-Meta: Raum + Zeitpunkt für alle aktuellen Raum-Member speichern ───
+  if (_roomNums.size > 0) {
+    const _scanRoom = data.room || null;
+    const _scanTime = new Date().toLocaleString('de-DE', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
+    // Alle Owner-Nummern die in CURSE_DB vorkommen und gerade im Raum sind
+    const _seenOwners = new Set();
+    Object.values(CURSE_DB).forEach(function(e) {
+      const on = String(e.Besitzer?.Nummer ?? '');
+      if (on && _roomNums.has(on)) _seenOwners.add(on);
+    });
+    _seenOwners.forEach(function(on) {
+      CURSE_SCAN_META[on] = { room: _scanRoom, time: _scanTime };
+    });
+    if (_seenOwners.size > 0) _saveCurseScanMeta();
+  }
   _updateCurseStats();
   _populateSlotFilter();
   if (_activeTab === 'curse') renderCurseTab();
@@ -3603,10 +3626,17 @@ function renderCurseTab() {
       return !!CURSE_OUTFIT_FLAGS[k2];
     }).length;
 
+    const _meta = CURSE_SCAN_META[String(owner.num)] ?? null;
+    const _metaHtml = _meta
+      ? '<span style="font-size:.6rem;color:var(--text3);white-space:nowrap;margin-left:4px" title="Zuletzt gescannt">'
+        + '📍' + (_meta.room ? escHtml(_meta.room) : '?') + ' &nbsp;🕐' + escHtml(_meta.time) + '</span>'
+      : '';
+
     block.innerHTML =
       '<div class="curse-owner-hdr" onclick="toggleCurseOwner(\'' + blockId + '\')">'+
         '<span class="curse-owner-name">'+escHtml(owner.name)+'</span>'+
         '<span class="curse-owner-num">#'+owner.num+'</span>'+
+        _metaHtml +
         (lscgCount ? '<span class="curse-owner-count" style="background:var(--gd);color:var(--green)">🧿 '+lscgCount+'</span>' : '')+
         (cursedCount ? '<span class="curse-owner-count">🔮 '+cursedCount+'</span>' : '')+
         '<span class="curse-owner-count" style="background:var(--bg3);color:var(--text2)">'+owner.items.length+'</span>'+

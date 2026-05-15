@@ -1039,11 +1039,13 @@ window.CurseScanner = (() => {
           BCK.info('SCAN_CURSES');
           try {
             const result = window.CurseScanner.scan();
+            const _curseRoom = (typeof ChatRoomData !== 'undefined' && ChatRoomData?.Name) ? ChatRoomData.Name : null;
             src.postMessage({
               app: APP, type: 'CURSE_DATA',
               database:  result.database,
               lscgTable: result.lscgTable,
               lscgCache: result.lscgCache,
+              room: _curseRoom,
               _auto: ev.data._auto === true,
             }, ALLOWED_ORIGIN);
             BCK.ok('CURSE_DATA gesendet: ' + Object.keys(result.database).length + ' Crafts');
