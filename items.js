@@ -3074,7 +3074,13 @@ function _pmodCopyToYuuki() {
   if (_profileModalName) copyProfileToYuuki(_profileModalName);
 }
 
-// ── Farb-Häufigkeit / Color Frequency ────────────────────────────────────
+// ── Farb-Häufigkeit / Color Frequency v2 ─────────────────────────────────
+
+// ── State ──
+let _cfreqCtxType = '';      // 'outfit' | 'profile'
+let _cfreqCtxKey  = '';      // profileName or ''
+let _cfreqChanges = {};      // { origColorLower → newHex }
+let _cfreqLinked  = new Set(); // set of origColorLower that move together
 
 function _getColorFreq(items) {
   const freq = {};
@@ -3092,76 +3098,223 @@ function _getColorFreq(items) {
 }
 
 function _renderColorFreqHtml(freqData, ctxType, ctxKey) {
+  _cfreqCtxType = ctxType;
+  _cfreqCtxKey  = ctxKey || '';
+  _cfreqChanges = {};
+  _cfreqLinked  = new Set();
+
   if (!freqData.length) return '<div style="color:var(--text3);font-size:.76rem;padding:6px 0">Keine Farbdaten vorhanden.</div>';
-  return '<div style="display:flex;flex-direction:column;gap:3px">'
-    + freqData.map(f => {
-      const hexSafe = escHtml(f.color);
-      const ckSafe  = escHtml(ctxKey || '');
-      const tip     = f.usages.slice(0, 6).map(u => u.asset).join(', ') + (f.usages.length > 6 ? ' …' : '');
-      return '<div class="cfreq-row" title="' + escHtml(tip) + '">'
-        + '<span class="cfreq-swatch" style="background:' + hexSafe + '"></span>'
-        + '<span class="cfreq-hex">'  + hexSafe + '</span>'
-        + '<span class="cfreq-count">' + f.count + '×</span>'
-        + '<span style="font-size:.62rem;color:var(--text3)">→</span>'
-        + '<input type="color" class="cfreq-picker" value="' + hexSafe + '"'
-        + ' data-old="' + hexSafe + '" data-ctx-type="' + ctxType + '" data-ctx-key="' + ckSafe + '"'
-        + ' onchange="_replaceColorFromInput(this)" title="Neue Farbe wählen – ersetzt alle Vorkommen">'
-        + '</div>';
-    }).join('')
+
+  const defaultCopyName = (ctxType === 'profile' && ctxKey)
+    ? _profileShortName(ctxKey, _profileOwnerOf(ctxKey)) + ' (Farbanpassung)'
+    : 'Mein Outfit (Farbanpassung)';
+
+  const rows = freqData.map((f, idx) => {
+    const hexSafe = escHtml(f.color);
+    const tip = f.usages.slice(0, 6).map(u => u.asset).join(', ') + (f.usages.length > 6 ? ' …' : '');
+    return '<div class="cfreq-row" data-orig="' + hexSafe + '" title="' + escHtml(tip) + '">'
+      + '<label class="cfreq-link-wrap" title="Verknüpfen – alle verknüpften Farben ändern sich gemeinsam">'
+      +   '<input type="checkbox" class="cfreq-link-cb" data-orig="' + hexSafe + '" onchange="_cfreqLinkToggle(this)">'
+      +   '<span class="cfreq-link-icon">🔗</span>'
+      + '</label>'
+      + '<span class="cfreq-swatch" id="cfswt_' + idx + '" style="background:' + hexSafe + '"></span>'
+      + '<input type="text" class="cfreq-hex-inp" id="cfhex_' + idx + '" value="' + hexSafe + '"'
+      +   ' maxlength="7" spellcheck="false" data-orig="' + hexSafe + '" data-idx="' + idx + '"'
+      +   ' oninput="_cfreqHexInput(this)" onchange="_cfreqHexCommit(this)" placeholder="#RRGGBB">'
+      + '<input type="color" class="cfreq-picker" id="cfpick_' + idx + '" value="' + hexSafe + '"'
+      +   ' data-orig="' + hexSafe + '" data-idx="' + idx + '" oninput="_cfreqPickerInput(this)">'
+      + '<span class="cfreq-count">' + f.count + '×</span>'
+      + '</div>';
+  }).join('');
+
+  const copyNameSafe = escHtml(defaultCopyName);
+  const actions = '<div class="cfreq-actions">'
+    + '<div class="cfreq-act-row">'
+    +   '<button class="btn btn-primary cfreq-act-btn" onclick="_cfreqTest()" title="Farben in BC testen ohne zu speichern">▶ Testen</button>'
+    +   '<button class="btn btn-green cfreq-act-btn" onclick="_cfreqSave()" title="Änderungen dauerhaft speichern">💾 Speichern</button>'
+    + '</div>'
+    + '<div class="cfreq-act-row">'
+    +   '<input type="text" class="cfreq-copy-name" id="cfreqCopyName" value="' + copyNameSafe + '" placeholder="Name der Kopie..." maxlength="60">'
+    +   '<button class="btn cfreq-act-btn" onclick="_cfreqSaveCopy()" title="Als neue Kopie mit eigenem Namen speichern" style="white-space:nowrap">📋 Als Kopie</button>'
+    + '</div>'
+    + '</div>';
+
+  return '<div id="cfreq-inner">'
+    + '<div style="font-size:.67rem;color:var(--text3);margin-bottom:7px">🔗 = Farben verknüpfen &nbsp;·&nbsp; Hex eingeben oder Picker &nbsp;·&nbsp; dann Testen / Speichern</div>'
+    + '<div style="display:flex;flex-direction:column;gap:3px">' + rows + '</div>'
+    + actions
     + '</div>';
 }
 
-function _replaceColorFromInput(el) {
-  const oldColor = el.dataset.old;
-  const newColor = el.value;
-  if (oldColor.toLowerCase() === newColor.toLowerCase()) return;
-  if (el.dataset.ctxType === 'outfit') {
-    _replaceColorInOutfit(oldColor, newColor);
-    refreshOutfitColorFreq();
-  } else if (el.dataset.ctxType === 'profile') {
-    _replaceColorInProfile(el.dataset.ctxKey, oldColor, newColor);
-    _refreshPmodColorFreq();
-  }
-  el.dataset.old = newColor;
+// ── Picker: live update while dragging ──
+function _cfreqPickerInput(el) {
+  const idx  = el.dataset.idx;
+  const orig = el.dataset.orig.toLowerCase();
+  const newC = el.value;
+  const hexInp = document.getElementById('cfhex_' + idx);
+  const swatch = document.getElementById('cfswt_' + idx);
+  if (hexInp) hexInp.value = newC;
+  if (swatch) swatch.style.background = newC;
+  _cfreqSetChange(orig, newC, idx);
 }
 
-function _replaceColorInOutfit(oldColor, newColor) {
-  const old = oldColor.toLowerCase();
-  let changed = 0;
-  for (const item of OUTFIT) {
-    if (!item.colors) continue;
-    if (Array.isArray(item.colors)) {
-      const before = JSON.stringify(item.colors);
-      item.colors = item.colors.map(c => (c?.toLowerCase() === old ? newColor : c));
-      if (JSON.stringify(item.colors) !== before) changed++;
-    } else if (typeof item.colors === 'string' && item.colors.toLowerCase() === old) {
-      item.colors = newColor; changed++;
-    }
-  }
-  _autoOutfitCode();
-  showStatus('✅ ' + changed + ' Item(s) mit ' + oldColor + ' → ' + newColor + ' aktualisiert', 'success');
+// ── Hex input: preview while typing ──
+function _cfreqHexInput(el) {
+  const raw = el.value.trim();
+  if (!/^#[0-9a-fA-F]{6}$/.test(raw)) return;
+  const idx    = el.dataset.idx;
+  const swatch = document.getElementById('cfswt_' + idx);
+  const picker = document.getElementById('cfpick_' + idx);
+  if (swatch) swatch.style.background = raw;
+  if (picker) picker.value = raw;
 }
 
-function _replaceColorInProfile(profileName, oldColor, newColor) {
-  const p = PROFILES[profileName];
-  if (!p) return;
-  const old = oldColor.toLowerCase();
-  let changed = 0;
-  for (const item of (p.items || [])) {
+// ── Hex input: commit on blur / Enter ──
+function _cfreqHexCommit(el) {
+  const raw = el.value.trim();
+  const idx  = el.dataset.idx;
+  const orig = el.dataset.orig.toLowerCase();
+  if (!/^#[0-9a-fA-F]{6}$/.test(raw)) {
+    el.value = _cfreqChanges[orig] || el.dataset.orig; // restore
+    return;
+  }
+  const picker = document.getElementById('cfpick_' + idx);
+  const swatch = document.getElementById('cfswt_' + idx);
+  if (picker) picker.value = raw;
+  if (swatch) swatch.style.background = raw;
+  _cfreqSetChange(orig, raw, idx);
+}
+
+// ── Store change; propagate to linked colors ──
+function _cfreqSetChange(origLower, newHex, changedIdx) {
+  if (_cfreqLinked.has(origLower) && _cfreqLinked.size > 1) {
+    _cfreqLinked.forEach(lc => {
+      _cfreqChanges[lc] = newHex;
+      document.querySelectorAll('.cfreq-row[data-orig]').forEach(row => {
+        if (row.dataset.orig.toLowerCase() !== lc) return;
+        const rp = row.querySelector('.cfreq-picker');
+        const ri = rp?.dataset?.idx;
+        if (!ri) return;
+        const p = document.getElementById('cfpick_' + ri);
+        const h = document.getElementById('cfhex_' + ri);
+        const s = document.getElementById('cfswt_' + ri);
+        if (p) p.value = newHex;
+        if (h) h.value = newHex;
+        if (s) s.style.background = newHex;
+      });
+    });
+  } else {
+    _cfreqChanges[origLower] = newHex;
+  }
+}
+
+// ── Link checkbox toggle ──
+function _cfreqLinkToggle(cb) {
+  const orig = cb.dataset.orig.toLowerCase();
+  if (cb.checked) _cfreqLinked.add(orig); else _cfreqLinked.delete(orig);
+  document.querySelectorAll('.cfreq-link-cb').forEach(c => {
+    c.closest('.cfreq-row')?.classList.toggle('cfreq-linked', c.checked);
+  });
+}
+
+// ── Apply _cfreqChanges to items array ──
+function _cfreqApplyChanges(items, changes) {
+  for (const item of (items || [])) {
     if (!item.colors) continue;
     if (Array.isArray(item.colors)) {
-      const before = JSON.stringify(item.colors);
-      item.colors = item.colors.map(c => (c?.toLowerCase() === old ? newColor : c));
-      if (JSON.stringify(item.colors) !== before) changed++;
-    } else if (typeof item.colors === 'string' && item.colors.toLowerCase() === old) {
-      item.colors = newColor; changed++;
+      item.colors = item.colors.map(c => (!c || c === 'Default') ? c : (changes[c.toLowerCase()] ?? c));
+    } else if (typeof item.colors === 'string' && item.colors !== 'Default') {
+      item.colors = changes[item.colors.toLowerCase()] ?? item.colors;
     }
   }
+}
+
+// ── Testen: execute in BC without saving ──
+function _cfreqTest() {
+  if (!Object.keys(_cfreqChanges).length) { showStatus('⚠️ Keine Farbänderungen vorhanden', 'info'); return; }
+  if (!_connected) { showStatus('❌ Nicht verbunden mit BC', 'error'); return; }
+
+  if (_cfreqCtxType === 'profile' && _cfreqCtxKey) {
+    const p = PROFILES[_cfreqCtxKey];
+    if (!p) { showStatus('❌ Profil nicht gefunden', 'error'); return; }
+    const origOutfit = JSON.parse(JSON.stringify(OUTFIT));
+    const origKHG    = [..._currentProfileKeepHairGroups];
+    loadProfile(_cfreqCtxKey);
+    _cfreqApplyChanges(OUTFIT, _cfreqChanges);
+    _autoOutfitCode();
+    const code = document.getElementById('outfitCode')?.value?.trim();
+    if (code) bcSend({ type: 'EXEC', code: '(function(){\n' + code + '\n})();' });
+    showStatus('▶ Test ausgeführt · Profil: "' + _cfreqCtxKey + '"', 'success');
+    // Restore OUTFIT
+    OUTFIT.length = 0;
+    origOutfit.forEach(i => OUTFIT.push(i));
+    _currentProfileKeepHairGroups = origKHG;
+    _autoOutfitCode();
+  } else {
+    // Outfit mode
+    const origColors = OUTFIT.map(i => Array.isArray(i.colors) ? [...i.colors] : i.colors);
+    _cfreqApplyChanges(OUTFIT, _cfreqChanges);
+    _autoOutfitCode();
+    const code = document.getElementById('outfitCode')?.value?.trim();
+    if (code) bcSend({ type: 'EXEC', code: '(function(){\n' + code + '\n})();' });
+    showStatus('▶ Test ausgeführt', 'success');
+    // Restore
+    OUTFIT.forEach((item, i) => { item.colors = origColors[i]; });
+    _autoOutfitCode();
+  }
+}
+
+// ── Speichern: apply and save ──
+function _cfreqSave() {
+  const n = Object.keys(_cfreqChanges).length;
+  if (!n) { showStatus('⚠️ Keine Farbänderungen vorhanden', 'info'); return; }
+
+  if (_cfreqCtxType === 'profile' && _cfreqCtxKey) {
+    const p = PROFILES[_cfreqCtxKey];
+    if (!p) return;
+    _cfreqApplyChanges(p.items, _cfreqChanges);
+    _saveProfiles();
+    showStatus('✅ ' + n + ' Farbänderung(en) in "' + _cfreqCtxKey + '" gespeichert', 'success');
+    _cfreqChanges = {};
+    const panel = document.getElementById('pmodColorFreqPanel') || document.getElementById('outfitColorFreqPanel');
+    if (panel) panel.innerHTML = _renderColorFreqHtml(_getColorFreq(p.items), _cfreqCtxType, _cfreqCtxKey);
+  } else {
+    _cfreqApplyChanges(OUTFIT, _cfreqChanges);
+    _autoOutfitCode();
+    showStatus('✅ ' + n + ' Farbänderung(en) im Outfit gespeichert', 'success');
+    _cfreqChanges = {};
+    const panel = document.getElementById('outfitColorFreqPanel');
+    if (panel) panel.innerHTML = _renderColorFreqHtml(_getColorFreq(OUTFIT), 'outfit', '');
+  }
+}
+
+// ── Als Kopie speichern ──
+function _cfreqSaveCopy() {
+  const nameInp = document.getElementById('cfreqCopyName');
+  const rawName = nameInp?.value?.trim();
+  if (!rawName) { showStatus('❌ Bitte einen Namen für die Kopie eingeben', 'error'); return; }
+  if (PROFILES[rawName] && !confirm('Profil "' + rawName + '" existiert bereits. Überschreiben?')) return;
+
+  let srcItems;
+  if (_cfreqCtxType === 'profile' && _cfreqCtxKey) {
+    const p = PROFILES[_cfreqCtxKey];
+    if (!p) return;
+    srcItems = JSON.parse(JSON.stringify(p.items || []));
+  } else {
+    const SAVE_KEYS = ['group','asset','colors','tr','trStr','typeStr','tightCode','lock','lockParams','isOther','memberNum','label'];
+    srcItems = JSON.parse(JSON.stringify(OUTFIT.map(item => {
+      const out = {}; SAVE_KEYS.forEach(k => { if (item[k] !== undefined) out[k] = item[k]; }); return out;
+    })));
+  }
+
+  _cfreqApplyChanges(srcItems, _cfreqChanges);
+  PROFILES[rawName] = { name: rawName, date: new Date().toLocaleDateString('de-DE'), items: srcItems };
   _saveProfiles();
-  showStatus('✅ ' + changed + ' Item(s) in "' + profileName + '" aktualisiert', 'success');
+  renderProfileList();
+  showStatus('✅ Kopie "' + rawName + '" mit ' + Object.keys(_cfreqChanges).length + ' Farbänderung(en) gespeichert', 'success');
 }
 
-// Outfit-Tab: Farb-Panel toggle
+// ── Outfit-Tab: toggle panel ──
 let _outfitColorFreqOpen = false;
 
 function toggleOutfitColorFreq() {
@@ -3170,7 +3323,7 @@ function toggleOutfitColorFreq() {
   const btn   = document.getElementById('outfitColorFreqBtn');
   if (!panel) return;
   if (_outfitColorFreqOpen) {
-    refreshOutfitColorFreq();
+    panel.innerHTML = _renderColorFreqHtml(_getColorFreq(OUTFIT), 'outfit', '');
     panel.style.display = '';
     if (btn) btn.textContent = '🎨 Farben ▲';
   } else {
@@ -3185,7 +3338,7 @@ function refreshOutfitColorFreq() {
   panel.innerHTML = _renderColorFreqHtml(_getColorFreq(OUTFIT), 'outfit', '');
 }
 
-// Profil-Modal: Farb-Panel toggle
+// ── Profil-Modal: toggle panel ──
 let _pmodColorFreqOpen = false;
 
 function _pmodToggleColorFreq() {
@@ -3198,10 +3351,7 @@ function _pmodToggleColorFreq() {
 function _refreshPmodColorFreq() {
   const panel = document.getElementById('pmodColorFreqPanel');
   if (!panel) return;
-  if (!_pmodColorFreqOpen || !_profileModalName) {
-    panel.style.display = 'none';
-    return;
-  }
+  if (!_pmodColorFreqOpen || !_profileModalName) { panel.style.display = 'none'; return; }
   const p = PROFILES[_profileModalName];
   panel.innerHTML = _renderColorFreqHtml(_getColorFreq(p?.items || []), 'profile', _profileModalName);
   panel.style.display = '';
@@ -3212,7 +3362,11 @@ function _showCardColorFreq(slot) {
   if (!name) return;
   _pmodColorFreqOpen = true;
   openProfileModal(slot, null);
-  setTimeout(() => { _refreshPmodColorFreq(); const btn = document.getElementById('pmodColorFreqBtn'); if (btn) btn.textContent = '🎨 Farben ▲'; }, 60);
+  setTimeout(() => {
+    _refreshPmodColorFreq();
+    const btn = document.getElementById('pmodColorFreqBtn');
+    if (btn) btn.textContent = '🎨 Farben ▲';
+  }, 60);
 }
 
 // ── Export / Import ──────────────────────────────────────────────────────
