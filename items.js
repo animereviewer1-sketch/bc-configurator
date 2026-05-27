@@ -2214,6 +2214,8 @@ function renderProfileList() {
         + '<button class="pc-btn primary" data-slot="' + slotKey + '" onclick="profileExecuteBySlot(this.dataset.slot)" title="Laden + ausführen">▶ Run</button>'
         + '<button class="pc-btn' + (isFav ? ' fav-on' : '') + '" data-pkey="' + idx + '" onclick="toggleProfileFav(_profileNameMap[\'p_\'+this.dataset.pkey])" title="Favorit">⭐</button>'
         + '<button class="pc-btn' + (isEdit ? ' edit-on' : '') + '" data-slot="' + slotKey + '" onclick="profileToggleEdit(this.dataset.slot)" title="Bearbeiten">✏️</button>'
+        + '<button class="pc-btn" data-slot="' + slotKey + '" onclick="copyProfileToYuuki(_profileNameMap[this.dataset.slot])" title="Kopie unter Yuuki 998 erstellen" style="font-size:9px">📋 Yuuki</button>'
+        + '<button class="pc-btn" data-slot="' + slotKey + '" onclick="_showCardColorFreq(this.dataset.slot)" title="Farb-Häufigkeit anzeigen und Farben ersetzen">🎨</button>'
         + '</div>'
         + '</div>';
     }).join('');
@@ -2838,6 +2840,13 @@ function _renderProfileModal(name) {
   const slotEntry = Object.entries(_profileNameMap).find(([,v]) => v === name);
   _profileModalSlot = slotEntry ? slotEntry[0] : null;
 
+  // Reset color freq panel on profile switch
+  _pmodColorFreqOpen = false;
+  const _cfPanel = document.getElementById('pmodColorFreqPanel');
+  if (_cfPanel) { _cfPanel.style.display = 'none'; _cfPanel.innerHTML = ''; }
+  const _cfBtn = document.getElementById('pmodColorFreqBtn');
+  if (_cfBtn) _cfBtn.textContent = '🎨 Farben';
+
   const owner = _profileOwnerOf(name);
   const shortName = _profileShortName(name, owner);
   const isFav = PROFILE_FAVS.has(name);
@@ -2888,6 +2897,7 @@ function _renderProfileModal(name) {
 
 function closeProfileModal() {
   document.getElementById('profileModal')?.classList.remove('open');
+  _pmodColorFreqOpen = false;
 }
 
 function profileModalPrev() {
@@ -3037,6 +3047,172 @@ function profileOpenInItemManager(slot, iIdx) {
     if (searchEl) { searchEl.value = item.asset; renderGroups(item.asset); }
     showStatus('⚠️ ' + item.asset + ' nicht im Cache – Suche gesetzt', 'info');
   }
+}
+
+// ── Kopie unter Yuuki 998 ────────────────────────────────────────────────
+const YUUKI_OWNER = 'Yuuki 998';
+
+function copyProfileToYuuki(name) {
+  const p = PROFILES[name];
+  if (!p) return;
+  const owner = _profileOwnerOf(name);
+  const shortName = _profileShortName(name, owner);
+  const newName = shortName + ' - ' + YUUKI_OWNER;
+  if (PROFILES[newName] && !confirm('Profil "' + newName + '" existiert bereits. Überschreiben?')) return;
+  PROFILES[newName] = {
+    name: newName,
+    date: new Date().toLocaleDateString('de-DE'),
+    items: JSON.parse(JSON.stringify(p.items || [])),
+    ...(p.keepHairGroups ? { keepHairGroups: [...p.keepHairGroups] } : {}),
+  };
+  _saveProfiles();
+  renderProfileList();
+  showStatus('✅ Kopie "' + newName + '" unter Yuuki 998 erstellt', 'success');
+}
+
+function _pmodCopyToYuuki() {
+  if (_profileModalName) copyProfileToYuuki(_profileModalName);
+}
+
+// ── Farb-Häufigkeit / Color Frequency ────────────────────────────────────
+
+function _getColorFreq(items) {
+  const freq = {};
+  for (const item of (items || [])) {
+    const cols = Array.isArray(item.colors) ? item.colors : (item.colors ? [item.colors] : []);
+    cols.forEach((c, li) => {
+      if (!c || c === 'Default') return;
+      const key = c.toLowerCase();
+      if (!freq[key]) freq[key] = { color: c, count: 0, usages: [] };
+      freq[key].count++;
+      freq[key].usages.push({ asset: item.asset, group: item.group, layer: li });
+    });
+  }
+  return Object.values(freq).sort((a, b) => b.count - a.count);
+}
+
+function _renderColorFreqHtml(freqData, ctxType, ctxKey) {
+  if (!freqData.length) return '<div style="color:var(--text3);font-size:.76rem;padding:6px 0">Keine Farbdaten vorhanden.</div>';
+  return '<div style="display:flex;flex-direction:column;gap:3px">'
+    + freqData.map(f => {
+      const hexSafe = escHtml(f.color);
+      const ckSafe  = escHtml(ctxKey || '');
+      const tip     = f.usages.slice(0, 6).map(u => u.asset).join(', ') + (f.usages.length > 6 ? ' …' : '');
+      return '<div class="cfreq-row" title="' + escHtml(tip) + '">'
+        + '<span class="cfreq-swatch" style="background:' + hexSafe + '"></span>'
+        + '<span class="cfreq-hex">'  + hexSafe + '</span>'
+        + '<span class="cfreq-count">' + f.count + '×</span>'
+        + '<span style="font-size:.62rem;color:var(--text3)">→</span>'
+        + '<input type="color" class="cfreq-picker" value="' + hexSafe + '"'
+        + ' data-old="' + hexSafe + '" data-ctx-type="' + ctxType + '" data-ctx-key="' + ckSafe + '"'
+        + ' onchange="_replaceColorFromInput(this)" title="Neue Farbe wählen – ersetzt alle Vorkommen">'
+        + '</div>';
+    }).join('')
+    + '</div>';
+}
+
+function _replaceColorFromInput(el) {
+  const oldColor = el.dataset.old;
+  const newColor = el.value;
+  if (oldColor.toLowerCase() === newColor.toLowerCase()) return;
+  if (el.dataset.ctxType === 'outfit') {
+    _replaceColorInOutfit(oldColor, newColor);
+    refreshOutfitColorFreq();
+  } else if (el.dataset.ctxType === 'profile') {
+    _replaceColorInProfile(el.dataset.ctxKey, oldColor, newColor);
+    _refreshPmodColorFreq();
+  }
+  el.dataset.old = newColor;
+}
+
+function _replaceColorInOutfit(oldColor, newColor) {
+  const old = oldColor.toLowerCase();
+  let changed = 0;
+  for (const item of OUTFIT) {
+    if (!item.colors) continue;
+    if (Array.isArray(item.colors)) {
+      const before = JSON.stringify(item.colors);
+      item.colors = item.colors.map(c => (c?.toLowerCase() === old ? newColor : c));
+      if (JSON.stringify(item.colors) !== before) changed++;
+    } else if (typeof item.colors === 'string' && item.colors.toLowerCase() === old) {
+      item.colors = newColor; changed++;
+    }
+  }
+  _autoOutfitCode();
+  showStatus('✅ ' + changed + ' Item(s) mit ' + oldColor + ' → ' + newColor + ' aktualisiert', 'success');
+}
+
+function _replaceColorInProfile(profileName, oldColor, newColor) {
+  const p = PROFILES[profileName];
+  if (!p) return;
+  const old = oldColor.toLowerCase();
+  let changed = 0;
+  for (const item of (p.items || [])) {
+    if (!item.colors) continue;
+    if (Array.isArray(item.colors)) {
+      const before = JSON.stringify(item.colors);
+      item.colors = item.colors.map(c => (c?.toLowerCase() === old ? newColor : c));
+      if (JSON.stringify(item.colors) !== before) changed++;
+    } else if (typeof item.colors === 'string' && item.colors.toLowerCase() === old) {
+      item.colors = newColor; changed++;
+    }
+  }
+  _saveProfiles();
+  showStatus('✅ ' + changed + ' Item(s) in "' + profileName + '" aktualisiert', 'success');
+}
+
+// Outfit-Tab: Farb-Panel toggle
+let _outfitColorFreqOpen = false;
+
+function toggleOutfitColorFreq() {
+  _outfitColorFreqOpen = !_outfitColorFreqOpen;
+  const panel = document.getElementById('outfitColorFreqPanel');
+  const btn   = document.getElementById('outfitColorFreqBtn');
+  if (!panel) return;
+  if (_outfitColorFreqOpen) {
+    refreshOutfitColorFreq();
+    panel.style.display = '';
+    if (btn) btn.textContent = '🎨 Farben ▲';
+  } else {
+    panel.style.display = 'none';
+    if (btn) btn.textContent = '🎨 Farben';
+  }
+}
+
+function refreshOutfitColorFreq() {
+  const panel = document.getElementById('outfitColorFreqPanel');
+  if (!panel || !_outfitColorFreqOpen) return;
+  panel.innerHTML = _renderColorFreqHtml(_getColorFreq(OUTFIT), 'outfit', '');
+}
+
+// Profil-Modal: Farb-Panel toggle
+let _pmodColorFreqOpen = false;
+
+function _pmodToggleColorFreq() {
+  _pmodColorFreqOpen = !_pmodColorFreqOpen;
+  _refreshPmodColorFreq();
+  const btn = document.getElementById('pmodColorFreqBtn');
+  if (btn) btn.textContent = _pmodColorFreqOpen ? '🎨 Farben ▲' : '🎨 Farben';
+}
+
+function _refreshPmodColorFreq() {
+  const panel = document.getElementById('pmodColorFreqPanel');
+  if (!panel) return;
+  if (!_pmodColorFreqOpen || !_profileModalName) {
+    panel.style.display = 'none';
+    return;
+  }
+  const p = PROFILES[_profileModalName];
+  panel.innerHTML = _renderColorFreqHtml(_getColorFreq(p?.items || []), 'profile', _profileModalName);
+  panel.style.display = '';
+}
+
+function _showCardColorFreq(slot) {
+  const name = _profileNameMap[slot];
+  if (!name) return;
+  _pmodColorFreqOpen = true;
+  openProfileModal(slot, null);
+  setTimeout(() => { _refreshPmodColorFreq(); const btn = document.getElementById('pmodColorFreqBtn'); if (btn) btn.textContent = '🎨 Farben ▲'; }, 60);
 }
 
 // ── Export / Import ──────────────────────────────────────────────────────
