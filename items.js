@@ -3074,13 +3074,16 @@ function _pmodCopyToYuuki() {
   if (_profileModalName) copyProfileToYuuki(_profileModalName);
 }
 
-// ── Farb-Häufigkeit / Color Frequency v2 ─────────────────────────────────
+// ── Farb-Häufigkeit / Color Frequency v3 ─────────────────────────────────
 
 // ── State ──
-let _cfreqCtxType = '';      // 'outfit' | 'profile'
-let _cfreqCtxKey  = '';      // profileName or ''
-let _cfreqChanges = {};      // { origColorLower → newHex }
-let _cfreqLinked  = new Set(); // set of origColorLower that move together
+let _cfreqCtxType     = '';       // 'outfit' | 'profile'
+let _cfreqCtxKey      = '';       // profileName or ''
+let _cfreqChanges     = {};       // global mode: { origColorLower → newHex }
+let _cfreqLinked      = new Set();// global mode: set of origColorLower that move together
+let _cfreqViewMode    = 'global'; // 'global' | 'item'
+let _cfreqSrcItems    = null;     // reference to items array being edited
+let _cfreqItemChanges = {};       // item mode: { 'iidx:lidx' → newHex }
 
 function _getColorFreq(items) {
   const freq = {};
@@ -3097,35 +3100,33 @@ function _getColorFreq(items) {
   return Object.values(freq).sort((a, b) => b.count - a.count);
 }
 
+// ─────────────────────────────────────────────────────────────────────────
+// Entry: renders the full panel HTML (resets all state)
 function _renderColorFreqHtml(freqData, ctxType, ctxKey) {
-  _cfreqCtxType = ctxType;
-  _cfreqCtxKey  = ctxKey || '';
-  _cfreqChanges = {};
-  _cfreqLinked  = new Set();
+  _cfreqCtxType     = ctxType;
+  _cfreqCtxKey      = ctxKey || '';
+  _cfreqChanges     = {};
+  _cfreqItemChanges = {};
+  _cfreqLinked      = new Set();
+  _cfreqViewMode    = 'global';
+  _cfreqSrcItems    = (ctxType === 'profile' && ctxKey) ? (PROFILES[ctxKey]?.items || []) : OUTFIT;
 
-  if (!freqData.length) return '<div style="color:var(--text3);font-size:.76rem;padding:6px 0">Keine Farbdaten vorhanden.</div>';
+  const noData = !freqData.length && !_cfreqSrcItems.length;
+  if (noData) return '<div style="color:var(--text3);font-size:.76rem;padding:6px 0">Keine Items/Farben vorhanden.</div>';
 
   const defaultCopyName = (ctxType === 'profile' && ctxKey)
     ? _profileShortName(ctxKey, _profileOwnerOf(ctxKey)) + ' (Farbanpassung)'
     : 'Mein Outfit (Farbanpassung)';
 
-  const rows = freqData.map((f, idx) => {
-    const hexSafe = escHtml(f.color);
-    const tip = f.usages.slice(0, 6).map(u => u.asset).join(', ') + (f.usages.length > 6 ? ' …' : '');
-    return '<div class="cfreq-row" data-orig="' + hexSafe + '" title="' + escHtml(tip) + '">'
-      + '<label class="cfreq-link-wrap" title="Verknüpfen – alle verknüpften Farben ändern sich gemeinsam">'
-      +   '<input type="checkbox" class="cfreq-link-cb" data-orig="' + hexSafe + '" onchange="_cfreqLinkToggle(this)">'
-      +   '<span class="cfreq-link-icon">🔗</span>'
-      + '</label>'
-      + '<span class="cfreq-swatch" id="cfswt_' + idx + '" style="background:' + hexSafe + '"></span>'
-      + '<input type="text" class="cfreq-hex-inp" id="cfhex_' + idx + '" value="' + hexSafe + '"'
-      +   ' maxlength="7" spellcheck="false" data-orig="' + hexSafe + '" data-idx="' + idx + '"'
-      +   ' oninput="_cfreqHexInput(this)" onchange="_cfreqHexCommit(this)" placeholder="#RRGGBB">'
-      + '<input type="color" class="cfreq-picker" id="cfpick_' + idx + '" value="' + hexSafe + '"'
-      +   ' data-orig="' + hexSafe + '" data-idx="' + idx + '" oninput="_cfreqPickerInput(this)">'
-      + '<span class="cfreq-count">' + f.count + '×</span>'
-      + '</div>';
-  }).join('');
+  const header = '<div class="cfreq-header">'
+    + '<span class="cfreq-hint">🔗 verknüpfen &nbsp;·&nbsp; Hex oder Picker &nbsp;·&nbsp; dann Testen / Speichern</span>'
+    + '<div class="cfreq-mode-tabs">'
+    +   '<button class="cfreq-mode-btn active" data-mode="global" onclick="_cfreqSetMode(\'global\')">Gesamt</button>'
+    +   '<button class="cfreq-mode-btn" data-mode="item" onclick="_cfreqSetMode(\'item\')">Nach Item</button>'
+    + '</div>'
+    + '</div>';
+
+  const content = '<div id="cfreq-content">' + _renderGlobalRows(freqData) + '</div>';
 
   const copyNameSafe = escHtml(defaultCopyName);
   const actions = '<div class="cfreq-actions">'
@@ -3139,68 +3140,137 @@ function _renderColorFreqHtml(freqData, ctxType, ctxKey) {
     + '</div>'
     + '</div>';
 
-  return '<div id="cfreq-inner">'
-    + '<div style="font-size:.67rem;color:var(--text3);margin-bottom:7px">🔗 = Farben verknüpfen &nbsp;·&nbsp; Hex eingeben oder Picker &nbsp;·&nbsp; dann Testen / Speichern</div>'
-    + '<div style="display:flex;flex-direction:column;gap:3px">' + rows + '</div>'
-    + actions
+  return '<div id="cfreq-inner">' + header + content + actions + '</div>';
+}
+
+// ── Global view: aggregated colors ───────────────────────
+function _renderGlobalRows(freqData) {
+  if (!freqData.length) return '<div style="color:var(--text3);font-size:.76rem;padding:6px 0">Keine Farbdaten vorhanden.</div>';
+  return '<div style="display:flex;flex-direction:column;gap:3px">'
+    + freqData.map((f, idx) => {
+      const hexSafe = escHtml(f.color);
+      const tip = f.usages.slice(0, 6).map(u => u.asset).join(', ') + (f.usages.length > 6 ? ' …' : '');
+      return '<div class="cfreq-row" data-orig="' + hexSafe + '" title="' + escHtml(tip) + '">'
+        + '<label class="cfreq-link-wrap" title="Verknüpfen – alle verknüpften Farben ändern sich gemeinsam">'
+        +   '<input type="checkbox" class="cfreq-link-cb" data-orig="' + hexSafe + '" onchange="_cfreqLinkToggle(this)">'
+        +   '<span class="cfreq-link-icon">🔗</span>'
+        + '</label>'
+        + '<span class="cfreq-swatch" id="cfswt_' + idx + '" style="background:' + hexSafe + '"></span>'
+        + '<input type="text" class="cfreq-hex-inp" id="cfhex_' + idx + '" value="' + hexSafe + '"'
+        +   ' maxlength="7" spellcheck="false" data-orig="' + hexSafe + '" data-idx="' + idx + '"'
+        +   ' oninput="_cfreqHexInput(this)" onchange="_cfreqHexCommit(this)" placeholder="#RRGGBB">'
+        + '<input type="color" class="cfreq-picker" id="cfpick_' + idx + '" value="' + hexSafe + '"'
+        +   ' data-orig="' + hexSafe + '" data-idx="' + idx + '" oninput="_cfreqPickerInput(this)">'
+        + '<span class="cfreq-count">' + f.count + '×</span>'
+        + '</div>';
+    }).join('')
     + '</div>';
 }
 
-// ── Picker: live update while dragging ──
-function _cfreqPickerInput(el) {
-  const idx  = el.dataset.idx;
-  const orig = el.dataset.orig.toLowerCase();
-  const newC = el.value;
-  const hexInp = document.getElementById('cfhex_' + idx);
-  const swatch = document.getElementById('cfswt_' + idx);
-  if (hexInp) hexInp.value = newC;
-  if (swatch) swatch.style.background = newC;
-  _cfreqSetChange(orig, newC, idx);
+// ── Item view: per-item color rows ────────────────────────
+function _renderItemRows(items) {
+  const withColors = (items || []).map((item, iidx) => {
+    const cols = Array.isArray(item.colors) ? item.colors : (item.colors ? [item.colors] : []);
+    return { item, iidx, cols };
+  }).filter(({ cols }) => cols.some(c => c && c !== 'Default'));
+
+  if (!withColors.length) return '<div style="color:var(--text3);font-size:.76rem;padding:6px 0">Keine farbigen Items gefunden.</div>';
+
+  return withColors.map(({ item, iidx, cols }) => {
+    const assetName = escHtml(item.label || item.asset || '?');
+    const groupName = escHtml(item.group || '');
+    const validCount = cols.filter(c => c && c !== 'Default').length;
+
+    const colorRows = cols.map((c, lidx) => {
+      if (!c || c === 'Default') {
+        return '<div class="cfreq-icolor-row" style="opacity:.3">'
+          + '<span class="cfreq-ilabel">L' + (lidx + 1) + '</span>'
+          + '<span class="cfreq-swatch" style="background:#808080;border-style:dashed"></span>'
+          + '<span style="font-size:.67rem;color:var(--text3);font-family:var(--font-mono)">Default</span>'
+          + '</div>';
+      }
+      const hexSafe = escHtml(c);
+      const uid = iidx + '_' + lidx;
+      return '<div class="cfreq-icolor-row">'
+        + '<span class="cfreq-ilabel">L' + (lidx + 1) + '</span>'
+        + '<span class="cfreq-swatch" id="cfswt_i' + uid + '" style="background:' + hexSafe + '"></span>'
+        + '<input type="text" class="cfreq-hex-inp" id="cfhex_i' + uid + '" value="' + hexSafe + '"'
+        +   ' maxlength="7" spellcheck="false" data-orig="' + hexSafe + '" data-iidx="' + iidx + '" data-lidx="' + lidx + '"'
+        +   ' oninput="_cfreqItemHexInput(this)" onchange="_cfreqItemHexCommit(this)">'
+        + '<input type="color" class="cfreq-picker" id="cfpick_i' + uid + '" value="' + hexSafe + '"'
+        +   ' data-orig="' + hexSafe + '" data-iidx="' + iidx + '" data-lidx="' + lidx + '" oninput="_cfreqItemPickerInput(this)">'
+        + '</div>';
+    }).join('');
+
+    return '<div class="cfreq-item-block">'
+      + '<div class="cfreq-item-hdr">'
+      +   '<span class="cfreq-item-name">' + assetName + '</span>'
+      +   '<span class="cfreq-item-group">' + groupName + '</span>'
+      +   '<span class="cfreq-item-ncols">' + validCount + ' Farbe' + (validCount !== 1 ? 'n' : '') + '</span>'
+      + '</div>'
+      + '<div class="cfreq-item-colors">' + colorRows + '</div>'
+      + '</div>';
+  }).join('');
 }
 
-// ── Hex input: preview while typing ──
+// ── Mode switch ───────────────────────────────────────────
+function _cfreqSetMode(mode) {
+  if (_cfreqViewMode === mode) return;
+  _cfreqViewMode    = mode;
+  _cfreqChanges     = {};
+  _cfreqItemChanges = {};
+  _cfreqLinked      = new Set();
+  const content = document.getElementById('cfreq-content');
+  if (!content) return;
+  content.innerHTML = (mode === 'global')
+    ? _renderGlobalRows(_getColorFreq(_cfreqSrcItems || []))
+    : _renderItemRows(_cfreqSrcItems || []);
+  document.querySelectorAll('.cfreq-mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
+}
+
+// ── Global: Picker live ───────────────────────────────────
+function _cfreqPickerInput(el) {
+  const idx = el.dataset.idx, orig = el.dataset.orig.toLowerCase(), newC = el.value;
+  const h = document.getElementById('cfhex_' + idx), s = document.getElementById('cfswt_' + idx);
+  if (h) h.value = newC;
+  if (s) s.style.background = newC;
+  _cfreqSetChange(orig, newC);
+}
+
+// ── Global: Hex live preview ──────────────────────────────
 function _cfreqHexInput(el) {
   const raw = el.value.trim();
   if (!/^#[0-9a-fA-F]{6}$/.test(raw)) return;
-  const idx    = el.dataset.idx;
-  const swatch = document.getElementById('cfswt_' + idx);
-  const picker = document.getElementById('cfpick_' + idx);
-  if (swatch) swatch.style.background = raw;
-  if (picker) picker.value = raw;
+  const idx = el.dataset.idx;
+  const s = document.getElementById('cfswt_' + idx), p = document.getElementById('cfpick_' + idx);
+  if (s) s.style.background = raw;
+  if (p) p.value = raw;
 }
 
-// ── Hex input: commit on blur / Enter ──
+// ── Global: Hex commit on blur ────────────────────────────
 function _cfreqHexCommit(el) {
-  const raw = el.value.trim();
-  const idx  = el.dataset.idx;
-  const orig = el.dataset.orig.toLowerCase();
-  if (!/^#[0-9a-fA-F]{6}$/.test(raw)) {
-    el.value = _cfreqChanges[orig] || el.dataset.orig; // restore
-    return;
-  }
-  const picker = document.getElementById('cfpick_' + idx);
-  const swatch = document.getElementById('cfswt_' + idx);
-  if (picker) picker.value = raw;
-  if (swatch) swatch.style.background = raw;
-  _cfreqSetChange(orig, raw, idx);
+  const raw = el.value.trim(), idx = el.dataset.idx, orig = el.dataset.orig.toLowerCase();
+  if (!/^#[0-9a-fA-F]{6}$/.test(raw)) { el.value = _cfreqChanges[orig] || el.dataset.orig; return; }
+  const p = document.getElementById('cfpick_' + idx), s = document.getElementById('cfswt_' + idx);
+  if (p) p.value = raw;
+  if (s) s.style.background = raw;
+  _cfreqSetChange(orig, raw);
 }
 
-// ── Store change; propagate to linked colors ──
-function _cfreqSetChange(origLower, newHex, changedIdx) {
+// ── Global: store + propagate to linked ──────────────────
+function _cfreqSetChange(origLower, newHex) {
   if (_cfreqLinked.has(origLower) && _cfreqLinked.size > 1) {
     _cfreqLinked.forEach(lc => {
       _cfreqChanges[lc] = newHex;
       document.querySelectorAll('.cfreq-row[data-orig]').forEach(row => {
         if (row.dataset.orig.toLowerCase() !== lc) return;
         const rp = row.querySelector('.cfreq-picker');
-        const ri = rp?.dataset?.idx;
-        if (!ri) return;
-        const p = document.getElementById('cfpick_' + ri);
-        const h = document.getElementById('cfhex_' + ri);
-        const s = document.getElementById('cfswt_' + ri);
-        if (p) p.value = newHex;
-        if (h) h.value = newHex;
-        if (s) s.style.background = newHex;
+        if (!rp) return;
+        const ri = rp.dataset.idx;
+        const p2 = document.getElementById('cfpick_' + ri), h2 = document.getElementById('cfhex_' + ri), s2 = document.getElementById('cfswt_' + ri);
+        if (p2) p2.value = newHex;
+        if (h2) h2.value = newHex;
+        if (s2) s2.style.background = newHex;
       });
     });
   } else {
@@ -3208,87 +3278,117 @@ function _cfreqSetChange(origLower, newHex, changedIdx) {
   }
 }
 
-// ── Link checkbox toggle ──
+// ── Global: link toggle ───────────────────────────────────
 function _cfreqLinkToggle(cb) {
   const orig = cb.dataset.orig.toLowerCase();
   if (cb.checked) _cfreqLinked.add(orig); else _cfreqLinked.delete(orig);
-  document.querySelectorAll('.cfreq-link-cb').forEach(c => {
-    c.closest('.cfreq-row')?.classList.toggle('cfreq-linked', c.checked);
+  document.querySelectorAll('.cfreq-link-cb').forEach(c => c.closest('.cfreq-row')?.classList.toggle('cfreq-linked', c.checked));
+}
+
+// ── Item: Picker live ─────────────────────────────────────
+function _cfreqItemPickerInput(el) {
+  const iidx = el.dataset.iidx, lidx = el.dataset.lidx, newC = el.value, uid = iidx + '_' + lidx;
+  const h = document.getElementById('cfhex_i' + uid), s = document.getElementById('cfswt_i' + uid);
+  if (h) h.value = newC;
+  if (s) s.style.background = newC;
+  _cfreqItemChanges[iidx + ':' + lidx] = newC;
+}
+
+// ── Item: Hex live preview ────────────────────────────────
+function _cfreqItemHexInput(el) {
+  const raw = el.value.trim();
+  if (!/^#[0-9a-fA-F]{6}$/.test(raw)) return;
+  const uid = el.dataset.iidx + '_' + el.dataset.lidx;
+  const s = document.getElementById('cfswt_i' + uid), p = document.getElementById('cfpick_i' + uid);
+  if (s) s.style.background = raw;
+  if (p) p.value = raw;
+}
+
+// ── Item: Hex commit on blur ──────────────────────────────
+function _cfreqItemHexCommit(el) {
+  const raw = el.value.trim(), iidx = el.dataset.iidx, lidx = el.dataset.lidx;
+  if (!/^#[0-9a-fA-F]{6}$/.test(raw)) { el.value = _cfreqItemChanges[iidx + ':' + lidx] || el.dataset.orig; return; }
+  const uid = iidx + '_' + lidx;
+  const p = document.getElementById('cfpick_i' + uid), s = document.getElementById('cfswt_i' + uid);
+  if (p) p.value = raw;
+  if (s) s.style.background = raw;
+  _cfreqItemChanges[iidx + ':' + lidx] = raw;
+}
+
+// ── Apply all changes to items array ─────────────────────
+function _cfreqApplyChanges(items, globalCh, itemCh) {
+  (items || []).forEach((item, iidx) => {
+    if (!item.colors) return;
+    if (Array.isArray(item.colors)) {
+      item.colors = item.colors.map((c, lidx) => {
+        const ik = iidx + ':' + lidx;
+        if (itemCh && itemCh[ik]) return itemCh[ik];
+        if (!c || c === 'Default') return c;
+        return globalCh[c.toLowerCase()] ?? c;
+      });
+    } else if (typeof item.colors === 'string') {
+      const ik = iidx + ':0';
+      if (itemCh && itemCh[ik]) item.colors = itemCh[ik];
+      else if (item.colors !== 'Default') item.colors = globalCh[item.colors.toLowerCase()] ?? item.colors;
+    }
   });
 }
 
-// ── Apply _cfreqChanges to items array ──
-function _cfreqApplyChanges(items, changes) {
-  for (const item of (items || [])) {
-    if (!item.colors) continue;
-    if (Array.isArray(item.colors)) {
-      item.colors = item.colors.map(c => (!c || c === 'Default') ? c : (changes[c.toLowerCase()] ?? c));
-    } else if (typeof item.colors === 'string' && item.colors !== 'Default') {
-      item.colors = changes[item.colors.toLowerCase()] ?? item.colors;
-    }
-  }
+function _cfreqHasChanges() {
+  return Object.keys(_cfreqChanges).length > 0 || Object.keys(_cfreqItemChanges).length > 0;
 }
 
-// ── Testen: execute in BC without saving ──
+// ── Testen ────────────────────────────────────────────────
 function _cfreqTest() {
-  if (!Object.keys(_cfreqChanges).length) { showStatus('⚠️ Keine Farbänderungen vorhanden', 'info'); return; }
+  if (!_cfreqHasChanges()) { showStatus('⚠️ Keine Farbänderungen vorhanden', 'info'); return; }
   if (!_connected) { showStatus('❌ Nicht verbunden mit BC', 'error'); return; }
 
   if (_cfreqCtxType === 'profile' && _cfreqCtxKey) {
-    const p = PROFILES[_cfreqCtxKey];
-    if (!p) { showStatus('❌ Profil nicht gefunden', 'error'); return; }
     const origOutfit = JSON.parse(JSON.stringify(OUTFIT));
     const origKHG    = [..._currentProfileKeepHairGroups];
     loadProfile(_cfreqCtxKey);
-    _cfreqApplyChanges(OUTFIT, _cfreqChanges);
+    _cfreqApplyChanges(OUTFIT, _cfreqChanges, _cfreqItemChanges);
     _autoOutfitCode();
     const code = document.getElementById('outfitCode')?.value?.trim();
     if (code) bcSend({ type: 'EXEC', code: '(function(){\n' + code + '\n})();' });
-    showStatus('▶ Test ausgeführt · Profil: "' + _cfreqCtxKey + '"', 'success');
-    // Restore OUTFIT
-    OUTFIT.length = 0;
-    origOutfit.forEach(i => OUTFIT.push(i));
-    _currentProfileKeepHairGroups = origKHG;
-    _autoOutfitCode();
+    showStatus('▶ Test ausgeführt · "' + _cfreqCtxKey + '"', 'success');
+    OUTFIT.length = 0; origOutfit.forEach(i => OUTFIT.push(i));
+    _currentProfileKeepHairGroups = origKHG; _autoOutfitCode();
   } else {
-    // Outfit mode
     const origColors = OUTFIT.map(i => Array.isArray(i.colors) ? [...i.colors] : i.colors);
-    _cfreqApplyChanges(OUTFIT, _cfreqChanges);
+    _cfreqApplyChanges(OUTFIT, _cfreqChanges, _cfreqItemChanges);
     _autoOutfitCode();
     const code = document.getElementById('outfitCode')?.value?.trim();
     if (code) bcSend({ type: 'EXEC', code: '(function(){\n' + code + '\n})();' });
     showStatus('▶ Test ausgeführt', 'success');
-    // Restore
-    OUTFIT.forEach((item, i) => { item.colors = origColors[i]; });
-    _autoOutfitCode();
+    OUTFIT.forEach((item, i) => { item.colors = origColors[i]; }); _autoOutfitCode();
   }
 }
 
-// ── Speichern: apply and save ──
+// ── Speichern ─────────────────────────────────────────────
 function _cfreqSave() {
-  const n = Object.keys(_cfreqChanges).length;
-  if (!n) { showStatus('⚠️ Keine Farbänderungen vorhanden', 'info'); return; }
+  if (!_cfreqHasChanges()) { showStatus('⚠️ Keine Farbänderungen vorhanden', 'info'); return; }
+  const n = Object.keys(_cfreqChanges).length + Object.keys(_cfreqItemChanges).length;
 
   if (_cfreqCtxType === 'profile' && _cfreqCtxKey) {
-    const p = PROFILES[_cfreqCtxKey];
-    if (!p) return;
-    _cfreqApplyChanges(p.items, _cfreqChanges);
+    const p = PROFILES[_cfreqCtxKey]; if (!p) return;
+    _cfreqApplyChanges(p.items, _cfreqChanges, _cfreqItemChanges);
     _saveProfiles();
     showStatus('✅ ' + n + ' Farbänderung(en) in "' + _cfreqCtxKey + '" gespeichert', 'success');
-    _cfreqChanges = {};
+    _cfreqChanges = {}; _cfreqItemChanges = {};
     const panel = document.getElementById('pmodColorFreqPanel') || document.getElementById('outfitColorFreqPanel');
     if (panel) panel.innerHTML = _renderColorFreqHtml(_getColorFreq(p.items), _cfreqCtxType, _cfreqCtxKey);
   } else {
-    _cfreqApplyChanges(OUTFIT, _cfreqChanges);
+    _cfreqApplyChanges(OUTFIT, _cfreqChanges, _cfreqItemChanges);
     _autoOutfitCode();
     showStatus('✅ ' + n + ' Farbänderung(en) im Outfit gespeichert', 'success');
-    _cfreqChanges = {};
+    _cfreqChanges = {}; _cfreqItemChanges = {};
     const panel = document.getElementById('outfitColorFreqPanel');
     if (panel) panel.innerHTML = _renderColorFreqHtml(_getColorFreq(OUTFIT), 'outfit', '');
   }
 }
 
-// ── Als Kopie speichern ──
+// ── Als Kopie speichern ───────────────────────────────────
 function _cfreqSaveCopy() {
   const nameInp = document.getElementById('cfreqCopyName');
   const rawName = nameInp?.value?.trim();
@@ -3297,24 +3397,22 @@ function _cfreqSaveCopy() {
 
   let srcItems;
   if (_cfreqCtxType === 'profile' && _cfreqCtxKey) {
-    const p = PROFILES[_cfreqCtxKey];
-    if (!p) return;
-    srcItems = JSON.parse(JSON.stringify(p.items || []));
+    srcItems = JSON.parse(JSON.stringify(PROFILES[_cfreqCtxKey]?.items || []));
   } else {
-    const SAVE_KEYS = ['group','asset','colors','tr','trStr','typeStr','tightCode','lock','lockParams','isOther','memberNum','label'];
+    const SK = ['group','asset','colors','tr','trStr','typeStr','tightCode','lock','lockParams','isOther','memberNum','label'];
     srcItems = JSON.parse(JSON.stringify(OUTFIT.map(item => {
-      const out = {}; SAVE_KEYS.forEach(k => { if (item[k] !== undefined) out[k] = item[k]; }); return out;
+      const out = {}; SK.forEach(k => { if (item[k] !== undefined) out[k] = item[k]; }); return out;
     })));
   }
 
-  _cfreqApplyChanges(srcItems, _cfreqChanges);
+  _cfreqApplyChanges(srcItems, _cfreqChanges, _cfreqItemChanges);
+  const n = Object.keys(_cfreqChanges).length + Object.keys(_cfreqItemChanges).length;
   PROFILES[rawName] = { name: rawName, date: new Date().toLocaleDateString('de-DE'), items: srcItems };
-  _saveProfiles();
-  renderProfileList();
-  showStatus('✅ Kopie "' + rawName + '" mit ' + Object.keys(_cfreqChanges).length + ' Farbänderung(en) gespeichert', 'success');
+  _saveProfiles(); renderProfileList();
+  showStatus('✅ Kopie "' + rawName + '" mit ' + n + ' Farbänderung(en) gespeichert', 'success');
 }
 
-// ── Outfit-Tab: toggle panel ──
+// ── Outfit-Tab: toggle panel ──────────────────────────────
 let _outfitColorFreqOpen = false;
 
 function toggleOutfitColorFreq() {
@@ -3338,7 +3436,7 @@ function refreshOutfitColorFreq() {
   panel.innerHTML = _renderColorFreqHtml(_getColorFreq(OUTFIT), 'outfit', '');
 }
 
-// ── Profil-Modal: toggle panel ──
+// ── Profil-Modal: toggle panel ────────────────────────────
 let _pmodColorFreqOpen = false;
 
 function _pmodToggleColorFreq() {
@@ -3349,8 +3447,7 @@ function _pmodToggleColorFreq() {
 }
 
 function _refreshPmodColorFreq() {
-  const panel = document.getElementById('pmodColorFreqPanel');
-  if (!panel) return;
+  const panel = document.getElementById('pmodColorFreqPanel'); if (!panel) return;
   if (!_pmodColorFreqOpen || !_profileModalName) { panel.style.display = 'none'; return; }
   const p = PROFILES[_profileModalName];
   panel.innerHTML = _renderColorFreqHtml(_getColorFreq(p?.items || []), 'profile', _profileModalName);
@@ -3358,8 +3455,7 @@ function _refreshPmodColorFreq() {
 }
 
 function _showCardColorFreq(slot) {
-  const name = _profileNameMap[slot];
-  if (!name) return;
+  const name = _profileNameMap[slot]; if (!name) return;
   _pmodColorFreqOpen = true;
   openProfileModal(slot, null);
   setTimeout(() => {
