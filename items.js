@@ -3087,6 +3087,26 @@ let _cfreqSrcItems         = null;
 let _cfreqItemChanges      = {};        // item: { 'iidx:lidx' → newHex }
 let _cfreqLinkedItems      = new Set(); // item exact link:  set of 'iidx:lidx'
 let _cfreqLinkedItemsShift = new Set(); // item shift link:  set of 'iidx:lidx'
+let _cfreqThemePanelOpen   = false;
+
+// ── Vordefinierte Farbthemen ──────────────────────────────
+const CFREQ_THEMES = [
+  { id:'gothic',   icon:'🖤', name:'Gothic',    colors:['#0d0d0d','#5c0a0a','#8b0000','#b0b0b0','#f0f0f0'] },
+  { id:'sakura',   icon:'🌸', name:'Sakura',    colors:['#590d22','#c9184a','#ff85a1','#ffc2d1','#fff0f3'] },
+  { id:'ocean',    icon:'🌊', name:'Ozean',     colors:['#03045e','#0077b6','#00b4d8','#90e0ef','#caf0f8'] },
+  { id:'fire',     icon:'🔥', name:'Feuer',     colors:['#1a0000','#7d0000','#c1121f','#f48c06','#ffd60a'] },
+  { id:'forest',   icon:'🌿', name:'Wald',      colors:['#1b2108','#386641','#6a994e','#a7c957','#f2e8cf'] },
+  { id:'neon',     icon:'⚡', name:'Neon',      colors:['#0d0d0d','#1a0030','#f72585','#00f5d4','#ffffff'] },
+  { id:'pastel',   icon:'🍬', name:'Pastell',   colors:['#fdeff9','#f7c5e0','#d4a5d4','#a8d5e2','#c3f0ca'] },
+  { id:'vampire',  icon:'🧛', name:'Vampir',    colors:['#0d0010','#1c0021','#4a0050','#990033','#f5e6e8'] },
+  { id:'cyber',    icon:'🤖', name:'Cyber',     colors:['#0a0f14','#0d2137','#004080','#00f5d4','#ccff00'] },
+  { id:'rosegold', icon:'✨', name:'Roségold',  colors:['#1a0808','#6d2b3d','#c47c7c','#e8b4b8','#f5e6e0'] },
+  { id:'winter',   icon:'❄️', name:'Winter',    colors:['#0a1628','#1e3a5f','#4a90b8','#b8d4e8','#eaf4fb'] },
+  { id:'earth',    icon:'🌍', name:'Erde',      colors:['#1c1208','#4a3520','#7d5a3c','#c4a882','#f0e6d0'] },
+  { id:'toxic',    icon:'☢️', name:'Toxic',     colors:['#0a0f00','#1a3300','#39ff14','#ccff00','#f5ff80'] },
+  { id:'candy',    icon:'🍭', name:'Candy',     colors:['#f9f9ff','#ffb3de','#d4aaff','#aaffee','#ffeeaa'] },
+  { id:'leather',  icon:'🖤', name:'Leder',     colors:['#080808','#1a1008','#2d1a08','#4a2e14','#6b4423'] },
+];
 
 function _getColorFreq(items) {
   const freq = {};
@@ -3145,13 +3165,28 @@ function _renderColorFreqHtml(freqData, ctxType, ctxKey) {
     ? _profileShortName(ctxKey, _profileOwnerOf(ctxKey)) + ' (Farbanpassung)'
     : 'Mein Outfit (Farbanpassung)');
 
+  // Theme-Panel HTML vorbauen
+  const themeGridHtml = CFREQ_THEMES.map(th => {
+    const swatches = th.colors.map(c=>'<span class="cfreq-tswatch" style="background:'+c+'"></span>').join('');
+    return '<div class="cfreq-theme-card" onclick="_cfreqApplyTheme(\''+th.id+'\')" title="'+escHtml(th.name)+'">'
+      + '<div class="cfreq-tswatches">'+swatches+'</div>'
+      + '<div class="cfreq-tname">'+escHtml(th.icon+' '+th.name)+'</div>'
+      + '</div>';
+  }).join('');
+
   return '<div id="cfreq-inner">'
     + '<div class="cfreq-header">'
     +   '<span class="cfreq-hint">🔗 = 1:1 &nbsp; ≈ = Farbmuster verschieben &nbsp;·&nbsp; Hex oder Picker &nbsp;·&nbsp; Testen / Speichern</span>'
-    +   '<div class="cfreq-mode-tabs">'
-    +     '<button class="cfreq-mode-btn active" data-mode="global" onclick="_cfreqSetMode(\'global\')">Gesamt</button>'
-    +     '<button class="cfreq-mode-btn" data-mode="item" onclick="_cfreqSetMode(\'item\')">Nach Item</button>'
+    +   '<div style="display:flex;align-items:center;gap:5px">'
+    +     '<button class="cfreq-mode-btn" id="cfreqThemeBtn" onclick="_cfreqToggleThemePanel()" title="Vordefinierte Farbthemen anwenden">🎨 Themen</button>'
+    +     '<div class="cfreq-mode-tabs">'
+    +       '<button class="cfreq-mode-btn active" data-mode="global" onclick="_cfreqSetMode(\'global\')">Gesamt</button>'
+    +       '<button class="cfreq-mode-btn" data-mode="item" onclick="_cfreqSetMode(\'item\')">Nach Item</button>'
+    +     '</div>'
     +   '</div>'
+    + '</div>'
+    + '<div id="cfreq-theme-panel" class="cfreq-theme-panel" style="display:none">'
+    +   '<div class="cfreq-theme-grid">' + themeGridHtml + '</div>'
     + '</div>'
     + '<div id="cfreq-content">' + _renderGlobalRows(freqData) + '</div>'
     + '<div class="cfreq-actions">'
@@ -3172,16 +3207,18 @@ function _renderGlobalRows(freqData) {
   if (!freqData.length) return '<div style="color:var(--text3);font-size:.76rem;padding:6px 0">Keine Farbdaten vorhanden.</div>';
   return '<div style="display:flex;flex-direction:column;gap:3px">'
     + freqData.map((f, idx) => {
-      const hex  = f.color.toLowerCase();
-      const hexS = escHtml(hex);
+      const hex    = f.color.toLowerCase();
+      const hexS   = escHtml(hex);
+      const curHex = escHtml(_cfreqChanges[hex] || hex);  // zeigt Thema/Änderung sofort
+      const isChanged = !!_cfreqChanges[hex];
       const tip  = f.usages.slice(0,6).map(u=>u.asset).join(', ')+(f.usages.length>6?' …':'');
-      return '<div class="cfreq-row" data-orig="' + hexS + '" title="' + escHtml(tip) + '">'
+      return '<div class="cfreq-row' + (isChanged?' cfreq-row-changed':'') + '" data-orig="' + hexS + '" title="' + escHtml(tip) + '">'
         + _cfreqLinkBtns('data-orig="' + hexS + '"', 'ex', '_cfreqGlobalLinkToggle(this,\'ex\')', '_cfreqGlobalLinkToggle(this,\'sh\')')
-        + '<span class="cfreq-swatch" id="cfswt_' + idx + '" style="background:' + hexS + '"></span>'
-        + '<input type="text" class="cfreq-hex-inp" id="cfhex_' + idx + '" value="' + hexS + '"'
+        + '<span class="cfreq-swatch" id="cfswt_' + idx + '" style="background:' + curHex + '"></span>'
+        + '<input type="text" class="cfreq-hex-inp" id="cfhex_' + idx + '" value="' + curHex + '"'
         +   ' maxlength="7" spellcheck="false" data-orig="' + hexS + '" data-idx="' + idx + '"'
         +   ' oninput="_cfreqHexInput(this)" onchange="_cfreqHexCommit(this)">'
-        + '<input type="color" class="cfreq-picker" id="cfpick_' + idx + '" value="' + hexS + '"'
+        + '<input type="color" class="cfreq-picker" id="cfpick_' + idx + '" value="' + curHex + '"'
         +   ' data-orig="' + hexS + '" data-idx="' + idx + '" oninput="_cfreqPickerInput(this)">'
         + '<span class="cfreq-count">' + f.count + '×</span>'
         + '</div>';
@@ -3206,14 +3243,15 @@ function _renderItemRows(items) {
         + '<span style="font-size:.65rem;color:var(--text3);font-family:var(--font-mono)">Default</span></div>';
       const hex=c.toLowerCase(), hexS=escHtml(hex), uid=iidx+'_'+lidx;
       const iiS=String(iidx), llS=String(lidx);
+      const curHex=escHtml(_cfreqItemChanges[iidx+':'+lidx]||_cfreqChanges[hex]||hex);
       return '<div class="cfreq-icolor-row" data-iidx="'+iiS+'" data-lidx="'+llS+'">'
         + _cfreqLinkBtns('data-iidx="'+iiS+'" data-lidx="'+llS+'"', 'it', '_cfreqItemLinkToggle(this,\'ex\')', '_cfreqItemLinkToggle(this,\'sh\')')
         + '<span class="cfreq-ilabel">L'+(lidx+1)+'</span>'
-        + '<span class="cfreq-swatch" id="cfswt_i'+uid+'" style="background:'+hexS+'"></span>'
-        + '<input type="text" class="cfreq-hex-inp" id="cfhex_i'+uid+'" value="'+hexS+'"'
+        + '<span class="cfreq-swatch" id="cfswt_i'+uid+'" style="background:'+curHex+'"></span>'
+        + '<input type="text" class="cfreq-hex-inp" id="cfhex_i'+uid+'" value="'+curHex+'"'
         +   ' maxlength="7" spellcheck="false" data-orig="'+hexS+'" data-iidx="'+iiS+'" data-lidx="'+llS+'"'
         +   ' oninput="_cfreqItemHexInput(this)" onchange="_cfreqItemHexCommit(this)">'
-        + '<input type="color" class="cfreq-picker" id="cfpick_i'+uid+'" value="'+hexS+'"'
+        + '<input type="color" class="cfreq-picker" id="cfpick_i'+uid+'" value="'+curHex+'"'
         +   ' data-orig="'+hexS+'" data-iidx="'+iiS+'" data-lidx="'+llS+'" oninput="_cfreqItemPickerInput(this)">'
         + '</div>';
     }).join('');
@@ -3246,7 +3284,65 @@ function _cfreqSetMode(mode) {
   content.innerHTML = (mode === 'global')
     ? _renderGlobalRows(_getColorFreq(_cfreqSrcItems||[]))
     : _renderItemRows(_cfreqSrcItems||[]);
-  document.querySelectorAll('.cfreq-mode-btn').forEach(b=>b.classList.toggle('active',b.dataset.mode===mode));
+  document.querySelectorAll('.cfreq-mode-btn[data-mode]').forEach(b=>b.classList.toggle('active',b.dataset.mode===mode));
+}
+
+// ── Themen-Panel Toggle ───────────────────────────────────
+function _cfreqToggleThemePanel() {
+  _cfreqThemePanelOpen = !_cfreqThemePanelOpen;
+  const panel = document.getElementById('cfreq-theme-panel');
+  const btn   = document.getElementById('cfreqThemeBtn');
+  if (panel) panel.style.display = _cfreqThemePanelOpen ? '' : 'none';
+  if (btn)   btn.classList.toggle('active', _cfreqThemePanelOpen);
+}
+
+// ── Thema anwenden ────────────────────────────────────────
+function _cfreqApplyTheme(themeId) {
+  const theme = CFREQ_THEMES.find(t => t.id === themeId);
+  if (!theme) return;
+
+  // Alle eindeutigen Non-Default-Farben aus Quell-Items sammeln
+  const colSet = new Set();
+  (_cfreqSrcItems || []).forEach(item => {
+    const cols = Array.isArray(item.colors) ? item.colors : (item.colors ? [item.colors] : []);
+    cols.forEach(c => {
+      if (c && c !== 'Default' && /^#[0-9a-fA-F]{6}$/i.test(c)) colSet.add(c.toLowerCase());
+    });
+  });
+  if (!colSet.size) { showStatus('⚠️ Keine Farben im Outfit gefunden', 'info'); return; }
+
+  // Outfit-Farben und Theme-Farben je nach Helligkeit sortieren (dunkel → hell)
+  const outfitCols = [...colSet].sort((a,b) => _hexToHsl(a).l - _hexToHsl(b).l);
+  const themeCols  = [...theme.colors].sort((a,b) => _hexToHsl(a).l - _hexToHsl(b).l);
+
+  // Mapping: Outfit-Farbe → passende Theme-Farbe (Helligkeit gleich bleibt relativ erhalten)
+  _cfreqChanges          = {};
+  _cfreqItemChanges      = {};
+  _cfreqLinked           = new Set();
+  _cfreqLinkedShift      = new Set();
+  _cfreqLinkedItems      = new Set();
+  _cfreqLinkedItemsShift = new Set();
+
+  outfitCols.forEach((hex, i) => {
+    _cfreqChanges[hex] = themeCols[i % themeCols.length];
+  });
+
+  // Inhalt neu rendern (respektiert nun _cfreqChanges)
+  const content = document.getElementById('cfreq-content');
+  if (content) {
+    content.innerHTML = (_cfreqViewMode === 'global')
+      ? _renderGlobalRows(_getColorFreq(_cfreqSrcItems || []))
+      : _renderItemRows(_cfreqSrcItems || []);
+  }
+
+  // Theme-Panel schließen
+  _cfreqThemePanelOpen = false;
+  const panel = document.getElementById('cfreq-theme-panel');
+  const btn   = document.getElementById('cfreqThemeBtn');
+  if (panel) panel.style.display = 'none';
+  if (btn)   btn.classList.remove('active');
+
+  showStatus('🎨 Thema "' + theme.name + '" angewendet · Testen oder Speichern', 'success');
 }
 
 // ── Global: Picker + Hex ──────────────────────────────────
@@ -3407,25 +3503,61 @@ function _cfreqApplyChanges(items, globalCh, itemCh) {
 function _cfreqHasChanges(){return Object.keys(_cfreqChanges).length>0||Object.keys(_cfreqItemChanges).length>0;}
 
 // ── Testen ────────────────────────────────────────────────
+// Nur Farb-Patches senden (kein Strip/InventoryWear) → kein Rate-Limit
 function _cfreqTest() {
   if(!_cfreqHasChanges()){showStatus('⚠️ Keine Farbänderungen vorhanden','info');return;}
   if(!_connected){showStatus('❌ Nicht verbunden mit BC','error');return;}
+
+  // Quell-Items ermitteln (Profil-Kopie oder aktuelles Outfit)
+  let srcItems;
   if(_cfreqCtxType==='profile'&&_cfreqCtxKey){
-    const orig=JSON.parse(JSON.stringify(OUTFIT)), origKHG=[..._currentProfileKeepHairGroups];
-    loadProfile(_cfreqCtxKey);
-    _cfreqApplyChanges(OUTFIT,_cfreqChanges,_cfreqItemChanges); _autoOutfitCode();
-    const code=document.getElementById('outfitCode')?.value?.trim();
-    if(code)bcSend({type:'EXEC',code:'(function(){\n'+code+'\n})();'});
-    showStatus('▶ Test · "'+_cfreqCtxKey+'"','success');
-    OUTFIT.length=0;orig.forEach(i=>OUTFIT.push(i));_currentProfileKeepHairGroups=origKHG;_autoOutfitCode();
+    const p=PROFILES[_cfreqCtxKey];
+    if(!p){showStatus('❌ Profil nicht gefunden','error');return;}
+    srcItems=JSON.parse(JSON.stringify(p.items));
   } else {
-    const origC=OUTFIT.map(i=>Array.isArray(i.colors)?[...i.colors]:i.colors);
-    _cfreqApplyChanges(OUTFIT,_cfreqChanges,_cfreqItemChanges); _autoOutfitCode();
-    const code=document.getElementById('outfitCode')?.value?.trim();
-    if(code)bcSend({type:'EXEC',code:'(function(){\n'+code+'\n})();'});
-    showStatus('▶ Test ausgeführt','success');
-    OUTFIT.forEach((item,i)=>{item.colors=origC[i];}); _autoOutfitCode();
+    srcItems=OUTFIT.map(it=>({group:it.group,colors:Array.isArray(it.colors)?[...it.colors]:it.colors}));
   }
+
+  // Farbänderungen auf Kopie anwenden
+  _cfreqApplyChanges(srcItems,_cfreqChanges,_cfreqItemChanges);
+
+  // Nur geänderte Items als Color-Patch-Code generieren
+  const origItems=_cfreqCtxType==='profile'&&_cfreqCtxKey
+    ? PROFILES[_cfreqCtxKey].items
+    : OUTFIT;
+
+  const patches=[];
+  srcItems.forEach((item,i)=>{
+    const orig=origItems[i];
+    if(!orig)return;
+    if(JSON.stringify(item.colors)!==JSON.stringify(orig.colors)){
+      patches.push({group:item.group,colors:item.colors});
+    }
+  });
+
+  if(!patches.length){showStatus('⚠️ Keine Farbänderungen erkannt','info');return;}
+
+  // Leichtgewichtiger BC-Code: nur Color-Property patchen, kein InventoryWear
+  const isOther=_outfitTargetNum!==null;
+  let code='(function(){\n';
+  if(isOther&&_outfitTargetNum){
+    code+='var T=ChatRoomCharacter.find(function(c){return c.MemberNumber==='+_outfitTargetNum+';});\n';
+    code+='if(!T){console.error("❌ Spieler #'+_outfitTargetNum+' nicht im Raum!");return;}\n';
+  } else {
+    code+='var T=Player;\n';
+  }
+  patches.forEach(function(p){
+    code+='(function(){var _it=InventoryGet(T,'+JSON.stringify(p.group)+');'
+        +'if(_it)_it.Color='+JSON.stringify(p.colors)+';})();\n';
+  });
+  code+='CharacterRefresh(T,false,false);\n';
+  code+='setTimeout(function(){'
+      +(isOther&&_outfitTargetNum?'ChatRoomCharacterUpdate(T);':'ServerPlayerAppearanceSync();ChatRoomCharacterUpdate(T);')
+      +'console.log("✅ Farb-Test ('+patches.length+' Items)");},600);\n';
+  code+='})();';
+
+  bcSend({type:'EXEC',code});
+  showStatus('▶ Farb-Test: '+patches.length+' Item(s) aktualisiert','success');
 }
 
 // ── Speichern ─────────────────────────────────────────────

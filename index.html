@@ -1188,6 +1188,18 @@ textarea.outfit-code { width: 100%; min-height: 210px; background: rgba(0,0,0,0.
 .cfreq-icolor-row { display:flex;align-items:center;gap:6px;padding:2px 0; }
 .cfreq-ilabel { font-size:.62rem;color:var(--text3);min-width:20px;font-family:var(--font-mono);flex-shrink:0; }
 
+/* Geänderte Zeile (nach Thema / manuell) */
+.cfreq-row-changed { border-color:rgba(255,255,255,0.15); }
+
+/* Theme-Panel */
+.cfreq-theme-panel { margin:4px 0 2px;padding:8px;background:rgba(0,0,0,0.2);border:1px solid rgba(255,255,255,0.07);border-radius:8px; }
+.cfreq-theme-grid { display:grid;grid-template-columns:repeat(auto-fill,minmax(82px,1fr));gap:6px; }
+.cfreq-theme-card { display:flex;flex-direction:column;align-items:center;gap:4px;padding:6px 4px 5px;border:1px solid rgba(255,255,255,0.08);border-radius:7px;cursor:pointer;transition:background .12s,border-color .12s; }
+.cfreq-theme-card:hover { background:rgba(255,255,255,0.07);border-color:rgba(255,255,255,0.2); }
+.cfreq-tswatches { display:flex;gap:2px; }
+.cfreq-tswatch { width:12px;height:12px;border-radius:3px;border:1px solid rgba(255,255,255,0.12); }
+.cfreq-tname { font-size:.63rem;color:var(--text2);text-align:center;line-height:1.2; }
+
 /* Outfit Filter-Bar */
 .outfit-filter-bar {
   display: flex; align-items: center; gap: 7px; margin-bottom: 10px; flex-wrap: wrap;
