@@ -3074,16 +3074,19 @@ function _pmodCopyToYuuki() {
   if (_profileModalName) copyProfileToYuuki(_profileModalName);
 }
 
-// ── Farb-Häufigkeit / Color Frequency v3 ─────────────────────────────────
+// ── Farb-Häufigkeit / Color Frequency v4 ─────────────────────────────────
 
 // ── State ──
-let _cfreqCtxType     = '';       // 'outfit' | 'profile'
-let _cfreqCtxKey      = '';       // profileName or ''
-let _cfreqChanges     = {};       // global mode: { origColorLower → newHex }
-let _cfreqLinked      = new Set();// global mode: set of origColorLower that move together
-let _cfreqViewMode    = 'global'; // 'global' | 'item'
-let _cfreqSrcItems    = null;     // reference to items array being edited
-let _cfreqItemChanges = {};       // item mode: { 'iidx:lidx' → newHex }
+let _cfreqCtxType          = '';
+let _cfreqCtxKey           = '';
+let _cfreqChanges          = {};        // global: { origLower → newHex }
+let _cfreqLinked           = new Set(); // global exact link:  set of origLower
+let _cfreqLinkedShift      = new Set(); // global shift link:  set of origLower
+let _cfreqViewMode         = 'global';
+let _cfreqSrcItems         = null;
+let _cfreqItemChanges      = {};        // item: { 'iidx:lidx' → newHex }
+let _cfreqLinkedItems      = new Set(); // item exact link:  set of 'iidx:lidx'
+let _cfreqLinkedItemsShift = new Set(); // item shift link:  set of 'iidx:lidx'
 
 function _getColorFreq(items) {
   const freq = {};
@@ -3100,369 +3103,405 @@ function _getColorFreq(items) {
   return Object.values(freq).sort((a, b) => b.count - a.count);
 }
 
-// ─────────────────────────────────────────────────────────────────────────
-// Entry: renders the full panel HTML (resets all state)
-function _renderColorFreqHtml(freqData, ctxType, ctxKey) {
-  _cfreqCtxType     = ctxType;
-  _cfreqCtxKey      = ctxKey || '';
-  _cfreqChanges     = {};
-  _cfreqItemChanges = {};
-  _cfreqLinked      = new Set();
-  _cfreqViewMode    = 'global';
-  _cfreqSrcItems    = (ctxType === 'profile' && ctxKey) ? (PROFILES[ctxKey]?.items || []) : OUTFIT;
-
-  const noData = !freqData.length && !_cfreqSrcItems.length;
-  if (noData) return '<div style="color:var(--text3);font-size:.76rem;padding:6px 0">Keine Items/Farben vorhanden.</div>';
-
-  const defaultCopyName = (ctxType === 'profile' && ctxKey)
-    ? _profileShortName(ctxKey, _profileOwnerOf(ctxKey)) + ' (Farbanpassung)'
-    : 'Mein Outfit (Farbanpassung)';
-
-  const header = '<div class="cfreq-header">'
-    + '<span class="cfreq-hint">🔗 verknüpfen &nbsp;·&nbsp; Hex oder Picker &nbsp;·&nbsp; dann Testen / Speichern</span>'
-    + '<div class="cfreq-mode-tabs">'
-    +   '<button class="cfreq-mode-btn active" data-mode="global" onclick="_cfreqSetMode(\'global\')">Gesamt</button>'
-    +   '<button class="cfreq-mode-btn" data-mode="item" onclick="_cfreqSetMode(\'item\')">Nach Item</button>'
-    + '</div>'
-    + '</div>';
-
-  const content = '<div id="cfreq-content">' + _renderGlobalRows(freqData) + '</div>';
-
-  const copyNameSafe = escHtml(defaultCopyName);
-  const actions = '<div class="cfreq-actions">'
-    + '<div class="cfreq-act-row">'
-    +   '<button class="btn btn-primary cfreq-act-btn" onclick="_cfreqTest()" title="Farben in BC testen ohne zu speichern">▶ Testen</button>'
-    +   '<button class="btn btn-green cfreq-act-btn" onclick="_cfreqSave()" title="Änderungen dauerhaft speichern">💾 Speichern</button>'
-    + '</div>'
-    + '<div class="cfreq-act-row">'
-    +   '<input type="text" class="cfreq-copy-name" id="cfreqCopyName" value="' + copyNameSafe + '" placeholder="Name der Kopie..." maxlength="60">'
-    +   '<button class="btn cfreq-act-btn" onclick="_cfreqSaveCopy()" title="Als neue Kopie mit eigenem Namen speichern" style="white-space:nowrap">📋 Als Kopie</button>'
-    + '</div>'
-    + '</div>';
-
-  return '<div id="cfreq-inner">' + header + content + actions + '</div>';
+// ── HSL-Mathe ────────────────────────────────────────────
+function _hexToHsl(hex) {
+  let r=parseInt(hex.slice(1,3),16)/255, g=parseInt(hex.slice(3,5),16)/255, b=parseInt(hex.slice(5,7),16)/255;
+  const mx=Math.max(r,g,b), mn=Math.min(r,g,b); let h,s,l=(mx+mn)/2;
+  if(mx===mn){h=s=0;}else{const d=mx-mn;s=l>.5?d/(2-mx-mn):d/(mx+mn);switch(mx){case r:h=((g-b)/d+(g<b?6:0))/6;break;case g:h=((b-r)/d+2)/6;break;default:h=((r-g)/d+4)/6;}}
+  return{h:h*360,s,l};
+}
+function _hslToHex(h,s,l){
+  h=((h%360)+360)%360;s=Math.max(0,Math.min(1,s));l=Math.max(0,Math.min(1,l));
+  function hr(p,q,t){if(t<0)t+=1;if(t>1)t-=1;if(t<1/6)return p+(q-p)*6*t;if(t<1/2)return q;if(t<2/3)return p+(q-p)*(2/3-t)*6;return p;}
+  let r,g,b;if(s===0){r=g=b=l;}else{const q=l<.5?l*(1+s):l+s-l*s,p=2*l-q;r=hr(p,q,h/360+1/3);g=hr(p,q,h/360);b=hr(p,q,h/360-1/3);}
+  const t=x=>Math.round(x*255).toString(16).padStart(2,'0');return'#'+t(r)+t(g)+t(b);
+}
+// Wendet dieselbe HSL-Verschiebung (from→to) auf targetHex an
+function _applyHslShift(targetHex, fromHex, toHex) {
+  try{
+    const f=_hexToHsl(fromHex), t=_hexToHsl(toHex), tg=_hexToHsl(targetHex);
+    let dH=t.h-f.h; if(dH>180)dH-=360; if(dH<-180)dH+=360;
+    return _hslToHex(tg.h+dH, tg.s+(t.s-f.s), tg.l+(t.l-f.l));
+  }catch(e){return targetHex;}
 }
 
-// ── Global view: aggregated colors ───────────────────────
+// ── Render-Einstieg ───────────────────────────────────────
+function _renderColorFreqHtml(freqData, ctxType, ctxKey) {
+  _cfreqCtxType          = ctxType;
+  _cfreqCtxKey           = ctxKey || '';
+  _cfreqChanges          = {};
+  _cfreqItemChanges      = {};
+  _cfreqLinked           = new Set();
+  _cfreqLinkedShift      = new Set();
+  _cfreqLinkedItems      = new Set();
+  _cfreqLinkedItemsShift = new Set();
+  _cfreqViewMode         = 'global';
+  _cfreqSrcItems         = (ctxType === 'profile' && ctxKey) ? (PROFILES[ctxKey]?.items || []) : OUTFIT;
+
+  if (!freqData.length && !_cfreqSrcItems.length)
+    return '<div style="color:var(--text3);font-size:.76rem;padding:6px 0">Keine Items/Farben vorhanden.</div>';
+
+  const copyName = escHtml((ctxType === 'profile' && ctxKey)
+    ? _profileShortName(ctxKey, _profileOwnerOf(ctxKey)) + ' (Farbanpassung)'
+    : 'Mein Outfit (Farbanpassung)');
+
+  return '<div id="cfreq-inner">'
+    + '<div class="cfreq-header">'
+    +   '<span class="cfreq-hint">🔗 = 1:1 &nbsp; ≈ = Farbmuster verschieben &nbsp;·&nbsp; Hex oder Picker &nbsp;·&nbsp; Testen / Speichern</span>'
+    +   '<div class="cfreq-mode-tabs">'
+    +     '<button class="cfreq-mode-btn active" data-mode="global" onclick="_cfreqSetMode(\'global\')">Gesamt</button>'
+    +     '<button class="cfreq-mode-btn" data-mode="item" onclick="_cfreqSetMode(\'item\')">Nach Item</button>'
+    +   '</div>'
+    + '</div>'
+    + '<div id="cfreq-content">' + _renderGlobalRows(freqData) + '</div>'
+    + '<div class="cfreq-actions">'
+    +   '<div class="cfreq-act-row">'
+    +     '<button class="btn btn-primary cfreq-act-btn" onclick="_cfreqTest()">▶ Testen</button>'
+    +     '<button class="btn btn-green cfreq-act-btn" onclick="_cfreqSave()">💾 Speichern</button>'
+    +   '</div>'
+    +   '<div class="cfreq-act-row">'
+    +     '<input type="text" class="cfreq-copy-name" id="cfreqCopyName" value="' + copyName + '" placeholder="Name der Kopie..." maxlength="60">'
+    +     '<button class="btn cfreq-act-btn" onclick="_cfreqSaveCopy()" style="white-space:nowrap">📋 Als Kopie</button>'
+    +   '</div>'
+    + '</div>'
+    + '</div>';
+}
+
+// ── Globale Ansicht ───────────────────────────────────────
 function _renderGlobalRows(freqData) {
   if (!freqData.length) return '<div style="color:var(--text3);font-size:.76rem;padding:6px 0">Keine Farbdaten vorhanden.</div>';
   return '<div style="display:flex;flex-direction:column;gap:3px">'
     + freqData.map((f, idx) => {
-      const hexSafe = escHtml(f.color);
-      const tip = f.usages.slice(0, 6).map(u => u.asset).join(', ') + (f.usages.length > 6 ? ' …' : '');
-      return '<div class="cfreq-row" data-orig="' + hexSafe + '" title="' + escHtml(tip) + '">'
-        + '<label class="cfreq-link-wrap" title="Verknüpfen – alle verknüpften Farben ändern sich gemeinsam">'
-        +   '<input type="checkbox" class="cfreq-link-cb" data-orig="' + hexSafe + '" onchange="_cfreqLinkToggle(this)">'
-        +   '<span class="cfreq-link-icon">🔗</span>'
-        + '</label>'
-        + '<span class="cfreq-swatch" id="cfswt_' + idx + '" style="background:' + hexSafe + '"></span>'
-        + '<input type="text" class="cfreq-hex-inp" id="cfhex_' + idx + '" value="' + hexSafe + '"'
-        +   ' maxlength="7" spellcheck="false" data-orig="' + hexSafe + '" data-idx="' + idx + '"'
-        +   ' oninput="_cfreqHexInput(this)" onchange="_cfreqHexCommit(this)" placeholder="#RRGGBB">'
-        + '<input type="color" class="cfreq-picker" id="cfpick_' + idx + '" value="' + hexSafe + '"'
-        +   ' data-orig="' + hexSafe + '" data-idx="' + idx + '" oninput="_cfreqPickerInput(this)">'
+      const hex  = f.color.toLowerCase();
+      const hexS = escHtml(hex);
+      const tip  = f.usages.slice(0,6).map(u=>u.asset).join(', ')+(f.usages.length>6?' …':'');
+      return '<div class="cfreq-row" data-orig="' + hexS + '" title="' + escHtml(tip) + '">'
+        + _cfreqLinkBtns('data-orig="' + hexS + '"', 'ex', '_cfreqGlobalLinkToggle(this,\'ex\')', '_cfreqGlobalLinkToggle(this,\'sh\')')
+        + '<span class="cfreq-swatch" id="cfswt_' + idx + '" style="background:' + hexS + '"></span>'
+        + '<input type="text" class="cfreq-hex-inp" id="cfhex_' + idx + '" value="' + hexS + '"'
+        +   ' maxlength="7" spellcheck="false" data-orig="' + hexS + '" data-idx="' + idx + '"'
+        +   ' oninput="_cfreqHexInput(this)" onchange="_cfreqHexCommit(this)">'
+        + '<input type="color" class="cfreq-picker" id="cfpick_' + idx + '" value="' + hexS + '"'
+        +   ' data-orig="' + hexS + '" data-idx="' + idx + '" oninput="_cfreqPickerInput(this)">'
         + '<span class="cfreq-count">' + f.count + '×</span>'
         + '</div>';
     }).join('')
     + '</div>';
 }
 
-// ── Item view: per-item color rows ────────────────────────
+// ── Item-Ansicht ──────────────────────────────────────────
 function _renderItemRows(items) {
-  const withColors = (items || []).map((item, iidx) => {
-    const cols = Array.isArray(item.colors) ? item.colors : (item.colors ? [item.colors] : []);
-    return { item, iidx, cols };
-  }).filter(({ cols }) => cols.some(c => c && c !== 'Default'));
+  const filtered = (items||[]).map((item,iidx)=>({item,iidx,cols:Array.isArray(item.colors)?item.colors:(item.colors?[item.colors]:[])}))
+    .filter(({cols})=>cols.some(c=>c&&c!=='Default'));
+  if (!filtered.length) return '<div style="color:var(--text3);font-size:.76rem;padding:6px 0">Keine farbigen Items.</div>';
 
-  if (!withColors.length) return '<div style="color:var(--text3);font-size:.76rem;padding:6px 0">Keine farbigen Items gefunden.</div>';
-
-  return withColors.map(({ item, iidx, cols }) => {
-    const assetName = escHtml(item.label || item.asset || '?');
-    const groupName = escHtml(item.group || '');
-    const validCount = cols.filter(c => c && c !== 'Default').length;
-
-    const colorRows = cols.map((c, lidx) => {
-      if (!c || c === 'Default') {
-        return '<div class="cfreq-icolor-row" style="opacity:.3">'
-          + '<span class="cfreq-ilabel">L' + (lidx + 1) + '</span>'
-          + '<span class="cfreq-swatch" style="background:#808080;border-style:dashed"></span>'
-          + '<span style="font-size:.67rem;color:var(--text3);font-family:var(--font-mono)">Default</span>'
-          + '</div>';
-      }
-      const hexSafe = escHtml(c);
-      const uid = iidx + '_' + lidx;
-      return '<div class="cfreq-icolor-row">'
-        + '<span class="cfreq-ilabel">L' + (lidx + 1) + '</span>'
-        + '<span class="cfreq-swatch" id="cfswt_i' + uid + '" style="background:' + hexSafe + '"></span>'
-        + '<input type="text" class="cfreq-hex-inp" id="cfhex_i' + uid + '" value="' + hexSafe + '"'
-        +   ' maxlength="7" spellcheck="false" data-orig="' + hexSafe + '" data-iidx="' + iidx + '" data-lidx="' + lidx + '"'
+  return filtered.map(({item,iidx,cols})=>{
+    const nm = escHtml(item.label||item.asset||'?'), gr = escHtml(item.group||'');
+    const nc = cols.filter(c=>c&&c!=='Default').length;
+    const rows = cols.map((c,lidx)=>{
+      if (!c||c==='Default') return '<div class="cfreq-icolor-row" style="opacity:.3">'
+        + '<div class="cfreq-link-grp" style="visibility:hidden">' + _cfreqLinkBtnsHtml('','','') + '</div>'
+        + '<span class="cfreq-ilabel">L'+(lidx+1)+'</span>'
+        + '<span class="cfreq-swatch" style="background:#808080;border-style:dashed"></span>'
+        + '<span style="font-size:.65rem;color:var(--text3);font-family:var(--font-mono)">Default</span></div>';
+      const hex=c.toLowerCase(), hexS=escHtml(hex), uid=iidx+'_'+lidx;
+      const iiS=String(iidx), llS=String(lidx);
+      return '<div class="cfreq-icolor-row" data-iidx="'+iiS+'" data-lidx="'+llS+'">'
+        + _cfreqLinkBtns('data-iidx="'+iiS+'" data-lidx="'+llS+'"', 'it', '_cfreqItemLinkToggle(this,\'ex\')', '_cfreqItemLinkToggle(this,\'sh\')')
+        + '<span class="cfreq-ilabel">L'+(lidx+1)+'</span>'
+        + '<span class="cfreq-swatch" id="cfswt_i'+uid+'" style="background:'+hexS+'"></span>'
+        + '<input type="text" class="cfreq-hex-inp" id="cfhex_i'+uid+'" value="'+hexS+'"'
+        +   ' maxlength="7" spellcheck="false" data-orig="'+hexS+'" data-iidx="'+iiS+'" data-lidx="'+llS+'"'
         +   ' oninput="_cfreqItemHexInput(this)" onchange="_cfreqItemHexCommit(this)">'
-        + '<input type="color" class="cfreq-picker" id="cfpick_i' + uid + '" value="' + hexSafe + '"'
-        +   ' data-orig="' + hexSafe + '" data-iidx="' + iidx + '" data-lidx="' + lidx + '" oninput="_cfreqItemPickerInput(this)">'
+        + '<input type="color" class="cfreq-picker" id="cfpick_i'+uid+'" value="'+hexS+'"'
+        +   ' data-orig="'+hexS+'" data-iidx="'+iiS+'" data-lidx="'+llS+'" oninput="_cfreqItemPickerInput(this)">'
         + '</div>';
     }).join('');
-
     return '<div class="cfreq-item-block">'
-      + '<div class="cfreq-item-hdr">'
-      +   '<span class="cfreq-item-name">' + assetName + '</span>'
-      +   '<span class="cfreq-item-group">' + groupName + '</span>'
-      +   '<span class="cfreq-item-ncols">' + validCount + ' Farbe' + (validCount !== 1 ? 'n' : '') + '</span>'
-      + '</div>'
-      + '<div class="cfreq-item-colors">' + colorRows + '</div>'
-      + '</div>';
+      + '<div class="cfreq-item-hdr"><span class="cfreq-item-name">'+nm+'</span><span class="cfreq-item-group">'+gr+'</span>'
+      + '<span class="cfreq-item-ncols">'+nc+' Farbe'+(nc!==1?'n':'')+'</span></div>'
+      + '<div class="cfreq-item-colors">'+rows+'</div></div>';
   }).join('');
 }
 
-// ── Mode switch ───────────────────────────────────────────
+// Hilfsfunktion: erzeugt Link-Button-HTML (shared)
+function _cfreqLinkBtns(dataAttrs, kind, onEx, onSh) {
+  return '<div class="cfreq-link-grp">'
+    + '<button class="cfreq-lbtn" ' + dataAttrs + ' data-lkind="' + kind + '" data-type="ex" onclick="' + onEx + '"'
+    +   ' title="🔗 1:1 – exakt gleiche Farbe">🔗</button>'
+    + '<button class="cfreq-lbtn" ' + dataAttrs + ' data-lkind="' + kind + '" data-type="sh" onclick="' + onSh + '"'
+    +   ' title="≈ Verschieben – gleiche HSL-Verschiebung, Farbmuster bleibt">≈</button>'
+    + '</div>';
+}
+function _cfreqLinkBtnsHtml(a,b,c){return _cfreqLinkBtns(a,b,c,c);}
+
+// ── Mode-Wechsel ──────────────────────────────────────────
 function _cfreqSetMode(mode) {
   if (_cfreqViewMode === mode) return;
-  _cfreqViewMode    = mode;
-  _cfreqChanges     = {};
-  _cfreqItemChanges = {};
-  _cfreqLinked      = new Set();
+  _cfreqViewMode = mode; _cfreqChanges = {}; _cfreqItemChanges = {};
+  _cfreqLinked = new Set(); _cfreqLinkedShift = new Set();
+  _cfreqLinkedItems = new Set(); _cfreqLinkedItemsShift = new Set();
   const content = document.getElementById('cfreq-content');
   if (!content) return;
   content.innerHTML = (mode === 'global')
-    ? _renderGlobalRows(_getColorFreq(_cfreqSrcItems || []))
-    : _renderItemRows(_cfreqSrcItems || []);
-  document.querySelectorAll('.cfreq-mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
+    ? _renderGlobalRows(_getColorFreq(_cfreqSrcItems||[]))
+    : _renderItemRows(_cfreqSrcItems||[]);
+  document.querySelectorAll('.cfreq-mode-btn').forEach(b=>b.classList.toggle('active',b.dataset.mode===mode));
 }
 
-// ── Global: Picker live ───────────────────────────────────
+// ── Global: Picker + Hex ──────────────────────────────────
 function _cfreqPickerInput(el) {
-  const idx = el.dataset.idx, orig = el.dataset.orig.toLowerCase(), newC = el.value;
-  const h = document.getElementById('cfhex_' + idx), s = document.getElementById('cfswt_' + idx);
-  if (h) h.value = newC;
-  if (s) s.style.background = newC;
-  _cfreqSetChange(orig, newC);
+  const idx=el.dataset.idx, orig=el.dataset.orig, newC=el.value;
+  _cfreqSyncUI(idx,'g',newC); _cfreqSetChange(orig,newC);
 }
-
-// ── Global: Hex live preview ──────────────────────────────
 function _cfreqHexInput(el) {
-  const raw = el.value.trim();
-  if (!/^#[0-9a-fA-F]{6}$/.test(raw)) return;
-  const idx = el.dataset.idx;
-  const s = document.getElementById('cfswt_' + idx), p = document.getElementById('cfpick_' + idx);
-  if (s) s.style.background = raw;
-  if (p) p.value = raw;
+  const raw=el.value.trim(); if(!/^#[0-9a-fA-F]{6}$/.test(raw))return;
+  const idx=el.dataset.idx;
+  const s=document.getElementById('cfswt_'+idx),p=document.getElementById('cfpick_'+idx);
+  if(s)s.style.background=raw; if(p)p.value=raw;
 }
-
-// ── Global: Hex commit on blur ────────────────────────────
 function _cfreqHexCommit(el) {
-  const raw = el.value.trim(), idx = el.dataset.idx, orig = el.dataset.orig.toLowerCase();
-  if (!/^#[0-9a-fA-F]{6}$/.test(raw)) { el.value = _cfreqChanges[orig] || el.dataset.orig; return; }
-  const p = document.getElementById('cfpick_' + idx), s = document.getElementById('cfswt_' + idx);
-  if (p) p.value = raw;
-  if (s) s.style.background = raw;
-  _cfreqSetChange(orig, raw);
+  const raw=el.value.trim(),idx=el.dataset.idx,orig=el.dataset.orig;
+  if(!/^#[0-9a-fA-F]{6}$/.test(raw)){el.value=_cfreqChanges[orig]||orig;return;}
+  _cfreqSyncUI(idx,'g',raw); _cfreqSetChange(orig,raw);
+}
+function _cfreqSyncUI(idx,mode,hex){
+  const p=document.getElementById('cfpick_'+idx),h=document.getElementById('cfhex_'+idx),s=document.getElementById('cfswt_'+idx);
+  if(p)p.value=hex; if(h)h.value=hex; if(s)s.style.background=hex;
 }
 
-// ── Global: store + propagate to linked ──────────────────
-function _cfreqSetChange(origLower, newHex) {
-  if (_cfreqLinked.has(origLower) && _cfreqLinked.size > 1) {
-    _cfreqLinked.forEach(lc => {
-      _cfreqChanges[lc] = newHex;
-      document.querySelectorAll('.cfreq-row[data-orig]').forEach(row => {
-        if (row.dataset.orig.toLowerCase() !== lc) return;
-        const rp = row.querySelector('.cfreq-picker');
-        if (!rp) return;
-        const ri = rp.dataset.idx;
-        const p2 = document.getElementById('cfpick_' + ri), h2 = document.getElementById('cfhex_' + ri), s2 = document.getElementById('cfswt_' + ri);
-        if (p2) p2.value = newHex;
-        if (h2) h2.value = newHex;
-        if (s2) s2.style.background = newHex;
-      });
+// ── Global: Link-Toggle ───────────────────────────────────
+function _cfreqGlobalLinkToggle(btn, type) {
+  const orig = btn.dataset.orig; // lowercase hex
+  if (type==='ex'){
+    if(_cfreqLinked.has(orig)){_cfreqLinked.delete(orig);}
+    else{_cfreqLinkedShift.delete(orig);_cfreqLinked.add(orig);}
+  } else {
+    if(_cfreqLinkedShift.has(orig)){_cfreqLinkedShift.delete(orig);}
+    else{_cfreqLinked.delete(orig);_cfreqLinkedShift.add(orig);}
+  }
+  _cfreqUpdateRowClass(btn.closest('.cfreq-row'), _cfreqLinked.has(orig), _cfreqLinkedShift.has(orig));
+}
+
+// ── Global: Change + Propagation ─────────────────────────
+function _cfreqSetChange(orig, newHex) {
+  const ol = orig.toLowerCase();
+  if (_cfreqLinked.has(ol)) {
+    // 1:1 exakt
+    _cfreqLinked.forEach(lc => { _cfreqChanges[lc]=newHex; _cfreqUpdateGlobalRowUI(lc,newHex); });
+  } else if (_cfreqLinkedShift.has(ol)) {
+    // HSL verschieben
+    const fromHex = _cfreqChanges[ol] || ol;
+    _cfreqLinkedShift.forEach(lc => {
+      const cur = _cfreqChanges[lc] || lc;
+      const shifted = (lc===ol) ? newHex : _applyHslShift(cur, fromHex, newHex);
+      _cfreqChanges[lc] = shifted; _cfreqUpdateGlobalRowUI(lc, shifted);
     });
   } else {
-    _cfreqChanges[origLower] = newHex;
+    _cfreqChanges[ol] = newHex;
   }
 }
 
-// ── Global: link toggle ───────────────────────────────────
-function _cfreqLinkToggle(cb) {
-  const orig = cb.dataset.orig.toLowerCase();
-  if (cb.checked) _cfreqLinked.add(orig); else _cfreqLinked.delete(orig);
-  document.querySelectorAll('.cfreq-link-cb').forEach(c => c.closest('.cfreq-row')?.classList.toggle('cfreq-linked', c.checked));
-}
-
-// ── Item: Picker live ─────────────────────────────────────
-function _cfreqItemPickerInput(el) {
-  const iidx = el.dataset.iidx, lidx = el.dataset.lidx, newC = el.value, uid = iidx + '_' + lidx;
-  const h = document.getElementById('cfhex_i' + uid), s = document.getElementById('cfswt_i' + uid);
-  if (h) h.value = newC;
-  if (s) s.style.background = newC;
-  _cfreqItemChanges[iidx + ':' + lidx] = newC;
-}
-
-// ── Item: Hex live preview ────────────────────────────────
-function _cfreqItemHexInput(el) {
-  const raw = el.value.trim();
-  if (!/^#[0-9a-fA-F]{6}$/.test(raw)) return;
-  const uid = el.dataset.iidx + '_' + el.dataset.lidx;
-  const s = document.getElementById('cfswt_i' + uid), p = document.getElementById('cfpick_i' + uid);
-  if (s) s.style.background = raw;
-  if (p) p.value = raw;
-}
-
-// ── Item: Hex commit on blur ──────────────────────────────
-function _cfreqItemHexCommit(el) {
-  const raw = el.value.trim(), iidx = el.dataset.iidx, lidx = el.dataset.lidx;
-  if (!/^#[0-9a-fA-F]{6}$/.test(raw)) { el.value = _cfreqItemChanges[iidx + ':' + lidx] || el.dataset.orig; return; }
-  const uid = iidx + '_' + lidx;
-  const p = document.getElementById('cfpick_i' + uid), s = document.getElementById('cfswt_i' + uid);
-  if (p) p.value = raw;
-  if (s) s.style.background = raw;
-  _cfreqItemChanges[iidx + ':' + lidx] = raw;
-}
-
-// ── Apply all changes to items array ─────────────────────
-function _cfreqApplyChanges(items, globalCh, itemCh) {
-  (items || []).forEach((item, iidx) => {
-    if (!item.colors) return;
-    if (Array.isArray(item.colors)) {
-      item.colors = item.colors.map((c, lidx) => {
-        const ik = iidx + ':' + lidx;
-        if (itemCh && itemCh[ik]) return itemCh[ik];
-        if (!c || c === 'Default') return c;
-        return globalCh[c.toLowerCase()] ?? c;
-      });
-    } else if (typeof item.colors === 'string') {
-      const ik = iidx + ':0';
-      if (itemCh && itemCh[ik]) item.colors = itemCh[ik];
-      else if (item.colors !== 'Default') item.colors = globalCh[item.colors.toLowerCase()] ?? item.colors;
-    }
+function _cfreqUpdateGlobalRowUI(origLower, newHex) {
+  document.querySelectorAll('.cfreq-row[data-orig]').forEach(row => {
+    if (row.dataset.orig !== origLower) return;
+    const rp = row.querySelector('.cfreq-picker'); if(!rp)return;
+    const ri = rp.dataset.idx;
+    _cfreqSyncUI(ri,'g',newHex);
   });
 }
 
-function _cfreqHasChanges() {
-  return Object.keys(_cfreqChanges).length > 0 || Object.keys(_cfreqItemChanges).length > 0;
+// ── Item: Picker + Hex ────────────────────────────────────
+function _cfreqItemPickerInput(el) {
+  const ii=el.dataset.iidx,li=el.dataset.lidx,newC=el.value,uid=ii+'_'+li;
+  _cfreqSyncItemUI(uid,newC); _cfreqItemSetChange(ii,li,newC);
 }
+function _cfreqItemHexInput(el) {
+  const raw=el.value.trim(); if(!/^#[0-9a-fA-F]{6}$/.test(raw))return;
+  const uid=el.dataset.iidx+'_'+el.dataset.lidx;
+  const s=document.getElementById('cfswt_i'+uid),p=document.getElementById('cfpick_i'+uid);
+  if(s)s.style.background=raw; if(p)p.value=raw;
+}
+function _cfreqItemHexCommit(el) {
+  const raw=el.value.trim(),ii=el.dataset.iidx,li=el.dataset.lidx,uid=ii+'_'+li;
+  if(!/^#[0-9a-fA-F]{6}$/.test(raw)){el.value=_cfreqItemChanges[ii+':'+li]||el.dataset.orig;return;}
+  _cfreqSyncItemUI(uid,raw); _cfreqItemSetChange(ii,li,raw);
+}
+function _cfreqSyncItemUI(uid,hex){
+  const p=document.getElementById('cfpick_i'+uid),h=document.getElementById('cfhex_i'+uid),s=document.getElementById('cfswt_i'+uid);
+  if(p)p.value=hex; if(h)h.value=hex; if(s)s.style.background=hex;
+}
+
+// ── Item: Link-Toggle ─────────────────────────────────────
+function _cfreqItemLinkToggle(btn, type) {
+  const ii=btn.dataset.iidx, li=btn.dataset.lidx, key=ii+':'+li;
+  if (type==='ex'){
+    if(_cfreqLinkedItems.has(key)){_cfreqLinkedItems.delete(key);}
+    else{_cfreqLinkedItemsShift.delete(key);_cfreqLinkedItems.add(key);}
+  } else {
+    if(_cfreqLinkedItemsShift.has(key)){_cfreqLinkedItemsShift.delete(key);}
+    else{_cfreqLinkedItems.delete(key);_cfreqLinkedItemsShift.add(key);}
+  }
+  _cfreqUpdateRowClass(btn.closest('.cfreq-icolor-row'), _cfreqLinkedItems.has(key), _cfreqLinkedItemsShift.has(key));
+}
+
+// ── Item: Change + Propagation ────────────────────────────
+function _cfreqItemCurrentColor(ii, li) {
+  const key=String(ii)+':'+String(li);
+  if(_cfreqItemChanges[key]) return _cfreqItemChanges[key];
+  const item=(_cfreqSrcItems||[])[parseInt(ii)]; if(!item) return '#808080';
+  const cols=Array.isArray(item.colors)?item.colors:(item.colors?[item.colors]:[]);
+  return (cols[parseInt(li)]||'#808080').toLowerCase();
+}
+
+function _cfreqItemSetChange(iidx, lidx, newHex) {
+  const key=String(iidx)+':'+String(lidx);
+  if (_cfreqLinkedItems.has(key)) {
+    // 1:1 exakt
+    _cfreqLinkedItems.forEach(lk=>{
+      _cfreqItemChanges[lk]=newHex;
+      const [li,ll]=lk.split(':'); _cfreqSyncItemUI(li+'_'+ll,newHex);
+    });
+  } else if (_cfreqLinkedItemsShift.has(key)) {
+    // HSL verschieben
+    const fromHex=_cfreqItemCurrentColor(iidx,lidx);
+    _cfreqLinkedItemsShift.forEach(lk=>{
+      const [li,ll]=lk.split(':');
+      const cur=_cfreqItemCurrentColor(li,ll);
+      const shifted=(lk===key)?newHex:_applyHslShift(cur,fromHex,newHex);
+      _cfreqItemChanges[lk]=shifted; _cfreqSyncItemUI(li+'_'+ll,shifted);
+    });
+  } else {
+    _cfreqItemChanges[key]=newHex;
+  }
+}
+
+// ── Hilfsfunktionen ───────────────────────────────────────
+function _cfreqUpdateRowClass(row, isEx, isSh) {
+  if (!row) return;
+  const exBtn=row.querySelector('[data-type="ex"]'), shBtn=row.querySelector('[data-type="sh"]');
+  if(exBtn)exBtn.classList.toggle('active',isEx);
+  if(shBtn)shBtn.classList.toggle('active',isSh);
+  row.classList.toggle('cfreq-linked',   isEx && !isSh);
+  row.classList.toggle('cfreq-linked-sh', isSh);
+}
+
+// ── Apply ─────────────────────────────────────────────────
+function _cfreqApplyChanges(items, globalCh, itemCh) {
+  (items||[]).forEach((item,iidx)=>{
+    if(!item.colors)return;
+    if(Array.isArray(item.colors)){
+      item.colors=item.colors.map((c,lidx)=>{
+        const ik=iidx+':'+lidx;
+        if(itemCh&&itemCh[ik])return itemCh[ik];
+        if(!c||c==='Default')return c;
+        return globalCh[c.toLowerCase()]??c;
+      });
+    } else if(typeof item.colors==='string'){
+      const ik=iidx+':0';
+      if(itemCh&&itemCh[ik])item.colors=itemCh[ik];
+      else if(item.colors!=='Default')item.colors=globalCh[item.colors.toLowerCase()]??item.colors;
+    }
+  });
+}
+function _cfreqHasChanges(){return Object.keys(_cfreqChanges).length>0||Object.keys(_cfreqItemChanges).length>0;}
 
 // ── Testen ────────────────────────────────────────────────
 function _cfreqTest() {
-  if (!_cfreqHasChanges()) { showStatus('⚠️ Keine Farbänderungen vorhanden', 'info'); return; }
-  if (!_connected) { showStatus('❌ Nicht verbunden mit BC', 'error'); return; }
-
-  if (_cfreqCtxType === 'profile' && _cfreqCtxKey) {
-    const origOutfit = JSON.parse(JSON.stringify(OUTFIT));
-    const origKHG    = [..._currentProfileKeepHairGroups];
+  if(!_cfreqHasChanges()){showStatus('⚠️ Keine Farbänderungen vorhanden','info');return;}
+  if(!_connected){showStatus('❌ Nicht verbunden mit BC','error');return;}
+  if(_cfreqCtxType==='profile'&&_cfreqCtxKey){
+    const orig=JSON.parse(JSON.stringify(OUTFIT)), origKHG=[..._currentProfileKeepHairGroups];
     loadProfile(_cfreqCtxKey);
-    _cfreqApplyChanges(OUTFIT, _cfreqChanges, _cfreqItemChanges);
-    _autoOutfitCode();
-    const code = document.getElementById('outfitCode')?.value?.trim();
-    if (code) bcSend({ type: 'EXEC', code: '(function(){\n' + code + '\n})();' });
-    showStatus('▶ Test ausgeführt · "' + _cfreqCtxKey + '"', 'success');
-    OUTFIT.length = 0; origOutfit.forEach(i => OUTFIT.push(i));
-    _currentProfileKeepHairGroups = origKHG; _autoOutfitCode();
+    _cfreqApplyChanges(OUTFIT,_cfreqChanges,_cfreqItemChanges); _autoOutfitCode();
+    const code=document.getElementById('outfitCode')?.value?.trim();
+    if(code)bcSend({type:'EXEC',code:'(function(){\n'+code+'\n})();'});
+    showStatus('▶ Test · "'+_cfreqCtxKey+'"','success');
+    OUTFIT.length=0;orig.forEach(i=>OUTFIT.push(i));_currentProfileKeepHairGroups=origKHG;_autoOutfitCode();
   } else {
-    const origColors = OUTFIT.map(i => Array.isArray(i.colors) ? [...i.colors] : i.colors);
-    _cfreqApplyChanges(OUTFIT, _cfreqChanges, _cfreqItemChanges);
-    _autoOutfitCode();
-    const code = document.getElementById('outfitCode')?.value?.trim();
-    if (code) bcSend({ type: 'EXEC', code: '(function(){\n' + code + '\n})();' });
-    showStatus('▶ Test ausgeführt', 'success');
-    OUTFIT.forEach((item, i) => { item.colors = origColors[i]; }); _autoOutfitCode();
+    const origC=OUTFIT.map(i=>Array.isArray(i.colors)?[...i.colors]:i.colors);
+    _cfreqApplyChanges(OUTFIT,_cfreqChanges,_cfreqItemChanges); _autoOutfitCode();
+    const code=document.getElementById('outfitCode')?.value?.trim();
+    if(code)bcSend({type:'EXEC',code:'(function(){\n'+code+'\n})();'});
+    showStatus('▶ Test ausgeführt','success');
+    OUTFIT.forEach((item,i)=>{item.colors=origC[i];}); _autoOutfitCode();
   }
 }
 
 // ── Speichern ─────────────────────────────────────────────
 function _cfreqSave() {
-  if (!_cfreqHasChanges()) { showStatus('⚠️ Keine Farbänderungen vorhanden', 'info'); return; }
-  const n = Object.keys(_cfreqChanges).length + Object.keys(_cfreqItemChanges).length;
-
-  if (_cfreqCtxType === 'profile' && _cfreqCtxKey) {
-    const p = PROFILES[_cfreqCtxKey]; if (!p) return;
-    _cfreqApplyChanges(p.items, _cfreqChanges, _cfreqItemChanges);
-    _saveProfiles();
-    showStatus('✅ ' + n + ' Farbänderung(en) in "' + _cfreqCtxKey + '" gespeichert', 'success');
-    _cfreqChanges = {}; _cfreqItemChanges = {};
-    const panel = document.getElementById('pmodColorFreqPanel') || document.getElementById('outfitColorFreqPanel');
-    if (panel) panel.innerHTML = _renderColorFreqHtml(_getColorFreq(p.items), _cfreqCtxType, _cfreqCtxKey);
+  if(!_cfreqHasChanges()){showStatus('⚠️ Keine Farbänderungen vorhanden','info');return;}
+  const n=Object.keys(_cfreqChanges).length+Object.keys(_cfreqItemChanges).length;
+  if(_cfreqCtxType==='profile'&&_cfreqCtxKey){
+    const p=PROFILES[_cfreqCtxKey];if(!p)return;
+    _cfreqApplyChanges(p.items,_cfreqChanges,_cfreqItemChanges); _saveProfiles();
+    showStatus('✅ '+n+' Änderung(en) in "'+_cfreqCtxKey+'" gespeichert','success');
+    _cfreqChanges={};_cfreqItemChanges={};
+    const panel=document.getElementById('pmodColorFreqPanel')||document.getElementById('outfitColorFreqPanel');
+    if(panel)panel.innerHTML=_renderColorFreqHtml(_getColorFreq(p.items),_cfreqCtxType,_cfreqCtxKey);
   } else {
-    _cfreqApplyChanges(OUTFIT, _cfreqChanges, _cfreqItemChanges);
-    _autoOutfitCode();
-    showStatus('✅ ' + n + ' Farbänderung(en) im Outfit gespeichert', 'success');
-    _cfreqChanges = {}; _cfreqItemChanges = {};
-    const panel = document.getElementById('outfitColorFreqPanel');
-    if (panel) panel.innerHTML = _renderColorFreqHtml(_getColorFreq(OUTFIT), 'outfit', '');
+    _cfreqApplyChanges(OUTFIT,_cfreqChanges,_cfreqItemChanges); _autoOutfitCode();
+    showStatus('✅ '+n+' Änderung(en) im Outfit gespeichert','success');
+    _cfreqChanges={};_cfreqItemChanges={};
+    const panel=document.getElementById('outfitColorFreqPanel');
+    if(panel)panel.innerHTML=_renderColorFreqHtml(_getColorFreq(OUTFIT),'outfit','');
   }
 }
 
 // ── Als Kopie speichern ───────────────────────────────────
 function _cfreqSaveCopy() {
-  const nameInp = document.getElementById('cfreqCopyName');
-  const rawName = nameInp?.value?.trim();
-  if (!rawName) { showStatus('❌ Bitte einen Namen für die Kopie eingeben', 'error'); return; }
-  if (PROFILES[rawName] && !confirm('Profil "' + rawName + '" existiert bereits. Überschreiben?')) return;
-
+  const rawName=document.getElementById('cfreqCopyName')?.value?.trim();
+  if(!rawName){showStatus('❌ Bitte Namen eingeben','error');return;}
+  if(PROFILES[rawName]&&!confirm('Profil "'+rawName+'" existiert bereits. Überschreiben?'))return;
   let srcItems;
-  if (_cfreqCtxType === 'profile' && _cfreqCtxKey) {
-    srcItems = JSON.parse(JSON.stringify(PROFILES[_cfreqCtxKey]?.items || []));
+  if(_cfreqCtxType==='profile'&&_cfreqCtxKey){
+    srcItems=JSON.parse(JSON.stringify(PROFILES[_cfreqCtxKey]?.items||[]));
   } else {
-    const SK = ['group','asset','colors','tr','trStr','typeStr','tightCode','lock','lockParams','isOther','memberNum','label'];
-    srcItems = JSON.parse(JSON.stringify(OUTFIT.map(item => {
-      const out = {}; SK.forEach(k => { if (item[k] !== undefined) out[k] = item[k]; }); return out;
-    })));
+    const SK=['group','asset','colors','tr','trStr','typeStr','tightCode','lock','lockParams','isOther','memberNum','label'];
+    srcItems=JSON.parse(JSON.stringify(OUTFIT.map(item=>{const o={};SK.forEach(k=>{if(item[k]!==undefined)o[k]=item[k];});return o;})));
   }
-
-  _cfreqApplyChanges(srcItems, _cfreqChanges, _cfreqItemChanges);
-  const n = Object.keys(_cfreqChanges).length + Object.keys(_cfreqItemChanges).length;
-  PROFILES[rawName] = { name: rawName, date: new Date().toLocaleDateString('de-DE'), items: srcItems };
-  _saveProfiles(); renderProfileList();
-  showStatus('✅ Kopie "' + rawName + '" mit ' + n + ' Farbänderung(en) gespeichert', 'success');
+  _cfreqApplyChanges(srcItems,_cfreqChanges,_cfreqItemChanges);
+  const n=Object.keys(_cfreqChanges).length+Object.keys(_cfreqItemChanges).length;
+  PROFILES[rawName]={name:rawName,date:new Date().toLocaleDateString('de-DE'),items:srcItems};
+  _saveProfiles();renderProfileList();
+  showStatus('✅ Kopie "'+rawName+'" mit '+n+' Farbänderung(en) gespeichert','success');
 }
 
-// ── Outfit-Tab: toggle panel ──────────────────────────────
+// ── Outfit-Tab: Panel-Toggle ──────────────────────────────
 let _outfitColorFreqOpen = false;
-
 function toggleOutfitColorFreq() {
-  _outfitColorFreqOpen = !_outfitColorFreqOpen;
-  const panel = document.getElementById('outfitColorFreqPanel');
-  const btn   = document.getElementById('outfitColorFreqBtn');
-  if (!panel) return;
-  if (_outfitColorFreqOpen) {
-    panel.innerHTML = _renderColorFreqHtml(_getColorFreq(OUTFIT), 'outfit', '');
-    panel.style.display = '';
-    if (btn) btn.textContent = '🎨 Farben ▲';
-  } else {
-    panel.style.display = 'none';
-    if (btn) btn.textContent = '🎨 Farben';
-  }
+  _outfitColorFreqOpen=!_outfitColorFreqOpen;
+  const panel=document.getElementById('outfitColorFreqPanel'),btn=document.getElementById('outfitColorFreqBtn');
+  if(!panel)return;
+  if(_outfitColorFreqOpen){
+    panel.innerHTML=_renderColorFreqHtml(_getColorFreq(OUTFIT),'outfit','');
+    panel.style.display=''; if(btn)btn.textContent='🎨 Farben ▲';
+  } else {panel.style.display='none';if(btn)btn.textContent='🎨 Farben';}
+}
+function refreshOutfitColorFreq(){
+  const panel=document.getElementById('outfitColorFreqPanel');
+  if(!panel||!_outfitColorFreqOpen)return;
+  panel.innerHTML=_renderColorFreqHtml(_getColorFreq(OUTFIT),'outfit','');
 }
 
-function refreshOutfitColorFreq() {
-  const panel = document.getElementById('outfitColorFreqPanel');
-  if (!panel || !_outfitColorFreqOpen) return;
-  panel.innerHTML = _renderColorFreqHtml(_getColorFreq(OUTFIT), 'outfit', '');
-}
-
-// ── Profil-Modal: toggle panel ────────────────────────────
+// ── Profil-Modal: Panel-Toggle ────────────────────────────
 let _pmodColorFreqOpen = false;
-
-function _pmodToggleColorFreq() {
-  _pmodColorFreqOpen = !_pmodColorFreqOpen;
-  _refreshPmodColorFreq();
-  const btn = document.getElementById('pmodColorFreqBtn');
-  if (btn) btn.textContent = _pmodColorFreqOpen ? '🎨 Farben ▲' : '🎨 Farben';
+function _pmodToggleColorFreq(){
+  _pmodColorFreqOpen=!_pmodColorFreqOpen; _refreshPmodColorFreq();
+  const btn=document.getElementById('pmodColorFreqBtn');
+  if(btn)btn.textContent=_pmodColorFreqOpen?'🎨 Farben ▲':'🎨 Farben';
 }
-
-function _refreshPmodColorFreq() {
-  const panel = document.getElementById('pmodColorFreqPanel'); if (!panel) return;
-  if (!_pmodColorFreqOpen || !_profileModalName) { panel.style.display = 'none'; return; }
-  const p = PROFILES[_profileModalName];
-  panel.innerHTML = _renderColorFreqHtml(_getColorFreq(p?.items || []), 'profile', _profileModalName);
-  panel.style.display = '';
+function _refreshPmodColorFreq(){
+  const panel=document.getElementById('pmodColorFreqPanel');if(!panel)return;
+  if(!_pmodColorFreqOpen||!_profileModalName){panel.style.display='none';return;}
+  const p=PROFILES[_profileModalName];
+  panel.innerHTML=_renderColorFreqHtml(_getColorFreq(p?.items||[]),'profile',_profileModalName);
+  panel.style.display='';
 }
-
-function _showCardColorFreq(slot) {
-  const name = _profileNameMap[slot]; if (!name) return;
-  _pmodColorFreqOpen = true;
-  openProfileModal(slot, null);
-  setTimeout(() => {
-    _refreshPmodColorFreq();
-    const btn = document.getElementById('pmodColorFreqBtn');
-    if (btn) btn.textContent = '🎨 Farben ▲';
-  }, 60);
+function _showCardColorFreq(slot){
+  const name=_profileNameMap[slot];if(!name)return;
+  _pmodColorFreqOpen=true; openProfileModal(slot,null);
+  setTimeout(()=>{_refreshPmodColorFreq();const btn=document.getElementById('pmodColorFreqBtn');if(btn)btn.textContent='🎨 Farben ▲';},60);
 }
 
 // ── Export / Import ──────────────────────────────────────────────────────
