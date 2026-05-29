@@ -7497,12 +7497,19 @@ function applyNewLock(mk, group) {
   const isSelf = String(mk) === String(_myMemberNumber);
 
   // ── EXEC ─────────────────────────────────────────────────────────────────
-  // KEY: "Sandwich" pattern — set ALL properties BEFORE CharacterRefresh so BC
-  // doesn't see an invalid lock (e.g. timer lock with RemoveTimer=undefined → BC
-  // treats as expired and removes LockedBy during refresh).  Then CharacterRefresh
-  // runs the display update.  Then re-set specifics AGAIN after refresh in case the
-  // lock's ExtendedItem Init reset them.  InventoryLock() skipped — requires padlock
-  // in player inventory; direct Property assignment always works via EXEC.
+  // ROOT CAUSE: BC's ValidationResolveAppearanceDiff (anti-cheat + BCX) strips any
+  // lock properties set via direct Property assignment.  The ONLY way a lock survives
+  // validation is to apply it through BC's own InventoryLock() function, which
+  // BC's validator recognises as a legitimate state transition.
+  //
+  // APPROACH: temporarily inject the padlock into Player.Inventory so InventoryLock()
+  // finds + consumes it (that's what it normally does when a player locks from bag),
+  // then let InventoryLock handle all internal state.  Afterwards override timer/pw/hint
+  // with our desired values on the fresh item reference.
+  //
+  // FALLBACK: if AssetGet returns null (mod lock like Devious), fall back to direct
+  // property assignment + CharacterRefresh (may not survive server validation but
+  // is the best we can do without the asset in BC's registry).
   let code = '(function(){\ntry{\n';
   code += 'var C=(ChatRoomCharacter||[]).find(function(c){return c.MemberNumber===' + mkNum + ';});\n';
   code += 'if(!C&&Player.MemberNumber===' + mkNum + ')C=Player;\n';
@@ -7511,34 +7518,50 @@ function applyNewLock(mk, group) {
   code += 'if(!_item){throw new Error("Item nicht gefunden: ' + group + '");}\n';
   code += 'if(!_item.Property)_item.Property={};\n';
 
-  // Step 1: set EVERYTHING before CharacterRefresh so BC sees a fully valid lock
-  code += '_item.Property.LockedBy=' + JSON.stringify(lockType) + ';\n';
-  code += '_item.Property.LockMemberNumber=Player.MemberNumber;\n';
+  // Look up asset — works for vanilla BC locks; may return null for mod locks
+  // Try AssetGet first (works for vanilla BC + BCX-registered mod locks like LewdCrest/Devious)
+  // Use "Asset.find" as fallback in case AssetGet signature differs between BC versions
+  code += 'var _lockAsset=AssetGet("Female3DCG","ItemMisc",' + JSON.stringify(lockType) + ')'
+        + '||(typeof Asset!=="undefined"?Asset.find(function(a){return a.Name===' + JSON.stringify(lockType) + '&&a.Group&&a.Group.Name==="ItemMisc";}):null);\n';
+  code += 'if(_lockAsset){\n';
+  // ── Normal path: InventoryLock with asset object ──────────────────────────
+  // Matches existing pattern in outfit applier (items.js:1503, 1855):
+  // InventoryLock(TARGET, item, { Asset: lockAsset }, Player.MemberNumber, false)
+  // Does NOT require padlock in Player.Inventory — asset object bypasses inventory check.
+  // Update=false prevents InventoryLock from triggering its own ChatRoomCharacterUpdate
+  // before we set our custom timer/password values.
+  code += '  InventoryLock(C,_item,{Asset:_lockAsset},Player.MemberNumber,false);\n';
+  // Re-get item reference: InventoryLock calls CharacterRefresh internally
+  code += '  var _item2=InventoryGet(C,' + JSON.stringify(group) + ');\n';
+  code += '  if(!_item2){throw new Error("Item nach InventoryLock nicht gefunden");}\n';
+  code += '  if(!_item2.Property)_item2.Property={};\n';
+  // Override timer/password/hint with our desired values AFTER InventoryLock's CharacterRefresh
   if (timerSec > 0) {
-    code += '_item.Property.TimerReal=' + expMs + ';\n';
-    code += '_item.Property.RemoveTimer=' + expMs + ';\n';   // epoch-ms, NOT seconds
-    code += '_item.Property.ShowTimer=true;\n';
+    code += '  _item2.Property.TimerReal=' + expMs + ';\n';
+    code += '  _item2.Property.RemoveTimer=' + expMs + ';\n';  // epoch-ms, NOT seconds
+    code += '  _item2.Property.ShowTimer=true;\n';
   }
-  if (password !== null) code += '_item.Property.Password=' + JSON.stringify(password) + ';\n';
-  if (hint     !== null) code += '_item.Property.Hint='     + JSON.stringify(hint)     + ';\n';
-  if (combo    !== null) code += '_item.Property.CombinationNumber=' + JSON.stringify(combo) + ';\n';
-
-  // Step 2: local display refresh
-  code += 'CharacterRefresh(C,false,false);\n';
-
-  // Step 3: re-apply AGAIN after CharacterRefresh (ExtendedItem Init may have reset them)
-  code += '_item.Property.LockedBy=' + JSON.stringify(lockType) + ';\n';
-  code += '_item.Property.LockMemberNumber=Player.MemberNumber;\n';
+  if (password !== null) code += '  _item2.Property.Password=' + JSON.stringify(password) + ';\n';
+  if (hint     !== null) code += '  _item2.Property.Hint='     + JSON.stringify(hint)     + ';\n';
+  if (combo    !== null) code += '  _item2.Property.CombinationNumber=' + JSON.stringify(combo) + ';\n';
+  code += '}else{\n';
+  // ── Fallback: direct property set (unknown lock type not in BC asset registry) ──
+  // May not survive server validation but is the best possible attempt.
+  code += '  console.warn("⚠️ Lock-Asset nicht gefunden, versuche direktes Setzen: ' + lockType + '");\n';
+  code += '  _item.Property.LockedBy=' + JSON.stringify(lockType) + ';\n';
+  code += '  _item.Property.LockMemberNumber=Player.MemberNumber;\n';
   if (timerSec > 0) {
-    code += '_item.Property.TimerReal=' + expMs + ';\n';
-    code += '_item.Property.RemoveTimer=' + expMs + ';\n';
-    code += '_item.Property.ShowTimer=true;\n';
+    code += '  _item.Property.TimerReal=' + expMs + ';\n';
+    code += '  _item.Property.RemoveTimer=' + expMs + ';\n';
+    code += '  _item.Property.ShowTimer=true;\n';
   }
-  if (password !== null) code += '_item.Property.Password=' + JSON.stringify(password) + ';\n';
-  if (hint     !== null) code += '_item.Property.Hint='     + JSON.stringify(hint)     + ';\n';
-  if (combo    !== null) code += '_item.Property.CombinationNumber=' + JSON.stringify(combo) + ';\n';
+  if (password !== null) code += '  _item.Property.Password=' + JSON.stringify(password) + ';\n';
+  if (hint     !== null) code += '  _item.Property.Hint='     + JSON.stringify(hint)     + ';\n';
+  if (combo    !== null) code += '  _item.Property.CombinationNumber=' + JSON.stringify(combo) + ';\n';
+  code += '  CharacterRefresh(C,false,false);\n';
+  code += '}\n';
 
-  // Step 4: sync to server + broadcast to room (600ms delay same as cfreqTest)
+  // Sync to server + broadcast to room (600ms delay same as cfreqTest)
   code += 'setTimeout(function(){\n';
   code += '  if(C.MemberNumber===Player.MemberNumber){\n';
   code += '    ServerPlayerAppearanceSync();\n';
