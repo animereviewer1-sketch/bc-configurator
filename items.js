@@ -7096,9 +7096,11 @@ function importLscgDB() {
 //  TIMER & LOCK DASHBOARD
 // ══════════════════════════════════════════════════════
 
-let _locksData     = null;   // latest scan results array
-let _locksInterval = null;   // setInterval id for countdown ticks
-let _locksEditOpen = null;   // 'mk:group' of currently open edit panel
+let _locksData        = null;   // latest scan results array
+let _locksInterval    = null;   // setInterval id for countdown ticks
+let _locksEditOpen    = null;   // 'mk:group' of currently open edit-existing panel
+let _locksApplyOpen   = null;   // 'mk:group' of currently open apply-new-lock panel
+let _locksShowLockable = new Set();  // mk keys where "lockable items" section is expanded
 
 // Lock type metadata ──────────────────────────────────
 const _LOCK_META = {
@@ -7197,27 +7199,41 @@ function renderLocksTab() {
     body.innerHTML = '<div class="lk-empty">▶ Scannen um alle aktiven Locks anzuzeigen</div>';
     return;
   }
-  const withLocks = _locksData.filter(function(c) { return c.locks.length > 0; });
-  if (!withLocks.length) {
-    body.innerHTML = '<div class="lk-empty">🔓 Keine aktiven Locks im Raum</div>';
+  // Show chars that have at least one lock OR at least one lockable item
+  const visible = _locksData.filter(function(c) {
+    return c.locks.length > 0 || (c.lockable ?? []).length > 0;
+  });
+  if (!visible.length) {
+    body.innerHTML = '<div class="lk-empty">🔓 Keine aktiven Locks und keine lockbaren Items im Raum</div>';
     return;
   }
-  body.innerHTML = withLocks.map(_buildLocksCharHtml).join('');
+  body.innerHTML = visible.map(_buildLocksCharHtml).join('');
 }
 
 function _buildLocksCharHtml(char) {
-  const mk = char.memberNumber;
+  const mk           = String(char.memberNumber);
+  const showLockable = _locksShowLockable.has(mk);
+  const lockableCnt  = (char.lockable ?? []).length;
   const nameHtml = escHtml(char.name)
     + (char.nickname ? ' <span class="lk-nick">„' + escHtml(char.nickname) + '"</span>' : '')
     + (char.isPlayer ? ' <span class="lk-self-badge">ICH</span>' : '');
   const cards = char.locks.map(function(lock) { return _buildLockCardHtml(mk, lock, char.isPlayer); }).join('');
+  const lockableSection = lockableCnt
+    ? ('<div class="lk-lockable-wrap' + (showLockable ? ' open' : '') + '">'
+       + '<button class="lk-lockable-toggle" onclick="toggleLockableSection(\'' + mk + '\')">'
+       + '🔓 ' + lockableCnt + ' lockbar ' + (showLockable ? '▲' : '▼')
+       + '</button>'
+       + (showLockable ? _buildLockableSectionHtml(mk, char.lockable) : '')
+       + '</div>')
+    : '';
   return '<div class="lk-char-block">'
     + '<div class="lk-char-hdr">'
     + '<span class="lk-char-name">' + nameHtml + '</span>'
     + '<span class="lk-char-num">#' + mk + '</span>'
-    + '<span class="lk-char-cnt">' + char.locks.length + ' Lock(s)</span>'
+    + (char.locks.length ? '<span class="lk-char-cnt">' + char.locks.length + ' Lock(s)</span>' : '')
     + '</div>'
-    + '<div class="lk-grid">' + cards + '</div>'
+    + (cards ? '<div class="lk-grid">' + cards + '</div>' : '')
+    + lockableSection
     + '</div>';
 }
 
@@ -7316,6 +7332,168 @@ function _buildLockEditHtml(mk, lock, meta, isPlayer) {
     + '<button class="btn lk-edit-btn-sm" onclick="toggleLockEdit(\'' + mk + '\',\'' + escHtml(lock.group) + '\')">✕</button>'
     + '</div>'
     + '</div>';
+}
+
+// Lockable section ───────────────────────────────────
+function toggleLockableSection(mk) {
+  const key = String(mk);
+  if (_locksShowLockable.has(key)) _locksShowLockable.delete(key);
+  else _locksShowLockable.add(key);
+  renderLocksTab();
+  _startLocksTimer();
+}
+
+function _buildLockableSectionHtml(mk, lockableItems) {
+  const items = lockableItems.map(function(li) {
+    return _buildLockableItemHtml(mk, li);
+  }).join('');
+  return '<div class="lk-lockable-grid">' + items + '</div>';
+}
+
+function _buildLockableItemHtml(mk, li) {
+  const editKey  = mk + ':' + li.group;
+  const isApply  = _locksApplyOpen === editKey;
+  const label    = escHtml(li.assetDesc || li.asset);
+  const craft    = li.craftName ? ' <span class="lk-craft">(' + escHtml(li.craftName) + ')</span>' : '';
+  const applyPanel = isApply ? _buildLockApplyPanelHtml(mk, li) : '';
+  return '<div class="lk-lockable-item' + (isApply ? ' lk-lockable-applying' : '') + '">'
+    + '<div class="lk-lockable-top">'
+    + '<span class="lk-lockable-name">🔓 ' + label + craft + '</span>'
+    + '<span class="lk-lockable-grp">' + escHtml(li.group) + '</span>'
+    + '<button class="lk-apply-btn" onclick="toggleApplyLock(\'' + mk + '\',\'' + escHtml(li.group) + '\')">'
+    + (isApply ? '✕' : '+ Schloss') + '</button>'
+    + '</div>'
+    + applyPanel
+    + '</div>';
+}
+
+// List of selectable lock types for the "apply" dropdown
+const _APPLY_LOCK_TYPES = [
+  { v:'MetalPadlock',         l:'🔒 Metall Padlock'       },
+  { v:'TimerPadlock',         l:'⏱️ Timer Padlock'         },
+  { v:'TimerPasswordPadlock', l:'⏱️🔑 Timer + Passwort'    },
+  { v:'PasswordPadlock',      l:'🔑 Passwort Padlock'      },
+  { v:'CombinationPadlock',   l:'🔢 Kombinations Padlock'  },
+  { v:'ExclusivePadlock',     l:'🔐 Exclusive Padlock'     },
+  { v:'OwnerPadlock',         l:'👑 Owner Padlock'         },
+  { v:'OwnerTimerPadlock',    l:'👑⏱️ Owner Timer Padlock' },
+  { v:'MistressPadlock',      l:'🎭 Mistress Padlock'      },
+  { v:'MistressTimerPadlock', l:'🎭⏱️ Mistress Timer'      },
+  { v:'LoversPadlock',        l:'💕 Lover Padlock'         },
+  { v:'LoversTimerPadlock',   l:'💕⏱️ Lover Timer'         },
+  { v:'HighSecurityPadlock',  l:'🛡️ High Security'         },
+  { v:'SafewordPadlock',      l:'⚡ Safeword Padlock'      },
+  { v:'IntricatePadlock',     l:'🔒✨ Intricate Padlock'   },
+];
+
+function _buildLockApplyPanelHtml(mk, li) {
+  const defType = 'MetalPadlock';
+  const defMeta = _lockMeta(defType);
+  const opts = _APPLY_LOCK_TYPES.map(function(o) {
+    return '<option value="' + o.v + '"' + (o.v === defType ? ' selected' : '') + '>' + o.l + '</option>';
+  }).join('');
+  return '<div class="lk-apply-panel" id="lockApply-' + mk + '-' + escHtml(li.group) + '">'
+    + '<div class="lk-edit-row">'
+    + '<span class="lk-edit-lbl">🔒 Typ</span>'
+    + '<select class="lk-input lk-apply-type" onchange="_onLockTypeChange(\'' + mk + '\',\'' + escHtml(li.group) + '\')">'
+    + opts + '</select>'
+    + '</div>'
+    // Timer row — visible only for timer locks (hidden by default for MetalPadlock)
+    + '<div class="lk-edit-row lk-apply-timer-row" style="display:' + (defMeta.hasTimer ? '' : 'none') + '">'
+    + '<span class="lk-edit-lbl">⏱ Zeit</span>'
+    + '<div class="lk-edit-inputs">'
+    + '<input type="number" class="lk-input lk-edit-h" min="0" max="720" value="1" placeholder="0"> <span class="lk-edit-unit">h</span>'
+    + '<input type="number" class="lk-input lk-edit-m" min="0" max="59" value="0" placeholder="0"> <span class="lk-edit-unit">min</span>'
+    + '</div>'
+    + '</div>'
+    // Password row
+    + '<div class="lk-edit-row lk-apply-pw-row" style="display:' + (defMeta.hasPw ? '' : 'none') + '">'
+    + '<span class="lk-edit-lbl">🔑 PW</span>'
+    + '<input type="text" class="lk-input lk-apply-pw" maxlength="8" placeholder="Passwort (max 8)">'
+    + '</div>'
+    // Combo row
+    + '<div class="lk-edit-row lk-apply-combo-row" style="display:' + (defMeta.hasCombo ? '' : 'none') + '">'
+    + '<span class="lk-edit-lbl">🔢 Kombi</span>'
+    + '<input type="text" class="lk-input lk-apply-combo" maxlength="4" placeholder="0000">'
+    + '</div>'
+    + '<div class="lk-edit-actions">'
+    + '<button class="btn btn-primary lk-edit-btn-sm" onclick="applyNewLock(\'' + mk + '\',\'' + escHtml(li.group) + '\')">🔒 Sperren</button>'
+    + '<button class="btn lk-edit-btn-sm" onclick="toggleApplyLock(\'' + mk + '\',\'' + escHtml(li.group) + '\')">✕</button>'
+    + '</div>'
+    + '</div>';
+}
+
+// Called when lock-type dropdown changes — show/hide relevant input rows without re-render
+function _onLockTypeChange(mk, group) {
+  const panel = document.getElementById('lockApply-' + mk + '-' + group);
+  if (!panel) return;
+  const lockType = panel.querySelector('.lk-apply-type')?.value;
+  if (!lockType) return;
+  const meta = _lockMeta(lockType);
+  const timerRow = panel.querySelector('.lk-apply-timer-row');
+  const pwRow    = panel.querySelector('.lk-apply-pw-row');
+  const comboRow = panel.querySelector('.lk-apply-combo-row');
+  if (timerRow) timerRow.style.display = meta.hasTimer ? '' : 'none';
+  if (pwRow)    pwRow.style.display    = meta.hasPw    ? '' : 'none';
+  if (comboRow) comboRow.style.display = meta.hasCombo ? '' : 'none';
+}
+
+function toggleApplyLock(mk, group) {
+  const key = mk + ':' + group;
+  _locksApplyOpen = (_locksApplyOpen === key) ? null : key;
+  renderLocksTab();
+  _startLocksTimer();
+}
+
+function applyNewLock(mk, group) {
+  if (!_connected) { showStatus('❌ Nicht verbunden', 'error'); return; }
+  const panel = document.getElementById('lockApply-' + mk + '-' + group);
+  if (!panel) return;
+
+  const lockType = panel.querySelector('.lk-apply-type')?.value;
+  if (!lockType) { showStatus('⚠️ Kein Lock-Typ ausgewählt', 'info'); return; }
+
+  const meta     = _lockMeta(lockType);
+  const hEl      = panel.querySelector('.lk-edit-h');
+  const mEl      = panel.querySelector('.lk-edit-m');
+  const pwEl     = panel.querySelector('.lk-apply-pw');
+  const comboEl  = panel.querySelector('.lk-apply-combo');
+
+  const timerSec = (meta.hasTimer && hEl && mEl) ? (parseInt(hEl.value || 0) * 3600 + parseInt(mEl.value || 0) * 60) : 0;
+  const password = (meta.hasPw  && pwEl)    ? pwEl.value    : null;
+  const combo    = (meta.hasCombo && comboEl) ? comboEl.value : null;
+
+  const isPlayer = String(mk) === String(_myMemberNumber);
+  const mkNum    = parseInt(mk);
+  const expMs    = timerSec > 0 ? (Date.now() + timerSec * 1000) : 0;
+
+  let code = '(function(){\n';
+  code += isPlayer
+    ? 'var C=Player;\n'
+    : 'var C=(ChatRoomCharacter||[]).find(function(c){return c.MemberNumber===' + mkNum + ';});\n'
+    + 'if(!C){console.error("❌ Char #' + mkNum + ' nicht gefunden");return;}\n';
+  code += 'var item=InventoryGet(C,' + JSON.stringify(group) + ');\n';
+  code += 'if(!item){console.error("❌ Item nicht gefunden: ' + group + '");return;}\n';
+  code += 'if(!item.Property)item.Property={};\n';
+  code += 'item.Property.LockedBy=' + JSON.stringify(lockType) + ';\n';
+  code += 'item.Property.LockMemberNumber=Player.MemberNumber;\n';
+  if (timerSec > 0) {
+    code += 'item.Property.TimerReal=' + expMs + ';\n';
+    code += 'item.Property.RemoveTimer=' + timerSec + ';\n';
+    code += 'item.Property.ShowTimer=true;\n';
+  }
+  if (password) code += 'item.Property.Password=' + JSON.stringify(password) + ';\n';
+  if (combo)    code += 'item.Property.CombinationNumber=' + JSON.stringify(combo) + ';\n';
+  code += 'CharacterRefresh(C,false,false);\n';
+  code += isPlayer ? 'ServerPlayerAppearanceSync();\n' : 'ChatRoomCharacterUpdate(C);\n';
+  code += 'console.log("✅ Lock vergeben: ' + lockType + ' → ' + group + '");\n';
+  code += '})();';
+
+  bcSend({ type: 'EXEC', code });
+  showStatus('🔒 ' + lockType + ' vergeben auf ' + group, 'success');
+  _locksApplyOpen = null;
+  _locksShowLockable.add(String(mk));  // keep section open after re-scan
+  setTimeout(scanLocks, 900);
 }
 
 // Edit actions ────────────────────────────────────────

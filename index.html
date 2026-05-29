@@ -3311,6 +3311,25 @@ document.write('<scr'+'ipt src="outfit-import.js?_='+_cbv+'"><\/scr'+'ipt>');
 .lk-edit-info { font-size:.66rem;color:var(--text3);font-style:italic; }
 .lk-edit-actions { display:flex;gap:5px;margin-top:2px; }
 .lk-edit-btn-sm { font-size:.65rem;padding:3px 10px; }
+
+/* ── Lockable items section ── */
+.lk-lockable-wrap { border-top:1px solid rgba(255,255,255,0.06);padding:0 12px 8px; }
+.lk-lockable-toggle { background:none;border:none;color:var(--text3);cursor:pointer;font-size:.7rem;padding:6px 2px;width:100%;text-align:left;transition:color .12s; }
+.lk-lockable-toggle:hover { color:var(--text2); }
+.lk-lockable-wrap.open .lk-lockable-toggle { color:var(--accent-text); }
+.lk-lockable-grid { display:flex;flex-direction:column;gap:5px;margin-top:2px; }
+.lk-lockable-item { background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:6px;padding:7px 9px;transition:border-color .12s; }
+.lk-lockable-item:hover { border-color:rgba(255,255,255,0.14); }
+.lk-lockable-applying { border-color:rgba(34,197,94,0.35);background:rgba(34,197,94,0.04); }
+.lk-lockable-top { display:flex;align-items:center;gap:6px; }
+.lk-lockable-name { font-size:.72rem;color:var(--text2);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
+.lk-lockable-grp { font-size:.62rem;color:var(--text3);flex-shrink:0; }
+.lk-apply-btn { background:none;border:1px solid rgba(255,255,255,0.12);border-radius:4px;color:var(--text3);cursor:pointer;font-size:.65rem;padding:2px 7px;transition:all .12s;flex-shrink:0; }
+.lk-apply-btn:hover { border-color:rgba(34,197,94,0.5);color:#86efac; }
+.lk-apply-panel { margin-top:7px;padding:8px;background:rgba(0,0,0,0.2);border:1px solid rgba(255,255,255,0.08);border-radius:5px;display:flex;flex-direction:column;gap:6px; }
+.lk-apply-type { background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.15);border-radius:4px;color:var(--text1);font-size:.72rem;padding:3px 6px;outline:none;width:100%;box-sizing:border-box;cursor:pointer; }
+.lk-apply-type:focus { border-color:rgba(59,130,246,0.6); }
+.lk-apply-type option { background:#1e1e2e;color:#e2e8f0; }
 </style>
 
 <style>

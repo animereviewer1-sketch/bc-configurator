@@ -1019,30 +1019,50 @@ window.CurseScanner = (() => {
             // Helper: look up a member's name from room
             const _nameMap = {};
             _allChars.forEach(function(c){ _nameMap[c.MemberNumber] = c.Name; });
+            // Groups that can never accept a padlock
+            const _LK_BODY_SKIP = new Set([
+              'Eyes','Eyes2','EyesColor','EyesColor2','Blush','Emoticon','Fluids','ExpressionFull',
+              'BodyUpper','BodyLower','BodyMarkings','Head','Mouth','Pronouns',
+              'HairFront','HairBack','HairSide','HairFront2','HairBack2',
+              'HairColor','HairColorAccessory','HairColorUnder',
+            ]);
             const _results = _allChars.map(function(C) {
-              const locks = [];
+              const locks    = [];
+              const lockable = [];   // items that can accept a new lock
               for (const _item of (C.Appearance ?? [])) {
-                const _P = _item.Property;
-                if (!_P || !_P.LockedBy) continue;   // not locked
-                const _lockerNum  = _P.LockMemberNumber ?? null;
-                const _lockerName = _lockerNum != null ? (_nameMap[_lockerNum] ?? ('#' + _lockerNum)) : null;
-                locks.push({
-                  group:       _item.Asset.Group.Name,
-                  asset:       _item.Asset.Name,
-                  assetDesc:   _item.Asset.Description ?? _item.Asset.Name,
-                  craftName:   _item.Craft?.Name ?? null,
-                  lockType:    _P.LockedBy,
-                  lockerNum:   _lockerNum,
-                  lockerName:  _lockerName,
-                  password:    _P.Password      ?? null,
-                  combination: _P.CombinationNumber ?? null,
-                  removeTimer: _P.RemoveTimer   ?? null,   // epoch ms (or seconds, see client)
-                  timerReal:   _P.TimerReal     ?? null,   // epoch ms if present
-                  hint:        _P.Hint          ?? null,
-                  selfUnlock:  _P.SelfUnlock    ?? false,
-                  showTimer:   _P.ShowTimer     ?? false,
-                  memberList:  _P.MemberNumberList ?? null,
-                });
+                const _P  = _item.Property;
+                const _gn = _item.Asset.Group.Name;
+                if (_LK_BODY_SKIP.has(_gn)) continue;
+                if (_P?.LockedBy) {
+                  // Already locked — collect lock info
+                  const _lockerNum  = _P.LockMemberNumber ?? null;
+                  const _lockerName = _lockerNum != null ? (_nameMap[_lockerNum] ?? ('#' + _lockerNum)) : null;
+                  locks.push({
+                    group:       _gn,
+                    asset:       _item.Asset.Name,
+                    assetDesc:   _item.Asset.Description ?? _item.Asset.Name,
+                    craftName:   _item.Craft?.Name ?? null,
+                    lockType:    _P.LockedBy,
+                    lockerNum:   _lockerNum,
+                    lockerName:  _lockerName,
+                    password:    _P.Password          ?? null,
+                    combination: _P.CombinationNumber ?? null,
+                    removeTimer: _P.RemoveTimer        ?? null,
+                    timerReal:   _P.TimerReal          ?? null,
+                    hint:        _P.Hint               ?? null,
+                    selfUnlock:  _P.SelfUnlock         ?? false,
+                    showTimer:   _P.ShowTimer          ?? false,
+                    memberList:  _P.MemberNumberList   ?? null,
+                  });
+                } else if (_item.Asset.AllowLock) {
+                  // Not locked but can accept a lock
+                  lockable.push({
+                    group:     _gn,
+                    asset:     _item.Asset.Name,
+                    assetDesc: _item.Asset.Description ?? _item.Asset.Name,
+                    craftName: _item.Craft?.Name ?? null,
+                  });
+                }
               }
               return {
                 memberNumber: C.MemberNumber,
@@ -1050,6 +1070,7 @@ window.CurseScanner = (() => {
                 nickname: C.Nickname ?? null,
                 isPlayer: C.MemberNumber === Player.MemberNumber,
                 locks,
+                lockable,
               };
             });
             src.postMessage({ app: APP, type: 'LOCKS_DATA',
