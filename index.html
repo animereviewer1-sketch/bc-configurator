@@ -2292,6 +2292,7 @@ button { cursor: pointer; }
   <button class="tab-btn"        id="tab-shop-btn"          onclick="switchTab('shop')">🛒 Shop</button>
   <button class="tab-btn"        id="tab-outfit-import-btn" onclick="switchTab('outfit-import')">📥 Outfit Import</button>
   <button class="tab-btn"        id="tab-outfit-scan-btn"   onclick="switchTab('outfit-scan')">🧬 LSCG Outfits</button>
+  <button class="tab-btn"        id="tab-locks-btn"         onclick="switchTab('locks')">🔒 Locks</button>
   <button class="tab-btn"        id="tab-settings-btn"      onclick="switchTab('settings')">⚙️ Einstellungen</button>
 </div>
 
@@ -3236,6 +3237,81 @@ document.write('<scr'+'ipt src="outfit-import.js?_='+_cbv+'"><\/scr'+'ipt>');
   <div id="outfitScanBody" class="os-body"></div>
 </div>
 <!-- /tab-outfit-scan -->
+
+<!-- TAB: LOCKS / TIMER DASHBOARD -->
+<div id="tab-locks" class="tab-pane">
+  <div class="lk-header">
+    <button class="btn btn-primary" onclick="scanLocks()">⟳ Scannen</button>
+    <span class="lk-header-hint">Zeigt alle aktiven Locks aller Chars im Raum · Countdown läuft live</span>
+  </div>
+  <div id="locksBody" class="lk-body">
+    <div class="lk-empty">▶ Scannen um alle aktiven Locks anzuzeigen</div>
+  </div>
+</div>
+<!-- /tab-locks -->
+
+<style>
+/* ── Lock / Timer Dashboard ── */
+.lk-header { display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--border);flex-wrap:wrap; }
+.lk-header-hint { font-size:.68rem;color:var(--text3);flex:1; }
+.lk-body { padding:10px 14px;overflow-y:auto;display:flex;flex-direction:column;gap:12px; }
+.lk-empty { color:var(--text3);font-size:.8rem;padding:24px;text-align:center; }
+
+/* Character block */
+.lk-char-block { background:rgba(0,0,0,0.15);border:1px solid rgba(255,255,255,0.07);border-radius:8px;overflow:hidden; }
+.lk-char-hdr { display:flex;align-items:center;gap:8px;padding:7px 12px;background:rgba(255,255,255,0.04);border-bottom:1px solid rgba(255,255,255,0.06); }
+.lk-char-name { font-size:.8rem;font-weight:600;color:var(--text1);flex:1; }
+.lk-nick { font-size:.72rem;color:var(--text3);font-weight:400; }
+.lk-self-badge { font-size:.58rem;background:rgba(59,130,246,0.3);color:#93c5fd;border:1px solid rgba(59,130,246,0.5);border-radius:3px;padding:1px 5px;vertical-align:middle; }
+.lk-char-num { font-size:.68rem;color:var(--text3); }
+.lk-char-cnt { font-size:.65rem;color:var(--accent-text);background:rgba(var(--accent-rgb),.15);padding:1px 6px;border-radius:10px; }
+
+/* Lock grid */
+.lk-grid { display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:8px;padding:10px 12px; }
+
+/* Lock card */
+.lk-card { background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.09);border-radius:7px;padding:9px 10px;display:flex;flex-direction:column;gap:5px;transition:border-color .15s; }
+.lk-card:hover { border-color:rgba(255,255,255,0.18); }
+.lk-card-editing { border-color:rgba(59,130,246,0.45);background:rgba(59,130,246,0.05); }
+.lk-card-hdr { display:flex;align-items:center;gap:5px; }
+.lk-badge { font-size:.9rem; }
+.lk-lock-label { font-size:.7rem;font-weight:600;color:var(--text2);flex:1; }
+.lk-edit-btn { background:none;border:1px solid rgba(255,255,255,0.1);border-radius:4px;color:var(--text3);cursor:pointer;font-size:.7rem;padding:2px 5px;transition:all .12s;margin-left:auto; }
+.lk-edit-btn:hover { border-color:rgba(255,255,255,0.3);color:var(--text2); }
+.lk-slot { font-size:.72rem;color:var(--text1);font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
+.lk-craft { font-size:.65rem;color:var(--text3);font-style:italic; }
+
+/* Row labels */
+.lk-row { display:flex;align-items:baseline;gap:5px;font-size:.68rem; }
+.lk-row-lbl { color:var(--text3);flex-shrink:0;min-width:40px; }
+.lk-val { color:var(--text2);word-break:break-all; }
+.lk-dim { color:var(--text3); }
+.lk-lnum { color:var(--text3);font-size:.62rem; }
+
+/* Password display */
+.lk-pw-val { color:#a5f3fc;font-family:monospace;font-size:.74rem;word-break:break-all; }
+.lk-hint { cursor:help;font-size:.75rem; }
+
+/* Timer countdown */
+.lk-countdown { font-family:monospace;font-size:.8rem;font-weight:700;color:var(--accent-text);letter-spacing:.03em; }
+.lk-countdown.lk-expired { color:#fb7185; }
+.lk-countdown.lk-warn    { color:#fbbf24; }
+.lk-countdown.lk-soon    { color:#fdba74; }
+
+/* Edit panel */
+.lk-edit-panel { margin-top:4px;padding:8px;background:rgba(0,0,0,0.2);border:1px solid rgba(255,255,255,0.08);border-radius:5px;display:flex;flex-direction:column;gap:6px; }
+.lk-edit-row { display:flex;align-items:center;gap:6px;font-size:.68rem; }
+.lk-edit-lbl { color:var(--text3);min-width:72px;flex-shrink:0; }
+.lk-edit-inputs { display:flex;align-items:center;gap:4px; }
+.lk-edit-unit { color:var(--text3);font-size:.65rem; }
+.lk-input { background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.15);border-radius:4px;color:var(--text1);font-size:.72rem;padding:3px 6px;outline:none;transition:border-color .12s; }
+.lk-input:focus { border-color:rgba(59,130,246,0.6); }
+.lk-edit-h,.lk-edit-m { width:46px;text-align:center; }
+.lk-edit-pw,.lk-edit-combo { width:100%;box-sizing:border-box; }
+.lk-edit-info { font-size:.66rem;color:var(--text3);font-style:italic; }
+.lk-edit-actions { display:flex;gap:5px;margin-top:2px; }
+.lk-edit-btn-sm { font-size:.65rem;padding:3px 10px; }
+</style>
 
 <style>
 /* ── LSCG Outfit Tab ── */

@@ -4096,7 +4096,7 @@ function deleteProfileByIdx(idx) {
 let _activeTab = 'items';
 function switchTab(tab) {
   _activeTab = tab;
-  ['items','outfit','curse','bot','log','money','events','rank','shop','outfit-import','outfit-scan'].forEach(t => {
+  ['items','outfit','curse','bot','log','money','events','rank','shop','outfit-import','outfit-scan','locks'].forEach(t => {
     document.getElementById('tab-'+t)?.classList.toggle('active', t===tab);
     document.getElementById('tab-'+t+'-btn')?.classList.toggle('active', t===tab);
   });
@@ -4109,6 +4109,8 @@ function switchTab(tab) {
   if (tab === 'shop')          { renderShopTab(); }
   if (tab === 'outfit-import') { renderOutfitImportTab(); }
   if (tab === 'outfit-scan')   { renderOutfitScanTab(); }
+  if (tab === 'locks')         { renderLocksTab(); _startLocksTimer(); }
+  if (tab !== 'locks')         { _stopLocksTimer(); }
 
 }
 
@@ -5613,6 +5615,10 @@ window.addEventListener('message', function(ev) {
       _handleLscgOutfitsData(ev.data);
       break;
 
+    case 'LOCKS_DATA':
+      _handleLocksData(ev.data);
+      break;
+
   }
 });
 
@@ -7084,6 +7090,290 @@ function importLscgDB() {
     reader.readAsText(file);
   };
   input.click();
+}
+
+// ══════════════════════════════════════════════════════
+//  TIMER & LOCK DASHBOARD
+// ══════════════════════════════════════════════════════
+
+let _locksData     = null;   // latest scan results array
+let _locksInterval = null;   // setInterval id for countdown ticks
+let _locksEditOpen = null;   // 'mk:group' of currently open edit panel
+
+// Lock type metadata ──────────────────────────────────
+const _LOCK_META = {
+  'TimerPadlock':          { icon:'⏱️',   label:'Timer',             hasTimer:true,  hasPw:false, hasCombo:false },
+  'TimerPasswordPadlock':  { icon:'⏱️🔑', label:'Timer + PW',       hasTimer:true,  hasPw:true,  hasCombo:false },
+  'PasswordPadlock':       { icon:'🔑',   label:'Passwort',          hasTimer:false, hasPw:true,  hasCombo:false },
+  'CombinationPadlock':    { icon:'🔢',   label:'Kombination',       hasTimer:false, hasPw:false, hasCombo:true  },
+  'HighSecurityPadlock':   { icon:'🛡️',   label:'High Security',     hasTimer:false, hasPw:true,  hasCombo:false },
+  'OwnerPadlock':          { icon:'👑',   label:'Owner',             hasTimer:false, hasPw:false, hasCombo:false },
+  'OwnerTimerPadlock':     { icon:'👑⏱️', label:'Owner Timer',       hasTimer:true,  hasPw:false, hasCombo:false },
+  'MistressPadlock':       { icon:'🎭',   label:'Mistress',          hasTimer:false, hasPw:false, hasCombo:false },
+  'MistressTimerPadlock':  { icon:'🎭⏱️', label:'Mistress Timer',    hasTimer:true,  hasPw:false, hasCombo:false },
+  'LoversPadlock':         { icon:'💕',   label:'Lover',             hasTimer:false, hasPw:false, hasCombo:false },
+  'LoversTimerPadlock':    { icon:'💕⏱️', label:'Lover Timer',       hasTimer:true,  hasPw:false, hasCombo:false },
+  'ExclusivePadlock':      { icon:'🔐',   label:'Exklusiv',          hasTimer:false, hasPw:false, hasCombo:false },
+  'MetalPadlock':          { icon:'🔒',   label:'Metall',            hasTimer:false, hasPw:false, hasCombo:false },
+  'IntricatePadlock':      { icon:'🔒✨', label:'Intricate',         hasTimer:false, hasPw:false, hasCombo:false },
+  'SafewordPadlock':       { icon:'⚡',   label:'Safeword',          hasTimer:false, hasPw:false, hasCombo:false },
+};
+function _lockMeta(type) { return _LOCK_META[type] || { icon:'🔒', label: type || 'Lock', hasTimer:false, hasPw:false, hasCombo:false }; }
+
+// Countdown helpers ───────────────────────────────────
+function _pad2(n) { return n < 10 ? '0' + n : String(n); }
+function _formatLockCountdown(ms) {
+  if (ms == null) return '—';
+  if (ms <= 0) return '⌛ Abgelaufen';
+  const s   = Math.floor(ms / 1000);
+  const d   = Math.floor(s / 86400);
+  const h   = Math.floor((s % 86400) / 3600);
+  const m   = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  if (d > 0) return d + 'd ' + _pad2(h) + ':' + _pad2(m) + ':' + _pad2(sec);
+  return _pad2(h) + ':' + _pad2(m) + ':' + _pad2(sec);
+}
+
+// Compute remaining ms from lock data ─────────────────
+// BC stores RemoveTimer as epoch-ms (Date.now() + duration)
+// TimerReal is also epoch-ms (set by the padlock item itself)
+function _locksRemainingMs(lock) {
+  const now = Date.now();
+  // TimerReal: epoch ms
+  if (lock.timerReal != null) {
+    const rem = lock.timerReal - now;
+    if (rem > -86400000 && rem < 8 * 86400000) return rem;
+  }
+  // RemoveTimer: try as epoch ms first
+  if (lock.removeTimer != null) {
+    const remMs = lock.removeTimer - now;
+    if (remMs > -86400000 && remMs < 8 * 86400000) return remMs;
+    // Fallback: try as epoch seconds
+    const remS = lock.removeTimer * 1000 - now;
+    if (remS > -86400000 && remS < 8 * 86400000) return remS;
+  }
+  return null;
+}
+
+// Countdown interval ──────────────────────────────────
+function _startLocksTimer() {
+  if (_locksInterval) return;
+  _locksInterval = setInterval(function() {
+    if (_activeTab !== 'locks') { _stopLocksTimer(); return; }
+    document.querySelectorAll('.lk-countdown[data-expires]').forEach(function(el) {
+      const exp = parseInt(el.dataset.expires);
+      const rem = exp - Date.now();
+      el.textContent = _formatLockCountdown(rem);
+      el.className = 'lk-countdown' +
+        (rem <= 0 ? ' lk-expired' : rem < 3600000 ? ' lk-warn' : rem < 14400000 ? ' lk-soon' : '');
+    });
+  }, 1000);
+}
+function _stopLocksTimer() {
+  if (_locksInterval) { clearInterval(_locksInterval); _locksInterval = null; }
+}
+
+// Scan ────────────────────────────────────────────────
+function scanLocks() {
+  if (!_connected) { showStatus('❌ Nicht verbunden mit BC', 'error'); return; }
+  bcSend({ type: 'GET_LOCKS' });
+  showStatus('⏳ Scanne Locks…', 'info');
+}
+
+function _handleLocksData(data) {
+  if (data.err) { showStatus('❌ Lock-Scan: ' + data.err, 'error'); return; }
+  _locksData  = data.results ?? [];
+  const total = _locksData.reduce(function(n, c) { return n + c.locks.length; }, 0);
+  const chars = _locksData.filter(function(c) { return c.locks.length > 0; }).length;
+  showStatus('🔒 ' + total + ' Lock(s) bei ' + chars + ' Char(s)', 'success');
+  if (_activeTab === 'locks') { renderLocksTab(); _startLocksTimer(); }
+}
+
+// Render ──────────────────────────────────────────────
+function renderLocksTab() {
+  const body = document.getElementById('locksBody');
+  if (!body) return;
+  if (!_locksData) {
+    body.innerHTML = '<div class="lk-empty">▶ Scannen um alle aktiven Locks anzuzeigen</div>';
+    return;
+  }
+  const withLocks = _locksData.filter(function(c) { return c.locks.length > 0; });
+  if (!withLocks.length) {
+    body.innerHTML = '<div class="lk-empty">🔓 Keine aktiven Locks im Raum</div>';
+    return;
+  }
+  body.innerHTML = withLocks.map(_buildLocksCharHtml).join('');
+}
+
+function _buildLocksCharHtml(char) {
+  const mk = char.memberNumber;
+  const nameHtml = escHtml(char.name)
+    + (char.nickname ? ' <span class="lk-nick">„' + escHtml(char.nickname) + '"</span>' : '')
+    + (char.isPlayer ? ' <span class="lk-self-badge">ICH</span>' : '');
+  const cards = char.locks.map(function(lock) { return _buildLockCardHtml(mk, lock, char.isPlayer); }).join('');
+  return '<div class="lk-char-block">'
+    + '<div class="lk-char-hdr">'
+    + '<span class="lk-char-name">' + nameHtml + '</span>'
+    + '<span class="lk-char-num">#' + mk + '</span>'
+    + '<span class="lk-char-cnt">' + char.locks.length + ' Lock(s)</span>'
+    + '</div>'
+    + '<div class="lk-grid">' + cards + '</div>'
+    + '</div>';
+}
+
+function _buildLockCardHtml(mk, lock, isPlayer) {
+  const meta      = _lockMeta(lock.lockType);
+  const remMs     = meta.hasTimer ? _locksRemainingMs(lock) : null;
+  const expiresTs = (remMs != null) ? (Date.now() + remMs) : null;
+  const editKey   = mk + ':' + lock.group;
+  const isEditing = _locksEditOpen === editKey;
+  const slotLabel = escHtml(lock.assetDesc || lock.asset);
+  const craftLabel = lock.craftName ? ' <span class="lk-craft">(' + escHtml(lock.craftName) + ')</span>' : '';
+  const lockerStr = lock.lockerName
+    ? escHtml(lock.lockerName) + (lock.lockerNum != null ? ' <span class="lk-lnum">#' + lock.lockerNum + '</span>' : '')
+    : '—';
+
+  let timerHtml = '';
+  if (meta.hasTimer) {
+    if (expiresTs != null) {
+      const initText = _formatLockCountdown(remMs);
+      const colorCls = remMs <= 0 ? 'lk-expired' : remMs < 3600000 ? 'lk-warn' : remMs < 14400000 ? 'lk-soon' : '';
+      timerHtml = '<div class="lk-row"><span class="lk-row-lbl">⏱ Timer</span>'
+        + '<span class="lk-countdown ' + colorCls + '" data-expires="' + expiresTs + '">' + initText + '</span>'
+        + '</div>';
+    } else {
+      timerHtml = '<div class="lk-row"><span class="lk-row-lbl">⏱ Timer</span><span class="lk-val lk-dim">—</span></div>';
+    }
+  }
+
+  let pwHtml = '';
+  if (meta.hasPw) {
+    pwHtml = '<div class="lk-row"><span class="lk-row-lbl">🔑 PW</span>'
+      + '<span class="lk-pw-val">' + (lock.password ? escHtml(lock.password) : '<span class="lk-dim">—</span>') + '</span>'
+      + (lock.hint ? ' <span class="lk-hint" title="Hinweis: ' + escHtml(lock.hint) + '">💬</span>' : '')
+      + '</div>';
+  }
+  if (meta.hasCombo) {
+    pwHtml = '<div class="lk-row"><span class="lk-row-lbl">🔢 Kombi</span>'
+      + '<span class="lk-pw-val">' + (lock.combination ? escHtml(lock.combination) : '<span class="lk-dim">—</span>') + '</span>'
+      + '</div>';
+  }
+
+  const editPanel = isEditing ? _buildLockEditHtml(mk, lock, meta, isPlayer) : '';
+
+  return '<div class="lk-card' + (isEditing ? ' lk-card-editing' : '') + '" id="lkcard-' + escHtml(editKey.replace(':','_')) + '">'
+    + '<div class="lk-card-hdr">'
+    + '<span class="lk-badge">' + meta.icon + '</span>'
+    + '<span class="lk-lock-label">' + escHtml(meta.label) + '</span>'
+    + '<button class="lk-edit-btn" onclick="toggleLockEdit(\'' + mk + '\',\'' + escHtml(lock.group) + '\')" title="Bearbeiten">✏️</button>'
+    + '</div>'
+    + '<div class="lk-slot">' + slotLabel + craftLabel + '</div>'
+    + '<div class="lk-row"><span class="lk-row-lbl">👤 Von</span><span class="lk-val">' + lockerStr + '</span></div>'
+    + timerHtml
+    + pwHtml
+    + (lock.memberList?.length ? '<div class="lk-row"><span class="lk-row-lbl">👥</span><span class="lk-val lk-dim">' + lock.memberList.join(', ') + '</span></div>' : '')
+    + editPanel
+    + '</div>';
+}
+
+function _buildLockEditHtml(mk, lock, meta, isPlayer) {
+  const remMs   = meta.hasTimer ? _locksRemainingMs(lock) : null;
+  const curH    = remMs != null ? Math.floor(Math.max(0, remMs) / 3600000) : 0;
+  const curM    = remMs != null ? Math.floor((Math.max(0, remMs) % 3600000) / 60000) : 0;
+
+  let fields = '';
+
+  if (meta.hasTimer) {
+    fields += '<div class="lk-edit-row">'
+      + '<span class="lk-edit-lbl">⏱ Neue Zeit</span>'
+      + '<div class="lk-edit-inputs">'
+      + '<input type="number" class="lk-input lk-edit-h" min="0" max="720" value="' + curH + '" placeholder="0"> <span class="lk-edit-unit">h</span>'
+      + '<input type="number" class="lk-input lk-edit-m" min="0" max="59" value="' + curM + '" placeholder="0"> <span class="lk-edit-unit">min</span>'
+      + '</div>'
+      + '</div>';
+  }
+  if (meta.hasPw) {
+    fields += '<div class="lk-edit-row">'
+      + '<span class="lk-edit-lbl">🔑 Passwort</span>'
+      + '<input type="text" class="lk-input lk-edit-pw" maxlength="8" value="' + escHtml(lock.password || '') + '" placeholder="Passwort (max 8)">'
+      + '</div>';
+  }
+  if (meta.hasCombo) {
+    fields += '<div class="lk-edit-row">'
+      + '<span class="lk-edit-lbl">🔢 Kombi</span>'
+      + '<input type="text" class="lk-input lk-edit-combo" maxlength="4" value="' + escHtml(lock.combination || '') + '" placeholder="0000">'
+      + '</div>';
+  }
+
+  if (!fields) {
+    fields = '<div class="lk-edit-info">Dieser Lock-Typ hat keine editierbaren Werte.</div>';
+  }
+
+  return '<div class="lk-edit-panel" id="lockEdit-' + mk + '-' + escHtml(lock.group) + '">'
+    + fields
+    + '<div class="lk-edit-actions">'
+    + '<button class="btn btn-primary lk-edit-btn-sm" onclick="applyLockEdit(\'' + mk + '\',\'' + escHtml(lock.group) + '\')">✅ Anwenden</button>'
+    + '<button class="btn lk-edit-btn-sm" onclick="toggleLockEdit(\'' + mk + '\',\'' + escHtml(lock.group) + '\')">✕</button>'
+    + '</div>'
+    + '</div>';
+}
+
+// Edit actions ────────────────────────────────────────
+function toggleLockEdit(mk, group) {
+  const key = mk + ':' + group;
+  _locksEditOpen = (_locksEditOpen === key) ? null : key;
+  renderLocksTab();
+  _startLocksTimer();
+}
+
+function applyLockEdit(mk, group) {
+  if (!_connected) { showStatus('❌ Nicht verbunden', 'error'); return; }
+  const panel = document.getElementById('lockEdit-' + mk + '-' + group);
+  if (!panel) return;
+
+  const hEl    = panel.querySelector('.lk-edit-h');
+  const mEl    = panel.querySelector('.lk-edit-m');
+  const pwEl   = panel.querySelector('.lk-edit-pw');
+  const comboEl = panel.querySelector('.lk-edit-combo');
+
+  const timerSec = (hEl && mEl) ? (parseInt(hEl.value || 0) * 3600 + parseInt(mEl.value || 0) * 60) : null;
+  const newPw    = pwEl    ? pwEl.value    : null;
+  const newCombo = comboEl ? comboEl.value : null;
+
+  const hasTimer = timerSec != null;
+  const hasPw    = newPw    != null;
+  const hasCombo = newCombo != null;
+
+  if (!hasTimer && !hasPw && !hasCombo) { showStatus('⚠️ Nichts zu ändern', 'info'); return; }
+
+  const isPlayer = (String(mk) === String(_myMemberNumber));
+  const mkNum    = parseInt(mk);
+  const expMs    = hasTimer ? (Date.now() + timerSec * 1000) : 0;
+
+  let code = '(function(){\n';
+  code += isPlayer
+    ? 'var C=Player;\n'
+    : 'var C=(ChatRoomCharacter||[]).find(function(c){return c.MemberNumber===' + mkNum + ';});\n'
+    + 'if(!C){console.error("❌ Char #' + mkNum + ' nicht gefunden");return;}\n';
+  code += 'var item=InventoryGet(C,' + JSON.stringify(group) + ');\n';
+  code += 'if(!item||!item.Property){console.error("❌ Item/' + group + ' hat keine Property");return;}\n';
+  if (hasTimer) {
+    code += 'item.Property.TimerReal=' + expMs + ';\n';
+    code += 'item.Property.RemoveTimer=' + timerSec + ';\n';
+  }
+  if (hasPw && newPw !== null)    code += 'item.Property.Password=' + JSON.stringify(newPw) + ';\n';
+  if (hasCombo && newCombo !== null) code += 'item.Property.CombinationNumber=' + JSON.stringify(newCombo) + ';\n';
+  code += 'CharacterRefresh(C,false,false);\n';
+  code += isPlayer
+    ? 'ServerPlayerAppearanceSync();\n'
+    : 'ChatRoomCharacterUpdate(C);\n';
+  code += 'console.log("✅ Lock ' + group + ' aktualisiert");\n';
+  code += '})();';
+
+  bcSend({ type: 'EXEC', code });
+  showStatus('✅ Lock aktualisiert — neu scannen zum Aktualisieren', 'success');
+  _locksEditOpen = null;
+  setTimeout(scanLocks, 900);
 }
 
 function scanOutfits() {

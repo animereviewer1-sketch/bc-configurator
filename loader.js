@@ -1011,6 +1011,55 @@ window.CurseScanner = (() => {
           break;
         }
 
+        case 'GET_LOCKS': {
+          try {
+            const _s = new Set();
+            const _allChars = [Player, ...(ChatRoomCharacter ?? [])]
+              .filter(c => c?.MemberNumber && !_s.has(c.MemberNumber) && _s.add(c.MemberNumber));
+            // Helper: look up a member's name from room
+            const _nameMap = {};
+            _allChars.forEach(function(c){ _nameMap[c.MemberNumber] = c.Name; });
+            const _results = _allChars.map(function(C) {
+              const locks = [];
+              for (const _item of (C.Appearance ?? [])) {
+                const _P = _item.Property;
+                if (!_P || !_P.LockedBy) continue;   // not locked
+                const _lockerNum  = _P.LockMemberNumber ?? null;
+                const _lockerName = _lockerNum != null ? (_nameMap[_lockerNum] ?? ('#' + _lockerNum)) : null;
+                locks.push({
+                  group:       _item.Asset.Group.Name,
+                  asset:       _item.Asset.Name,
+                  assetDesc:   _item.Asset.Description ?? _item.Asset.Name,
+                  craftName:   _item.Craft?.Name ?? null,
+                  lockType:    _P.LockedBy,
+                  lockerNum:   _lockerNum,
+                  lockerName:  _lockerName,
+                  password:    _P.Password      ?? null,
+                  combination: _P.CombinationNumber ?? null,
+                  removeTimer: _P.RemoveTimer   ?? null,   // epoch ms (or seconds, see client)
+                  timerReal:   _P.TimerReal     ?? null,   // epoch ms if present
+                  hint:        _P.Hint          ?? null,
+                  selfUnlock:  _P.SelfUnlock    ?? false,
+                  showTimer:   _P.ShowTimer     ?? false,
+                  memberList:  _P.MemberNumberList ?? null,
+                });
+              }
+              return {
+                memberNumber: C.MemberNumber,
+                name:    C.Name,
+                nickname: C.Nickname ?? null,
+                isPlayer: C.MemberNumber === Player.MemberNumber,
+                locks,
+              };
+            });
+            src.postMessage({ app: APP, type: 'LOCKS_DATA',
+              results: _results, scanTime: Date.now() }, ALLOWED_ORIGIN);
+          } catch(_ex) {
+            src.postMessage({ app: APP, type: 'LOCKS_DATA', err: _ex.message }, ALLOWED_ORIGIN);
+          }
+          break;
+        }
+
         case 'EXEC': {
           const _execCode = ev.data.code;
           const _execLen  = _execCode?.length ?? 0;
