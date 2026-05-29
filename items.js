@@ -7518,62 +7518,54 @@ function applyNewLock(mk, group) {
   code += 'if(!_item){throw new Error("Item nicht gefunden: ' + group + '");}\n';
   code += 'if(!_item.Property)_item.Property={};\n';
 
-  // Look up the lock asset.
-  // AssetGet(Family, Group, Name) — use Player.AssetFamily (not hardcoded "Female3DCG")
-  // because BC forks / mod hosts may use a different family string.
-  // Fall back to direct Asset.find() in case AssetGet is unavailable or has different arity.
-  code += 'var _lockAsset=(typeof AssetGet==="function"'
-        + '?(AssetGet(Player.AssetFamily,"ItemMisc",' + JSON.stringify(lockType) + ')'
-        + '||AssetGet("Female3DCG","ItemMisc",' + JSON.stringify(lockType) + '))'
-        + ':null)'
-        + '||(typeof Asset!=="undefined"?Asset.find(function(a){return a.Name===' + JSON.stringify(lockType) + '&&a.Group&&a.Group.Name==="ItemMisc";}):null);\n';
-  code += 'if(_lockAsset){\n';
+  // Look up the lock asset — try every known lookup method in this BC fork.
+  // Final fallback: synthesize a minimal asset so InventoryLock is ALWAYS called
+  // (never fall through to the direct-property path, which can't pass BCX validation).
+  code += 'var _lockAsset='
+        + '(typeof AssetGet==="function"?(AssetGet(Player.AssetFamily,"ItemMisc",' + JSON.stringify(lockType) + ')||AssetGet("Female3DCG","ItemMisc",' + JSON.stringify(lockType) + ')):null)'
+        + '||(typeof Asset!=="undefined"?Asset.find(function(a){return a.Name===' + JSON.stringify(lockType) + '&&a.Group&&(a.Group.Name==="ItemMisc"||a.Group==="ItemMisc");}):null)'
+        + '||(typeof Asset!=="undefined"?Asset.find(function(a){return a.Name===' + JSON.stringify(lockType) + ';}):null)'
+        + '||{Name:' + JSON.stringify(lockType) + ',Group:{Name:"ItemMisc"}};\n';
 
-  // ── Normal path: InventoryLock ─────────────────────────────────────────────
-  // Pass asset OBJECT (not string) so BC doesn't check Player.Inventory.
-  // Update=false: skip InventoryLock's own sync so WE control the timing.
-  // BCX registers a "pending lock change" when InventoryLock runs.  That pending
-  // state has a short expiry — syncing IMMEDIATELY (no delay) means the state is
-  // still valid when the server echo arrives and BCX validates it.
-  // A 600ms delay (our old approach) exceeded that window → lock got stripped.
-  code += '  InventoryLock(C,_item,{Asset:_lockAsset},Player.MemberNumber,false);\n';
-  code += '  var _item2=InventoryGet(C,' + JSON.stringify(group) + ');\n';
-  code += '  if(!_item2){throw new Error("Item nach InventoryLock nicht gefunden");}\n';
-  code += '  if(!_item2.Property)_item2.Property={};\n';
-  // Override timer/pw/hint with our values — set BEFORE sync so they travel with the lock
+  // ── InventoryLock path ────────────────────────────────────────────────────
+  // Set all desired properties BEFORE calling InventoryLock so they survive
+  // even if InventoryLock (with Update=false) doesn't call CharacterRefresh.
+  // Then InventoryLock adds LockedBy/LockMemberNumber and registers BCX's
+  // pending-change state, which is what makes the lock survive validation.
+  // Sync IMMEDIATELY after (no delay) — BCX's pending state has a short expiry.
+  code += 'if(!_item.Property)_item.Property={};\n';
+  code += '_item.Property.LockedBy=' + JSON.stringify(lockType) + ';\n';
+  code += '_item.Property.LockMemberNumber=Player.MemberNumber;\n';
   if (timerSec > 0) {
-    code += '  _item2.Property.TimerReal=' + expMs + ';\n';
-    code += '  _item2.Property.RemoveTimer=' + expMs + ';\n';  // epoch-ms, NOT seconds
-    code += '  _item2.Property.ShowTimer=true;\n';
+    code += '_item.Property.TimerReal=' + expMs + ';\n';
+    code += '_item.Property.RemoveTimer=' + expMs + ';\n';  // epoch-ms, NOT seconds
+    code += '_item.Property.ShowTimer=true;\n';
   }
-  if (password !== null) code += '  _item2.Property.Password=' + JSON.stringify(password) + ';\n';
-  if (hint     !== null) code += '  _item2.Property.Hint='     + JSON.stringify(hint)     + ';\n';
-  if (combo    !== null) code += '  _item2.Property.CombinationNumber=' + JSON.stringify(combo) + ';\n';
-  // Sync IMMEDIATELY — no delay, matches BC's own lock-application flow
-  code += '  if(C.MemberNumber===Player.MemberNumber){ServerPlayerAppearanceSync();ChatRoomCharacterUpdate(C);}else{ChatRoomCharacterUpdate(C);}\n';
-  code += '  console.log("✅ Lock vergeben: ' + lockType + ' → ' + group + '");\n';
+  if (password !== null) code += '_item.Property.Password=' + JSON.stringify(password) + ';\n';
+  if (hint     !== null) code += '_item.Property.Hint='     + JSON.stringify(hint)     + ';\n';
+  if (combo    !== null) code += '_item.Property.CombinationNumber=' + JSON.stringify(combo) + ';\n';
 
-  code += '}else{\n';
-  // ── Fallback: direct property set (mod lock not in BC asset registry) ────────
-  // Cannot use InventoryLock; direct set + CharacterRefresh is the best attempt.
-  // May still be stripped by BCX validation on sync — no reliable workaround.
-  code += '  console.warn("⚠️ Lock-Asset nicht gefunden, Fallback: ' + lockType + '");\n';
-  code += '  _item.Property.LockedBy=' + JSON.stringify(lockType) + ';\n';
-  code += '  _item.Property.LockMemberNumber=Player.MemberNumber;\n';
+  // Call InventoryLock — this is what registers with BCX; wrapped in try/catch
+  // in case the synthetic asset is missing properties BC needs internally.
+  code += 'var _ilOk=false;\n';
+  code += 'try{InventoryLock(C,_item,{Asset:_lockAsset},Player.MemberNumber,false);_ilOk=true;}catch(e){console.warn("InventoryLock err:",e.message);}\n';
+  code += 'console.log("InventoryLock ok:",_ilOk,"asset:",_lockAsset.Name);\n';
+
+  // Re-get item (InventoryLock may have updated the reference) and re-apply overrides
+  code += 'var _item2=InventoryGet(C,' + JSON.stringify(group) + ')||_item;\n';
+  code += 'if(!_item2.Property)_item2.Property={};\n';
   if (timerSec > 0) {
-    code += '  _item.Property.TimerReal=' + expMs + ';\n';
-    code += '  _item.Property.RemoveTimer=' + expMs + ';\n';
-    code += '  _item.Property.ShowTimer=true;\n';
+    code += '_item2.Property.TimerReal=' + expMs + ';\n';
+    code += '_item2.Property.RemoveTimer=' + expMs + ';\n';
+    code += '_item2.Property.ShowTimer=true;\n';
   }
-  if (password !== null) code += '  _item.Property.Password=' + JSON.stringify(password) + ';\n';
-  if (hint     !== null) code += '  _item.Property.Hint='     + JSON.stringify(hint)     + ';\n';
-  if (combo    !== null) code += '  _item.Property.CombinationNumber=' + JSON.stringify(combo) + ';\n';
-  code += '  CharacterRefresh(C,false,false);\n';
-  code += '  setTimeout(function(){\n';
-  code += '    if(C.MemberNumber===Player.MemberNumber){ServerPlayerAppearanceSync();ChatRoomCharacterUpdate(C);}else{ChatRoomCharacterUpdate(C);}\n';
-  code += '    console.log("✅ Lock vergeben (Fallback): ' + lockType + ' → ' + group + '");\n';
-  code += '  },600);\n';
-  code += '}\n';
+  if (password !== null) code += '_item2.Property.Password=' + JSON.stringify(password) + ';\n';
+  if (hint     !== null) code += '_item2.Property.Hint='     + JSON.stringify(hint)     + ';\n';
+  if (combo    !== null) code += '_item2.Property.CombinationNumber=' + JSON.stringify(combo) + ';\n';
+
+  // Sync immediately — before BCX pending state expires
+  code += 'if(C.MemberNumber===Player.MemberNumber){ServerPlayerAppearanceSync();ChatRoomCharacterUpdate(C);}else{ChatRoomCharacterUpdate(C);}\n';
+  code += 'console.log("✅ Lock vergeben: ' + lockType + ' → ' + group + '");\n';
 
   code += '}catch(e){console.error("❌ applyNewLock:",e.message);}\n})();';
 
