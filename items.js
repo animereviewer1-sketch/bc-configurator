@@ -7103,24 +7103,36 @@ let _locksApplyOpen   = null;   // 'mk:group' of currently open apply-new-lock p
 let _locksShowLockable = new Set();  // mk keys where "lockable items" section is expanded
 
 // Lock type metadata ──────────────────────────────────
+// hasHint: lock stores a hint text (shown alongside password input)
 const _LOCK_META = {
-  'TimerPadlock':          { icon:'⏱️',   label:'Timer',             hasTimer:true,  hasPw:false, hasCombo:false },
-  'TimerPasswordPadlock':  { icon:'⏱️🔑', label:'Timer + PW',       hasTimer:true,  hasPw:true,  hasCombo:false },
-  'PasswordPadlock':       { icon:'🔑',   label:'Passwort',          hasTimer:false, hasPw:true,  hasCombo:false },
-  'CombinationPadlock':    { icon:'🔢',   label:'Kombination',       hasTimer:false, hasPw:false, hasCombo:true  },
-  'HighSecurityPadlock':   { icon:'🛡️',   label:'High Security',     hasTimer:false, hasPw:true,  hasCombo:false },
-  'OwnerPadlock':          { icon:'👑',   label:'Owner',             hasTimer:false, hasPw:false, hasCombo:false },
-  'OwnerTimerPadlock':     { icon:'👑⏱️', label:'Owner Timer',       hasTimer:true,  hasPw:false, hasCombo:false },
-  'MistressPadlock':       { icon:'🎭',   label:'Mistress',          hasTimer:false, hasPw:false, hasCombo:false },
-  'MistressTimerPadlock':  { icon:'🎭⏱️', label:'Mistress Timer',    hasTimer:true,  hasPw:false, hasCombo:false },
-  'LoversPadlock':         { icon:'💕',   label:'Lover',             hasTimer:false, hasPw:false, hasCombo:false },
-  'LoversTimerPadlock':    { icon:'💕⏱️', label:'Lover Timer',       hasTimer:true,  hasPw:false, hasCombo:false },
-  'ExclusivePadlock':      { icon:'🔐',   label:'Exklusiv',          hasTimer:false, hasPw:false, hasCombo:false },
-  'MetalPadlock':          { icon:'🔒',   label:'Metall',            hasTimer:false, hasPw:false, hasCombo:false },
-  'IntricatePadlock':      { icon:'🔒✨', label:'Intricate',         hasTimer:false, hasPw:false, hasCombo:false },
-  'SafewordPadlock':       { icon:'⚡',   label:'Safeword',          hasTimer:false, hasPw:false, hasCombo:false },
+  'MetalPadlock':             { icon:'🔒',   label:'Metall',             hasTimer:false, hasPw:false, hasCombo:false, hasHint:false },
+  'ExclusivePadlock':         { icon:'🔐',   label:'Exklusiv',           hasTimer:false, hasPw:false, hasCombo:false, hasHint:false },
+  'IntricatePadlock':         { icon:'🔒✨', label:'Intricate',          hasTimer:false, hasPw:false, hasCombo:false, hasHint:false },
+  'HighSecurityPadlock':      { icon:'🛡️',   label:'High Security',      hasTimer:false, hasPw:true,  hasCombo:false, hasHint:false },
+  'PandoraPadlock':           { icon:'📦',   label:'Pandora',            hasTimer:false, hasPw:false, hasCombo:false, hasHint:false },
+  'MistressPadlock':          { icon:'🎭',   label:'Mistress',           hasTimer:false, hasPw:false, hasCombo:false, hasHint:false },
+  'LoversPadlock':            { icon:'💕',   label:'Lover',              hasTimer:false, hasPw:false, hasCombo:false, hasHint:false },
+  'OwnerPadlock':             { icon:'👑',   label:'Owner',              hasTimer:false, hasPw:false, hasCombo:false, hasHint:false },
+  'FiveMinutesPadlock':       { icon:'⏱️5m', label:'5 Minuten',          hasTimer:true,  hasPw:false, hasCombo:false, hasHint:false },
+  'CombinationPadlock':       { icon:'🔢',   label:'Kombination',        hasTimer:false, hasPw:false, hasCombo:true,  hasHint:false },
+  'SafewordPadlock':          { icon:'⚡',   label:'Safeword',           hasTimer:false, hasPw:true,  hasCombo:false, hasHint:true  },
+  'PasswordPadlock':          { icon:'🔑',   label:'Passwort',           hasTimer:false, hasPw:true,  hasCombo:false, hasHint:true  },
+  'MistressTimerPadlock':     { icon:'🎭⏱️', label:'Mistress Timer',     hasTimer:true,  hasPw:false, hasCombo:false, hasHint:false },
+  'LoversTimerPadlock':       { icon:'💕⏱️', label:'Lover Timer',        hasTimer:true,  hasPw:false, hasCombo:false, hasHint:false },
+  'OwnerTimerPadlock':        { icon:'👑⏱️', label:'Owner Timer',        hasTimer:true,  hasPw:false, hasCombo:false, hasHint:false },
+  'TimerPasswordPadlock':     { icon:'⏱️🔑', label:'Timer + PW',        hasTimer:true,  hasPw:true,  hasCombo:false, hasHint:true  },
+  'BestFriendPadlock':        { icon:'👫',   label:'Best Friend',        hasTimer:false, hasPw:false, hasCombo:false, hasHint:false },
+  'BestFriendTimerPadlock':   { icon:'👫⏱️', label:'BF Timer',           hasTimer:true,  hasPw:false, hasCombo:false, hasHint:false },
+  'FamilyPadlock':            { icon:'👨‍👩‍👧', label:'Family',             hasTimer:false, hasPw:false, hasCombo:false, hasHint:false },
+  'LewdCrestPadlock':         { icon:'🌸',   label:'Lewd Crest',         hasTimer:false, hasPw:false, hasCombo:false, hasHint:false },
+  'DeviousPadlock':           { icon:'😈',   label:'Devious',            hasTimer:false, hasPw:false, hasCombo:false, hasHint:false },
+  'HeartPadlock':             { icon:'❤️',   label:'Heart',              hasTimer:false, hasPw:false, hasCombo:false, hasHint:false },
+  // Legacy / BC standalone timer
+  'TimerPadlock':             { icon:'⏱️',   label:'Timer',              hasTimer:true,  hasPw:false, hasCombo:false, hasHint:false },
 };
-function _lockMeta(type) { return _LOCK_META[type] || { icon:'🔒', label: type || 'Lock', hasTimer:false, hasPw:false, hasCombo:false }; }
+function _lockMeta(type) {
+  return _LOCK_META[type] || { icon:'🔒', label: type || 'Lock', hasTimer:false, hasPw:false, hasCombo:false, hasHint:false };
+}
 
 // Countdown helpers ───────────────────────────────────
 function _pad2(n) { return n < 10 ? '0' + n : String(n); }
@@ -7266,8 +7278,8 @@ function _buildLockCardHtml(mk, lock, isPlayer) {
   if (meta.hasPw) {
     pwHtml = '<div class="lk-row"><span class="lk-row-lbl">🔑 PW</span>'
       + '<span class="lk-pw-val">' + (lock.password ? escHtml(lock.password) : '<span class="lk-dim">—</span>') + '</span>'
-      + (lock.hint ? ' <span class="lk-hint" title="Hinweis: ' + escHtml(lock.hint) + '">💬</span>' : '')
-      + '</div>';
+      + '</div>'
+      + (lock.hint ? '<div class="lk-row"><span class="lk-row-lbl">💬</span><span class="lk-val lk-dim">' + escHtml(lock.hint) + '</span></div>' : '');
   }
   if (meta.hasCombo) {
     pwHtml = '<div class="lk-row"><span class="lk-row-lbl">🔢 Kombi</span>'
@@ -7312,6 +7324,12 @@ function _buildLockEditHtml(mk, lock, meta, isPlayer) {
     fields += '<div class="lk-edit-row">'
       + '<span class="lk-edit-lbl">🔑 Passwort</span>'
       + '<input type="text" class="lk-input lk-edit-pw" maxlength="8" value="' + escHtml(lock.password || '') + '" placeholder="Passwort (max 8)">'
+      + '</div>';
+  }
+  if (meta.hasHint) {
+    fields += '<div class="lk-edit-row">'
+      + '<span class="lk-edit-lbl">💬 Hinweis</span>'
+      + '<input type="text" class="lk-input lk-edit-hint" maxlength="64" value="' + escHtml(lock.hint || '') + '" placeholder="Hinweis (optional)">'
       + '</div>';
   }
   if (meta.hasCombo) {
@@ -7367,23 +7385,30 @@ function _buildLockableItemHtml(mk, li) {
     + '</div>';
 }
 
-// List of selectable lock types for the "apply" dropdown
+// List of selectable lock types — matches BC lock list (22 entries)
 const _APPLY_LOCK_TYPES = [
-  { v:'MetalPadlock',         l:'🔒 Metall Padlock'       },
-  { v:'TimerPadlock',         l:'⏱️ Timer Padlock'         },
-  { v:'TimerPasswordPadlock', l:'⏱️🔑 Timer + Passwort'    },
-  { v:'PasswordPadlock',      l:'🔑 Passwort Padlock'      },
-  { v:'CombinationPadlock',   l:'🔢 Kombinations Padlock'  },
-  { v:'ExclusivePadlock',     l:'🔐 Exclusive Padlock'     },
-  { v:'OwnerPadlock',         l:'👑 Owner Padlock'         },
-  { v:'OwnerTimerPadlock',    l:'👑⏱️ Owner Timer Padlock' },
-  { v:'MistressPadlock',      l:'🎭 Mistress Padlock'      },
-  { v:'MistressTimerPadlock', l:'🎭⏱️ Mistress Timer'      },
-  { v:'LoversPadlock',        l:'💕 Lover Padlock'         },
-  { v:'LoversTimerPadlock',   l:'💕⏱️ Lover Timer'         },
-  { v:'HighSecurityPadlock',  l:'🛡️ High Security'         },
-  { v:'SafewordPadlock',      l:'⚡ Safeword Padlock'      },
-  { v:'IntricatePadlock',     l:'🔒✨ Intricate Padlock'   },
+  { v:'MetalPadlock',           l:'🔒 1 · Metall'             },
+  { v:'ExclusivePadlock',       l:'🔐 2 · Exklusiv'           },
+  { v:'IntricatePadlock',       l:'🔒✨ 3 · Intricate'        },
+  { v:'HighSecurityPadlock',    l:'🛡️ 4 · High Security'      },
+  { v:'PandoraPadlock',         l:'📦 5 · Pandora'            },
+  { v:'MistressPadlock',        l:'🎭 6 · Mistress'           },
+  { v:'LoversPadlock',          l:'💕 7 · Lover'              },
+  { v:'OwnerPadlock',           l:'👑 8 · Owner'              },
+  { v:'FiveMinutesPadlock',     l:'⏱️ 9 · Five Minutes'       },
+  { v:'CombinationPadlock',     l:'🔢 10 · Kombination'       },
+  { v:'SafewordPadlock',        l:'⚡ 11 · Safeword'          },
+  { v:'PasswordPadlock',        l:'🔑 12 · Passwort'          },
+  { v:'MistressTimerPadlock',   l:'🎭⏱️ 13 · Mistress Timer'  },
+  { v:'LoversTimerPadlock',     l:'💕⏱️ 14 · Lover Timer'     },
+  { v:'OwnerTimerPadlock',      l:'👑⏱️ 15 · Owner Timer'     },
+  { v:'TimerPasswordPadlock',   l:'⏱️🔑 16 · Timer Password'  },
+  { v:'BestFriendPadlock',      l:'👫 17 · Best Friend'       },
+  { v:'BestFriendTimerPadlock', l:'👫⏱️ 18 · BF Timer'        },
+  { v:'FamilyPadlock',          l:'👨‍👩‍👧 19 · Family'           },
+  { v:'LewdCrestPadlock',       l:'🌸 20 · Lewd Crest'        },
+  { v:'DeviousPadlock',         l:'😈 21 · Devious'           },
+  { v:'HeartPadlock',           l:'❤️ 22 · Heart'             },
 ];
 
 function _buildLockApplyPanelHtml(mk, li) {
@@ -7395,23 +7420,23 @@ function _buildLockApplyPanelHtml(mk, li) {
   return '<div class="lk-apply-panel" id="lockApply-' + mk + '-' + escHtml(li.group) + '">'
     + '<div class="lk-edit-row">'
     + '<span class="lk-edit-lbl">🔒 Typ</span>'
-    + '<select class="lk-input lk-apply-type" onchange="_onLockTypeChange(\'' + mk + '\',\'' + escHtml(li.group) + '\')">'
+    + '<select class="lk-apply-type" onchange="_onLockTypeChange(\'' + mk + '\',\'' + escHtml(li.group) + '\')">'
     + opts + '</select>'
     + '</div>'
-    // Timer row — visible only for timer locks (hidden by default for MetalPadlock)
     + '<div class="lk-edit-row lk-apply-timer-row" style="display:' + (defMeta.hasTimer ? '' : 'none') + '">'
     + '<span class="lk-edit-lbl">⏱ Zeit</span>'
     + '<div class="lk-edit-inputs">'
     + '<input type="number" class="lk-input lk-edit-h" min="0" max="720" value="1" placeholder="0"> <span class="lk-edit-unit">h</span>'
-    + '<input type="number" class="lk-input lk-edit-m" min="0" max="59" value="0" placeholder="0"> <span class="lk-edit-unit">min</span>'
-    + '</div>'
-    + '</div>'
-    // Password row
+    + '<input type="number" class="lk-input lk-edit-m" min="0" max="59"  value="0" placeholder="0"> <span class="lk-edit-unit">min</span>'
+    + '</div></div>'
     + '<div class="lk-edit-row lk-apply-pw-row" style="display:' + (defMeta.hasPw ? '' : 'none') + '">'
     + '<span class="lk-edit-lbl">🔑 PW</span>'
     + '<input type="text" class="lk-input lk-apply-pw" maxlength="8" placeholder="Passwort (max 8)">'
     + '</div>'
-    // Combo row
+    + '<div class="lk-edit-row lk-apply-hint-row" style="display:' + (defMeta.hasHint ? '' : 'none') + '">'
+    + '<span class="lk-edit-lbl">💬 Hinweis</span>'
+    + '<input type="text" class="lk-input lk-apply-hint" maxlength="64" placeholder="Hinweis (optional)">'
+    + '</div>'
     + '<div class="lk-edit-row lk-apply-combo-row" style="display:' + (defMeta.hasCombo ? '' : 'none') + '">'
     + '<span class="lk-edit-lbl">🔢 Kombi</span>'
     + '<input type="text" class="lk-input lk-apply-combo" maxlength="4" placeholder="0000">'
@@ -7429,12 +7454,14 @@ function _onLockTypeChange(mk, group) {
   if (!panel) return;
   const lockType = panel.querySelector('.lk-apply-type')?.value;
   if (!lockType) return;
-  const meta = _lockMeta(lockType);
+  const meta     = _lockMeta(lockType);
   const timerRow = panel.querySelector('.lk-apply-timer-row');
   const pwRow    = panel.querySelector('.lk-apply-pw-row');
+  const hintRow  = panel.querySelector('.lk-apply-hint-row');
   const comboRow = panel.querySelector('.lk-apply-combo-row');
   if (timerRow) timerRow.style.display = meta.hasTimer ? '' : 'none';
   if (pwRow)    pwRow.style.display    = meta.hasPw    ? '' : 'none';
+  if (hintRow)  hintRow.style.display  = meta.hasHint  ? '' : 'none';
   if (comboRow) comboRow.style.display = meta.hasCombo ? '' : 'none';
 }
 
@@ -7457,42 +7484,62 @@ function applyNewLock(mk, group) {
   const hEl      = panel.querySelector('.lk-edit-h');
   const mEl      = panel.querySelector('.lk-edit-m');
   const pwEl     = panel.querySelector('.lk-apply-pw');
+  const hintEl   = panel.querySelector('.lk-apply-hint');
   const comboEl  = panel.querySelector('.lk-apply-combo');
 
   const timerSec = (meta.hasTimer && hEl && mEl) ? (parseInt(hEl.value || 0) * 3600 + parseInt(mEl.value || 0) * 60) : 0;
-  const password = (meta.hasPw  && pwEl)    ? pwEl.value    : null;
-  const combo    = (meta.hasCombo && comboEl) ? comboEl.value : null;
+  const password = (meta.hasPw    && pwEl)    ? (pwEl.value    || null) : null;
+  const hint     = (meta.hasHint  && hintEl)  ? (hintEl.value  || null) : null;
+  const combo    = (meta.hasCombo && comboEl) ? (comboEl.value || null) : null;
 
-  const isPlayer = String(mk) === String(_myMemberNumber);
-  const mkNum    = parseInt(mk);
-  const expMs    = timerSec > 0 ? (Date.now() + timerSec * 1000) : 0;
+  const mkNum = parseInt(mk);
+  // expMs: epoch-ms when timer expires (RemoveTimer AND TimerReal must both be this value)
+  const expMs = timerSec > 0 ? (Date.now() + timerSec * 1000) : 0;
 
-  let code = '(function(){\n';
-  code += isPlayer
-    ? 'var C=Player;\n'
-    : 'var C=(ChatRoomCharacter||[]).find(function(c){return c.MemberNumber===' + mkNum + ';});\n'
-    + 'if(!C){console.error("❌ Char #' + mkNum + ' nicht gefunden");return;}\n';
+  // Build EXEC — use InventoryLock (proper BC path) + property overrides afterward
+  let code = '(function(){\ntry{\n';
+  code += 'var C=(ChatRoomCharacter||[]).find(function(c){return c.MemberNumber===' + mkNum + ';});\n';
+  code += 'if(!C&&Player.MemberNumber===' + mkNum + ')C=Player;\n';
+  code += 'if(!C){throw new Error("Char #' + mkNum + ' nicht gefunden");}\n';
   code += 'var item=InventoryGet(C,' + JSON.stringify(group) + ');\n';
-  code += 'if(!item){console.error("❌ Item nicht gefunden: ' + group + '");return;}\n';
+  code += 'if(!item){throw new Error("Item nicht gefunden: ' + group + '");}\n';
   code += 'if(!item.Property)item.Property={};\n';
-  code += 'item.Property.LockedBy=' + JSON.stringify(lockType) + ';\n';
-  code += 'item.Property.LockMemberNumber=Player.MemberNumber;\n';
+
+  // Attempt InventoryLock (proper BC function — sets LockedBy, LockMemberNumber, default props)
+  code += 'var _lkA=(typeof Asset!=="undefined")?Asset.find(function(a){return a.Name===' + JSON.stringify(lockType) + ';}):{Name:' + JSON.stringify(lockType) + '};\n';
+  code += 'if(typeof InventoryLock==="function"){\n';
+  code += '  try{InventoryLock(C,item,{Asset:_lkA||{Name:' + JSON.stringify(lockType) + '}},Player.MemberNumber,false);}catch(_e){\n';
+  // Fallback: manual property set if InventoryLock throws
+  code += '    item.Property.LockedBy=' + JSON.stringify(lockType) + ';\n';
+  code += '    item.Property.LockMemberNumber=Player.MemberNumber;\n';
+  code += '  }\n';
+  code += '}else{\n';
+  code += '  item.Property.LockedBy=' + JSON.stringify(lockType) + ';\n';
+  code += '  item.Property.LockMemberNumber=Player.MemberNumber;\n';
+  code += '}\n';
+
+  // Override specific properties AFTER InventoryLock (ensures our values win)
   if (timerSec > 0) {
+    // RemoveTimer = epoch ms (NOT seconds!) — same value as TimerReal
     code += 'item.Property.TimerReal=' + expMs + ';\n';
-    code += 'item.Property.RemoveTimer=' + timerSec + ';\n';
+    code += 'item.Property.RemoveTimer=' + expMs + ';\n';
     code += 'item.Property.ShowTimer=true;\n';
   }
   if (password) code += 'item.Property.Password=' + JSON.stringify(password) + ';\n';
+  if (hint)     code += 'item.Property.Hint=' + JSON.stringify(hint) + ';\n';
   if (combo)    code += 'item.Property.CombinationNumber=' + JSON.stringify(combo) + ';\n';
+
   code += 'CharacterRefresh(C,false,false);\n';
-  code += isPlayer ? 'ServerPlayerAppearanceSync();\n' : 'ChatRoomCharacterUpdate(C);\n';
+  // Use BC-context check — reliable regardless of _myMemberNumber state
+  code += 'if(C.MemberNumber===Player.MemberNumber){ServerPlayerAppearanceSync();}else{ChatRoomCharacterUpdate(C);}\n';
   code += 'console.log("✅ Lock vergeben: ' + lockType + ' → ' + group + '");\n';
-  code += '})();';
+  code += '}catch(e){console.error("❌ applyNewLock Fehler:",e.message);}\n})();';
 
   bcSend({ type: 'EXEC', code });
-  showStatus('🔒 ' + lockType + ' vergeben auf ' + group, 'success');
+  const meta2 = _lockMeta(lockType);
+  showStatus('🔒 ' + meta2.icon + ' ' + meta2.label + ' → ' + group, 'success');
   _locksApplyOpen = null;
-  _locksShowLockable.add(String(mk));  // keep section open after re-scan
+  _locksShowLockable.add(String(mk));
   setTimeout(scanLocks, 900);
 }
 
@@ -7509,47 +7556,52 @@ function applyLockEdit(mk, group) {
   const panel = document.getElementById('lockEdit-' + mk + '-' + group);
   if (!panel) return;
 
-  const hEl    = panel.querySelector('.lk-edit-h');
-  const mEl    = panel.querySelector('.lk-edit-m');
-  const pwEl   = panel.querySelector('.lk-edit-pw');
+  const hEl     = panel.querySelector('.lk-edit-h');
+  const mEl     = panel.querySelector('.lk-edit-m');
+  const pwEl    = panel.querySelector('.lk-edit-pw');
+  const hintEl  = panel.querySelector('.lk-edit-hint');
   const comboEl = panel.querySelector('.lk-edit-combo');
 
   const timerSec = (hEl && mEl) ? (parseInt(hEl.value || 0) * 3600 + parseInt(mEl.value || 0) * 60) : null;
   const newPw    = pwEl    ? pwEl.value    : null;
+  const newHint  = hintEl  ? hintEl.value  : null;
   const newCombo = comboEl ? comboEl.value : null;
 
-  const hasTimer = timerSec != null;
-  const hasPw    = newPw    != null;
-  const hasCombo = newCombo != null;
+  // Only set timer if > 0 — 0:0 would expire immediately
+  const wantsTimer = (timerSec != null && timerSec > 0);
+  const hasPw      = newPw    != null;
+  const hasHint    = newHint  != null;
+  const hasCombo   = newCombo != null;
 
-  if (!hasTimer && !hasPw && !hasCombo) { showStatus('⚠️ Nichts zu ändern', 'info'); return; }
-
-  const isPlayer = (String(mk) === String(_myMemberNumber));
-  const mkNum    = parseInt(mk);
-  const expMs    = hasTimer ? (Date.now() + timerSec * 1000) : 0;
-
-  let code = '(function(){\n';
-  code += isPlayer
-    ? 'var C=Player;\n'
-    : 'var C=(ChatRoomCharacter||[]).find(function(c){return c.MemberNumber===' + mkNum + ';});\n'
-    + 'if(!C){console.error("❌ Char #' + mkNum + ' nicht gefunden");return;}\n';
-  code += 'var item=InventoryGet(C,' + JSON.stringify(group) + ');\n';
-  code += 'if(!item||!item.Property){console.error("❌ Item/' + group + ' hat keine Property");return;}\n';
-  if (hasTimer) {
-    code += 'item.Property.TimerReal=' + expMs + ';\n';
-    code += 'item.Property.RemoveTimer=' + timerSec + ';\n';
+  if (!wantsTimer && !hasPw && !hasHint && !hasCombo) {
+    showStatus('⚠️ Nichts zu ändern (Timer muss > 0 sein)', 'info'); return;
   }
-  if (hasPw && newPw !== null)    code += 'item.Property.Password=' + JSON.stringify(newPw) + ';\n';
+
+  const mkNum  = parseInt(mk);
+  const expMs  = wantsTimer ? (Date.now() + timerSec * 1000) : 0;
+
+  let code = '(function(){\ntry{\n';
+  code += 'var C=(ChatRoomCharacter||[]).find(function(c){return c.MemberNumber===' + mkNum + ';});\n';
+  code += 'if(!C&&Player.MemberNumber===' + mkNum + ')C=Player;\n';
+  code += 'if(!C){throw new Error("Char #' + mkNum + ' nicht gefunden");}\n';
+  code += 'var item=InventoryGet(C,' + JSON.stringify(group) + ');\n';
+  code += 'if(!item||!item.Property){throw new Error("Item/' + group + ' nicht gefunden");}\n';
+  if (wantsTimer) {
+    // RemoveTimer = epoch ms (same as TimerReal) — NOT seconds!
+    code += 'item.Property.TimerReal=' + expMs + ';\n';
+    code += 'item.Property.RemoveTimer=' + expMs + ';\n';
+  }
+  if (hasPw  && newPw    !== null) code += 'item.Property.Password=' + JSON.stringify(newPw) + ';\n';
+  if (hasHint && newHint !== null) code += 'item.Property.Hint=' + JSON.stringify(newHint) + ';\n';
   if (hasCombo && newCombo !== null) code += 'item.Property.CombinationNumber=' + JSON.stringify(newCombo) + ';\n';
   code += 'CharacterRefresh(C,false,false);\n';
-  code += isPlayer
-    ? 'ServerPlayerAppearanceSync();\n'
-    : 'ChatRoomCharacterUpdate(C);\n';
-  code += 'console.log("✅ Lock ' + group + ' aktualisiert");\n';
-  code += '})();';
+  // Use BC-context check — avoids _myMemberNumber dependency
+  code += 'if(C.MemberNumber===Player.MemberNumber){ServerPlayerAppearanceSync();}else{ChatRoomCharacterUpdate(C);}\n';
+  code += 'console.log("✅ Lock aktualisiert: ' + group + '");\n';
+  code += '}catch(e){console.error("❌ Lock-Edit Fehler:",e.message);}\n})();';
 
   bcSend({ type: 'EXEC', code });
-  showStatus('✅ Lock aktualisiert — neu scannen zum Aktualisieren', 'success');
+  showStatus('✅ Lock aktualisiert', 'success');
   _locksEditOpen = null;
   setTimeout(scanLocks, 900);
 }
