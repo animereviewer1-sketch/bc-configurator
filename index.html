@@ -3220,6 +3220,8 @@ document.write('<scr'+'ipt src="outfit-import.js?_='+_cbv+'"><\/scr'+'ipt>');
     <button class="os-filter-btn" onclick="toggleIgnorePanel()" title="Gruppen-Filter">⚙ Filter</button>
     <button class="btn btn-primary" onclick="captureAllMissingOsScreenshots()" title="Für alle Einträge ohne Bild ein Canvas-Bild aufnehmen" style="font-size:.68rem;padding:4px 10px">📸 Fehlende Bilder</button>
     <button class="btn" onclick="clearAllLscgScreenshots()" title="Alle Bilder löschen (Codes bleiben)" style="font-size:.68rem;padding:4px 10px;color:#fb7185;border-color:rgba(251,113,133,0.3)">🖼️ Alle Bilder löschen</button>
+    <button class="btn" onclick="exportLscgDB()" title="Alle LSCG Outfits als JSON-Datei sichern" style="font-size:.68rem;padding:4px 10px">📤 Export</button>
+    <button class="btn" onclick="importLscgDB()" title="LSCG Outfits aus JSON importieren (Merge)" style="font-size:.68rem;padding:4px 10px">📥 Import</button>
     <button class="btn btn-red" onclick="clearAllLscgOutfits()" title="Alle Outfits + Bilder löschen">🗑️</button>
     <span id="osAutoScanStatus" style="display:none;font-size:.68rem;color:var(--accent-text);margin-left:4px"></span>
   </div>

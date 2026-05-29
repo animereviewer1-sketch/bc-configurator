@@ -6758,10 +6758,13 @@ body{display:flex;align-items:flex-start;justify-content:center;padding:32px 16p
 }
 
 const LSCG_IDB_KEY      = 'BC_LSCG_OUTFITS_v3';
+const LSCG_LS_KEY       = 'BC_LSCG_OUTFITS_LS_v3';   // localStorage-Backup (Fallback wenn IDB geleert wird)
 const LSCG_IGNORE_KEY   = 'BC_LSCG_IGNORE_v1';
 const LSCG_FAV_KEY      = 'BC_LSCG_FAVS_v1';
 const LSCG_MAX_VERSIONS = 30;
 let LSCG_DB = {};
+// Synchrones localStorage-Preload: Daten sofort verfügbar, bevor IDB async geladen hat
+try { const _lsBackup = localStorage.getItem(LSCG_LS_KEY); if (_lsBackup) LSCG_DB = JSON.parse(_lsBackup); } catch(e) {}
 const _osOpenSet  = new Set();
 let _osFavs       = new Set();   // member keys die favorisiert sind
 let _osSearchQuery = '';          // aktueller Suchbegriff
@@ -6825,7 +6828,10 @@ function setIgnoreText(text) {
 function _dedupeVersions(entry) {
   const seen = new Set();
   entry.versions = entry.versions.filter(function(v) {
-    const fp = v.fingerprint ?? ('__' + v.ts);
+    // v.fingerprint='' (leerer String) wird von ?? nicht abgefangen → separat prüfen
+    const fp = (v.fingerprint != null && v.fingerprint !== '')
+      ? v.fingerprint
+      : ('__no_fp_' + (v.ts ?? Math.random()));
     if (seen.has(fp)) return false;
     seen.add(fp);
     return true;
@@ -6987,8 +6993,12 @@ function toggleOsChar(mk, hdrEl) {
     console.log('[BCU] LSCG Screenshots geladen:', Object.keys(LSCG_SCREENSHOTS).length);
   }
   const saved = await idbGet(LSCG_IDB_KEY);
-  if (saved && typeof saved === 'object') {
+  if (saved && typeof saved === 'object' && Object.keys(saved).length) {
+    // IDB hat Daten → als primäre Quelle nutzen
     LSCG_DB = saved;
+  }
+  // LSCG_DB enthält jetzt entweder IDB-Daten oder den localStorage-Backup (aus dem Preload oben)
+  if (Object.keys(LSCG_DB).length) {
     // Fingerprints mit aktuellen Ignore-Regeln neu berechnen + Dups entfernen
     let migrated = false;
     for (const mk of Object.keys(LSCG_DB)) {
@@ -6999,12 +7009,82 @@ function toggleOsChar(mk, hdrEl) {
       }
       _dedupeVersions(entry);
     }
-    if (migrated) await idbSet(LSCG_IDB_KEY, LSCG_DB);
-    console.log('[BCU] LSCG Outfits geladen:', Object.keys(LSCG_DB).length, 'Chars');
+    // Immer zurückspeichern wenn IDB leer war (Wiederherstellung aus LS-Backup) oder migriert
+    if (migrated || !saved || !Object.keys(saved).length) await idbSet(LSCG_IDB_KEY, LSCG_DB);
+    const src = (!saved || !Object.keys(saved).length) ? ' [LS-Backup wiederhergestellt]' : '';
+    console.log('[BCU] LSCG Outfits geladen:', Object.keys(LSCG_DB).length, 'Chars' + src);
   }
 })();
 
-async function _saveLscgDB() { await idbSet(LSCG_IDB_KEY, LSCG_DB); }
+async function _saveLscgDB() {
+  await idbSet(LSCG_IDB_KEY, LSCG_DB);
+  try { localStorage.setItem(LSCG_LS_KEY, JSON.stringify(LSCG_DB)); } catch(e) {
+    // QuotaExceededError: DB zu groß für localStorage — kein Problem, IDB ist primär
+    console.warn('[BCU] LSCG localStorage-Backup fehlgeschlagen (Quota?):', e.message);
+  }
+}
+
+// ── Export / Import ───────────────────────────────────────────
+function exportLscgDB() {
+  const chars = Object.keys(LSCG_DB).length;
+  if (!chars) { showStatus('⚠️ Keine LSCG Outfits zum Exportieren', 'info'); return; }
+  const data = JSON.stringify(LSCG_DB, null, 2);
+  const blob = new Blob([data], { type: 'application/json' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = 'lscg_outfits_' + new Date().toISOString().slice(0, 10) + '.json';
+  a.click();
+  URL.revokeObjectURL(url);
+  let versions = 0;
+  for (const e of Object.values(LSCG_DB)) versions += (e.versions?.length ?? 0);
+  showStatus('✅ Export: ' + chars + ' Chars, ' + versions + ' Versionen', 'success');
+}
+
+function importLscgDB() {
+  const input    = document.createElement('input');
+  input.type     = 'file';
+  input.accept   = '.json,application/json';
+  input.onchange = function(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function(ev) {
+      try {
+        const imported = JSON.parse(ev.target.result);
+        if (typeof imported !== 'object' || Array.isArray(imported))
+          { showStatus('❌ Ungültiges Format', 'error'); return; }
+        let added = 0, vAdded = 0;
+        for (const [mk, entry] of Object.entries(imported)) {
+          if (!entry?.versions || !Array.isArray(entry.versions)) continue;
+          if (!LSCG_DB[mk]) {
+            LSCG_DB[mk] = { name: entry.name ?? mk, nickname: entry.nickname ?? null, versions: [] };
+            added++;
+          } else {
+            LSCG_DB[mk].name     = entry.name     ?? LSCG_DB[mk].name;
+            LSCG_DB[mk].nickname = entry.nickname ?? LSCG_DB[mk].nickname;
+          }
+          const existing = LSCG_DB[mk];
+          for (const v of entry.versions) {
+            const fp  = v.fingerprint;
+            const dup = fp ? existing.versions.find(function(ev){ return ev.fingerprint === fp; }) : null;
+            if (!dup) { existing.versions.push(v); vAdded++; }
+          }
+          if (existing.versions.length > LSCG_MAX_VERSIONS)
+            existing.versions = existing.versions.slice(-LSCG_MAX_VERSIONS);
+          _dedupeVersions(existing);
+        }
+        _saveLscgDB();
+        renderOutfitScanTab();
+        showStatus('✅ Import: +' + added + ' neue Chars, +' + vAdded + ' Versionen', 'success');
+      } catch(err) {
+        showStatus('❌ Import-Fehler: ' + err.message, 'error');
+      }
+    };
+    reader.readAsText(file);
+  };
+  input.click();
+}
 
 function scanOutfits() {
   if (!_connected) { showStatus('❌ Nicht verbunden mit BC', 'error'); return; }
