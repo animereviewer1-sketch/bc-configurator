@@ -3088,12 +3088,13 @@ let _cfreqItemChanges      = {};        // item: { 'iidx:lidx' → newHex }
 let _cfreqLinkedItems      = new Set(); // item exact link:  set of 'iidx:lidx'
 let _cfreqLinkedItemsShift = new Set(); // item shift link:  set of 'iidx:lidx'
 let _cfreqThemePanelOpen   = false;
+let _cfreqActiveTheme      = null;  // { id, name, icon, colors:[], selected:[] }
 
 // ── Vordefinierte Farbthemen ──────────────────────────────
 const CFREQ_THEMES = [
 
-  // ════ LATEX – Einfarbig ════════════════════════════════
-  { id:'latex_bk',   icon:'🖤', name:'Latex Schwarz',   colors:['#050505','#0f0f0f','#1e1e1e','#2e2e2e','#f0f0f0'] },
+  // ════ LATEX – Einfarbig ═══════════════════════════════
+  { id:'latex_bk',   icon:'🖤', name:'Latex Schwarz',    colors:['#050505','#0f0f0f','#1e1e1e','#2e2e2e','#f0f0f0'] },
   { id:'latex_wh',   icon:'🤍', name:'Latex Weiß',      colors:['#c0c0c0','#d8d8d8','#ebebeb','#f5f5f5','#ffffff'] },
   { id:'latex_rd',   icon:'🔴', name:'Latex Rot',       colors:['#140000','#5c0000','#b30000','#ff1a1a','#ffd6d6'] },
   { id:'latex_pk',   icon:'🩷', name:'Latex Pink',      colors:['#1a0010','#700040','#cc0077','#ff44bb','#ffccee'] },
@@ -3262,6 +3263,101 @@ const CFREQ_THEMES = [
   { id:'wine',       icon:'🍷', name:'Weinrot',          colors:['#0d0005','#2d0010','#6b0020','#aa1040','#d4608a'] },
   { id:'navy',       icon:'🌊', name:'Navy',             colors:['#010308','#030c1e','#061838','#0a2a60','#1a4a90'] },
   { id:'forest_m',   icon:'🌲', name:'Waldgrün',         colors:['#030a03','#0a1e0a','#143014','#284e28','#406640'] },
+
+  // ════ LATEX – Tricolor / Spezial ══════════════════════
+  { id:'latex_bkrdwh',icon:'🔴',name:'Schwarz/Rot/Weiß', colors:['#050505','#550000','#aa0000','#f0f0f0','#ffffff'] },
+  { id:'latex_bkpkwh',icon:'🩷',name:'Schwarz/Pink/Weiß',colors:['#050505','#660044','#cc0077','#f0f0f0','#ffffff'] },
+  { id:'latex_bkpugd',icon:'💜',name:'Schwarz/Lila/Gold',colors:['#050505','#3a0060','#7700cc','#aa8800','#ffcc00'] },
+  { id:'latex_rdwh',  icon:'🤍',name:'Rot/Weiß',         colors:['#5c0000','#aa0000','#cc3333','#f5f5f5','#ffffff'] },
+  { id:'latex_pkwh',  icon:'🩷',name:'Pink/Weiß',        colors:['#880055','#cc0077','#ff44bb','#f5f5f5','#ffffff'] },
+  { id:'latex_ngbk',  icon:'💚',name:'Neongrün/Schwarz', colors:['#050505','#0f0f0f','#003300','#00aa00','#33ff33'] },
+  { id:'latex_cyber', icon:'🤖',name:'Latex Cyber',      colors:['#050505','#001428','#004080','#00f5d4','#ccff00'] },
+  { id:'latex_rainbow',icon:'🌈',name:'Latex Regenbogen',colors:['#cc0000','#cc6600','#aaaa00','#006600','#0000cc'] },
+  { id:'latex_pastel',icon:'🍬',name:'Latex Pastell',    colors:['#e8c0d8','#d8b0e8','#b8c8f0','#b0e8d8','#f0e8b0'] },
+  { id:'latex_metal', icon:'🪩',name:'Metallic',         colors:['#101010','#303030','#606060','#aaaaaa','#e8e8e8'] },
+
+  // ════ BDSM – Uniformen & Rollen ═══════════════════════
+  { id:'schuluni',   icon:'📐', name:'Schuluniform',     colors:['#0a0a28','#1a1a66','#c0c0c0','#f5f5f5','#cc2222'] },
+  { id:'polizei',    icon:'👮', name:'Polizei',          colors:['#0a0a14','#0d1e3d','#1a2d6b','#888899','#c8c8d8'] },
+  { id:'militar',    icon:'🪖', name:'Militär',          colors:['#0a0e08','#1e2810','#3a4820','#6a7840','#8a9860'] },
+  { id:'cheerleader',icon:'📣', name:'Cheerleader',      colors:['#0a0a0a','#880000','#cc0000','#f5f5f5','#ffffff'] },
+  { id:'krkpfleger', icon:'💊', name:'Pfleger (Blau)',   colors:['#0a1428','#1a3a6b','#3366aa','#e8f0f8','#ffffff'] },
+  { id:'koechin',    icon:'👩‍🍳', name:'Köchin',          colors:['#0a0a0a','#2d2d2d','#f5f5f5','#ffffff','#cc4400'] },
+  { id:'buero',      icon:'👔', name:'Business',         colors:['#0a0e14','#1a2840','#3d5070','#b0b8c8','#f0f0f5'] },
+  { id:'latex_art',  icon:'🎨', name:'Artisten-Latexanzug',colors:['#0a0a0a','#3d003d','#006600','#ccaa00','#dd0000'] },
+
+  // ════ FANTASY – Mythologie & Kreaturen ════════════════
+  { id:'nixe',       icon:'💧', name:'Nixe',             colors:['#000814','#002244','#005588','#00aacc','#88eeee'] },
+  { id:'phoenix',    icon:'🦅', name:'Phönix',           colors:['#1a0000','#6b0000','#cc3300','#ff8800','#ffdd44'] },
+  { id:'eiselfe',    icon:'🌨️', name:'Eis-Elfe',         colors:['#0a1428','#1a4488','#5599cc','#aaddff','#ffffff'] },
+  { id:'schattenj',  icon:'🗡️', name:'Schattenjägerin',  colors:['#050505','#1a1a1a','#333333','#880000','#c8c8c8'] },
+  { id:'waldelfe',   icon:'🍃', name:'Waldgeist',        colors:['#0a1005','#1e3010','#3a6020','#70a840','#c8e8a0'] },
+  { id:'fuchs',      icon:'🦊', name:'Fuchs',            colors:['#1a0800','#5c2000','#b84400','#e87000','#f5c880'] },
+  { id:'woelfin',    icon:'🐺', name:'Wölfin',           colors:['#0a0a0a','#1e1e1e','#444444','#888888','#c0c0c0'] },
+  { id:'schmetterling',icon:'🦋',name:'Schmetterling',   colors:['#0d0028','#3300aa','#6633dd','#ff88cc','#ffeeaa'] },
+  { id:'blumenmaedchen',icon:'🌼',name:'Blumenmädchen',  colors:['#1a2e00','#5a8a20','#d4e870','#ffcc44','#ff8888'] },
+  { id:'engelsfall2',icon:'⚡', name:'Engel des Sturms', colors:['#050808','#102030','#204888','#6088c8','#f0f0f0'] },
+
+  // ════ MODERNE AESTHETICS – Neu ════════════════════════
+  { id:'balletcore', icon:'🩰', name:'Balletcore',       colors:['#f5e8f0','#eec8d8','#e0a0b8','#c87090','#a04870'] },
+  { id:'coquette',   icon:'🎀', name:'Coquette',         colors:['#0a0005','#2a0020','#cc2266','#ff88bb','#ffd8e8'] },
+  { id:'oldmoney',   icon:'🎩', name:'Old Money',        colors:['#0a0c08','#1e2810','#3a4830','#88997a','#d8d8c8'] },
+  { id:'cleangirl',  icon:'✨', name:'Clean Girl',       colors:['#e8d8c8','#f0e4d4','#f8f0e8','#fbf5ef','#ffffff'] },
+  { id:'barbiecore', icon:'🩷', name:'Barbiecore',       colors:['#3a0028','#880066','#ee00aa','#ff55cc','#ffbbee'] },
+  { id:'mobwife',    icon:'🐆', name:'Mob Wife',         colors:['#0a0800','#2d2000','#6b4a00','#aa8800','#d4aa44'] },
+  { id:'academia_l', icon:'📖', name:'Light Academia',   colors:['#1e1808','#4a3818','#8b7040','#c8b080','#f5ecd8'] },
+  { id:'mermaidcore',icon:'🌊', name:'Mermaidcore',      colors:['#001428','#005555','#00aaaa','#55ddcc','#f0ffee'] },
+  { id:'fairycore',  icon:'🧚', name:'Fairycore',        colors:['#f0e8ff','#e0d0f8','#c8d8ff','#d8f8e8','#fff8e8'] },
+  { id:'animecore',  icon:'⭐', name:'Animecore',        colors:['#1a0030','#4400aa','#cc0066','#ff88cc','#ffeeaa'] },
+  { id:'darkfairy',  icon:'🖤', name:'Dark Fairy',       colors:['#0a0010','#200040','#5500aa','#cc44ee','#f8e0ff'] },
+  { id:'royalcore',  icon:'👑', name:'Royalcore',        colors:['#050010','#150040','#3300aa','#6622cc','#ffcc00'] },
+
+  // ════ LEBENSMITTEL & NATUR-TÖNE ═══════════════════════
+  { id:'chocolate',  icon:'🍫', name:'Schokolade',       colors:['#0a0500','#2d1400','#5c2e00','#8b4513','#c48050'] },
+  { id:'vanilla',    icon:'🍦', name:'Vanille',          colors:['#2a1e00','#6b5020','#c4a050','#e8d090','#fdf5e0'] },
+  { id:'berry',      icon:'🫐', name:'Beere',            colors:['#0d0018','#2a0050','#5c2888','#9944cc','#d4aaee'] },
+  { id:'raspberry',  icon:'🍓', name:'Himbeere',         colors:['#3a000a','#880022','#cc1144','#ee5588','#ffaabb'] },
+  { id:'coffee',     icon:'☕', name:'Kaffee',           colors:['#0a0800','#2a1e08','#5a3a18','#8b6030','#c4a068'] },
+  { id:'matcha',     icon:'🍵', name:'Matcha',           colors:['#0a1405','#1e3010','#3a6020','#70a050','#d4e8b0'] },
+  { id:'coral',      icon:'🪸', name:'Koralle',          colors:['#3a0808','#882020','#cc5040','#ee8870','#f5c0a8'] },
+  { id:'peach2',     icon:'🍑', name:'Pfirsich Satt',   colors:['#5c1e00','#aa4400','#e07030','#f0a870','#f8d8b8'] },
+  { id:'lemon',      icon:'🍋', name:'Zitrone',          colors:['#1e1e00','#666600','#aaaa00','#eeee00','#ffffaa'] },
+  { id:'wine2',      icon:'🍇', name:'Traube',           colors:['#0d0018','#2a0040','#550077','#8833aa','#cc99dd'] },
+  { id:'honey',      icon:'🍯', name:'Honig',            colors:['#1a0e00','#5c3800','#aa7000','#dda830','#f5cc70'] },
+  { id:'rose_tea',   icon:'🌹', name:'Rosentee',         colors:['#2a0818','#6b2244','#aa5580','#d498b8','#f5d8e8'] },
+
+  // ════ EINZELFARBEN SATT ════════════════════════════════
+  { id:'magenta',    icon:'🌸', name:'Magenta',          colors:['#1a0014','#5c0044','#aa0077','#ee00aa','#ffaaee'] },
+  { id:'indigo',     icon:'🔵', name:'Indigo',           colors:['#030014','#0d0040','#1a0088','#3300cc','#8866ff'] },
+  { id:'plum',       icon:'💜', name:'Pflaume',          colors:['#0d0018','#2d0050','#5a0077','#8844aa','#ccaadd'] },
+  { id:'teal_m',     icon:'🩵', name:'Petrol/Teal',     colors:['#001414','#003030','#005555','#008888','#44cccc'] },
+  { id:'olive',      icon:'🫒', name:'Olive',            colors:['#0a0e00','#222e00','#445500','#778800','#aacc44'] },
+  { id:'khaki',      icon:'🌾', name:'Khaki',            colors:['#0e0e00','#2e2e08','#5c5820','#9a9050','#d8d090'] },
+  { id:'burgundy',   icon:'🍷', name:'Burgund',          colors:['#0d0008','#2d0018','#680030','#990044','#cc3366'] },
+  { id:'terracotta', icon:'🏺', name:'Terrakotta',       colors:['#1a0800','#5c2000','#aa5030','#d48060','#f0b898'] },
+  { id:'sage',       icon:'🌿', name:'Salbei',           colors:['#0e1a0a','#283e20','#4a6a3a','#7a9a60','#b8ccaa'] },
+  { id:'dustyrose',  icon:'🌹', name:'Altrosa',          colors:['#1a0808','#5c2828','#9a6060','#c89898','#f0d8d8'] },
+  { id:'slate',      icon:'🔷', name:'Schieferblau',     colors:['#0a1018','#1e2e3a','#3a5068','#6080a0','#98b8d0'] },
+  { id:'chartreuse', icon:'🟢', name:'Limonengrün',      colors:['#0e1400','#2e4000','#557700','#99cc00','#ccee44'] },
+
+  // ════ KULTURELL / HISTORISCH ══════════════════════════
+  { id:'japanisch',  icon:'⛩️', name:'Japanisch',        colors:['#0a0808','#880000','#cc0000','#f5f5f5','#ffffff'] },
+  { id:'chinesisch', icon:'🏮', name:'Chinesisch',       colors:['#1a0000','#880000','#cc0000','#cc9900','#ffcc00'] },
+  { id:'aegyptisch', icon:'🏺', name:'Ägyptisch',        colors:['#050808','#1a1400','#005555','#aa8800','#ffcc00'] },
+  { id:'vikinger',   icon:'⚔️', name:'Wikinger',         colors:['#0a0808','#2d2018','#5c4028','#9a7040','#c8b888'] },
+  { id:'mittelalter',icon:'🏰', name:'Mittelalter',      colors:['#0a0808','#2d1400','#6b3010','#aa6030','#cc9900'] },
+  { id:'samurai2',   icon:'🗡️', name:'Ronin',            colors:['#050505','#1a0800','#4d0000','#888888','#c0b890'] },
+  { id:'roman',      icon:'🏛️', name:'Römisch',          colors:['#1a1005','#5c4020','#aa8040','#ddc090','#f5ead8'] },
+
+  // ════ SPEZIAL / SPASSL ════════════════════════════════
+  { id:'holographic',icon:'🌈', name:'Holografisch',     colors:['#cc00ff','#0066ff','#00ffcc','#ccff00','#ff6600'] },
+  { id:'galaxy',     icon:'🌌', name:'Galaxie',          colors:['#020408','#0a1428','#2a1050','#8822cc','#ff88ff'] },
+  { id:'sunflower',  icon:'🌻', name:'Sonnenblume',      colors:['#1a1400','#5c4800','#aa8800','#eecc00','#f5ee80'] },
+  { id:'toxic2',     icon:'🧪', name:'Giftgrün',         colors:['#0a1400','#1e3300','#33660a','#77bb00','#ccee33'] },
+  { id:'bloodmoon2', icon:'🌕', name:'Roter Mond',       colors:['#050000','#1a0000','#5c1100','#cc4400','#ee8800'] },
+  { id:'shadow',     icon:'👤', name:'Schatten',         colors:['#020202','#060606','#0e0e0e','#181818','#242424'] },
+  { id:'smoke',      icon:'💨', name:'Rauch',            colors:['#101010','#282828','#484848','#787878','#a8a8a8'] },
+  { id:'aurora2',    icon:'✨', name:'Aurora Pink',      colors:['#050010','#1a0040','#5500aa','#ff00cc','#ffaaff'] },
 ];
 
 function _getColorFreq(items) {
@@ -3322,9 +3418,10 @@ function _renderColorFreqHtml(freqData, ctxType, ctxKey) {
     : 'Mein Outfit (Farbanpassung)');
 
   // Theme-Panel HTML vorbauen
+  _cfreqActiveTheme = null;
   const themeGridHtml = CFREQ_THEMES.map(th => {
     const swatches = th.colors.map(c=>'<span class="cfreq-tswatch" style="background:'+c+'"></span>').join('');
-    return '<div class="cfreq-theme-card" onclick="_cfreqApplyTheme(\''+th.id+'\')" title="'+escHtml(th.name)+'">'
+    return '<div class="cfreq-theme-card" id="cfreq-tcard-'+th.id+'" onclick="_cfreqSelectTheme(\''+th.id+'\')" title="'+escHtml(th.name)+'">'
       + '<div class="cfreq-tswatches">'+swatches+'</div>'
       + '<div class="cfreq-tname">'+escHtml(th.icon+' '+th.name)+'</div>'
       + '</div>';
@@ -3343,6 +3440,7 @@ function _renderColorFreqHtml(freqData, ctxType, ctxKey) {
     + '</div>'
     + '<div id="cfreq-theme-panel" class="cfreq-theme-panel" style="display:none">'
     +   '<div class="cfreq-theme-grid">' + themeGridHtml + '</div>'
+    +   '<div id="cfreq-theme-editor"></div>'
     + '</div>'
     + '<div id="cfreq-content">' + _renderGlobalRows(freqData) + '</div>'
     + '<div class="cfreq-actions">'
@@ -3446,44 +3544,121 @@ function _cfreqSetMode(mode) {
 // ── Themen-Panel Toggle ───────────────────────────────────
 function _cfreqToggleThemePanel() {
   _cfreqThemePanelOpen = !_cfreqThemePanelOpen;
+  if (!_cfreqThemePanelOpen) {
+    _cfreqActiveTheme = null;
+    document.querySelectorAll('.cfreq-theme-card').forEach(c => c.classList.remove('active'));
+    const ed = document.getElementById('cfreq-theme-editor');
+    if (ed) ed.innerHTML = '';
+  }
   const panel = document.getElementById('cfreq-theme-panel');
   const btn   = document.getElementById('cfreqThemeBtn');
   if (panel) panel.style.display = _cfreqThemePanelOpen ? '' : 'none';
   if (btn)   btn.classList.toggle('active', _cfreqThemePanelOpen);
 }
 
-// ── Thema anwenden ────────────────────────────────────────
-function _cfreqApplyTheme(themeId) {
-  const theme = CFREQ_THEMES.find(t => t.id === themeId);
-  if (!theme) return;
+// ── Thema auswählen (Klick auf Karte) ────────────────────
+function _cfreqSelectTheme(themeId) {
+  const th = CFREQ_THEMES.find(t => t.id === themeId);
+  if (!th) return;
+  // Nochmal klicken → Auswahl aufheben
+  if (_cfreqActiveTheme && _cfreqActiveTheme.id === themeId) {
+    _cfreqActiveTheme = null;
+    document.querySelectorAll('.cfreq-theme-card').forEach(c => c.classList.remove('active'));
+    _cfreqRenderThemeEditor();
+    return;
+  }
+  _cfreqActiveTheme = { id: themeId, name: th.name, icon: th.icon,
+    colors: [...th.colors], selected: th.colors.map(() => true) };
+  document.querySelectorAll('.cfreq-theme-card').forEach(c => c.classList.remove('active'));
+  document.getElementById('cfreq-tcard-' + themeId)?.classList.add('active');
+  _cfreqRenderThemeEditor();
+}
 
-  // Alle eindeutigen Non-Default-Farben aus Quell-Items sammeln
+// ── Editor rendern ────────────────────────────────────────
+function _cfreqRenderThemeEditor() {
+  const el = document.getElementById('cfreq-theme-editor');
+  if (!el) return;
+  if (!_cfreqActiveTheme) { el.innerHTML = ''; return; }
+  const th = _cfreqActiveTheme;
+  const selCnt = th.selected.filter(Boolean).length;
+
+  const swatchCols = th.colors.map((c, i) => {
+    const on = th.selected[i];
+    const canR = i < th.colors.length - 1;
+    return '<div class="cfreq-te-col">'
+      + '<div class="cfreq-te-sw' + (on ? ' on' : '') + '" style="background:' + c + '"'
+      +   ' onclick="_cfreqThemeSwatchToggle(' + i + ')" title="' + (on ? 'Abwählen' : 'Auswählen') + '">'
+      +   (on ? '<span class="cfreq-te-ck">✓</span>' : '') + '</div>'
+      + (canR ? '<button class="cfreq-te-swap" onclick="_cfreqThemeSwapColors(' + i + ',' + (i+1) + ')" title="Tauschen">⇄</button>'
+              : '<span class="cfreq-te-swph"></span>')
+      + '</div>';
+  }).join('');
+
+  el.innerHTML = '<div class="cfreq-te-wrap">'
+    + '<div class="cfreq-te-hdr">'
+    +   '<span class="cfreq-te-nm">' + escHtml(th.icon + ' ' + th.name) + '</span>'
+    +   '<span class="cfreq-te-cnt">' + selCnt + ' von ' + th.colors.length + ' Farbe' + (th.colors.length!==1?'n':'') + ' gewählt</span>'
+    + '</div>'
+    + '<div class="cfreq-te-row">' + swatchCols + '</div>'
+    + '<div class="cfreq-te-acts">'
+    +   '<button class="btn btn-primary cfreq-te-btn" onclick="_cfreqApplyActiveTheme()"' + (selCnt===0?' disabled':'') + '>✓ Anwenden</button>'
+    +   '<button class="btn cfreq-te-btn" onclick="_cfreqCancelTheme()">✕</button>'
+    + '</div>'
+    + '</div>';
+}
+
+// ── Swatch ein/ausschalten ────────────────────────────────
+function _cfreqThemeSwatchToggle(idx) {
+  if (!_cfreqActiveTheme) return;
+  const s = _cfreqActiveTheme.selected;
+  if (s[idx] && s.filter(Boolean).length <= 1) {
+    showStatus('⚠️ Mindestens 1 Farbe muss ausgewählt sein', 'info'); return;
+  }
+  s[idx] = !s[idx];
+  _cfreqRenderThemeEditor();
+}
+
+// ── Farben tauschen ───────────────────────────────────────
+function _cfreqThemeSwapColors(i, j) {
+  if (!_cfreqActiveTheme) return;
+  const c = _cfreqActiveTheme.colors, s = _cfreqActiveTheme.selected;
+  [c[i], c[j]] = [c[j], c[i]];
+  [s[i], s[j]] = [s[j], s[i]];
+  _cfreqRenderThemeEditor();
+}
+
+// ── Editor abbrechen ──────────────────────────────────────
+function _cfreqCancelTheme() {
+  _cfreqActiveTheme = null;
+  document.querySelectorAll('.cfreq-theme-card').forEach(c => c.classList.remove('active'));
+  _cfreqRenderThemeEditor();
+}
+
+// ── Thema mit gewählten Farben anwenden ───────────────────
+function _cfreqApplyActiveTheme() {
+  if (!_cfreqActiveTheme) return;
+  const th = _cfreqActiveTheme;
+  const selColors = th.colors.filter((_, i) => th.selected[i]);
+  if (!selColors.length) { showStatus('⚠️ Keine Farbe ausgewählt', 'info'); return; }
+
+  // Outfit-Farben sammeln
   const colSet = new Set();
   (_cfreqSrcItems || []).forEach(item => {
     const cols = Array.isArray(item.colors) ? item.colors : (item.colors ? [item.colors] : []);
-    cols.forEach(c => {
-      if (c && c !== 'Default' && /^#[0-9a-fA-F]{6}$/i.test(c)) colSet.add(c.toLowerCase());
-    });
+    cols.forEach(c => { if (c && c !== 'Default' && /^#[0-9a-fA-F]{6}$/i.test(c)) colSet.add(c.toLowerCase()); });
   });
-  if (!colSet.size) { showStatus('⚠️ Keine Farben im Outfit gefunden', 'info'); return; }
+  if (!colSet.size) { showStatus('⚠️ Keine Farben im Outfit', 'info'); return; }
 
-  // Outfit-Farben und Theme-Farben je nach Helligkeit sortieren (dunkel → hell)
-  const outfitCols = [...colSet].sort((a,b) => _hexToHsl(a).l - _hexToHsl(b).l);
-  const themeCols  = [...theme.colors].sort((a,b) => _hexToHsl(a).l - _hexToHsl(b).l);
+  // Beide nach Helligkeit sortieren und mappen
+  const outfitCols = [...colSet].sort((a, b) => _hexToHsl(a).l - _hexToHsl(b).l);
+  const themeCols  = [...selColors].sort((a, b) => _hexToHsl(a).l - _hexToHsl(b).l);
 
-  // Mapping: Outfit-Farbe → passende Theme-Farbe (Helligkeit gleich bleibt relativ erhalten)
-  _cfreqChanges          = {};
-  _cfreqItemChanges      = {};
-  _cfreqLinked           = new Set();
-  _cfreqLinkedShift      = new Set();
-  _cfreqLinkedItems      = new Set();
-  _cfreqLinkedItemsShift = new Set();
+  _cfreqChanges = {}; _cfreqItemChanges = {};
+  _cfreqLinked = new Set(); _cfreqLinkedShift = new Set();
+  _cfreqLinkedItems = new Set(); _cfreqLinkedItemsShift = new Set();
+  outfitCols.forEach((hex, i) => { _cfreqChanges[hex] = themeCols[i % themeCols.length]; });
 
-  outfitCols.forEach((hex, i) => {
-    _cfreqChanges[hex] = themeCols[i % themeCols.length];
-  });
-
-  // Inhalt neu rendern (respektiert nun _cfreqChanges)
+  // Inhalt neu rendern
   const content = document.getElementById('cfreq-content');
   if (content) {
     content.innerHTML = (_cfreqViewMode === 'global')
@@ -3491,14 +3666,15 @@ function _cfreqApplyTheme(themeId) {
       : _renderItemRows(_cfreqSrcItems || []);
   }
 
-  // Theme-Panel schließen
+  // Panel schließen
   _cfreqThemePanelOpen = false;
+  _cfreqActiveTheme = null;
   const panel = document.getElementById('cfreq-theme-panel');
   const btn   = document.getElementById('cfreqThemeBtn');
   if (panel) panel.style.display = 'none';
   if (btn)   btn.classList.remove('active');
 
-  showStatus('🎨 Thema "' + theme.name + '" angewendet · Testen oder Speichern', 'success');
+  showStatus('🎨 "' + th.name + '" · ' + selColors.length + ' Farbe' + (selColors.length!==1?'n':'') + ' angewendet · Testen oder Speichern', 'success');
 }
 
 // ── Global: Picker + Hex ──────────────────────────────────
