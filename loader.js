@@ -532,7 +532,9 @@ window.CurseScanner = (() => {
       'Corset','SocksRight'
     ];
     for (const g of gruppen) {
-      if (typeof AssetGet === 'function' && AssetGet('Female3DCG', g, itemName)) return g;
+      const _fam = (typeof Player !== 'undefined' && Player.AssetFamily) ? Player.AssetFamily : 'Female3DCG';
+      if (typeof AssetGet === 'function' && (AssetGet(_fam, g, itemName) || AssetGet('Female3DCG', g, itemName))) return g;
+      if (typeof Asset !== 'undefined' && Asset.find(function(a){return a.Name===itemName&&a.Group&&a.Group.Name===g;})) return g;
     }
     return null;
   }

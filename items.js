@@ -7518,8 +7518,15 @@ function applyNewLock(mk, group) {
   code += 'if(!_item){throw new Error("Item nicht gefunden: ' + group + '");}\n';
   code += 'if(!_item.Property)_item.Property={};\n';
 
-  // Look up the lock asset — present for all vanilla BC locks; may be null for unregistered mods
-  code += 'var _lockAsset=AssetGet("Female3DCG","ItemMisc",' + JSON.stringify(lockType) + ');\n';
+  // Look up the lock asset.
+  // AssetGet(Family, Group, Name) — use Player.AssetFamily (not hardcoded "Female3DCG")
+  // because BC forks / mod hosts may use a different family string.
+  // Fall back to direct Asset.find() in case AssetGet is unavailable or has different arity.
+  code += 'var _lockAsset=(typeof AssetGet==="function"'
+        + '?(AssetGet(Player.AssetFamily,"ItemMisc",' + JSON.stringify(lockType) + ')'
+        + '||AssetGet("Female3DCG","ItemMisc",' + JSON.stringify(lockType) + '))'
+        + ':null)'
+        + '||(typeof Asset!=="undefined"?Asset.find(function(a){return a.Name===' + JSON.stringify(lockType) + '&&a.Group&&a.Group.Name==="ItemMisc";}):null);\n';
   code += 'if(_lockAsset){\n';
 
   // ── Normal path: InventoryLock ─────────────────────────────────────────────
