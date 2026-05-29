@@ -7412,39 +7412,16 @@ const _APPLY_LOCK_TYPES = [
 ];
 
 function _buildLockApplyPanelHtml(mk, li) {
-  const defType = 'MetalPadlock';
-  const defMeta = _lockMeta(defType);
-  const opts = _APPLY_LOCK_TYPES.map(function(o) {
-    return '<option value="' + o.v + '"' + (o.v === defType ? ' selected' : '') + '>' + o.l + '</option>';
-  }).join('');
-  return '<div class="lk-apply-panel" id="lockApply-' + mk + '-' + escHtml(li.group) + '">'
-    + '<div class="lk-edit-row">'
-    + '<span class="lk-edit-lbl">🔒 Typ</span>'
-    + '<select class="lk-apply-type" onchange="_onLockTypeChange(\'' + mk + '\',\'' + escHtml(li.group) + '\')">'
-    + opts + '</select>'
-    + '</div>'
-    + '<div class="lk-edit-row lk-apply-timer-row" style="display:' + (defMeta.hasTimer ? '' : 'none') + '">'
-    + '<span class="lk-edit-lbl">⏱ Zeit</span>'
-    + '<div class="lk-edit-inputs">'
-    + '<input type="number" class="lk-input lk-edit-h" min="0" max="720" value="1" placeholder="0"> <span class="lk-edit-unit">h</span>'
-    + '<input type="number" class="lk-input lk-edit-m" min="0" max="59"  value="0" placeholder="0"> <span class="lk-edit-unit">min</span>'
-    + '</div></div>'
-    + '<div class="lk-edit-row lk-apply-pw-row" style="display:' + (defMeta.hasPw ? '' : 'none') + '">'
-    + '<span class="lk-edit-lbl">🔑 PW</span>'
-    + '<input type="text" class="lk-input lk-apply-pw" maxlength="8" placeholder="Passwort (max 8)">'
-    + '</div>'
-    + '<div class="lk-edit-row lk-apply-hint-row" style="display:' + (defMeta.hasHint ? '' : 'none') + '">'
-    + '<span class="lk-edit-lbl">💬 Hinweis</span>'
-    + '<input type="text" class="lk-input lk-apply-hint" maxlength="64" placeholder="Hinweis (optional)">'
-    + '</div>'
-    + '<div class="lk-edit-row lk-apply-combo-row" style="display:' + (defMeta.hasCombo ? '' : 'none') + '">'
-    + '<span class="lk-edit-lbl">🔢 Kombi</span>'
-    + '<input type="text" class="lk-input lk-apply-combo" maxlength="4" placeholder="0000">'
-    + '</div>'
-    + '<div class="lk-edit-actions">'
-    + '<button class="btn btn-primary lk-edit-btn-sm" onclick="applyNewLock(\'' + mk + '\',\'' + escHtml(li.group) + '\')">🔒 Sperren</button>'
-    + '<button class="btn lk-edit-btn-sm" onclick="toggleApplyLock(\'' + mk + '\',\'' + escHtml(li.group) + '\')">✕</button>'
-    + '</div>'
+  // Lock application via extension is blocked by BC's server-side anti-cheat:
+  // the server validates that the padlock was consumed from the locker's inventory
+  // via BC's own item menu. Any lock applied from injected code is stripped on sync.
+  // Editing EXISTING locks (timer/password/hint) still works fine.
+  return '<div class="lk-apply-panel lk-apply-info" id="lockApply-' + mk + '-' + escHtml(li.group) + '">'
+    + '<p class="lk-apply-note">'
+    + '⚠️ Schloss anlegen ist nur über BCs eigenes Interface möglich.<br>'
+    + 'BCs Anti-Cheat-System blockiert das Setzen neuer Schlösser via Extension.<br>'
+    + '<small>Timer/Passwort/Hinweis an <em>bestehenden</em> Schlössern können hier bearbeitet werden.</small>'
+    + '</p>'
     + '</div>';
 }
 
