@@ -7412,16 +7412,39 @@ const _APPLY_LOCK_TYPES = [
 ];
 
 function _buildLockApplyPanelHtml(mk, li) {
-  // Lock application via extension is blocked by BC's server-side anti-cheat:
-  // the server validates that the padlock was consumed from the locker's inventory
-  // via BC's own item menu. Any lock applied from injected code is stripped on sync.
-  // Editing EXISTING locks (timer/password/hint) still works fine.
-  return '<div class="lk-apply-panel lk-apply-info" id="lockApply-' + mk + '-' + escHtml(li.group) + '">'
-    + '<p class="lk-apply-note">'
-    + '⚠️ Schloss anlegen ist nur über BCs eigenes Interface möglich.<br>'
-    + 'BCs Anti-Cheat-System blockiert das Setzen neuer Schlösser via Extension.<br>'
-    + '<small>Timer/Passwort/Hinweis an <em>bestehenden</em> Schlössern können hier bearbeitet werden.</small>'
-    + '</p>'
+  const defType = 'MetalPadlock';
+  const defMeta = _lockMeta(defType);
+  const opts = _APPLY_LOCK_TYPES.map(function(o) {
+    return '<option value="' + o.v + '"' + (o.v === defType ? ' selected' : '') + '>' + o.l + '</option>';
+  }).join('');
+  return '<div class="lk-apply-panel" id="lockApply-' + mk + '-' + escHtml(li.group) + '">'
+    + '<div class="lk-edit-row">'
+    + '<span class="lk-edit-lbl">🔒 Typ</span>'
+    + '<select class="lk-apply-type" onchange="_onLockTypeChange(\'' + mk + '\',\'' + escHtml(li.group) + '\')">'
+    + opts + '</select>'
+    + '</div>'
+    + '<div class="lk-edit-row lk-apply-timer-row" style="display:' + (defMeta.hasTimer ? '' : 'none') + '">'
+    + '<span class="lk-edit-lbl">⏱ Zeit</span>'
+    + '<div class="lk-edit-inputs">'
+    + '<input type="number" class="lk-input lk-edit-h" min="0" max="720" value="1" placeholder="0"> <span class="lk-edit-unit">h</span>'
+    + '<input type="number" class="lk-input lk-edit-m" min="0" max="59"  value="0" placeholder="0"> <span class="lk-edit-unit">min</span>'
+    + '</div></div>'
+    + '<div class="lk-edit-row lk-apply-pw-row" style="display:' + (defMeta.hasPw ? '' : 'none') + '">'
+    + '<span class="lk-edit-lbl">🔑 PW</span>'
+    + '<input type="text" class="lk-input lk-apply-pw" maxlength="8" placeholder="Passwort (max 8)">'
+    + '</div>'
+    + '<div class="lk-edit-row lk-apply-hint-row" style="display:' + (defMeta.hasHint ? '' : 'none') + '">'
+    + '<span class="lk-edit-lbl">💬 Hinweis</span>'
+    + '<input type="text" class="lk-input lk-apply-hint" maxlength="64" placeholder="Hinweis (optional)">'
+    + '</div>'
+    + '<div class="lk-edit-row lk-apply-combo-row" style="display:' + (defMeta.hasCombo ? '' : 'none') + '">'
+    + '<span class="lk-edit-lbl">🔢 Kombi</span>'
+    + '<input type="text" class="lk-input lk-apply-combo" maxlength="4" placeholder="0000">'
+    + '</div>'
+    + '<div class="lk-edit-actions">'
+    + '<button class="btn btn-primary lk-edit-btn-sm" onclick="applyNewLock(\'' + mk + '\',\'' + escHtml(li.group) + '\')">🔒 Sperren</button>'
+    + '<button class="btn lk-edit-btn-sm" onclick="toggleApplyLock(\'' + mk + '\',\'' + escHtml(li.group) + '\')">✕</button>'
+    + '</div>'
     + '</div>';
 }
 
@@ -7431,12 +7454,11 @@ function _onLockTypeChange(mk, group) {
   if (!panel) return;
   const lockType = panel.querySelector('.lk-apply-type')?.value;
   if (!lockType) return;
-  const meta     = _lockMeta(lockType);
-  const timerRow = panel.querySelector('.lk-apply-timer-row');
+  const meta = _lockMeta(lockType);
+  panel.querySelectorAll('.lk-apply-timer-row').forEach(function(el){ el.style.display = meta.hasTimer ? '' : 'none'; });
   const pwRow    = panel.querySelector('.lk-apply-pw-row');
   const hintRow  = panel.querySelector('.lk-apply-hint-row');
   const comboRow = panel.querySelector('.lk-apply-combo-row');
-  if (timerRow) timerRow.style.display = meta.hasTimer ? '' : 'none';
   if (pwRow)    pwRow.style.display    = meta.hasPw    ? '' : 'none';
   if (hintRow)  hintRow.style.display  = meta.hasHint  ? '' : 'none';
   if (comboRow) comboRow.style.display = meta.hasCombo ? '' : 'none';
@@ -7471,86 +7493,96 @@ function applyNewLock(mk, group) {
 
   const mkNum = parseInt(mk);
   const expMs = timerSec > 0 ? (Date.now() + timerSec * 1000) : 0;
-  const isSelf = String(mk) === String(_myMemberNumber);
+  const hasExtras = timerSec > 0 || password !== null || hint !== null || combo !== null;
 
-  // ── EXEC ─────────────────────────────────────────────────────────────────
-  // ROOT CAUSE: BC's ValidationResolveAppearanceDiff (anti-cheat + BCX) strips any
-  // lock properties set via direct Property assignment.  The ONLY way a lock survives
-  // validation is to apply it through BC's own InventoryLock() function, which
-  // BC's validator recognises as a legitimate state transition.
+  // ── Phase 1: Apply lock via InventoryLock — DOGS pattern ─────────────────
+  // DOGS calls: InventoryLock(C, item, "LockTypeName", memberNumber)
+  //   - STRING lock type (not asset object)
+  //   - NO update parameter (defaults to undefined → BC treats as true)
+  //   - With Update=true BC calls CharacterRefresh + ChatRoomCharacterUpdate internally
+  //   - DOGS/BCX register this as a pending-change → validation passes on echo
   //
-  // APPROACH: temporarily inject the padlock into Player.Inventory so InventoryLock()
-  // finds + consumes it (that's what it normally does when a player locks from bag),
-  // then let InventoryLock handle all internal state.  Afterwards override timer/pw/hint
-  // with our desired values on the fresh item reference.
-  //
-  // FALLBACK: if AssetGet returns null (mod lock like Devious), fall back to direct
-  // property assignment + CharacterRefresh (may not survive server validation but
-  // is the best we can do without the asset in BC's registry).
+  // KEY: Player.Inventory must contain the padlock for InventoryGet to find it.
+  // We add a minimal entry temporarily; InventoryLock consumes (removes) it.
+  // Do NOT call any additional sync — InventoryLock's internal Update=true handles it.
+  // A manual 2nd sync would consume BCX's pending state and undo the lock.
   let code = '(function(){\ntry{\n';
   code += 'var C=(ChatRoomCharacter||[]).find(function(c){return c.MemberNumber===' + mkNum + ';});\n';
   code += 'if(!C&&Player.MemberNumber===' + mkNum + ')C=Player;\n';
   code += 'if(!C){throw new Error("Char #' + mkNum + ' nicht gefunden");}\n';
   code += 'var _item=InventoryGet(C,' + JSON.stringify(group) + ');\n';
   code += 'if(!_item){throw new Error("Item nicht gefunden: ' + group + '");}\n';
-  code += 'if(!_item.Property)_item.Property={};\n';
-
-  // Look up the lock asset — try every known lookup method in this BC fork.
-  // Final fallback: synthesize a minimal asset so InventoryLock is ALWAYS called
-  // (never fall through to the direct-property path, which can't pass BCX validation).
-  code += 'var _lockAsset='
-        + '(typeof AssetGet==="function"?(AssetGet(Player.AssetFamily,"ItemMisc",' + JSON.stringify(lockType) + ')||AssetGet("Female3DCG","ItemMisc",' + JSON.stringify(lockType) + ')):null)'
-        + '||(typeof Asset!=="undefined"?Asset.find(function(a){return a.Name===' + JSON.stringify(lockType) + '&&a.Group&&(a.Group.Name==="ItemMisc"||a.Group==="ItemMisc");}):null)'
-        + '||(typeof Asset!=="undefined"?Asset.find(function(a){return a.Name===' + JSON.stringify(lockType) + ';}):null)'
-        + '||{Name:' + JSON.stringify(lockType) + ',Group:{Name:"ItemMisc"}};\n';
-
-  // ── InventoryLock path ────────────────────────────────────────────────────
-  // Set all desired properties BEFORE calling InventoryLock so they survive
-  // even if InventoryLock (with Update=false) doesn't call CharacterRefresh.
-  // Then InventoryLock adds LockedBy/LockMemberNumber and registers BCX's
-  // pending-change state, which is what makes the lock survive validation.
-  // Sync IMMEDIATELY after (no delay) — BCX's pending state has a short expiry.
-  code += 'if(!_item.Property)_item.Property={};\n';
-  code += '_item.Property.LockedBy=' + JSON.stringify(lockType) + ';\n';
-  code += '_item.Property.LockMemberNumber=Player.MemberNumber;\n';
-  if (timerSec > 0) {
-    code += '_item.Property.TimerReal=' + expMs + ';\n';
-    code += '_item.Property.RemoveTimer=' + expMs + ';\n';  // epoch-ms, NOT seconds
-    code += '_item.Property.ShowTimer=true;\n';
-  }
-  if (password !== null) code += '_item.Property.Password=' + JSON.stringify(password) + ';\n';
-  if (hint     !== null) code += '_item.Property.Hint='     + JSON.stringify(hint)     + ';\n';
-  if (combo    !== null) code += '_item.Property.CombinationNumber=' + JSON.stringify(combo) + ';\n';
-
-  // Call InventoryLock — this is what registers with BCX; wrapped in try/catch
-  // in case the synthetic asset is missing properties BC needs internally.
-  code += 'var _ilOk=false;\n';
-  code += 'try{InventoryLock(C,_item,{Asset:_lockAsset},Player.MemberNumber,false);_ilOk=true;}catch(e){console.warn("InventoryLock err:",e.message);}\n';
-  code += 'console.log("InventoryLock ok:",_ilOk,"asset:",_lockAsset.Name);\n';
-
-  // Re-get item (InventoryLock may have updated the reference) and re-apply overrides
-  code += 'var _item2=InventoryGet(C,' + JSON.stringify(group) + ')||_item;\n';
-  code += 'if(!_item2.Property)_item2.Property={};\n';
-  if (timerSec > 0) {
-    code += '_item2.Property.TimerReal=' + expMs + ';\n';
-    code += '_item2.Property.RemoveTimer=' + expMs + ';\n';
-    code += '_item2.Property.ShowTimer=true;\n';
-  }
-  if (password !== null) code += '_item2.Property.Password=' + JSON.stringify(password) + ';\n';
-  if (hint     !== null) code += '_item2.Property.Hint='     + JSON.stringify(hint)     + ';\n';
-  if (combo    !== null) code += '_item2.Property.CombinationNumber=' + JSON.stringify(combo) + ';\n';
-
-  // Sync immediately — before BCX pending state expires
-  code += 'if(C.MemberNumber===Player.MemberNumber){ServerPlayerAppearanceSync();ChatRoomCharacterUpdate(C);}else{ChatRoomCharacterUpdate(C);}\n';
+  // Add padlock to inventory if not present (InventoryLock needs to find it via InventoryGet)
+  code += 'if(!Player.Inventory.some(function(i){return i.Asset&&i.Asset.Name===' + JSON.stringify(lockType) + ';})){\n';
+  code += '  Player.Inventory.push({Asset:{Name:' + JSON.stringify(lockType) + ',Group:{Name:"ItemMisc"}}});\n';
+  code += '}\n';
+  // Call exactly as DOGS does: string type, no update param (→ Update=true internally)
+  code += 'InventoryLock(C,_item,' + JSON.stringify(lockType) + ',Player.MemberNumber);\n';
   code += 'console.log("✅ Lock vergeben: ' + lockType + ' → ' + group + '");\n';
-
   code += '}catch(e){console.error("❌ applyNewLock:",e.message);}\n})();';
 
   bcSend({ type: 'EXEC', code });
   showStatus('🔒 ' + meta.icon + ' ' + meta.label + ' → ' + group, 'success');
   _locksApplyOpen = null;
   _locksShowLockable.add(String(mk));
-  setTimeout(scanLocks, 1600);  // after the 600ms BC sync + some margin
+
+  // ── Phase 2 (1.5s later): set timer/pw/hint/combo on the now-valid lock ──
+  // The lock is now established and BCX-validated. Modifying its parameters
+  // (timer/password/hint) goes through the lenient "edit existing lock" path
+  // which doesn't require a pending-change registration.
+  if (hasExtras) {
+    setTimeout(function() {
+      let code2 = '(function(){\ntry{\n';
+      code2 += 'var C=(ChatRoomCharacter||[]).find(function(c){return c.MemberNumber===' + mkNum + ';});\n';
+      code2 += 'if(!C&&Player.MemberNumber===' + mkNum + ')C=Player;\n';
+      code2 += 'if(!C)throw new Error("Char nicht gefunden");\n';
+      code2 += 'var _item=InventoryGet(C,' + JSON.stringify(group) + ');\n';
+      code2 += 'if(!_item||!_item.Property)throw new Error("Item/Lock nicht gefunden");\n';
+      if (timerSec > 0) {
+        code2 += '_item.Property.TimerReal=' + expMs + ';\n';
+        code2 += '_item.Property.RemoveTimer=' + expMs + ';\n';
+        code2 += '_item.Property.ShowTimer=true;\n';
+      }
+      if (password !== null) code2 += '_item.Property.Password=' + JSON.stringify(password) + ';\n';
+      if (hint     !== null) code2 += '_item.Property.Hint='     + JSON.stringify(hint)     + ';\n';
+      if (combo    !== null) code2 += '_item.Property.CombinationNumber=' + JSON.stringify(combo) + ';\n';
+      code2 += 'setTimeout(function(){\n';
+      code2 += '  if(C.MemberNumber===Player.MemberNumber){ServerPlayerAppearanceSync();ChatRoomCharacterUpdate(C);}';
+      code2 += '  else{ChatRoomCharacterUpdate(C);}\n';
+      code2 += '},300);\n';
+      code2 += 'console.log("✅ Lock-Extras gesetzt: ' + group + '");\n';
+      code2 += '}catch(e){console.error("❌ Lock-Extras:",e.message);}\n})();';
+      bcSend({ type: 'EXEC', code: code2 });
+    }, 1500);
+  }
+
+  setTimeout(scanLocks, hasExtras ? 3000 : 1600);
+}
+
+// FuSam-Mod /lock command — fallback for timer/PW locks that server-validation strips on EXEC
+// Format: /lock "MEMBER_NUMBER" LOCK_INDEX  (index = 1-based position in _APPLY_LOCK_TYPES)
+function applyFusamLock(mk, group) {
+  if (!_connected) { showStatus('❌ Nicht verbunden', 'error'); return; }
+  const panel = document.getElementById('lockApply-' + mk + '-' + group);
+  if (!panel) return;
+  const lockType = panel.querySelector('.lk-apply-type')?.value;
+  if (!lockType) { showStatus('⚠️ Kein Lock-Typ ausgewählt', 'info'); return; }
+  const lockIdx = _APPLY_LOCK_TYPES.findIndex(function(o){ return o.v === lockType; }) + 1;
+  if (!lockIdx) { showStatus('❌ Lock-Typ nicht gefunden', 'error'); return; }
+  const mkNum = parseInt(mk);
+  const cmd = '/lock "' + mkNum + '" ' + lockIdx;
+  const code = '(function(){'
+    + 'try{'
+    + 'var _cmd=' + JSON.stringify(cmd) + ';'
+    + 'if(typeof ChatRoomSendChat==="function"){ChatRoomSendChat(_cmd);}'
+    + 'else{ServerSend("ChatRoomChat",{Type:"Chat",Content:_cmd});}'
+    + 'console.log("FuSam /lock gesendet:",_cmd);'
+    + '}catch(e){console.error("FuSam error:",e.message);}'
+    + '})();';
+  bcSend({ type: 'EXEC', code });
+  showStatus('📩 FuSam: ' + cmd, 'info');
+  _locksApplyOpen = null;
+  setTimeout(scanLocks, 2000);
 }
 
 // Edit actions ────────────────────────────────────────
