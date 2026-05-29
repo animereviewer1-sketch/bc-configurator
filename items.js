@@ -7497,10 +7497,12 @@ function applyNewLock(mk, group) {
   const isSelf = String(mk) === String(_myMemberNumber);
 
   // ── EXEC ─────────────────────────────────────────────────────────────────
-  // Key insight: CharacterRefresh() can reset Property.Password and timer fields.
-  // Solution: set ALL specific properties AGAIN after CharacterRefresh.
-  // Also: InventoryLock() requires the padlock in player inventory for some lock
-  // types → use direct property assignment (always works via EXEC).
+  // KEY: "Sandwich" pattern — set ALL properties BEFORE CharacterRefresh so BC
+  // doesn't see an invalid lock (e.g. timer lock with RemoveTimer=undefined → BC
+  // treats as expired and removes LockedBy during refresh).  Then CharacterRefresh
+  // runs the display update.  Then re-set specifics AGAIN after refresh in case the
+  // lock's ExtendedItem Init reset them.  InventoryLock() skipped — requires padlock
+  // in player inventory; direct Property assignment always works via EXEC.
   let code = '(function(){\ntry{\n';
   code += 'var C=(ChatRoomCharacter||[]).find(function(c){return c.MemberNumber===' + mkNum + ';});\n';
   code += 'if(!C&&Player.MemberNumber===' + mkNum + ')C=Player;\n';
@@ -7509,17 +7511,27 @@ function applyNewLock(mk, group) {
   code += 'if(!_item){throw new Error("Item nicht gefunden: ' + group + '");}\n';
   code += 'if(!_item.Property)_item.Property={};\n';
 
-  // Step 1: establish lock type
+  // Step 1: set EVERYTHING before CharacterRefresh so BC sees a fully valid lock
   code += '_item.Property.LockedBy=' + JSON.stringify(lockType) + ';\n';
   code += '_item.Property.LockMemberNumber=Player.MemberNumber;\n';
+  if (timerSec > 0) {
+    code += '_item.Property.TimerReal=' + expMs + ';\n';
+    code += '_item.Property.RemoveTimer=' + expMs + ';\n';   // epoch-ms, NOT seconds
+    code += '_item.Property.ShowTimer=true;\n';
+  }
+  if (password !== null) code += '_item.Property.Password=' + JSON.stringify(password) + ';\n';
+  if (hint     !== null) code += '_item.Property.Hint='     + JSON.stringify(hint)     + ';\n';
+  if (combo    !== null) code += '_item.Property.CombinationNumber=' + JSON.stringify(combo) + ';\n';
 
   // Step 2: local display refresh
   code += 'CharacterRefresh(C,false,false);\n';
 
-  // Step 3: re-apply specifics AFTER CharacterRefresh (which may reset them)
+  // Step 3: re-apply AGAIN after CharacterRefresh (ExtendedItem Init may have reset them)
+  code += '_item.Property.LockedBy=' + JSON.stringify(lockType) + ';\n';
+  code += '_item.Property.LockMemberNumber=Player.MemberNumber;\n';
   if (timerSec > 0) {
     code += '_item.Property.TimerReal=' + expMs + ';\n';
-    code += '_item.Property.RemoveTimer=' + expMs + ';\n';   // epoch-ms, NOT seconds
+    code += '_item.Property.RemoveTimer=' + expMs + ';\n';
     code += '_item.Property.ShowTimer=true;\n';
   }
   if (password !== null) code += '_item.Property.Password=' + JSON.stringify(password) + ';\n';
@@ -7582,15 +7594,17 @@ function applyLockEdit(mk, group) {
   const mkNum  = parseInt(mk);
   const expMs  = wantsTimer ? (Date.now() + timerSec * 1000) : 0;
 
+  // KEY: No CharacterRefresh here — the lock type isn't changing, only its parameters.
+  // CharacterRefresh calls the lock's ExtendedItem Init which specifically resets
+  // Property.Password (and potentially other fields) back to defaults.  Skipping it
+  // avoids the reset.  The sync functions below handle server + room visibility.
   let code = '(function(){\ntry{\n';
   code += 'var C=(ChatRoomCharacter||[]).find(function(c){return c.MemberNumber===' + mkNum + ';});\n';
   code += 'if(!C&&Player.MemberNumber===' + mkNum + ')C=Player;\n';
   code += 'if(!C){throw new Error("Char #' + mkNum + ' nicht gefunden");}\n';
   code += 'var _item=InventoryGet(C,' + JSON.stringify(group) + ');\n';
   code += 'if(!_item||!_item.Property){throw new Error("Item/' + group + ' nicht gefunden");}\n';
-  // Step 1: CharacterRefresh FIRST — it resets Password/Timer/etc, so we must re-set them after
-  code += 'CharacterRefresh(C,false,false);\n';
-  // Step 2: re-set all desired properties AFTER CharacterRefresh
+  // Set desired properties directly — no CharacterRefresh to avoid property reset
   if (wantsTimer) {
     // RemoveTimer = epoch ms (NOT seconds!) — same as TimerReal
     code += '_item.Property.TimerReal=' + expMs + ';\n';
@@ -7600,7 +7614,7 @@ function applyLockEdit(mk, group) {
   if (hasPw    && newPw    !== null) code += '_item.Property.Password=' + JSON.stringify(newPw) + ';\n';
   if (hasHint  && newHint  !== null) code += '_item.Property.Hint=' + JSON.stringify(newHint) + ';\n';
   if (hasCombo && newCombo !== null) code += '_item.Property.CombinationNumber=' + JSON.stringify(newCombo) + ';\n';
-  // Step 3: sync with 600ms delay so BC has time to process — both functions needed for room visibility
+  // Sync with 600ms delay — both functions needed for room visibility
   code += 'setTimeout(function(){\n';
   code += '  if(C.MemberNumber===Player.MemberNumber){ServerPlayerAppearanceSync();ChatRoomCharacterUpdate(C);}';
   code += '  else{ChatRoomCharacterUpdate(C);}\n';
