@@ -7480,67 +7480,69 @@ function applyNewLock(mk, group) {
   const lockType = panel.querySelector('.lk-apply-type')?.value;
   if (!lockType) { showStatus('⚠️ Kein Lock-Typ ausgewählt', 'info'); return; }
 
-  const meta     = _lockMeta(lockType);
-  const hEl      = panel.querySelector('.lk-edit-h');
-  const mEl      = panel.querySelector('.lk-edit-m');
-  const pwEl     = panel.querySelector('.lk-apply-pw');
-  const hintEl   = panel.querySelector('.lk-apply-hint');
-  const comboEl  = panel.querySelector('.lk-apply-combo');
+  const meta    = _lockMeta(lockType);
+  const hEl     = panel.querySelector('.lk-edit-h');
+  const mEl     = panel.querySelector('.lk-edit-m');
+  const pwEl    = panel.querySelector('.lk-apply-pw');
+  const hintEl  = panel.querySelector('.lk-apply-hint');
+  const comboEl = panel.querySelector('.lk-apply-combo');
 
   const timerSec = (meta.hasTimer && hEl && mEl) ? (parseInt(hEl.value || 0) * 3600 + parseInt(mEl.value || 0) * 60) : 0;
-  const password = (meta.hasPw    && pwEl)    ? (pwEl.value    || null) : null;
-  const hint     = (meta.hasHint  && hintEl)  ? (hintEl.value  || null) : null;
-  const combo    = (meta.hasCombo && comboEl) ? (comboEl.value || null) : null;
+  const password = (meta.hasPw    && pwEl)    ? (pwEl.value    || '') : null;
+  const hint     = (meta.hasHint  && hintEl)  ? (hintEl.value  || '') : null;
+  const combo    = (meta.hasCombo && comboEl) ? (comboEl.value || '') : null;
 
   const mkNum = parseInt(mk);
-  // expMs: epoch-ms when timer expires (RemoveTimer AND TimerReal must both be this value)
   const expMs = timerSec > 0 ? (Date.now() + timerSec * 1000) : 0;
+  const isSelf = String(mk) === String(_myMemberNumber);
 
-  // Build EXEC — use InventoryLock (proper BC path) + property overrides afterward
+  // ── EXEC ─────────────────────────────────────────────────────────────────
+  // Key insight: CharacterRefresh() can reset Property.Password and timer fields.
+  // Solution: set ALL specific properties AGAIN after CharacterRefresh.
+  // Also: InventoryLock() requires the padlock in player inventory for some lock
+  // types → use direct property assignment (always works via EXEC).
   let code = '(function(){\ntry{\n';
   code += 'var C=(ChatRoomCharacter||[]).find(function(c){return c.MemberNumber===' + mkNum + ';});\n';
   code += 'if(!C&&Player.MemberNumber===' + mkNum + ')C=Player;\n';
   code += 'if(!C){throw new Error("Char #' + mkNum + ' nicht gefunden");}\n';
-  code += 'var item=InventoryGet(C,' + JSON.stringify(group) + ');\n';
-  code += 'if(!item){throw new Error("Item nicht gefunden: ' + group + '");}\n';
-  code += 'if(!item.Property)item.Property={};\n';
+  code += 'var _item=InventoryGet(C,' + JSON.stringify(group) + ');\n';
+  code += 'if(!_item){throw new Error("Item nicht gefunden: ' + group + '");}\n';
+  code += 'if(!_item.Property)_item.Property={};\n';
 
-  // Attempt InventoryLock (proper BC function — sets LockedBy, LockMemberNumber, default props)
-  code += 'var _lkA=(typeof Asset!=="undefined")?Asset.find(function(a){return a.Name===' + JSON.stringify(lockType) + ';}):{Name:' + JSON.stringify(lockType) + '};\n';
-  code += 'if(typeof InventoryLock==="function"){\n';
-  code += '  try{InventoryLock(C,item,{Asset:_lkA||{Name:' + JSON.stringify(lockType) + '}},Player.MemberNumber,false);}catch(_e){\n';
-  // Fallback: manual property set if InventoryLock throws
-  code += '    item.Property.LockedBy=' + JSON.stringify(lockType) + ';\n';
-  code += '    item.Property.LockMemberNumber=Player.MemberNumber;\n';
-  code += '  }\n';
-  code += '}else{\n';
-  code += '  item.Property.LockedBy=' + JSON.stringify(lockType) + ';\n';
-  code += '  item.Property.LockMemberNumber=Player.MemberNumber;\n';
-  code += '}\n';
+  // Step 1: establish lock type
+  code += '_item.Property.LockedBy=' + JSON.stringify(lockType) + ';\n';
+  code += '_item.Property.LockMemberNumber=Player.MemberNumber;\n';
 
-  // Override specific properties AFTER InventoryLock (ensures our values win)
-  if (timerSec > 0) {
-    // RemoveTimer = epoch ms (NOT seconds!) — same value as TimerReal
-    code += 'item.Property.TimerReal=' + expMs + ';\n';
-    code += 'item.Property.RemoveTimer=' + expMs + ';\n';
-    code += 'item.Property.ShowTimer=true;\n';
-  }
-  if (password) code += 'item.Property.Password=' + JSON.stringify(password) + ';\n';
-  if (hint)     code += 'item.Property.Hint=' + JSON.stringify(hint) + ';\n';
-  if (combo)    code += 'item.Property.CombinationNumber=' + JSON.stringify(combo) + ';\n';
-
+  // Step 2: local display refresh
   code += 'CharacterRefresh(C,false,false);\n';
-  // Use BC-context check — reliable regardless of _myMemberNumber state
-  code += 'if(C.MemberNumber===Player.MemberNumber){ServerPlayerAppearanceSync();}else{ChatRoomCharacterUpdate(C);}\n';
-  code += 'console.log("✅ Lock vergeben: ' + lockType + ' → ' + group + '");\n';
-  code += '}catch(e){console.error("❌ applyNewLock Fehler:",e.message);}\n})();';
+
+  // Step 3: re-apply specifics AFTER CharacterRefresh (which may reset them)
+  if (timerSec > 0) {
+    code += '_item.Property.TimerReal=' + expMs + ';\n';
+    code += '_item.Property.RemoveTimer=' + expMs + ';\n';   // epoch-ms, NOT seconds
+    code += '_item.Property.ShowTimer=true;\n';
+  }
+  if (password !== null) code += '_item.Property.Password=' + JSON.stringify(password) + ';\n';
+  if (hint     !== null) code += '_item.Property.Hint='     + JSON.stringify(hint)     + ';\n';
+  if (combo    !== null) code += '_item.Property.CombinationNumber=' + JSON.stringify(combo) + ';\n';
+
+  // Step 4: sync to server + broadcast to room (600ms delay same as cfreqTest)
+  code += 'setTimeout(function(){\n';
+  code += '  if(C.MemberNumber===Player.MemberNumber){\n';
+  code += '    ServerPlayerAppearanceSync();\n';
+  code += '    ChatRoomCharacterUpdate(C);\n';
+  code += '  }else{\n';
+  code += '    ChatRoomCharacterUpdate(C);\n';
+  code += '  }\n';
+  code += '  console.log("✅ Lock vergeben: ' + lockType + ' → ' + group + '");\n';
+  code += '},600);\n';
+  code += '}catch(e){console.error("❌ applyNewLock:",e.message);}\n})();';
 
   bcSend({ type: 'EXEC', code });
-  const meta2 = _lockMeta(lockType);
-  showStatus('🔒 ' + meta2.icon + ' ' + meta2.label + ' → ' + group, 'success');
+  showStatus('🔒 ' + meta.icon + ' ' + meta.label + ' → ' + group, 'success');
   _locksApplyOpen = null;
   _locksShowLockable.add(String(mk));
-  setTimeout(scanLocks, 900);
+  setTimeout(scanLocks, 1600);  // after the 600ms BC sync + some margin
 }
 
 // Edit actions ────────────────────────────────────────
@@ -7584,26 +7586,32 @@ function applyLockEdit(mk, group) {
   code += 'var C=(ChatRoomCharacter||[]).find(function(c){return c.MemberNumber===' + mkNum + ';});\n';
   code += 'if(!C&&Player.MemberNumber===' + mkNum + ')C=Player;\n';
   code += 'if(!C){throw new Error("Char #' + mkNum + ' nicht gefunden");}\n';
-  code += 'var item=InventoryGet(C,' + JSON.stringify(group) + ');\n';
-  code += 'if(!item||!item.Property){throw new Error("Item/' + group + ' nicht gefunden");}\n';
-  if (wantsTimer) {
-    // RemoveTimer = epoch ms (same as TimerReal) — NOT seconds!
-    code += 'item.Property.TimerReal=' + expMs + ';\n';
-    code += 'item.Property.RemoveTimer=' + expMs + ';\n';
-  }
-  if (hasPw  && newPw    !== null) code += 'item.Property.Password=' + JSON.stringify(newPw) + ';\n';
-  if (hasHint && newHint !== null) code += 'item.Property.Hint=' + JSON.stringify(newHint) + ';\n';
-  if (hasCombo && newCombo !== null) code += 'item.Property.CombinationNumber=' + JSON.stringify(newCombo) + ';\n';
+  code += 'var _item=InventoryGet(C,' + JSON.stringify(group) + ');\n';
+  code += 'if(!_item||!_item.Property){throw new Error("Item/' + group + ' nicht gefunden");}\n';
+  // Step 1: CharacterRefresh FIRST — it resets Password/Timer/etc, so we must re-set them after
   code += 'CharacterRefresh(C,false,false);\n';
-  // Use BC-context check — avoids _myMemberNumber dependency
-  code += 'if(C.MemberNumber===Player.MemberNumber){ServerPlayerAppearanceSync();}else{ChatRoomCharacterUpdate(C);}\n';
+  // Step 2: re-set all desired properties AFTER CharacterRefresh
+  if (wantsTimer) {
+    // RemoveTimer = epoch ms (NOT seconds!) — same as TimerReal
+    code += '_item.Property.TimerReal=' + expMs + ';\n';
+    code += '_item.Property.RemoveTimer=' + expMs + ';\n';
+    code += '_item.Property.ShowTimer=true;\n';
+  }
+  if (hasPw    && newPw    !== null) code += '_item.Property.Password=' + JSON.stringify(newPw) + ';\n';
+  if (hasHint  && newHint  !== null) code += '_item.Property.Hint=' + JSON.stringify(newHint) + ';\n';
+  if (hasCombo && newCombo !== null) code += '_item.Property.CombinationNumber=' + JSON.stringify(newCombo) + ';\n';
+  // Step 3: sync with 600ms delay so BC has time to process — both functions needed for room visibility
+  code += 'setTimeout(function(){\n';
+  code += '  if(C.MemberNumber===Player.MemberNumber){ServerPlayerAppearanceSync();ChatRoomCharacterUpdate(C);}';
+  code += '  else{ChatRoomCharacterUpdate(C);}\n';
+  code += '},600);\n';
   code += 'console.log("✅ Lock aktualisiert: ' + group + '");\n';
   code += '}catch(e){console.error("❌ Lock-Edit Fehler:",e.message);}\n})();';
 
   bcSend({ type: 'EXEC', code });
   showStatus('✅ Lock aktualisiert', 'success');
   _locksEditOpen = null;
-  setTimeout(scanLocks, 900);
+  setTimeout(scanLocks, 1600);
 }
 
 function scanOutfits() {
