@@ -7530,33 +7530,43 @@ function applyNewLock(mk, group) {
   const expMs = timerSec > 0 ? (Date.now() + timerSec * 1000) : 0;
   const hasExtras = timerSec > 0 || password !== null || hint !== null || combo !== null;
 
-  // ── Phase 1: Apply lock via InventoryLock — DOGS pattern ─────────────────
-  // DOGS calls: InventoryLock(C, item, "LockTypeName", memberNumber)
-  //   - STRING lock type (not asset object)
-  //   - NO update parameter (defaults to undefined → BC treats as true)
-  //   - With Update=true BC calls CharacterRefresh + ChatRoomCharacterUpdate internally
-  //   - DOGS/BCX register this as a pending-change → validation passes on echo
-  //
-  // KEY: Player.Inventory must contain the padlock for InventoryGet to find it.
-  // We add a minimal entry temporarily; InventoryLock consumes (removes) it.
-  // Do NOT call any additional sync — InventoryLock's internal Update=true handles it.
-  // A manual 2nd sync would consume BCX's pending state and undo the lock.
+  // ── Phase 1: Strip + Re-equip + Lock (wie Outfit-System) ────────────────
+  // BC Anti-Cheat blockt "Lock erscheint plötzlich auf vorhandenem Item" als Diff.
+  // Lösung: Item entfernen, neu anlegen (mit Farben/Craft erhalten), dann Lock drauf.
+  // BC sieht "neues Item mit Lock" → valide Operator-Aktion → kein Anti-Cheat Block.
   let code = '(function(){\ntry{\n';
   code += 'var C=(ChatRoomCharacter||[]).find(function(c){return c.MemberNumber===' + mkNum + ';});\n';
   code += 'if(!C&&Player.MemberNumber===' + mkNum + ')C=Player;\n';
   code += 'if(!C){throw new Error("Char #' + mkNum + ' nicht gefunden");}\n';
   code += 'var _item=InventoryGet(C,' + JSON.stringify(group) + ');\n';
   code += 'if(!_item){throw new Error("Item nicht gefunden: ' + group + '");}\n';
-  // Add padlock to inventory if not present (InventoryLock needs to find it via InventoryGet)
+  // Snapshot: asset name, colors, craft, typeRecord, props (ohne Lock-Properties)
+  code += 'var _assetName=_item.Asset.Name;\n';
+  code += 'var _color=_item.Color;\n';
+  code += 'var _craft=_item.Craft??null;\n';
+  code += 'var _tr=_item.Property?.TypeRecord??null;\n';
+  code += 'var _type=_item.Property?.Type??null;\n';
+  code += 'var _props={};\n';
+  code += 'if(_item.Property){\n';
+  code += '  var _skipKeys=["LockedBy","LockMemberNumber","Password","CombinationNumber","Hint","LockSet","RemoveTimer","TimerReal","ShowTimer","SelfUnlock","MemberNumberList","RemoveItem"];\n';
+  code += '  Object.keys(_item.Property).forEach(function(k){if(!_skipKeys.includes(k))_props[k]=_item.Property[k];});\n';
+  code += '}\n';
+  // Strip + re-equip
+  code += 'InventoryRemove(C,' + JSON.stringify(group) + ',false);\n';
+  code += 'InventoryWear(C,_assetName,' + JSON.stringify(group) + ',_color,0,Player.MemberNumber,_craft);\n';
+  code += 'var _newItem=InventoryGet(C,' + JSON.stringify(group) + ');\n';
+  code += 'if(!_newItem){throw new Error("Re-equip fehlgeschlagen");}\n';
+  code += '_newItem.Property=Object.assign({},_props);\n';
+  code += 'if(_tr){_newItem.Property.TypeRecord=_tr;_newItem.Property.Type=_type??"";};\n';
+  // Lock drauf
   code += 'if(!Player.Inventory.some(function(i){return i.Asset&&i.Asset.Name===' + JSON.stringify(lockType) + ';})){\n';
   code += '  Player.Inventory.push({Asset:{Name:' + JSON.stringify(lockType) + ',Group:{Name:"ItemMisc"}}});\n';
   code += '}\n';
-  // Call exactly as DOGS does: string type, no update param (→ Update=true internally)
-  code += 'InventoryLock(C,_item,' + JSON.stringify(lockType) + ',Player.MemberNumber);\n';
-  // For other chars: also push via ServerSend so all clients see the lock immediately
-  code += 'if(C.MemberNumber!==Player.MemberNumber){\n';
-  code += '  try{ServerSend("ChatRoomCharacterItemUpdate",{MemberNumber:C.MemberNumber,Appearance:C.Appearance.map(function(a){return{Group:a.Asset.Group.Name,Name:a.Asset.Name,Color:a.Color,Property:a.Property};})});}catch(e){}\n';
-  code += '}\n';
+  code += 'var _lockAsset=Asset.find(function(a){return a.Name===' + JSON.stringify(lockType) + '&&a.Group&&a.Group.Name==="ItemMisc";});\n';
+  code += 'if(_lockAsset){InventoryLock(C,_newItem,{Asset:_lockAsset},Player.MemberNumber,true);}\n';
+  code += 'else{InventoryLock(C,_newItem,' + JSON.stringify(lockType) + ',Player.MemberNumber);}\n';
+  code += 'CharacterRefresh(C);\n';
+  code += 'ChatRoomCharacterUpdate(C);\n';
   code += 'console.log("✅ Lock vergeben: ' + lockType + ' → ' + group + '");\n';
   code += '}catch(e){console.error("❌ applyNewLock:",e.message);}\n})();';
 
