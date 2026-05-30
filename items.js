@@ -6769,14 +6769,16 @@ const LSCG_IDB_KEY      = 'BC_LSCG_OUTFITS_v3';
 const LSCG_LS_KEY       = 'BC_LSCG_OUTFITS_LS_v3';   // localStorage-Backup (Fallback wenn IDB geleert wird)
 const LSCG_IGNORE_KEY   = 'BC_LSCG_IGNORE_v1';
 const LSCG_FAV_KEY      = 'BC_LSCG_FAVS_v1';
+const LSCG_SLOTS_KEY    = 'BC_LSCG_SLOTS_v1';         // Persistierte LSCG-Outfit-Slots (key → code)
 const LSCG_MAX_VERSIONS = 30;
 let LSCG_DB = {};
-// Synchrones localStorage-Preload: Daten sofort verfügbar, bevor IDB async geladen hat
-try { const _lsBackup = localStorage.getItem(LSCG_LS_KEY); if (_lsBackup) LSCG_DB = JSON.parse(_lsBackup); } catch(e) {}
+// Synchrones localStorage-Preload entfernt: JSON.parse eines großen LSCG_DB blockiert den UI-Thread.
+// IDB lädt async in der IIFE unten (<50ms) – kein spürbarer Unterschied für den Nutzer.
 const _osOpenSet  = new Set();
 let _osFavs       = new Set();   // member keys die favorisiert sind
 let _osSearchQuery = '';          // aktueller Suchbegriff
-let _lscgFpMap   = {};
+let _lscgFpMap   = {};            // fingerprint → [slotName,...] – RAM-only, wird aus _lscgSlots rebuilt
+let _lscgSlots   = {};            // slotName → code – PERSISTIERT in IDB
 
 // Ignorierte Gruppen: Prefixe + exakte Namen
 let _ignorePrefix = [];
@@ -7000,35 +7002,72 @@ function toggleOsChar(mk, hdrEl) {
     LSCG_SCREENSHOTS = ssSaved;
     console.log('[BCU] LSCG Screenshots geladen:', Object.keys(LSCG_SCREENSHOTS).length);
   }
+  // Gespeicherte LSCG-Outfit-Slots laden (persistierte Slot-Namen + Codes)
+  const slotsSaved = await idbGet(LSCG_SLOTS_KEY);
+  if (slotsSaved && typeof slotsSaved === 'object') {
+    _lscgSlots = slotsSaved;
+    _rebuildFpMapFromSlots();
+    console.log('[BCU] LSCG Slots geladen:', Object.keys(_lscgSlots).length);
+  }
   const saved = await idbGet(LSCG_IDB_KEY);
   if (saved && typeof saved === 'object' && Object.keys(saved).length) {
-    // IDB hat Daten → als primäre Quelle nutzen
     LSCG_DB = saved;
   }
-  // LSCG_DB enthält jetzt entweder IDB-Daten oder den localStorage-Backup (aus dem Preload oben)
   if (Object.keys(LSCG_DB).length) {
-    // Fingerprints mit aktuellen Ignore-Regeln neu berechnen + Dups entfernen
-    let migrated = false;
+    // Fingerprints werden NICHT mehr synchron neu berechnet (blockiert UI bei großer DB).
+    // Stattdessen: nur Einträge ohne Fingerprint asynchron füllen.
+    const needsFp = [];
     for (const mk of Object.keys(LSCG_DB)) {
       const entry = LSCG_DB[mk];
       if (!entry?.versions) continue;
       for (const v of entry.versions) {
-        if (v.code) { v.fingerprint = _computeFilteredFp(v.code); migrated = true; }
+        if (v.code && (v.fingerprint == null || v.fingerprint === '')) needsFp.push(v);
       }
-      _dedupeVersions(entry);
     }
-    // Immer zurückspeichern wenn IDB leer war (Wiederherstellung aus LS-Backup) oder migriert
-    if (migrated || !saved || !Object.keys(saved).length) await idbSet(LSCG_IDB_KEY, LSCG_DB);
-    const src = (!saved || !Object.keys(saved).length) ? ' [LS-Backup wiederhergestellt]' : '';
-    console.log('[BCU] LSCG Outfits geladen:', Object.keys(LSCG_DB).length, 'Chars' + src);
+    if (needsFp.length) {
+      // Fingerprints in Chunks berechnen (je 5 pro setTimeout-Tick) um UI nicht zu blockieren
+      const CHUNK = 5;
+      function processChunk(i) {
+        const end = Math.min(i + CHUNK, needsFp.length);
+        for (let j = i; j < end; j++) {
+          needsFp[j].fingerprint = _computeFilteredFp(needsFp[j].code);
+        }
+        if (end < needsFp.length) {
+          setTimeout(() => processChunk(end), 0);
+        } else {
+          // Dedup + save nach allen Chunks
+          for (const mk of Object.keys(LSCG_DB)) {
+            if (LSCG_DB[mk]?.versions) _dedupeVersions(LSCG_DB[mk]);
+          }
+          _saveLscgDB();
+          if (_activeTab === 'outfit-scan') renderOutfitScanTab();
+        }
+      }
+      setTimeout(() => processChunk(0), 0);
+    }
+    console.log('[BCU] LSCG Outfits geladen:', Object.keys(LSCG_DB).length, 'Chars');
   }
+  if (_activeTab === 'outfit-scan') renderOutfitScanTab();
 })();
 
 async function _saveLscgDB() {
   await idbSet(LSCG_IDB_KEY, LSCG_DB);
-  try { localStorage.setItem(LSCG_LS_KEY, JSON.stringify(LSCG_DB)); } catch(e) {
-    // QuotaExceededError: DB zu groß für localStorage — kein Problem, IDB ist primär
-    console.warn('[BCU] LSCG localStorage-Backup fehlgeschlagen (Quota?):', e.message);
+  // localStorage-Backup absichtlich entfernt: JSON.stringify/parse eines großen LSCG_DB
+  // blockiert den UI-Thread. IDB ist zuverlässig genug als primäre Quelle.
+}
+
+async function _saveLscgSlots() {
+  await idbSet(LSCG_SLOTS_KEY, _lscgSlots);
+}
+
+function _rebuildFpMapFromSlots() {
+  _lscgFpMap = {};
+  for (const [slotName, code] of Object.entries(_lscgSlots)) {
+    if (!code) continue;
+    const fp = _computeFilteredFp(code);
+    if (!fp) continue;
+    if (!_lscgFpMap[fp]) _lscgFpMap[fp] = [];
+    _lscgFpMap[fp].push(slotName);
   }
 }
 
@@ -7737,13 +7776,17 @@ function scanOutfits() {
 
 function _handleLscgOutfitsData(data) {
   if (data.err) { console.warn('[BCU] LSCG Outfits:', data.err); return; }
-  _lscgFpMap = {};
+  // Slot-Codes persistieren (damit Badges nach Neustart ohne BC-Verbindung erhalten bleiben)
+  let slotsChanged = false;
   for (const [key, info] of Object.entries(data.outfits ?? {})) {
-    const fp = _computeFilteredFp(info.code);
-    if (!fp) continue;
-    if (!_lscgFpMap[fp]) _lscgFpMap[fp] = [];
-    _lscgFpMap[fp].push(key);
+    if (info.code && _lscgSlots[key] !== info.code) {
+      _lscgSlots[key] = info.code;
+      slotsChanged = true;
+    }
   }
+  if (slotsChanged) _saveLscgSlots();
+  // Fingerprint-Map aus gespeicherten Slots neu aufbauen (non-blocking, da Slots schon gecacht)
+  _rebuildFpMapFromSlots();
   if (_activeTab === 'outfit-scan') renderOutfitScanTab();
 }
 
@@ -7752,35 +7795,82 @@ function _handleOutfitScanData(data) {
   const results = data.results ?? [];
   if (!results.length) { if (_activeTab === 'outfit-scan') renderOutfitScanTab(); return; }
 
-  let neu = 0, geaendert = 0;
+  // Phase 1 (synchron, schnell): Einträge anlegen OHNE Fingerprint-Berechnung.
+  // So wird die UI nicht blockiert – _computeFilteredFp macht LZString.decompress + JSON.parse
+  // für jeden Charakter, was bei 20+ Leuten mehrere Sekunden dauern würde.
+  const ts = Date.now();
+  const newVersions = []; // { mk, vIdx } – für spätere Fingerprint-Berechnung
   for (const r of results) {
     const mk = String(r.memberNumber);
-    if (!LSCG_DB[mk]) { LSCG_DB[mk] = { name: r.name, nickname: r.nickname ?? null, versions: [] }; neu++; }
+    if (!LSCG_DB[mk]) LSCG_DB[mk] = { name: r.name, nickname: r.nickname ?? null, versions: [] };
     else { LSCG_DB[mk].name = r.name; LSCG_DB[mk].nickname = r.nickname ?? null; }
-
     const entry = LSCG_DB[mk];
-    // Filtered Fingerprint im Popup berechnen (Ignore-Regeln anwenden)
-    const fp = r.code ? _computeFilteredFp(r.code) : '';
-
-    const existing = fp ? entry.versions.find(function(v){ return (v.fingerprint ?? '') === fp; }) : null;
-    if (existing) {
-      // Fingerprint bereits bekannt → kein Duplikat, Code aktuell halten
-      if (r.code) existing.code = r.code;
-    } else {
-      // Neuer Fingerprint → neue Version anlegen
-      entry.versions.push({ code: r.code, fingerprint: fp, ts: Date.now() });
-      if (entry.versions.length > LSCG_MAX_VERSIONS)
-        entry.versions = entry.versions.slice(-LSCG_MAX_VERSIONS);
-      if (entry.versions.length > 1) geaendert++;
+    if (r.code) {
+      // Prüfen ob ein noch-fingerprint-loser Eintrag mit diesem Code schon existiert
+      const dup = entry.versions.find(function(v){ return v.code === r.code; });
+      if (!dup) {
+        entry.versions.push({ code: r.code, fingerprint: null, ts });
+        if (entry.versions.length > LSCG_MAX_VERSIONS)
+          entry.versions = entry.versions.slice(-LSCG_MAX_VERSIONS);
+        newVersions.push({ mk, vIdx: entry.versions.length - 1 });
+      }
     }
   }
 
+  // Sofort speichern (mit null-Fingerprints) damit Daten nicht verloren gehen
   _saveLscgDB();
   if (_activeTab === 'outfit-scan') renderOutfitScanTab();
 
-  // Auto-Capture: nur bei MANUELLEM Scan (nicht beim Auto-Scan durch Join/Player-Join).
-  // Beim Auto-Scan würde BC noch am Laden sein und Screenshots des Originaloutfits liefern.
-  if (_connected && !data._auto) {
+  // Phase 2 (asynchron, je 3 Chars pro Tick): Fingerprints berechnen + Dedup
+  // Blockiert die UI nicht mehr – der Nutzer sieht sofort die neuen Karten
+  if (newVersions.length) {
+    const CHUNK = 3;
+    function _fpChunk(i) {
+      const end = Math.min(i + CHUNK, newVersions.length);
+      for (let j = i; j < end; j++) {
+        const {mk, vIdx} = newVersions[j];
+        const entry = LSCG_DB[mk];
+        if (!entry?.versions?.[vIdx]) continue;
+        const v = entry.versions[vIdx];
+        if (!v.code) continue;
+        v.fingerprint = _computeFilteredFp(v.code);
+        // Dedup nur für diesen Eintrag nach Fingerprint-Berechnung
+        _dedupeVersions(entry);
+      }
+      if (end < newVersions.length) {
+        setTimeout(function(){ _fpChunk(end); }, 0);
+      } else {
+        _saveLscgDB();
+        if (_activeTab === 'outfit-scan') renderOutfitScanTab();
+        // Auto-Capture für neue Versionen (Fingerprints sind jetzt bekannt)
+        if (_connected && !data._auto) {
+          const existingKeys = new Set(_osCaptureQueue.map(function(i) { return i.mk + '|' + i.vIdx; }));
+          const toCapture = [];
+          newVersions.forEach(function(nv) {
+            const versions = LSCG_DB[nv.mk]?.versions;
+            if (!Array.isArray(versions)) return;
+            const v = versions[nv.vIdx];
+            if (!v) return;
+            const fp  = v.fingerprint ?? null;
+            const key = fp ? (nv.mk + '|' + fp) : nv.mk;
+            if (!LSCG_SCREENSHOTS[key] && !existingKeys.has(nv.mk + '|' + nv.vIdx)) {
+              toCapture.push(nv);
+            }
+          });
+          if (toCapture.length) {
+            for (let i = toCapture.length - 1; i >= 0; i--) _osCaptureQueue.unshift(toCapture[i]);
+            if (!_osCaptureRunning) _runNextOsCapture();
+          }
+        }
+      }
+    }
+    setTimeout(function(){ _fpChunk(0); }, 0);
+  }
+
+  // Auto-Capture: nur bei MANUELLEM Scan, nach Fingerprint-Berechnung (Phase 2)
+  // Wird am Ende von _fpChunk ausgelöst wenn Fingerprints bekannt sind
+  if (_connected && !data._auto && newVersions.length === 0) {
+    // Keine neuen Versionen → direkt Screenshots prüfen
     const existingKeys = new Set(_osCaptureQueue.map(function(i) { return i.mk + '|' + i.vIdx; }));
     const toCapture = [];
     results.forEach(function(r) {
@@ -7801,11 +7891,7 @@ function _handleOutfitScanData(data) {
     }
   }
 
-  let msg = '✅ ' + (data.room ?? '') + ': ' + results.length + ' Chars';
-  if (neu)       msg += ' | +' + neu + ' neu';
-  if (geaendert) msg += ' | ' + geaendert + ' geändert';
-  showStatus(msg, data._auto ? 'info' : 'success');
-
+  showStatus('✅ ' + (data.room ?? '') + ': ' + results.length + ' Chars gescannt', data._auto ? 'info' : 'success');
 }
 
 // Item-Anzahl aus LZString-Code berechnen
@@ -8121,8 +8207,11 @@ function clearAllLscgOutfits() {
   if (!confirm('Alle gespeicherten LSCG-Outfits löschen?\n\nDies löscht alle Codes und Bilder.')) return;
   LSCG_DB = {};
   LSCG_SCREENSHOTS = {};
+  _lscgSlots = {};
+  _lscgFpMap = {};
   _saveLscgDB();
   _saveLscgScreenshots();
+  _saveLscgSlots();
   renderOutfitScanTab();
   showStatus('🗑️ LSCG Outfits geleert', 'info');
 }

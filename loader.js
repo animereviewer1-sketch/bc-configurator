@@ -521,7 +521,22 @@ window.CurseScanner = (() => {
     return lscgCache[memberNumber + ':' + craftName.toLowerCase()] ?? null;
   }
 
+  // Memoization-Cache: itemName → groupName (session-persistent)
+  const _groupCache = {};
+
   function findeGruppe(itemName) {
+    if (_groupCache[itemName] !== undefined) return _groupCache[itemName];
+    // Schnellster Weg: Asset-Array einmal direkt durchsuchen (kein Group-by-Group Loop)
+    if (typeof Asset !== 'undefined') {
+      for (let i = 0; i < Asset.length; i++) {
+        const a = Asset[i];
+        if (a.Name === itemName && a.Group?.Name) {
+          _groupCache[itemName] = a.Group.Name;
+          return a.Group.Name;
+        }
+      }
+    }
+    // Fallback: AssetGet per Gruppe (wenn Asset-Array nicht verfügbar)
     const gruppen = [
       'ItemHandheld','ItemMisc','ItemAddon','ItemHands','ItemArms','ItemLegs','ItemFeet',
       'ItemNeck','ItemHead','ItemMouth','ItemEyes','ItemEars','ItemNose','ItemTorso',
@@ -531,11 +546,16 @@ window.CurseScanner = (() => {
       'Shoes','Hat','Gloves','Socks','Bracelet','Mask','Decals','Bra','Panties',
       'Corset','SocksRight'
     ];
-    for (const g of gruppen) {
+    if (typeof AssetGet === 'function') {
       const _fam = (typeof Player !== 'undefined' && Player.AssetFamily) ? Player.AssetFamily : 'Female3DCG';
-      if (typeof AssetGet === 'function' && (AssetGet(_fam, g, itemName) || AssetGet('Female3DCG', g, itemName))) return g;
-      if (typeof Asset !== 'undefined' && Asset.find(function(a){return a.Name===itemName&&a.Group&&a.Group.Name===g;})) return g;
+      for (const g of gruppen) {
+        if (AssetGet(_fam, g, itemName) || AssetGet('Female3DCG', g, itemName)) {
+          _groupCache[itemName] = g;
+          return g;
+        }
+      }
     }
+    _groupCache[itemName] = null;
     return null;
   }
 
@@ -556,15 +576,20 @@ window.CurseScanner = (() => {
     let neuDB = 0, aktualisiert = 0, neuLSCG = 0;
     spieler.forEach(C => {
       _snapshotAllLSCG(C);
+      // LSCG-Map einmal pro Charakter aufbauen (O(1) Lookup statt O(n) find pro Craft)
+      const liveCursedItems = C.LSCG?.CursedItemModule?.CursedItems ?? [];
+      const lscgByName = new Map();
+      for (const ci of liveCursedItems) {
+        if (ci?.Name) lscgByName.set(ci.Name.toLowerCase(), ci);
+      }
       (C.Crafting ?? []).forEach(craft => {
         if (!craft?.Item) return;
         const gruppe = findeGruppe(craft.Item);
         const key    = C.MemberNumber + ':' + craft.Item + ':' + craft.Name;
         const istNeu = !database[key];
-        // LSCG: erst live schauen, dann in eigenem persistenten Cache nachschlagen
-        const liveCursedItems = C.LSCG?.CursedItemModule?.CursedItems ?? [];
-        const lscgLive = liveCursedItems.find(ci => ci.Name?.toLowerCase() === craft.Name?.toLowerCase()) ?? null;
-        if (lscgLive) _cacheLSCGWithCraftAlias(C.MemberNumber, lscgLive, craft.Name); // immer cachen
+        // LSCG: O(1) Lookup via Map statt linearer Suche
+        const lscgLive = lscgByName.get((craft.Name ?? '').toLowerCase()) ?? null;
+        if (lscgLive) _cacheLSCGWithCraftAlias(C.MemberNumber, lscgLive, craft.Name);
         const lscg = lscgLive ?? _getLSCGFromCache(C.MemberNumber, craft.Name);
         const lscgIsFromCache = lscg !== null && lscgLive === null;
 
