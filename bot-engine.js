@@ -153,6 +153,10 @@ const _roomEver=new Set([...(_savedState.roomEver??[]),...(${roomEverJson})]);
 window[_stateKey]={fired:_fired,firedCnt:_firedCnt,firedChar:_firedChar,roomEver:_roomEver};
 // Quick lookup: trigId -> trigger config (for charSpec)
 const _trigMap=Object.fromEntries(_trigs.map(t=>[t.id,t]));
+// Pre-filtered trigger lists for each poll type (avoids re-filtering every tick)
+const _itTrigs=_trigs.filter(t=>(t.bedingungen??[]).some(c=>c.typ==='item_traegt'||c.typ==='item_traegt_nicht')&&!(t.bedingungen??[]).some(c=>c.typ==='wort'));
+const _zoneTrigs=_trigs.filter(t=>(t.bedingungen??[]).some(c=>c.typ==='zone'||c.typ==='zone_rect')&&!(t.bedingungen??[]).some(c=>c.typ==='wort'||c.typ==='player_betritt'));
+const _joinTrigs=_trigs.filter(t=>(t.bedingungen??[]).some(c=>c.typ==='player_betritt'));
 // Rejoin-Fenster: memberNum → true – schließt wenn Nicht-Rejoin-Trigger feuert
 const _rejoinWindow=new Map(); // memberNum → timestamp when opened
 const _REJOIN_GRACE=1000; // ms window stays open regardless of other triggers
@@ -161,6 +165,8 @@ const _evts=JSON.parse(decodeURIComponent(escape(atob('${eventsJson}'))));
 // Rang-State: memberNum -> aktueller rankId (laut Popup-State)
 // Beim Start mit gespeicherten Spieler-Rang-Zuweisungen initialisieren
 const _rangState=Object.assign({},_cfg.rankPlayers??{});
+// Pre-sorted rank defs (avoids repeated in-place sort on every condition check)
+const _rankDefs=[...(_cfg.rankDefs??[])].sort((a,b)=>a.level-b.level);
 
 // Shop-Konfiguration (Snapshot beim Bot-Start)
 const _shopCfg={
@@ -226,7 +232,7 @@ function _ok(trig,rohText,typKey,C){
       const currentId=_rangState[C.MemberNumber]??null;
       if(op==='kein') return !currentId;
       if(!c.rang_id) return false;
-      const defs=(_cfg.rankDefs??[]).sort((a,b)=>a.level-b.level);
+      const defs=_rankDefs;
       const targetDef=defs.find(r=>r.id===c.rang_id);
       const currentDef=defs.find(r=>r.id===currentId);
       if(!targetDef) return false;
@@ -287,7 +293,7 @@ function _okIf(trig,rohText,typKey,C){
       const currentId=_rangState[C.MemberNumber]??null;
       if(op==='kein') return !currentId;
       if(!c.rang_id) return false;
-      const defs=(_cfg.rankDefs??[]).sort((a,b)=>a.level-b.level);
+      const defs=_rankDefs;
       const targetDef=defs.find(r=>r.id===c.rang_id);
       const currentDef=defs.find(r=>r.id===currentId);
       if(!targetDef) return false;
@@ -658,7 +664,7 @@ function _okEv(ev,C,rohText,typKey){
       const currentId=_rangState[C.MemberNumber]??null;
       if(op==='kein') return !currentId;
       if(!c.rang_id) return false;
-      const defs=(_cfg.rankDefs??[]).sort((a,b)=>a.level-b.level);
+      const defs=_rankDefs;
       const targetDef=defs.find(r=>r.id===c.rang_id);
       const currentDef=defs.find(r=>r.id===currentId);
       if(!targetDef) return false;
@@ -1031,7 +1037,7 @@ function _handleShopCmd(rohText,buyerC){
             const cid=_rangState[buyerC.MemberNumber]??null;
             if(op==='kein') return !cid;
             if(!c.rang_id) return false;
-            const defs=(_cfg.rankDefs??[]).sort((a,b)=>a.level-b.level);
+            const defs=_rankDefs;
             const td=defs.find(r=>r.id===c.rang_id),cd=defs.find(r=>r.id===cid);
             if(!td||!cd) return false;
             if(op==='=') return cd.level===td.level;
@@ -1155,7 +1161,7 @@ function _handleShopCmd(rohText,buyerC){
         const currentId=_rangState[buyerC.MemberNumber]??null;
         if(op==='kein') return !currentId;
         if(!c.rang_id) return false;
-        const defs=(_cfg.rankDefs??[]).sort((a,b)=>a.level-b.level);
+        const defs=_rankDefs;
         const td=defs.find(r=>r.id===c.rang_id);
         const cd=defs.find(r=>r.id===currentId);
         if(!td||!cd) return false;
@@ -1209,7 +1215,7 @@ function _proc(rohText,typKey,C){
     const chunks=[];let buf=hdr;
     aktive.forEach(item=>{
       const ns=item.preisNostrip??_shopCfg.preisNostrip??0;
-      const nsHint=ns>0?' (/nostrip +'+ns+')':(ns===0?'':'' );
+      const nsHint=ns>0?' (/nostrip +'+ns+')'  :'';
       const line='\\n• '+(item.icon||'🛒')+' '+item.name+' – '+(Number(item.preis)||0)+' '+cur+nsHint;
       if((buf+line).length>480){chunks.push(buf);buf=line.slice(1);}else buf+=line;
     });
@@ -1219,7 +1225,8 @@ function _proc(rohText,typKey,C){
   }
   // Shop Pay-Befehl
   const shopCmd=(_shopCfg.cmd||'').trim().toLowerCase();
-  if(shopCmd&&rohText.trim().toLowerCase().startsWith(shopCmd+' ')||rohText.trim().toLowerCase()===shopCmd){
+  const _rohLc=rohText.trim().toLowerCase();
+  if(shopCmd&&(_rohLc.startsWith(shopCmd+' ')||_rohLc===shopCmd)){
     _handleShopCmd(rohText,C);
     return;
   }
@@ -1228,8 +1235,8 @@ function _proc(rohText,typKey,C){
   _trigs.forEach(trig=>{
     // Trigger mit player_betritt -> nur Join-Poll, nie Nachrichten
     if((trig.bedingungen??[]).some(c=>c.typ==='player_betritt'))return;
-    // Trigger mit item_traegt aber ohne wort -> nur Polling
-    const hasItem=(trig.bedingungen??[]).some(c=>c.typ==='item_traegt');
+    // Trigger mit item_traegt/item_traegt_nicht aber ohne wort -> nur Polling
+    const hasItem=(trig.bedingungen??[]).some(c=>c.typ==='item_traegt'||c.typ==='item_traegt_nicht');
     const hasWort=(trig.bedingungen??[]).some(c=>c.typ==='wort');
     if(hasItem&&!hasWort)return;
     // Von-Filter: wer darf diesen Trigger auslösen?
@@ -1266,7 +1273,7 @@ function _procEvents(rohText,typKey,C){
     // Von-Filter: wer darf das Event auslösen?
     const vonOk=(()=>{
       if(ev.von==='bot')return C.MemberNumber===Player.MemberNumber;
-      if(ev.von==='nummer')return ev.vonNummer&&C.MemberNumber===ev.vonNummer;
+      if(ev.von==='nummer')return ev.vonNummer&&C.MemberNumber===+ev.vonNummer;
       return true; // 'alle'
     })();
     if(!vonOk)return;
@@ -1304,12 +1311,10 @@ function _procEvents(rohText,typKey,C){
 const _itState={}; // 'memberNum_trigId_typ' -> bool
 // FIX: 500ms is sufficient for item-state changes, 100ms caused unnecessary CPU load
 const _itPoll=setInterval(()=>{
+  if(!_itTrigs.length)return;
   const chars=[Player,...(ChatRoomCharacter||[])];
-  _trigs.forEach(trig=>{
+  _itTrigs.forEach(trig=>{
     const itemConds=(trig.bedingungen??[]).filter(c=>c.typ==='item_traegt'||c.typ==='item_traegt_nicht');
-    if(!itemConds.length)return;
-    const hasWort=(trig.bedingungen??[]).some(c=>c.typ==='wort');
-    if(hasWort)return;
     chars.forEach(C=>{
       // Check positive (traegt) and negative (traegt_nicht) conditions
       const condMet=itemConds.every(c=>{
@@ -1336,7 +1341,7 @@ const _itPoll=setInterval(()=>{
             const currentId=_rangState[C.MemberNumber]??null;
             if(op==='kein') return !currentId;
             if(!c.rang_id) return false;
-            const defs=(_cfg.rankDefs??[]).sort((a,b)=>a.level-b.level);
+            const defs=_rankDefs;
             const targetDef=defs.find(r=>r.id===c.rang_id);
             const currentDef=defs.find(r=>r.id===currentId);
             if(!targetDef) return false;
@@ -1388,7 +1393,7 @@ function _processJoinQueue(){
   if(!istNeu) setTimeout(()=>{ _rejoinWindow.delete(C.MemberNumber); _log('\u{1F6AA} Rejoin-Fenster für #'+C.MemberNumber+' automatisch geschlossen (1s)'); },_REJOIN_GRACE);
 
   const rejoinBatch=[];
-  _trigs.forEach(trig=>{
+  _joinTrigs.forEach(trig=>{
     const bConds=(trig.bedingungen??[]).filter(c=>c.typ==='player_betritt');
     if(!bConds.length)return;
     const isRejoinTrig=bConds.some(c=>c.betritt_typ==='rejoin');
@@ -1422,7 +1427,7 @@ function _processJoinQueue(){
         const currentId=_rangState[C.MemberNumber]??null;
         if(op==='kein') return !currentId;
         if(!c.rang_id) return false;
-        const defs=(_cfg.rankDefs??[]).sort((a,b)=>a.level-b.level);
+        const defs=_rankDefs;
         const targetDef=defs.find(r=>r.id===c.rang_id);
         const currentDef=defs.find(r=>r.id===currentId);
         if(!targetDef) return false;
@@ -1470,7 +1475,7 @@ function _processJoinQueue(){
         const currentId=_rangState[C.MemberNumber]??null;
         if(op==='kein') return !currentId;
         if(!c.rang_id) return false;
-        const defs=(_cfg.rankDefs??[]).sort((a,b)=>a.level-b.level);
+        const defs=_rankDefs;
         const targetDef=defs.find(r=>r.id===c.rang_id);
         const currentDef=defs.find(r=>r.id===currentId);
         if(!targetDef) return false;
@@ -1576,13 +1581,10 @@ const _joinPoll=setInterval(()=>{
 const _zoneState={}; // 'memberNum_trigId' -> bool (war zuletzt drin)
 // FIX: 500ms is sufficient for zone detection, 100ms caused unnecessary CPU load
 const _zonePoll=setInterval(()=>{
+  if(!_zoneTrigs.length)return;
   const chars=[Player,...(ChatRoomCharacter||[])];
-  _trigs.forEach(trig=>{
+  _zoneTrigs.forEach(trig=>{
     const zoneConds=(trig.bedingungen??[]).filter(c=>c.typ==='zone'||c.typ==='zone_rect');
-    if(!zoneConds.length)return;
-    const hasWort=(trig.bedingungen??[]).some(c=>c.typ==='wort');
-    const hasBetritt=(trig.bedingungen??[]).some(c=>c.typ==='player_betritt');
-    if(hasWort||hasBetritt)return;
     chars.forEach(C=>{
       if(!C)return;
       // Direkt C.X / C.Y – kein _getPos Umweg nötig
@@ -1611,7 +1613,7 @@ const _zonePoll=setInterval(()=>{
             const currentId=_rangState[C.MemberNumber]??null;
             if(op==='kein') return !currentId;
             if(!c.rang_id) return false;
-            const defs=(_cfg.rankDefs??[]).sort((a,b)=>a.level-b.level);
+            const defs=_rankDefs;
             const targetDef=defs.find(r=>r.id===c.rang_id);
             const currentDef=defs.find(r=>r.id===currentId);
             if(!targetDef) return false;
@@ -1921,11 +1923,14 @@ function botSync() {
   const safeId = b.id.replace(/\W/g,'_');
   bcSend({ type:'EXEC', code:`if(window['_BCBot_${safeId}'])window['_BCBot_${safeId}'].stop();` });
 
-  // Step 2: After stop delay, redeploy with latest saved config
+  // Step 2: After stop delay, redeploy with latest saved config (same Base64 encoding as botDeployById)
   setTimeout(() => {
     const latest = _selBot();
     if (!latest) return;
-    bcSend({ type:'EXEC', code: _buildBotCode(latest) });
+    const _syncCode = _buildBotCode(latest);
+    const _syncEncoded = btoa(unescape(encodeURIComponent(_syncCode)));
+    const _syncWrapper = `(new Function(decodeURIComponent(escape(atob('${_syncEncoded}'))))())`;
+    bcSend({ type:'EXEC', code: _syncWrapper });
     latest.laufend = true; _saveBots(); renderBotList(); renderBotEditor();
     showStatus('✅ Bot synchronisiert und neu gestartet', 'success');
   }, 700);
