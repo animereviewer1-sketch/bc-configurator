@@ -7115,7 +7115,7 @@ const _LOCK_META = {
   'OwnerPadlock':             { icon:'👑',   label:'Owner',              hasTimer:false, hasPw:false, hasCombo:false, hasHint:false },
   'FiveMinutesPadlock':       { icon:'⏱️5m', label:'5 Minuten (alt)',    hasTimer:true,  hasPw:false, hasCombo:false, hasHint:false },
   'CombinationPadlock':       { icon:'🔢',   label:'Kombination',        hasTimer:false, hasPw:false, hasCombo:true,  hasHint:false },
-  'SafewordPadlock':          { icon:'⚡',   label:'Safeword',           hasTimer:false, hasPw:false, hasCombo:false, hasHint:false },
+  'SafewordPadlock':          { icon:'⚡',   label:'Safeword',           hasTimer:false, hasPw:true,  hasCombo:false, hasHint:false },
   'PasswordPadlock':          { icon:'🔑',   label:'Passwort',           hasTimer:false, hasPw:true,  hasCombo:false, hasHint:false },
   'MistressTimerPadlock':     { icon:'🎭⏱️', label:'Mistress Timer',     hasTimer:true,  hasPw:false, hasCombo:false, hasHint:false },
   'LoversTimerPadlock':       { icon:'💕⏱️', label:'Lover Timer',        hasTimer:true,  hasPw:false, hasCombo:false, hasHint:false },
@@ -7324,7 +7324,7 @@ function _buildLockEditHtml(mk, lock, meta, isPlayer) {
   if (meta.hasPw) {
     fields += '<div class="lk-edit-row">'
       + '<span class="lk-edit-lbl">🔑 Passwort</span>'
-      + '<input type="text" class="lk-input lk-edit-pw" maxlength="8" value="' + escHtml(lock.password || '') + '" placeholder="Passwort (max 8)">'
+      + '<input type="text" class="lk-input lk-edit-pw" maxlength="8" value="' + escHtml((lock.password || '').toUpperCase()) + '" placeholder="A–Z max 8" oninput="this.value=this.value.toUpperCase()" style="text-transform:uppercase">'
       + '</div>';
   }
   if (meta.hasHint) {
@@ -7432,7 +7432,7 @@ function _buildLockApplyPanelHtml(mk, li) {
     + '</div></div>'
     + '<div class="lk-edit-row lk-apply-pw-row" style="display:' + (defMeta.hasPw ? '' : 'none') + '">'
     + '<span class="lk-edit-lbl">🔑 PW</span>'
-    + '<input type="text" class="lk-input lk-apply-pw" maxlength="8" placeholder="Passwort (max 8)">'
+    + '<input type="text" class="lk-input lk-apply-pw" maxlength="8" placeholder="A–Z max 8" oninput="this.value=this.value.toUpperCase()" style="text-transform:uppercase">'
     + '</div>'
     + '<div class="lk-edit-row lk-apply-hint-row" style="display:' + (defMeta.hasHint ? '' : 'none') + '">'
     + '<span class="lk-edit-lbl">💬 Hinweis</span>'
@@ -7551,6 +7551,10 @@ function applyNewLock(mk, group) {
   code += '}\n';
   // Call exactly as DOGS does: string type, no update param (→ Update=true internally)
   code += 'InventoryLock(C,_item,' + JSON.stringify(lockType) + ',Player.MemberNumber);\n';
+  // For other chars: also push via ServerSend so all clients see the lock immediately
+  code += 'if(C.MemberNumber!==Player.MemberNumber){\n';
+  code += '  try{ServerSend("ChatRoomCharacterItemUpdate",{MemberNumber:C.MemberNumber,Appearance:C.Appearance.map(function(a){return{Group:a.Asset.Group.Name,Name:a.Asset.Name,Color:a.Color,Property:a.Property};})});}catch(e){}\n';
+  code += '}\n';
   code += 'console.log("✅ Lock vergeben: ' + lockType + ' → ' + group + '");\n';
   code += '}catch(e){console.error("❌ applyNewLock:",e.message);}\n})();';
 
@@ -7580,8 +7584,14 @@ function applyNewLock(mk, group) {
       if (hint     !== null) code2 += '_item.Property.Hint='     + JSON.stringify(hint)     + ';\n';
       if (combo    !== null) code2 += '_item.Property.CombinationNumber=' + JSON.stringify(combo) + ';\n';
       code2 += 'setTimeout(function(){\n';
-      code2 += '  if(C.MemberNumber===Player.MemberNumber){ServerPlayerAppearanceSync();ChatRoomCharacterUpdate(C);}';
-      code2 += '  else{ChatRoomCharacterUpdate(C);}\n';
+      code2 += '  if(C.MemberNumber===Player.MemberNumber){\n';
+      code2 += '    ServerPlayerAppearanceSync();\n';
+      code2 += '    ChatRoomCharacterUpdate(C);\n';
+      code2 += '  } else {\n';
+      // For other chars: send appearance update via ServerSend so server + all clients see it
+      code2 += '    ServerSend("ChatRoomCharacterItemUpdate",{MemberNumber:C.MemberNumber,Appearance:C.Appearance.map(function(a){return{Group:a.Asset.Group.Name,Name:a.Asset.Name,Color:a.Color,Property:a.Property};})});\n';
+      code2 += '    ChatRoomCharacterUpdate(C);\n';
+      code2 += '  }\n';
       code2 += '},300);\n';
       code2 += 'console.log("✅ Lock-Extras gesetzt: ' + group + '");\n';
       code2 += '}catch(e){console.error("❌ Lock-Extras:",e.message);}\n})();';
