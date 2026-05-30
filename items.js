@@ -7427,7 +7427,7 @@ function _buildLockApplyPanelHtml(mk, li) {
     + '<div class="lk-edit-row lk-apply-timer-row" style="display:' + (defMeta.hasTimer ? '' : 'none') + '">'
     + '<span class="lk-edit-lbl">⏱ Zeit</span>'
     + '<div class="lk-edit-inputs">'
-    + '<input type="number" class="lk-input lk-edit-h" min="0" max="720" value="1" placeholder="0"> <span class="lk-edit-unit">h</span>'
+    + '<input type="number" class="lk-input lk-edit-h" min="0" max="720" value="0" placeholder="0"> <span class="lk-edit-unit">h</span>'
     + '<input type="number" class="lk-input lk-edit-m" min="0" max="59"  value="0" placeholder="0"> <span class="lk-edit-unit">min</span>'
     + '</div></div>'
     + '<div class="lk-edit-row lk-apply-pw-row" style="display:' + (defMeta.hasPw ? '' : 'none') + '">'
@@ -7463,6 +7463,16 @@ function _onLockTypeChange(mk, group) {
   if (pwRow)    pwRow.style.display    = meta.hasPw    ? '' : 'none';
   if (hintRow)  hintRow.style.display  = meta.hasHint  ? '' : 'none';
   if (comboRow) comboRow.style.display = meta.hasCombo ? '' : 'none';
+
+  // TimerPadlock: Standard auf 0h 5min setzen
+  if (meta.hasTimer) {
+    const hEl = panel.querySelector('.lk-edit-h');
+    const mEl = panel.querySelector('.lk-edit-m');
+    if (hEl && mEl && parseInt(hEl.value) === 0 && parseInt(mEl.value) === 0) {
+      if (lockType === 'TimerPadlock') { hEl.value = '0'; mEl.value = '5'; }
+      else                             { hEl.value = '1'; mEl.value = '0'; }
+    }
+  }
 }
 
 function toggleApplyLock(mk, group) {
@@ -7543,13 +7553,6 @@ function applyNewLock(mk, group) {
   code += 'InventoryLock(C,_item,' + JSON.stringify(lockType) + ',Player.MemberNumber);\n';
   code += 'console.log("✅ Lock vergeben: ' + lockType + ' → ' + group + '");\n';
   code += '}catch(e){console.error("❌ applyNewLock:",e.message);}\n})();';
-
-  // Lewd Crest (淫纹锁LuziPadlock) + DeviousPadlock: via FuSam /lock Command
-  const _FUSAM_LOCK_TYPES = ['淫纹锁LuziPadlock', 'DeviousPadlock'];
-  if (_FUSAM_LOCK_TYPES.includes(lockType)) {
-    applyFusamLock(mk, group);
-    return;
-  }
 
   bcSend({ type: 'EXEC', code });
   showStatus('🔒 ' + meta.icon + ' ' + meta.label + ' → ' + group, 'success');
