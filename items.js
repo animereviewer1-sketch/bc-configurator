@@ -7386,30 +7386,32 @@ function _buildLockableItemHtml(mk, li) {
     + '</div>';
 }
 
-// List of selectable lock types — matches BC lock list (22 entries)
+// List of selectable lock types
 const _APPLY_LOCK_TYPES = [
-  { v:'MetalPadlock',           l:'🔒 1 · Metall'             },
-  { v:'ExclusivePadlock',       l:'🔐 2 · Exklusiv'           },
-  { v:'IntricatePadlock',       l:'🔒✨ 3 · Intricate'        },
-  { v:'HighSecurityPadlock',    l:'🛡️ 4 · High Security'      },
-  { v:'PandoraPadlock',         l:'📦 5 · Pandora'            },
-  { v:'MistressPadlock',        l:'🎭 6 · Mistress'           },
-  { v:'LoversPadlock',          l:'💕 7 · Lover'              },
-  { v:'OwnerPadlock',           l:'👑 8 · Owner'              },
-  { v:'TimerPadlock',            l:'⏱️ 9 · Timer (max 5min)'   },
-  { v:'CombinationPadlock',      l:'🔢 10 · Kombination'       },
-  { v:'SafewordPadlock',         l:'⚡ 11 · Safeword'          },
-  { v:'PasswordPadlock',         l:'🔑 12 · Passwort'          },
-  { v:'MistressTimerPadlock',    l:'🎭⏱️ 13 · Mistress Timer'  },
-  { v:'LoversTimerPadlock',      l:'💕⏱️ 14 · Lover Timer ⚠️'  },
-  { v:'OwnerTimerPadlock',       l:'👑⏱️ 15 · Owner Timer ⚠️'  },
-  { v:'TimerPasswordPadlock',    l:'⏱️🔑 16 · Timer Password'  },
-  { v:'Best Friend Padlock',     l:'👫 17 · Best Friend ⚠️'    },
-  { v:'Best Friend Timer Padlock',l:'👫⏱️ 18 · BF Timer ⚠️'   },
-  { v:'FamilyPadlock',           l:'👨‍👩‍👧 19 · Family ⚠️'        },
-  { v:'淫纹锁LuziPadlock',        l:'🌸 20 · Lewd Crest'        },
-  { v:'DeviousPadlock',          l:'😈 21 · Devious ⚠️'        },
-  { v:'HeartPadlock',            l:'❤️ 22 · Heart ⚠️'          },
+  // ── Immer verfügbar ──────────────────────────────────────────
+  { v:'MetalPadlock',              l:'🔒 Metall'                              },
+  { v:'ExclusivePadlock',          l:'🔐 Exklusiv'                            },
+  { v:'IntricatePadlock',          l:'🔒✨ Intricate'                         },
+  { v:'HighSecurityPadlock',       l:'🛡️ High Security'                       },
+  { v:'PandoraPadlock',            l:'📦 Pandora'                             },
+  { v:'MistressPadlock',           l:'🎭 Mistress'                            },
+  { v:'TimerPadlock',              l:'⏱️ Timer (max 5min)'                    },
+  { v:'CombinationPadlock',        l:'🔢 Kombination'                         },
+  { v:'SafewordPadlock',           l:'⚡ Safeword'                            },
+  { v:'PasswordPadlock',           l:'🔑 Passwort'                            },
+  { v:'MistressTimerPadlock',      l:'🎭⏱️ Mistress Timer'                    },
+  { v:'TimerPasswordPadlock',      l:'⏱️🔑 Timer + Passwort'                  },
+  { v:'淫纹锁LuziPadlock',          l:'🌸 Lewd Crest (Mod)'                   },
+  // ── Nur mit Beziehung / eingeschränkt ────────────────────────
+  { v:'LoversPadlock',             l:'💕 Lover  ⚠ nur mit Lover'              },
+  { v:'LoversTimerPadlock',        l:'💕⏱️ Lover Timer  ⚠ nur mit Lover'      },
+  { v:'OwnerPadlock',              l:'👑 Owner  ⚠ nur wenn Owner'             },
+  { v:'OwnerTimerPadlock',         l:'👑⏱️ Owner Timer  ⚠ nur wenn Owner'     },
+  { v:'FamilyPadlock',             l:'👨‍👩‍👧 Family  ⚠ nur mit Familie'         },
+  { v:'Best Friend Padlock',       l:'👫 Best Friend  ⚠ Mod + Freundschaft'   },
+  { v:'Best Friend Timer Padlock', l:'👫⏱️ BF Timer  ⚠ Mod + Freundschaft'    },
+  { v:'DeviousPadlock',            l:'😈 Devious  ⚠ BCX, nur lokal'           },
+  { v:'HeartPadlock',              l:'❤️ Heart  ⚠ Mod erforderlich'            },
 ];
 
 function _buildLockApplyPanelHtml(mk, li) {
