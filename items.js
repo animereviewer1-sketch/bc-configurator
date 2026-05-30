@@ -7126,7 +7126,7 @@ const _LOCK_META = {
   'FamilyPadlock':            { icon:'👨‍👩‍👧', label:'Family',             hasTimer:false, hasPw:false, hasCombo:false, hasHint:false },
   '淫纹锁LuziPadlock':         { icon:'🌸',   label:'Lewd Crest',         hasTimer:false, hasPw:false, hasCombo:false, hasHint:false },
   'LewdCrestPadlock':         { icon:'🌸',   label:'Lewd Crest (alt)',   hasTimer:false, hasPw:false, hasCombo:false, hasHint:false },
-  'DeviousPadlock':           { icon:'😈',   label:'Devious',            hasTimer:false, hasPw:false, hasCombo:false, hasHint:false },
+  'DeviousPadlock':           { icon:'😈',   label:'Devious (BCX)',      hasTimer:true,  hasPw:false, hasCombo:false, hasHint:false, hasKeyHolder:true },
   'HeartPadlock':             { icon:'❤️',   label:'Heart',              hasTimer:false, hasPw:false, hasCombo:false, hasHint:false },
   // Legacy / BC standalone timer
   'TimerPadlock':             { icon:'⏱️',   label:'Timer',              hasTimer:true,  hasPw:false, hasCombo:false, hasHint:false },
@@ -7338,6 +7338,13 @@ function _buildLockEditHtml(mk, lock, meta, isPlayer) {
       + '<span class="lk-edit-lbl">🔢 Kombi</span>'
       + '<input type="text" class="lk-input lk-edit-combo" maxlength="4" value="' + escHtml(lock.combination || '') + '" placeholder="0000">'
       + '</div>';
+  }
+  if (meta.hasKeyHolder) {
+    fields += '<div class="lk-edit-row">'
+      + '<span class="lk-edit-lbl">🗝️ Key Holder #</span>'
+      + '<input type="number" class="lk-input lk-edit-keyholder" min="0" value="' + (lock.lockerNum || '') + '" placeholder="MemberNumber">'
+      + '</div>'
+      + '<div class="lk-edit-info lk-dim" style="font-size:.7rem;padding:4px 0">Min. Role, Note, Protected from cheats → BCX In-Game Menü</div>';
   }
 
   if (!fields) {
@@ -7656,16 +7663,18 @@ function applyLockEdit(mk, group) {
   const panel = document.getElementById('lockEdit-' + mk + '-' + group);
   if (!panel) return;
 
-  const hEl     = panel.querySelector('.lk-edit-h');
-  const mEl     = panel.querySelector('.lk-edit-m');
-  const pwEl    = panel.querySelector('.lk-edit-pw');
-  const hintEl  = panel.querySelector('.lk-edit-hint');
-  const comboEl = panel.querySelector('.lk-edit-combo');
+  const hEl        = panel.querySelector('.lk-edit-h');
+  const mEl        = panel.querySelector('.lk-edit-m');
+  const pwEl       = panel.querySelector('.lk-edit-pw');
+  const hintEl     = panel.querySelector('.lk-edit-hint');
+  const comboEl    = panel.querySelector('.lk-edit-combo');
+  const keyHolderEl= panel.querySelector('.lk-edit-keyholder');
 
-  const timerSec = (hEl && mEl) ? (parseInt(hEl.value || 0) * 3600 + parseInt(mEl.value || 0) * 60) : null;
-  const newPw    = pwEl    ? pwEl.value    : null;
-  const newHint  = hintEl  ? hintEl.value  : null;
-  const newCombo = comboEl ? comboEl.value : null;
+  const timerSec   = (hEl && mEl) ? (parseInt(hEl.value || 0) * 3600 + parseInt(mEl.value || 0) * 60) : null;
+  const newPw      = pwEl        ? pwEl.value                          : null;
+  const newHint    = hintEl      ? hintEl.value                        : null;
+  const newCombo   = comboEl     ? comboEl.value                       : null;
+  const newKH      = keyHolderEl ? parseInt(keyHolderEl.value || 0)    : null;
 
   // Only set timer if > 0 — 0:0 would expire immediately
   const wantsTimer = (timerSec != null && timerSec > 0);
@@ -7673,7 +7682,8 @@ function applyLockEdit(mk, group) {
   const hasHint    = newHint  != null;
   const hasCombo   = newCombo != null;
 
-  if (!wantsTimer && !hasPw && !hasHint && !hasCombo) {
+  const wantsKH = (newKH != null && newKH > 0);
+  if (!wantsTimer && !hasPw && !hasHint && !hasCombo && !wantsKH) {
     showStatus('⚠️ Nichts zu ändern (Timer muss > 0 sein)', 'info'); return;
   }
 
@@ -7700,6 +7710,7 @@ function applyLockEdit(mk, group) {
   if (hasPw    && newPw    !== null) code += '_item.Property.Password=' + JSON.stringify(newPw) + ';\n';
   if (hasHint  && newHint  !== null) code += '_item.Property.Hint=' + JSON.stringify(newHint) + ';\n';
   if (hasCombo && newCombo !== null) code += '_item.Property.CombinationNumber=' + JSON.stringify(newCombo) + ';\n';
+  if (newKH    && newKH    >  0)     code += '_item.Property.LockMemberNumber=' + newKH + ';\n';
   // Sync with 600ms delay — both functions needed for room visibility
   code += 'setTimeout(function(){\n';
   code += '  if(C.MemberNumber===Player.MemberNumber){ServerPlayerAppearanceSync();ChatRoomCharacterUpdate(C);}';
