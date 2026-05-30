@@ -7113,18 +7113,19 @@ const _LOCK_META = {
   'MistressPadlock':          { icon:'🎭',   label:'Mistress',           hasTimer:false, hasPw:false, hasCombo:false, hasHint:false },
   'LoversPadlock':            { icon:'💕',   label:'Lover',              hasTimer:false, hasPw:false, hasCombo:false, hasHint:false },
   'OwnerPadlock':             { icon:'👑',   label:'Owner',              hasTimer:false, hasPw:false, hasCombo:false, hasHint:false },
-  'FiveMinutesPadlock':       { icon:'⏱️5m', label:'5 Minuten',          hasTimer:true,  hasPw:false, hasCombo:false, hasHint:false },
+  'FiveMinutesPadlock':       { icon:'⏱️5m', label:'5 Minuten (alt)',    hasTimer:true,  hasPw:false, hasCombo:false, hasHint:false },
   'CombinationPadlock':       { icon:'🔢',   label:'Kombination',        hasTimer:false, hasPw:false, hasCombo:true,  hasHint:false },
-  'SafewordPadlock':          { icon:'⚡',   label:'Safeword',           hasTimer:false, hasPw:true,  hasCombo:false, hasHint:true  },
-  'PasswordPadlock':          { icon:'🔑',   label:'Passwort',           hasTimer:false, hasPw:true,  hasCombo:false, hasHint:true  },
+  'SafewordPadlock':          { icon:'⚡',   label:'Safeword',           hasTimer:false, hasPw:false, hasCombo:false, hasHint:false },
+  'PasswordPadlock':          { icon:'🔑',   label:'Passwort',           hasTimer:false, hasPw:true,  hasCombo:false, hasHint:false },
   'MistressTimerPadlock':     { icon:'🎭⏱️', label:'Mistress Timer',     hasTimer:true,  hasPw:false, hasCombo:false, hasHint:false },
   'LoversTimerPadlock':       { icon:'💕⏱️', label:'Lover Timer',        hasTimer:true,  hasPw:false, hasCombo:false, hasHint:false },
   'OwnerTimerPadlock':        { icon:'👑⏱️', label:'Owner Timer',        hasTimer:true,  hasPw:false, hasCombo:false, hasHint:false },
-  'TimerPasswordPadlock':     { icon:'⏱️🔑', label:'Timer + PW',        hasTimer:true,  hasPw:true,  hasCombo:false, hasHint:true  },
-  'BestFriendPadlock':        { icon:'👫',   label:'Best Friend',        hasTimer:false, hasPw:false, hasCombo:false, hasHint:false },
-  'BestFriendTimerPadlock':   { icon:'👫⏱️', label:'BF Timer',           hasTimer:true,  hasPw:false, hasCombo:false, hasHint:false },
+  'TimerPasswordPadlock':     { icon:'⏱️🔑', label:'Timer + PW',         hasTimer:true,  hasPw:true,  hasCombo:false, hasHint:true  },
+  'Best Friend Padlock':      { icon:'👫',   label:'Best Friend',        hasTimer:false, hasPw:false, hasCombo:false, hasHint:false },
+  'Best Friend Timer Padlock':{ icon:'👫⏱️', label:'BF Timer',           hasTimer:true,  hasPw:false, hasCombo:false, hasHint:false },
   'FamilyPadlock':            { icon:'👨‍👩‍👧', label:'Family',             hasTimer:false, hasPw:false, hasCombo:false, hasHint:false },
-  'LewdCrestPadlock':         { icon:'🌸',   label:'Lewd Crest',         hasTimer:false, hasPw:false, hasCombo:false, hasHint:false },
+  '淫纹锁LuziPadlock':         { icon:'🌸',   label:'Lewd Crest',         hasTimer:false, hasPw:false, hasCombo:false, hasHint:false },
+  'LewdCrestPadlock':         { icon:'🌸',   label:'Lewd Crest (alt)',   hasTimer:false, hasPw:false, hasCombo:false, hasHint:false },
   'DeviousPadlock':           { icon:'😈',   label:'Devious',            hasTimer:false, hasPw:false, hasCombo:false, hasHint:false },
   'HeartPadlock':             { icon:'❤️',   label:'Heart',              hasTimer:false, hasPw:false, hasCombo:false, hasHint:false },
   // Legacy / BC standalone timer
@@ -7395,20 +7396,20 @@ const _APPLY_LOCK_TYPES = [
   { v:'MistressPadlock',        l:'🎭 6 · Mistress'           },
   { v:'LoversPadlock',          l:'💕 7 · Lover'              },
   { v:'OwnerPadlock',           l:'👑 8 · Owner'              },
-  { v:'FiveMinutesPadlock',     l:'⏱️ 9 · Five Minutes'       },
-  { v:'CombinationPadlock',     l:'🔢 10 · Kombination'       },
-  { v:'SafewordPadlock',        l:'⚡ 11 · Safeword'          },
-  { v:'PasswordPadlock',        l:'🔑 12 · Passwort'          },
-  { v:'MistressTimerPadlock',   l:'🎭⏱️ 13 · Mistress Timer'  },
-  { v:'LoversTimerPadlock',     l:'💕⏱️ 14 · Lover Timer'     },
-  { v:'OwnerTimerPadlock',      l:'👑⏱️ 15 · Owner Timer'     },
-  { v:'TimerPasswordPadlock',   l:'⏱️🔑 16 · Timer Password'  },
-  { v:'BestFriendPadlock',      l:'👫 17 · Best Friend'       },
-  { v:'BestFriendTimerPadlock', l:'👫⏱️ 18 · BF Timer'        },
-  { v:'FamilyPadlock',          l:'👨‍👩‍👧 19 · Family'           },
-  { v:'LewdCrestPadlock',       l:'🌸 20 · Lewd Crest'        },
-  { v:'DeviousPadlock',         l:'😈 21 · Devious'           },
-  { v:'HeartPadlock',           l:'❤️ 22 · Heart'             },
+  { v:'TimerPadlock',            l:'⏱️ 9 · Timer (max 5min)'   },
+  { v:'CombinationPadlock',      l:'🔢 10 · Kombination'       },
+  { v:'SafewordPadlock',         l:'⚡ 11 · Safeword'          },
+  { v:'PasswordPadlock',         l:'🔑 12 · Passwort'          },
+  { v:'MistressTimerPadlock',    l:'🎭⏱️ 13 · Mistress Timer'  },
+  { v:'LoversTimerPadlock',      l:'💕⏱️ 14 · Lover Timer ⚠️'  },
+  { v:'OwnerTimerPadlock',       l:'👑⏱️ 15 · Owner Timer ⚠️'  },
+  { v:'TimerPasswordPadlock',    l:'⏱️🔑 16 · Timer Password'  },
+  { v:'Best Friend Padlock',     l:'👫 17 · Best Friend ⚠️'    },
+  { v:'Best Friend Timer Padlock',l:'👫⏱️ 18 · BF Timer ⚠️'   },
+  { v:'FamilyPadlock',           l:'👨‍👩‍👧 19 · Family ⚠️'        },
+  { v:'淫纹锁LuziPadlock',        l:'🌸 20 · Lewd Crest'        },
+  { v:'DeviousPadlock',          l:'😈 21 · Devious ⚠️'        },
+  { v:'HeartPadlock',            l:'❤️ 22 · Heart ⚠️'          },
 ];
 
 function _buildLockApplyPanelHtml(mk, li) {
@@ -7486,10 +7487,32 @@ function applyNewLock(mk, group) {
   const hintEl  = panel.querySelector('.lk-apply-hint');
   const comboEl = panel.querySelector('.lk-apply-combo');
 
-  const timerSec = (meta.hasTimer && hEl && mEl) ? (parseInt(hEl.value || 0) * 3600 + parseInt(mEl.value || 0) * 60) : 0;
+  let timerSec = (meta.hasTimer && hEl && mEl) ? (parseInt(hEl.value || 0) * 3600 + parseInt(mEl.value || 0) * 60) : 0;
   const password = (meta.hasPw    && pwEl)    ? (pwEl.value    || '') : null;
   const hint     = (meta.hasHint  && hintEl)  ? (hintEl.value  || '') : null;
   const combo    = (meta.hasCombo && comboEl) ? (comboEl.value || '') : null;
+
+  // TimerPadlock: max 5 Minuten
+  if (lockType === 'TimerPadlock' && timerSec > 300) {
+    timerSec = 300;
+    showStatus('⚠️ TimerPadlock max 5 Min – auf 5 Min gesetzt', 'info');
+  }
+
+  // Passwort-Validierung: 8 Großbuchstaben A-Z
+  if (meta.hasPw && password !== null && password !== '') {
+    const pwUpper = password.toUpperCase();
+    if (!/^[A-Z]{1,8}$/.test(pwUpper)) {
+      showStatus('❌ Passwort: max 8 Großbuchstaben (A-Z), keine Zahlen/Sonderzeichen', 'error'); return;
+    }
+    if (pwEl) pwEl.value = pwUpper; // auto-uppercase
+  }
+
+  // Kombination: 4 Ziffern
+  if (meta.hasCombo && combo !== null && combo !== '') {
+    if (!/^\d{4}$/.test(combo)) {
+      showStatus('❌ Kombination: exakt 4 Ziffern (0000–9999)', 'error'); return;
+    }
+  }
 
   const mkNum = parseInt(mk);
   const expMs = timerSec > 0 ? (Date.now() + timerSec * 1000) : 0;
@@ -7520,6 +7543,13 @@ function applyNewLock(mk, group) {
   code += 'InventoryLock(C,_item,' + JSON.stringify(lockType) + ',Player.MemberNumber);\n';
   code += 'console.log("✅ Lock vergeben: ' + lockType + ' → ' + group + '");\n';
   code += '}catch(e){console.error("❌ applyNewLock:",e.message);}\n})();';
+
+  // Lewd Crest (淫纹锁LuziPadlock) + DeviousPadlock: via FuSam /lock Command
+  const _FUSAM_LOCK_TYPES = ['淫纹锁LuziPadlock', 'DeviousPadlock'];
+  if (_FUSAM_LOCK_TYPES.includes(lockType)) {
+    applyFusamLock(mk, group);
+    return;
+  }
 
   bcSend({ type: 'EXEC', code });
   showStatus('🔒 ' + meta.icon + ' ' + meta.label + ' → ' + group, 'success');
