@@ -7116,7 +7116,7 @@ const _LOCK_META = {
   'FiveMinutesPadlock':       { icon:'⏱️5m', label:'5 Minuten (alt)',    hasTimer:true,  hasPw:false, hasCombo:false, hasHint:false },
   'CombinationPadlock':       { icon:'🔢',   label:'Kombination',        hasTimer:false, hasPw:false, hasCombo:true,  hasHint:false },
   'SafewordPadlock':          { icon:'⚡',   label:'Safeword',           hasTimer:false, hasPw:true,  hasCombo:false, hasHint:false },
-  'PasswordPadlock':          { icon:'🔑',   label:'Passwort',           hasTimer:false, hasPw:true,  hasCombo:false, hasHint:false },
+  'PasswordPadlock':          { icon:'🔑',   label:'Passwort',           hasTimer:false, hasPw:true,  hasCombo:false, hasHint:true  },
   'MistressTimerPadlock':     { icon:'🎭⏱️', label:'Mistress Timer',     hasTimer:true,  hasPw:false, hasCombo:false, hasHint:false },
   'LoversTimerPadlock':       { icon:'💕⏱️', label:'Lover Timer',        hasTimer:true,  hasPw:false, hasCombo:false, hasHint:false },
   'OwnerTimerPadlock':        { icon:'👑⏱️', label:'Owner Timer',        hasTimer:true,  hasPw:false, hasCombo:false, hasHint:false },
@@ -7402,6 +7402,7 @@ const _APPLY_LOCK_TYPES = [
   { v:'MistressTimerPadlock',      l:'🎭⏱️ Mistress Timer'                    },
   { v:'TimerPasswordPadlock',      l:'⏱️🔑 Timer + Passwort'                  },
   { v:'淫纹锁LuziPadlock',          l:'🌸 Lewd Crest (Mod)'                   },
+  { v:'DeviousPadlock',            l:'😈 Devious (BCX Mod)'                   },
   // ── Nur mit Beziehung / eingeschränkt ────────────────────────
   { v:'LoversPadlock',             l:'💕 Lover  ⚠ nur mit Lover'              },
   { v:'LoversTimerPadlock',        l:'💕⏱️ Lover Timer  ⚠ nur mit Lover'      },
@@ -7410,7 +7411,6 @@ const _APPLY_LOCK_TYPES = [
   { v:'FamilyPadlock',             l:'👨‍👩‍👧 Family  ⚠ nur mit Familie'         },
   { v:'Best Friend Padlock',       l:'👫 Best Friend  ⚠ Mod + Freundschaft'   },
   { v:'Best Friend Timer Padlock', l:'👫⏱️ BF Timer  ⚠ Mod + Freundschaft'    },
-  { v:'DeviousPadlock',            l:'😈 Devious  ⚠ BCX, nur lokal'           },
   { v:'HeartPadlock',              l:'❤️ Heart  ⚠ Mod erforderlich'            },
 ];
 
@@ -7582,9 +7582,12 @@ function applyNewLock(mk, group) {
         code2 += '_item.Property.RemoveTimer=' + expMs + ';\n';
         code2 += '_item.Property.ShowTimer=true;\n';
       }
-      if (password !== null) code2 += '_item.Property.Password=' + JSON.stringify(password) + ';\n';
-      if (hint     !== null) code2 += '_item.Property.Hint='     + JSON.stringify(hint)     + ';\n';
-      if (combo    !== null) code2 += '_item.Property.CombinationNumber=' + JSON.stringify(combo) + ';\n';
+      if (password !== null) {
+        code2 += '_item.Property.Password=' + JSON.stringify(password.toUpperCase()) + ';\n';
+        code2 += '_item.Property.LockSet=true;\n';
+      }
+      if (hint  !== null) code2 += '_item.Property.Hint='              + JSON.stringify(hint)  + ';\n';
+      if (combo !== null) code2 += '_item.Property.CombinationNumber=' + JSON.stringify(combo) + ';\n';
       code2 += 'setTimeout(function(){\n';
       code2 += '  if(C.MemberNumber===Player.MemberNumber){\n';
       code2 += '    ServerPlayerAppearanceSync();\n';
