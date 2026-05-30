@@ -1058,6 +1058,16 @@ window.CurseScanner = (() => {
                     selfUnlock:  _P.SelfUnlock         ?? false,
                     showTimer:   _P.ShowTimer          ?? false,
                     memberList:  _P.MemberNumberList   ?? null,
+                    // Devious / Lewd Crest extended properties
+                    shockLevel:        _P.ShockLevel         ?? null,
+                    showText:          _P.ShowText           ?? null,
+                    punishOrgasm:      _P.PunishOrgasm       ?? null,
+                    punishStandup:     _P.PunishStandup      ?? null,
+                    punishStruggle:    _P.PunishStruggle     ?? null,
+                    punishStruggleOther: _P.PunishStruggleOther ?? null,
+                    accessMode:        _P.AccessMode         ?? null,
+                    triggerValues:     _P.TriggerValues      ?? null,
+                    memberListKeys:    _P.MemberNumberListKeys ?? null,
                   });
                 } else if (_item.Asset.AllowLock) {
                   // Not locked but can accept a lock
