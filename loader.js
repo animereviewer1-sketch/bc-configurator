@@ -567,9 +567,14 @@ window.CurseScanner = (() => {
   }
 
   function scan() {
-    // Nur Raum-Charaktere scannen (nicht Player.Crafting – das ist die gesamte Garderobe)
-    // Vor dem Scan: craftCache in database laden (historische Einträge verfügbar halten)
-    Object.entries(craftCache).forEach(([k, e]) => { if (!database[k]) database[k] = { ...e, _fromCache: true }; });
+    // Vor dem Scan: craftCache in database laden (historische Einträge verfügbar halten).
+    // Nur Einträge eintragen die noch nicht in der DB sind – kein Object.entries wenn DB schon vollständig.
+    // Schneller check: wenn craftCache nicht größer als database → nichts zu mergen.
+    if (Object.keys(craftCache).length > Object.keys(database).length) {
+      for (const k in craftCache) {
+        if (!database[k]) database[k] = { ...craftCache[k], _fromCache: true };
+      }
+    }
     const raumChars = ChatRoomCharacter ?? [];
     _snapshotAllLSCG(Player);
     const spieler = raumChars;
@@ -1162,6 +1167,8 @@ window.CurseScanner = (() => {
               lscgCache: result.lscgCache,
               room: _curseRoom,
               roomMembers: _curseRoomMembers,
+              neuDB: result.neuDB,
+              aktualisiert: result.aktualisiert,
               _auto: ev.data._auto === true,
             }, ALLOWED_ORIGIN);
             BCK.ok('CURSE_DATA gesendet: ' + Object.keys(result.database).length + ' Crafts');

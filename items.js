@@ -4268,68 +4268,81 @@ let _curseDBFresh = false; // true once BC sends live data — prevents IDB star
 function _handleCurseData(data) {
   if (data.err) { showStatus('❌ Curse-Scan: ' + data.err, 'error'); return; }
   _curseDBFresh = true;
-  const prevDB = {...CURSE_DB};
+
+  // ZuletztGescannt-Timestamps aus dem alten CURSE_DB retten BEVOR wir überschreiben.
+  // Nur cursed Items brauchen den Timestamp — einmalig per-key in einer Map sammeln (O(n)).
+  const _prevTs = {};
+  const _prevKeys = new Set(Object.keys(CURSE_DB));
+  for (const k of _prevKeys) {
+    const ts = CURSE_DB[k]?.ZuletztGescannt;
+    if (ts) _prevTs[k] = ts;
+  }
+
   CURSE_DB         = data.database    ?? {};
   CURSE_LSCG       = data.lscgTable   ?? {};
   CURSE_CACHE_LSCG = data.lscgCache   ?? {};
-  // Cursed-Items: ZuletztGescannt nur für Personen aktualisieren die JETZT im Raum sind.
-  // data.roomMembers kommt direkt vom BC-Scan-Zeitpunkt → kein Raumwechsel-Race-Condition.
+
   const _now = Date.now();
   const _roomNums = data.roomMembers?.length
     ? new Set(data.roomMembers.map(String))
-    : new Set(_lastRoomMembers.map(function(m) { return String(m.num); })); // Fallback
-  Object.keys(CURSE_DB).forEach(k => {
+    : new Set(_lastRoomMembers.map(function(m) { return String(m.num); }));
+
+  // Timestamps setzen: nur cursed Items, nur einmal über CURSE_DB iterieren (O(n))
+  for (const k in CURSE_DB) {
     const entry = CURSE_DB[k];
-    if (!entry.IstCursed) return;
+    if (!entry.IstCursed) continue;
     const ownerNum = String(entry.Besitzer?.Nummer ?? '');
     if (_roomNums.has(ownerNum)) {
-      // Person ist gerade im Raum → Neu-Badge setzen (auch mit Outfit-Flag)
       entry.ZuletztGescannt = _now;
-    } else if (prevDB[k]?.ZuletztGescannt) {
-      // Person nicht im Raum → alten Timestamp behalten
-      entry.ZuletztGescannt = prevDB[k].ZuletztGescannt;
+    } else if (_prevTs[k]) {
+      entry.ZuletztGescannt = _prevTs[k];
     }
-    // kein else: kein alter Timestamp → bleibt ohne → kein Badge
-  });
+  }
 
-  // ── Scan-Meta: Raum + Zeitpunkt für alle aktuellen Raum-Member speichern ───
-  // Nur wenn ein Raumname vorhanden (echter Live-Scan, nicht nur DB-Reload)
+  // Scan-Meta: Raum + Zeitpunkt für aktuellen Raum speichern
   if (_roomNums.size > 0 && data.room) {
-    const _scanRoom = data.room || null;
+    const _scanRoom = data.room;
     const _scanTime = new Date().toLocaleString('de-DE', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
-    // Alle Owner-Nummern die in CURSE_DB vorkommen und gerade im Raum sind
     const _seenOwners = new Set();
-    Object.values(CURSE_DB).forEach(function(e) {
-      const on = String(e.Besitzer?.Nummer ?? '');
+    for (const k in CURSE_DB) {
+      const on = String(CURSE_DB[k].Besitzer?.Nummer ?? '');
       if (on && _roomNums.has(on)) _seenOwners.add(on);
-    });
-    _seenOwners.forEach(function(on) {
-      CURSE_SCAN_META[on] = { room: _scanRoom, time: _scanTime };
-    });
+    }
+    _seenOwners.forEach(function(on) { CURSE_SCAN_META[on] = { room: _scanRoom, time: _scanTime }; });
     if (_seenOwners.size > 0) _saveCurseScanMeta();
   }
+
   _updateCurseStats();
   _populateSlotFilter();
   if (_activeTab === 'curse') renderCurseTab();
-  const total = Object.keys(CURSE_DB).length;
+
+  const total  = Object.keys(CURSE_DB).length;
   const isAuto = data._auto === true;
-  // Change-Detection
-  const added   = Object.keys(CURSE_DB).filter(k => !prevDB[k]);
-  const updated = Object.keys(CURSE_DB).filter(k => prevDB[k] && JSON.stringify(prevDB[k]) !== JSON.stringify(CURSE_DB[k]));
+
+  // Change-Detection: BC sendet neuDB/aktualisiert direkt mit → kein teurer JSON.stringify-Vergleich
+  const addedCount   = data.neuDB       ?? 0;
+  const updatedCount = data.aktualisiert ?? 0;
+  // Fallback: einfacher Key-Vergleich wenn BC-Werte fehlen (kein JSON.stringify!)
+  const _addedKeys = addedCount === 0 && updatedCount === 0
+    ? Object.keys(CURSE_DB).filter(k => !_prevKeys.has(k))
+    : [];
+  const _finalAdded   = addedCount   || _addedKeys.length;
+  const _finalUpdated = updatedCount || 0;
+
   let statusText = '✅ ' + total + ' Crafts';
-  if (added.length || updated.length) {
-    statusText += ' | +' + added.length + ' neu, ' + updated.length + ' geändert';
-    _showChangeBadge(added, updated);
+  if (_finalAdded || _finalUpdated) {
+    statusText += ' | +' + _finalAdded + ' neu, ' + _finalUpdated + ' geändert';
+    if (_addedKeys.length) _showChangeBadge(_addedKeys, []);
+    else if (addedCount)   _showChangeBadge([], []);
   } else if (!isAuto) {
     statusText += ' | keine Änderungen';
   }
   document.getElementById('csScanStatus').textContent = isAuto
     ? '🔄 ' + new Date().toLocaleTimeString() + ' — ' + total + ' Crafts'
     : statusText;
-  if (!isAuto || added.length || updated.length) {
-    showStatus(statusText, added.length + updated.length > 0 ? 'success' : 'info');
+  if (!isAuto || _finalAdded || _finalUpdated) {
+    showStatus(statusText, _finalAdded + _finalUpdated > 0 ? 'success' : 'info');
   }
-  // persist
   _saveCurseDB();
 }
 
