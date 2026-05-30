@@ -412,29 +412,38 @@ function _applyItemAction(a, C){
         if(ic.lock){
           const BCX_L=['LewdCrestPadlock','DeviousPadlock','LuziPadlock'];
           const REL_L=['OwnerPadlock','LoversPadlock','MistressPadlock'];
+          const isDevious=ic.lock==='DeviousPadlock';
           const isBcx=BCX_L.includes(ic.lock);
           const isRel=REL_L.includes(ic.lock);
           const lp=ic.lockParams??{};
-          const lockAsset=isBcx
+          // DeviousPadlock: BCX locks with ExclusivePadlock underneath, then sets Name="DeviousPadlock"
+          const actualLockName=isDevious?(lp.bcxBase||'ExclusivePadlock'):ic.lock;
+          const lockAsset=(isBcx&&!isDevious)
             ?(Asset.find(a=>a.Name===ic.lock&&a.Group?.Name==='ItemMisc')??Asset.find(a=>a.Name===ic.lock))
-            :Asset.find(a=>a.Name===ic.lock&&a.Group?.Name==='ItemMisc');
+            :Asset.find(a=>a.Name===actualLockName&&a.Group?.Name==='ItemMisc');
           if(lockAsset){
             const itemForLock=InventoryGet(C,ic.group);
             if(itemForLock){
               InventoryLock(C,itemForLock,{Asset:lockAsset},Player.MemberNumber,true);
               itemForLock.Property=itemForLock.Property??{};
-              if(lp.timer>0)   itemForLock.Property.RemoveTimer=Date.now()+lp.timer;
-              if(lp.combo)     itemForLock.Property.CombinationNumber=lp.combo;
-              if(lp.password)  itemForLock.Property.Password=lp.password;
-              if(isRel){
-                itemForLock.Property.LockMemberNumber=lp.relMember||Player.MemberNumber;
-                if(lp.relTimer>0)itemForLock.Property.RemoveTimer=Date.now()+lp.relTimer;
+              if(isDevious){
+                // BCX DeviousPadlock: only Name override works via Property
+                // BCX stores its own settings (minimumRole, memberNumbers etc.) internally — not settable from outside
+                itemForLock.Property.Name='DeviousPadlock';
+              } else {
+                if(lp.timer>0)   itemForLock.Property.RemoveTimer=Date.now()+lp.timer;
+                if(lp.combo)     itemForLock.Property.CombinationNumber=lp.combo;
+                if(lp.password)  itemForLock.Property.Password=lp.password;
+                if(isRel){
+                  itemForLock.Property.LockMemberNumber=lp.relMember||Player.MemberNumber;
+                  if(lp.relTimer>0)itemForLock.Property.RemoveTimer=Date.now()+lp.relTimer;
+                }
               }
               CharacterRefresh(C);
               _log('🔒 Schloss angelegt: '+ic.lock+' auf '+ic.asset+' ('+C.Name+')');
             }
           } else {
-            _log('⚠️ Schloss nicht gefunden: '+ic.lock);
+            _log('⚠️ Schloss nicht gefunden: '+ic.lock+' (actual: '+actualLockName+')');
           }
         }
         CharacterRefresh(C);ChatRoomCharacterUpdate(C);
@@ -1355,7 +1364,180 @@ const _itPoll=setInterval(()=>{
 // ── Spieler-Betritt Polling (feuert 1x beim Betreten) ──
 const _roomPrev=new Set((ChatRoomCharacter||[]).map(c=>c.MemberNumber));
 // _roomEver is now part of persisted state (declared above)
+// Startup grace: triggers don't fire for the first 2s so the initial room scan doesn't spam actions
+const _startupTs=Date.now();
+const _JOIN_GRACE_MS=2000;
+// Queue: if multiple joins happen in one tick, process one per tick to avoid blocking the UI
+const _joinQueue=[];
+// Processes one queued joiner per tick so multiple simultaneous joins don't block the UI
+function _processJoinQueue(){
+  if(!_joinQueue.length)return;
+  const {C,istNeu,label,pos}=_joinQueue.shift();
+  _log(label+': '+C.Name+' #'+C.MemberNumber+(Date.now()-_startupTs<_JOIN_GRACE_MS?' [startup-grace, no triggers]':''));
+  _pushLog({status:istNeu?'join':'join_rejoin',trigName:'',msg:istNeu?'Erstes Mal':'Rejoin'},
+    {name:C.Name+' #'+C.MemberNumber,x:C.X??0,y:C.Y??0,C},{id:'__system__',name:'System'});
+  if(istNeu){
+    window.__BCK_popupRef?.postMessage({app:'BCKonfigurator',type:'MONEY_INIT_NEW',memberNum:C.MemberNumber,name:C.Name},'*');
+  }
+  window.__BCK_popupRef?.postMessage({app:'BCKonfigurator',type:'RANG_INIT',memberNum:C.MemberNumber,name:C.Name},'*');
+  _roomEver.add(C.MemberNumber);
+  _syncRoomEver();
+  // Skip trigger firing during startup grace period (avoids blasting all triggers on room load)
+  if(Date.now()-_startupTs<_JOIN_GRACE_MS)return;
+  if(!istNeu) _rejoinWindow.set(C.MemberNumber, Date.now());
+  if(!istNeu) setTimeout(()=>{ _rejoinWindow.delete(C.MemberNumber); _log('\u{1F6AA} Rejoin-Fenster für #'+C.MemberNumber+' automatisch geschlossen (1s)'); },_REJOIN_GRACE);
+
+  const rejoinBatch=[];
+  _trigs.forEach(trig=>{
+    const bConds=(trig.bedingungen??[]).filter(c=>c.typ==='player_betritt');
+    if(!bConds.length)return;
+    const isRejoinTrig=bConds.some(c=>c.betritt_typ==='rejoin');
+    const bOk=bConds.every(c=>{
+      const bt=c.betritt_typ??'alle';
+      if(bt==='neu')return istNeu;
+      if(bt==='rejoin')return!istNeu;
+      return true;
+    });
+    if(!bOk)return;
+    const vonOk=(()=>{
+      if(trig.von==='bot')return C.MemberNumber===Player.MemberNumber;
+      if(trig.von==='whitelist')return(trig.vonNummern||[]).map(Number).includes(Number(C.MemberNumber));
+      return true;
+    })();
+    const otherOk=vonOk&&(trig.bedingungen??[]).every(c=>{
+      if(c.typ==='player_betritt')return true;
+      if(c.typ==='zone'){const p=c.puffer??1;return pos.X>=c.x-p&&pos.X<=c.x+p&&pos.Y>=c.y-p&&pos.Y<=c.y+p;}
+      if(c.typ==='zone_rect'){return pos.X>=Math.min(c.x1,c.x2)&&pos.X<=Math.max(c.x1,c.x2)&&pos.Y>=Math.min(c.y1,c.y2)&&pos.Y<=Math.max(c.y1,c.y2);}
+      if(c.typ==='trigger_war'){
+        if(isRejoinTrig){
+          const refTrig=_trigMap[c.trigId];
+          const refIsRejoin=(refTrig?.bedingungen??[]).some(bc=>bc.typ==='player_betritt'&&bc.betritt_typ==='rejoin');
+          if(refIsRejoin)return true;
+        }
+        const ref=_trigMap[c.trigId];
+        return ref?.charSpec?!!_firedChar[c.trigId+'_'+C.MemberNumber]:!!_fired[c.trigId];
+      }
+      if(c.typ==='rang'){
+        const op=c.rang_op??'=';
+        const currentId=_rangState[C.MemberNumber]??null;
+        if(op==='kein') return !currentId;
+        if(!c.rang_id) return false;
+        const defs=(_cfg.rankDefs??[]).sort((a,b)=>a.level-b.level);
+        const targetDef=defs.find(r=>r.id===c.rang_id);
+        const currentDef=defs.find(r=>r.id===currentId);
+        if(!targetDef) return false;
+        if(!currentDef) return false;
+        const tl=targetDef.level, cl=currentDef.level;
+        if(op==='=')   return cl===tl;
+        if(op==='min') return cl>=tl;
+        if(op==='max') return cl<=tl;
+        return false;
+      }
+      return true;
+    });
+    if(!otherOk)return;
+    if(isRejoinTrig){
+      rejoinBatch.push(trig);
+    } else {
+      const ifBeds=trig.ifBedingungen??[];
+      const ifOk=!trig.ifElse||!ifBeds.length||_okIf(trig,'',null,C);
+      if(ifOk) _run(trig,{name:C.Name,wort:'',typ:label,x:pos.X,y:pos.Y,zone:'',C});
+      else if((trig.aktionen_sonst??[]).length) _runSonst(trig,{name:C.Name,wort:'',typ:label,x:pos.X,y:pos.Y,zone:'',C});
+    }
+  });
+  // ── Betritt-Events feuern ──
+  _evts.forEach(ev=>{
+    if(!ev.aktiv)return;
+    const betrittConds=(ev.bedingungen??[]).filter(c=>c.typ==='player_betritt');
+    if(!betrittConds.length)return;
+    const bOk=betrittConds.every(c=>{
+      const bt=c.betritt_typ??'alle';
+      if(bt==='neu')return istNeu;
+      if(bt==='rejoin')return!istNeu;
+      return true;
+    });
+    if(!bOk)return;
+    const vonOk=(()=>{
+      if(ev.von==='bot')return C.MemberNumber===Player.MemberNumber;
+      if(ev.von==='nummer')return ev.vonNummer&&C.MemberNumber===+ev.vonNummer;
+      return true;
+    })();
+    if(!vonOk)return;
+    const evOtherOk=(ev.bedingungen??[]).every(c=>{
+      if(c.typ==='player_betritt')return true;
+      if(c.typ==='rang'){
+        const op=c.rang_op??'=';
+        const currentId=_rangState[C.MemberNumber]??null;
+        if(op==='kein') return !currentId;
+        if(!c.rang_id) return false;
+        const defs=(_cfg.rankDefs??[]).sort((a,b)=>a.level-b.level);
+        const targetDef=defs.find(r=>r.id===c.rang_id);
+        const currentDef=defs.find(r=>r.id===currentId);
+        if(!targetDef) return false;
+        if(!currentDef) return false;
+        const tl=targetDef.level, cl=currentDef.level;
+        if(op==='=')   return cl===tl;
+        if(op==='min') return cl>=tl;
+        if(op==='max') return cl<=tl;
+        return false;
+      }
+      return true;
+    });
+    if(!evOtherOk)return;
+    const allChars=[Player,...(ChatRoomCharacter||[])];
+    let targets=[];
+    if(ev.ziel==='alle')targets=allChars;
+    else if(ev.ziel==='liste')targets=allChars.filter(ch=>(ev.zielListe||[]).includes(ch.MemberNumber));
+    else targets=[C];
+    const cnt=_evFiredCnt[ev.id]??0;
+    if(ev.wiederholung==='einmalig'&&cnt>=1)return;
+    if(ev.wiederholung==='n_mal'&&cnt>=(ev.maxMal??2))return;
+    targets.forEach(ch=>{
+      const vars={name:ch.Name,wort:'',typ:label,x:ch.X??0,y:ch.Y??0,zone:'',C:ch};
+      _runSeq(ev.aktionen??[],ch,vars,ev,
+        ()=>{_evFiredCnt[ev.id]=(_evFiredCnt[ev.id]??0)+1;_pushLog({status:'ok'},vars,{name:ev.name,id:ev.id});},
+        ()=>{_pushLog({status:'ungueltig'},vars,{name:ev.name,id:ev.id});}
+      );
+    });
+  });
+
+  const ITEM_SYNC_DELAY=800;
+  rejoinBatch.forEach(trig=>{
+    const hasItemCond=(trig.bedingungen??[]).some(c=>c.typ==='item_traegt'||c.typ==='item_traegt_nicht');
+    if(hasItemCond){
+      setTimeout(()=>{
+        if(!_rejoinWindow.has(C.MemberNumber)){
+          _log('⏭ [Rejoin] "'+trig.name+'" – Fenster geschlossen vor Appearance-Sync');
+          return;
+        }
+        const Cfresh=ChatRoomCharacter.find(x=>x.MemberNumber===C.MemberNumber)??C;
+        const itemOk=(trig.bedingungen??[]).every(c=>{
+          if(c.typ==='item_traegt')return(Cfresh.Appearance??[]).some(a=>a.Asset?.Name===c.item);
+          if(c.typ==='item_traegt_nicht')return!(Cfresh.Appearance??[]).some(a=>a.Asset?.Name===c.item);
+          return true;
+        });
+        if(!itemOk){
+          _log('⏭ [Rejoin] "'+trig.name+'" – Item-Bedingung nach Sync nicht erfüllt (Appearance jetzt geladen)');
+          return;
+        }
+        const ifBedsR=trig.ifBedingungen??[];
+        const ifOkR=!trig.ifElse||!ifBedsR.length||_okIf(trig,'',null,Cfresh);
+        if(ifOkR) _run(trig,{name:Cfresh.Name,wort:'',typ:label,x:Cfresh.X??pos.X,y:Cfresh.Y??pos.Y,zone:'',C:Cfresh});
+        else if((trig.aktionen_sonst??[]).length) _runSonst(trig,{name:Cfresh.Name,wort:'',typ:label,x:Cfresh.X??pos.X,y:Cfresh.Y??pos.Y,zone:'',C:Cfresh});
+      },ITEM_SYNC_DELAY);
+    } else {
+      const ifBeds=trig.ifBedingungen??[];
+      const ifOk=!trig.ifElse||!ifBeds.length||_okIf(trig,'',null,C);
+      if(ifOk) _run(trig,{name:C.Name,wort:'',typ:label,x:pos.X,y:pos.Y,zone:'',C});
+      else if((trig.aktionen_sonst??[]).length) _runSonst(trig,{name:C.Name,wort:'',typ:label,x:pos.X,y:pos.Y,zone:'',C});
+    }
+  });
+}
+
 const _joinPoll=setInterval(()=>{
+  // Process one queued joiner first (spreads work across ticks)
+  _processJoinQueue();
+
   const chars=ChatRoomCharacter||[];
   const cur=new Set(chars.map(c=>c.MemberNumber));
 
@@ -1363,14 +1545,12 @@ const _joinPoll=setInterval(()=>{
   for(const prevNum of _roomPrev){
     if(!cur.has(prevNum)){
       _log('\u{1F6AA} #'+prevNum+' verlassen');
-      _rejoinWindow.delete(prevNum); // Fenster beim Verlassen schließen (Map)
+      _rejoinWindow.delete(prevNum);
       _pushLog({status:'leave', trigName:'Verlassen', trigId:'__system__',
         player:'#'+prevNum, memberNum:prevNum, x:0, y:0, msg:'Raum verlassen'}, {name:'#'+prevNum,x:0,y:0,C:{MemberNumber:prevNum}}, {name:'System',id:'__system__'});
-      // _zoneState zurücksetzen (Spieler nicht mehr im Raum)
       for(const k of Object.keys(_zoneState)){
         if(k.startsWith(prevNum+'_'))delete _zoneState[k];
       }
-      // _firedChar nur bei Triggern mit resetOnLeave=true zurücksetzen
       _trigs.forEach(trig=>{
         if(trig.charSpec&&trig.resetOnLeave){
           delete _firedChar[trig.id+'_'+prevNum];
@@ -1380,191 +1560,17 @@ const _joinPoll=setInterval(()=>{
     }
   }
 
+  // Enqueue new joiners (processed one-per-tick via _processJoinQueue)
   for(const C of chars){
     if(!_roomPrev.has(C.MemberNumber)){
       const istNeu=!_roomEver.has(C.MemberNumber);
       const label=istNeu?'\u{1F195} Neu':'\u{1F504} Rejoin';
-      _log(label+': '+C.Name+' #'+C.MemberNumber);
-      _pushLog({status:istNeu?'join':'join_rejoin',trigName:'',msg:istNeu?'Erstes Mal':'Rejoin'},
-        {name:C.Name+' #'+C.MemberNumber,x:C.X??0,y:C.Y??0,C},{id:'__system__',name:'System'});
-      // Neuer Spieler → Money-Init (nur Erstes Mal, nicht bei Rejoin)
-      if(istNeu){
-        window.__BCK_popupRef?.postMessage({app:'BCKonfigurator',type:'MONEY_INIT_NEW',memberNum:C.MemberNumber,name:C.Name},'*');
-      }
-      // Rang-Init: Spieler registrieren (kein Rang) – bei Rejoin nur Name aktualisieren
-      window.__BCK_popupRef?.postMessage({app:'BCKonfigurator',type:'RANG_INIT',memberNum:C.MemberNumber,name:C.Name},'*');
-      _roomEver.add(C.MemberNumber);
-      _syncRoomEver();
-      // ── Rejoin-Fenster öffnen (nur bei echtem Rejoin) ──
-      if(!istNeu) _rejoinWindow.set(C.MemberNumber, Date.now());
-      // Auto-close window after grace period
-      if(!istNeu) setTimeout(()=>{ _rejoinWindow.delete(C.MemberNumber); _log('\u{1F6AA} Rejoin-Fenster für #'+C.MemberNumber+' automatisch geschlossen (1s)'); },_REJOIN_GRACE);
-
-      // ── Alle passenden Trigger sammeln (Rejoin separat) ──
-      const pos={X:C.X??0,Y:C.Y??0};
-      const rejoinBatch=[]; // Rejoin-Trigger: alle sammeln, dann zusammen feuern
-      _trigs.forEach(trig=>{
-        const bConds=(trig.bedingungen??[]).filter(c=>c.typ==='player_betritt');
-        if(!bConds.length)return;
-        const isRejoinTrig=bConds.some(c=>c.betritt_typ==='rejoin');
-        const bOk=bConds.every(c=>{
-          const bt=c.betritt_typ??'alle';
-          if(bt==='neu')return istNeu;
-          if(bt==='rejoin')return!istNeu;
-          return true;
-        });
-        if(!bOk)return;
-        const vonOk=(()=>{
-          if(trig.von==='bot')return C.MemberNumber===Player.MemberNumber;
-          if(trig.von==='whitelist')return(trig.vonNummern||[]).map(Number).includes(Number(C.MemberNumber));
-          return true;
-        })();
-        const otherOk=vonOk&&(trig.bedingungen??[]).every(c=>{
-          if(c.typ==='player_betritt')return true;
-          if(c.typ==='zone'){const p=c.puffer??1;return pos.X>=c.x-p&&pos.X<=c.x+p&&pos.Y>=c.y-p&&pos.Y<=c.y+p;}
-          if(c.typ==='zone_rect'){return pos.X>=Math.min(c.x1,c.x2)&&pos.X<=Math.max(c.x1,c.x2)&&pos.Y>=Math.min(c.y1,c.y2)&&pos.Y<=Math.max(c.y1,c.y2);}
-          if(c.typ==='trigger_war'){
-            // Rejoin-Trigger blockieren sich NICHT gegenseitig:
-            // trigger_war auf anderen Rejoin-Trigger → immer true (feuern zusammen)
-            if(isRejoinTrig){
-              const refTrig=_trigMap[c.trigId];
-              const refIsRejoin=(refTrig?.bedingungen??[]).some(bc=>bc.typ==='player_betritt'&&bc.betritt_typ==='rejoin');
-              if(refIsRejoin)return true;
-            }
-            const ref=_trigMap[c.trigId];
-            return ref?.charSpec?!!_firedChar[c.trigId+'_'+C.MemberNumber]:!!_fired[c.trigId];
-          }
-          if(c.typ==='rang'){
-            const op=c.rang_op??'=';
-            const currentId=_rangState[C.MemberNumber]??null;
-            if(op==='kein') return !currentId;
-            if(!c.rang_id) return false;
-            const defs=(_cfg.rankDefs??[]).sort((a,b)=>a.level-b.level);
-            const targetDef=defs.find(r=>r.id===c.rang_id);
-            const currentDef=defs.find(r=>r.id===currentId);
-            if(!targetDef) return false;
-            if(!currentDef) return false;
-            const tl=targetDef.level, cl=currentDef.level;
-            if(op==='=')   return cl===tl;
-            if(op==='min') return cl>=tl;
-            if(op==='max') return cl<=tl;
-            return false;
-          }
-          return true;
-        });
-        if(!otherOk)return;
-        if(isRejoinTrig){
-          rejoinBatch.push(trig); // Rejoin: gesammelt feuern
-        } else {
-          const ifBeds=trig.ifBedingungen??[];
-          const ifOk=!trig.ifElse||!ifBeds.length||_okIf(trig,'',null,C);
-          if(ifOk) _run(trig,{name:C.Name,wort:'',typ:label,x:pos.X,y:pos.Y,zone:'',C});
-          else if((trig.aktionen_sonst??[]).length) _runSonst(trig,{name:C.Name,wort:'',typ:label,x:pos.X,y:pos.Y,zone:'',C});
-        }
-      });
-      // ── Betritt-Events feuern (Events mit player_betritt Bedingung) ──
-      _evts.forEach(ev=>{
-        if(!ev.aktiv)return;
-        const betrittConds=(ev.bedingungen??[]).filter(c=>c.typ==='player_betritt');
-        if(!betrittConds.length)return;
-        // betritt_typ Filter
-        const bOk=betrittConds.every(c=>{
-          const bt=c.betritt_typ??'alle';
-          if(bt==='neu')return istNeu;
-          if(bt==='rejoin')return!istNeu;
-          return true;
-        });
-        if(!bOk)return;
-        // Von-Filter: wer darf das Event auslösen (= wer muss der Beitretende sein)?
-        const vonOk=(()=>{
-          if(ev.von==='bot')return C.MemberNumber===Player.MemberNumber;
-          if(ev.von==='nummer')return ev.vonNummer&&C.MemberNumber===+ev.vonNummer;
-          return true; // 'alle' → jeder
-        })();
-        if(!vonOk)return;
-        // Weitere Bedingungen prüfen (z.B. Rang) – player_betritt wurde bereits oben geprüft
-        const evOtherOk=(ev.bedingungen??[]).every(c=>{
-          if(c.typ==='player_betritt')return true;
-          if(c.typ==='rang'){
-            const op=c.rang_op??'=';
-            const currentId=_rangState[C.MemberNumber]??null;
-            if(op==='kein') return !currentId;
-            if(!c.rang_id) return false;
-            const defs=(_cfg.rankDefs??[]).sort((a,b)=>a.level-b.level);
-            const targetDef=defs.find(r=>r.id===c.rang_id);
-            const currentDef=defs.find(r=>r.id===currentId);
-            if(!targetDef) return false;
-            if(!currentDef) return false;
-            const tl=targetDef.level, cl=currentDef.level;
-            if(op==='=')   return cl===tl;
-            if(op==='min') return cl>=tl;
-            if(op==='max') return cl<=tl;
-            return false;
-          }
-          return true;
-        });
-        if(!evOtherOk)return;
-        const evVars={name:C.Name,wort:'',typ:label,x:C.X??0,y:C.Y??0,zone:'',C};
-        const allChars=[Player,...(ChatRoomCharacter||[])];
-        let targets=[];
-        if(ev.ziel==='alle')targets=allChars;
-        else if(ev.ziel==='liste')targets=allChars.filter(ch=>(ev.zielListe||[]).includes(ch.MemberNumber));
-        else targets=[C]; // ausloeser = der beitretende Spieler
-        const cnt=_evFiredCnt[ev.id]??0;
-        if(ev.wiederholung==='einmalig'&&cnt>=1)return;
-        if(ev.wiederholung==='n_mal'&&cnt>=(ev.maxMal??2))return;
-        targets.forEach(ch=>{
-          const vars={name:ch.Name,wort:'',typ:label,x:ch.X??0,y:ch.Y??0,zone:'',C:ch};
-          // FIX: Read cnt inside callback so each target increments independently
-          _runSeq(ev.aktionen??[],ch,vars,ev,
-            ()=>{_evFiredCnt[ev.id]=(_evFiredCnt[ev.id]??0)+1;_pushLog({status:'ok'},vars,{name:ev.name,id:ev.id});},
-            ()=>{_pushLog({status:'ungueltig'},vars,{name:ev.name,id:ev.id});}
-          );
-        });
-      });
-
-      // Alle Rejoin-Trigger feuern (keine gegenseitige Blockade)
-      // Trigger MIT Item-Bedingungen: verzögert – BC-Appearance ist beim Join noch nicht geladen
-      // Trigger OHNE Item-Bedingungen: sofort
-      const ITEM_SYNC_DELAY = 800; // ms warten bis BC Appearance synchronisiert hat
-      rejoinBatch.forEach(trig=>{
-        const hasItemCond=(trig.bedingungen??[]).some(c=>c.typ==='item_traegt'||c.typ==='item_traegt_nicht');
-        if(hasItemCond){
-          // Verzögert feuern + Bedingung nochmal prüfen mit frischen Daten
-          setTimeout(()=>{
-            if(!_rejoinWindow.has(C.MemberNumber)){
-              _log('⏭ [Rejoin] "'+trig.name+'" – Fenster geschlossen vor Appearance-Sync');
-              return;
-            }
-            // Frische Appearance-Daten aus ChatRoomCharacter holen
-            const Cfresh=ChatRoomCharacter.find(x=>x.MemberNumber===C.MemberNumber)??C;
-            // Item-Bedingungen nochmal prüfen
-            const itemOk=(trig.bedingungen??[]).every(c=>{
-              if(c.typ==='item_traegt')return(Cfresh.Appearance??[]).some(a=>a.Asset?.Name===c.item);
-              if(c.typ==='item_traegt_nicht')return!(Cfresh.Appearance??[]).some(a=>a.Asset?.Name===c.item);
-              return true;
-            });
-            if(!itemOk){
-              _log('⏭ [Rejoin] "'+trig.name+'" – Item-Bedingung nach Sync nicht erfüllt (Appearance jetzt geladen)');
-              return;
-            }
-            const ifBedsR=trig.ifBedingungen??[];
-            const ifOkR=!trig.ifElse||!ifBedsR.length||_okIf(trig,'',null,Cfresh);
-            if(ifOkR) _run(trig,{name:Cfresh.Name,wort:'',typ:label,x:Cfresh.X??pos.X,y:Cfresh.Y??pos.Y,zone:'',C:Cfresh});
-            else if((trig.aktionen_sonst??[]).length) _runSonst(trig,{name:Cfresh.Name,wort:'',typ:label,x:Cfresh.X??pos.X,y:Cfresh.Y??pos.Y,zone:'',C:Cfresh});
-          }, ITEM_SYNC_DELAY);
-        } else {
-          const ifBeds=trig.ifBedingungen??[];
-          const ifOk=!trig.ifElse||!ifBeds.length||_okIf(trig,'',null,C);
-          if(ifOk) _run(trig,{name:C.Name,wort:'',typ:label,x:pos.X,y:pos.Y,zone:'',C});
-          else if((trig.aktionen_sonst??[]).length) _runSonst(trig,{name:C.Name,wort:'',typ:label,x:pos.X,y:pos.Y,zone:'',C});
-        }
-      });
+      _joinQueue.push({C,istNeu,label,pos:{X:C.X??0,Y:C.Y??0}});
     }
   }
   _roomPrev.clear();
   for(const n of cur)_roomPrev.add(n);
-},100);
+},500);
 
 // ── Zonen-Betreten Polling – direkt C.X/C.Y (wie ZoneMonitor-Pattern) ──
 const _zoneState={}; // 'memberNum_trigId' -> bool (war zuletzt drin)

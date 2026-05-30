@@ -1287,14 +1287,16 @@ const BCX_LOCKS = ['LewdCrestPadlock','DeviousPadlock','LuziPadlock'];
 const PW_LOCKS  = ['PasswordPadlock','TimerPasswordPadlock'];
 
 function onLockChange() {
-  const lock  = document.getElementById('lockType').value;
-  const isRel = REL_LOCKS.includes(lock);
-  const isBcx = BCX_LOCKS.includes(lock);
-  document.getElementById('timerGroup').classList.toggle('hidden',    !lock.includes('Timer') || isRel);
-  document.getElementById('comboGroup').classList.toggle('hidden',    lock !== 'CombinationPadlock');
-  document.getElementById('passwordGroup').classList.toggle('hidden', !PW_LOCKS.includes(lock));
-  document.getElementById('relLockGroup').classList.toggle('hidden',  !isRel);
-  document.getElementById('bcxLockHint').classList.toggle('hidden',   !isBcx);
+  const lock     = document.getElementById('lockType').value;
+  const isRel    = REL_LOCKS.includes(lock);
+  const isBcx    = BCX_LOCKS.includes(lock);
+  const isDevious = lock === 'DeviousPadlock';
+  document.getElementById('timerGroup').classList.toggle('hidden',      !lock.includes('Timer') || isRel);
+  document.getElementById('comboGroup').classList.toggle('hidden',      lock !== 'CombinationPadlock');
+  document.getElementById('passwordGroup').classList.toggle('hidden',   !PW_LOCKS.includes(lock));
+  document.getElementById('relLockGroup').classList.toggle('hidden',    !isRel);
+  document.getElementById('bcxLockHint').classList.toggle('hidden',     !isBcx || isDevious);
+  document.getElementById('deviousLockGroup').classList.toggle('hidden', !isDevious);
   generate();
 }
 
