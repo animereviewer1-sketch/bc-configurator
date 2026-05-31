@@ -5112,13 +5112,6 @@ function _curseSaveAsProfileSilent(dbKey, afterSave) {
   };
 
   const _save = (items, keepHairGroups) => {
-    // Vergleich mit Standard-Outfit — falls identisch: Check-Liste
-    const stdFp     = _ctStdOutfitFingerprint();
-    const currentFp = _ctItemFingerprint(items);
-    if (stdFp && currentFp && stdFp === currentFp) {
-      _addToCheck();
-      return;
-    }
     PROFILES[profileName] = {
       name:  profileName,
       date:  new Date().toLocaleDateString('de-DE'),
@@ -5147,6 +5140,16 @@ function _curseSaveAsProfileSilent(dbKey, afterSave) {
     if (!items?.length) {
       _addToCheck();
       return;
+    }
+    // Vergleich VOR _applyHairBaseline: Haar-Items sind im Standard-Outfit-Bundle enthalten,
+    // werden aber durch _applyHairBaseline entfernt → Fingerprints würden nie übereinstimmen.
+    const stdFp = _ctStdOutfitFingerprint();
+    if (stdFp) {
+      const rawFp = _ctItemFingerprint(items.map(_appearanceItemToProfile));
+      if (stdFp === rawFp) {
+        _addToCheck();
+        return;
+      }
     }
     const { filteredItems, keepHairGroups } = _applyHairBaseline(items);
     _save(filteredItems.map(_appearanceItemToProfile), keepHairGroups);
@@ -6749,10 +6752,9 @@ window.testOsOutfit = function(mk, vIdx) {
     + '    var worn=Player.Appearance.find(function(a){return a.Asset&&a.Asset.Group&&a.Asset.Group.Name===bundleItem.Group;});'
     + '    if(worn)worn.Property=JSON.parse(JSON.stringify(bundleItem.Property));'
     + '  });'
-    // Nackt-Gruppen die nicht im Bundle sind zurück einfügen
-    + '  nakedItems.forEach(function(item){'
-    + '    if(!bundleGroups.has(item.Asset.Group.Name))Player.Appearance.push(item);'
-    + '  });'
+    // Nackt-Gruppen (Arme etc.) zurück einfügen falls nach Apply nicht vorhanden
+    + '  var _afterGrps=new Set(Player.Appearance.map(function(a){return a.Asset&&a.Asset.Group?a.Asset.Group.Name:"";}));'
+    + '  nakedItems.forEach(function(item){if(!_afterGrps.has(item.Asset.Group.Name))Player.Appearance.push(item);});'
     + '  CharacterRefresh(Player,false,false);'
     + '  CharacterLoadCanvas(Player);'
     + '  console.log("[BCU] TEST-Apply fertig. Items:",Player.Appearance.length);'
@@ -7023,10 +7025,9 @@ function _buildApplyCode(code) {
     + '    if(worn)worn.Property=JSON.parse(JSON.stringify(bundleItem.Property));'
     + '  });'
     + '}'
-    // Nackte Items wieder einfügen falls nicht im Bundle
-    + 'nakedItems.forEach(function(item){'
-    + '  if(!bundleGroups.has(item.Asset.Group.Name))Player.Appearance.push(item);'
-    + '});'
+    // Nackte Items (Arme etc.) zurück einfügen falls nach Apply nicht vorhanden
+    + 'var _afterGrps=new Set(Player.Appearance.map(function(a){return a.Asset&&a.Asset.Group?a.Asset.Group.Name:"";}));'
+    + 'nakedItems.forEach(function(item){if(!_afterGrps.has(item.Asset.Group.Name))Player.Appearance.push(item);});'
     + 'CharacterRefresh(Player,false,false);';
 }
 
@@ -9402,11 +9403,7 @@ function _ctHandleChatMsg(event, content) {
       if (CURSE_DEFAULT_OUTFIT_CODE) {
         if (st) st.textContent = '🏠 Standard-Outfit…';
         showStatus('🏠 Standard-Outfit wird wiederhergestellt…', 'info');
-        const code = typeof _oiBuildExecCode === 'function'
-          ? _oiBuildExecCode(CURSE_DEFAULT_OUTFIT_CODE)
-          : '(function(){try{var _d=LZString.decompressFromBase64('
-            + JSON.stringify(CURSE_DEFAULT_OUTFIT_CODE)
-            + ');var _a=JSON.parse(_d);if(Array.isArray(_a)){ServerPlayerInventoryLoad(_a);CharacterRefresh(Player,true,false);}}catch(e){}})();';
+        const code = '(function(){' + _buildApplyCode(CURSE_DEFAULT_OUTFIT_CODE) + '})();';
         bcSend({ type: 'EXEC', code });
         setTimeout(() => { if (_valid()) next(); }, 5000);
       } else {
