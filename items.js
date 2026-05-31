@@ -8967,9 +8967,10 @@ function _ctStop() {
   clearInterval(_ctCountdownTimer);
   _ctTimer = null;
   _ctCountdownTimer = null;
-  _ctPaused = false;
-  _ctCurseActive = false;
-  _ctCurseItemIdx = -1;
+  _ctPaused        = false;
+  _ctCurseActive   = false;
+  _ctCurseItemIdx  = -1;
+  _ctReadyForCurse = false;
   clearTimeout(_ctCurseDebounce);
   _ctCurseDebounce = null;
   _ctIdx = -1;
@@ -9076,8 +9077,10 @@ function _ctApplyCurrent(prevEntry) {
   }
 
   // Neues Item anlegen (mit kleinem Delay damit das Ablegen zuerst verarbeitet wird)
+  _ctReadyForCurse = false;  // Erst nach wearCurse curse_start Events akzeptieren
   setTimeout(() => {
     wearCurse(cur.dbKey, null);
+    _ctReadyForCurse = true;  // Item gesendet — ab jetzt Curses vom aktuellen Item erwartet
     // Aktuelle Zeile im Curse-Tab highlighten falls sichtbar
     const rowId = 'crow_' + cur.dbKey.replace(/[^a-zA-Z0-9]/g, '_');
     document.querySelectorAll('.cg-row.ct-active').forEach(r => r.classList.remove('ct-active'));
@@ -9311,9 +9314,10 @@ function _ctRefreshProfileSelect() {
 // ── Chat-Nachricht auswerten ──────────────────────────────────
 // Ein Item kann mehrere aufeinanderfolgende Curses auslösen (curse_start → cease → curse_start → cease…).
 // Erst nach dem LETZTEN cease (2s kein neuer curse_start) wird das Profil gespeichert.
-let _ctCurseActive   = false;
-let _ctCurseItemIdx  = -1;    // _ctIdx bei erstem curse_start — verhindert veraltete Events
-let _ctCurseDebounce = null;  // Debounce-Timer: feuert erst nach dem letzten cease
+let _ctCurseActive    = false;
+let _ctCurseItemIdx   = -1;    // _ctIdx bei erstem curse_start — verhindert veraltete Events
+let _ctCurseDebounce  = null;  // Debounce-Timer: feuert erst nach dem letzten cease
+let _ctReadyForCurse  = false; // true erst nachdem wearCurse gesendet wurde
 
 function _ctHandleChatMsg(event, content) {
   const panel = document.getElementById('curseTestPanel');
@@ -9323,6 +9327,12 @@ function _ctHandleChatMsg(event, content) {
     'background:' + (event === 'curse_end' ? '#064e3b' : '#78350f') + ';color:#fff;font-weight:700;padding:2px 6px;border-radius:3px');
 
   if (event === 'curse_start') {
+    // Verspätetes Event vom vorherigen Item — wearCurse für aktuelles Item noch nicht gesendet
+    if (!_ctReadyForCurse && !_ctCurseActive) {
+      console.log('[CURSE-TEST] curse_start ignoriert — Item noch nicht aktiv (Vorcurse?)');
+      return;
+    }
+
     // Laufenden Debounce abbrechen — noch nicht alle Curses beendet
     clearTimeout(_ctCurseDebounce);
     _ctCurseDebounce = null;
@@ -9454,6 +9464,7 @@ _ctStart = function() {
   _ctRefreshProfileSelect();
   _ctCurseActive   = false;
   _ctCurseItemIdx  = -1;
+  _ctReadyForCurse = false;
   clearTimeout(_ctCurseDebounce);
   _ctCurseDebounce = null;
   const stateEl = document.getElementById('curseTestCurseState');
