@@ -1341,43 +1341,86 @@ window.CurseScanner = (() => {
   // automatisch pausieren / weitermachen kann.
   (function _installCurseTestMonitor() {
     if (typeof ServerSocket === 'undefined') { setTimeout(_installCurseTestMonitor, 1000); return; }
-    var _ctMsgH = function(data) {
+    // Trackt ob ein Curse-Start erkannt wurde (für State-basierte Ende-Erkennung)
+    var _ctCurseWasActive = false;
+    var _ctLastCurseActivationCount = -1;
+
+    var _ctSendEvent = function(event, content) {
       var popup = window.__BCK_popupRef;
       if (!popup || popup.closed) return;
-
-      // Content kann String oder strukturiertes Objekt/Array sein (BC Activity-Format)
-      // Alles in einen flachen String umwandeln für einfaches Matching
-      var content = '';
-      if (typeof data.Content === 'string') {
-        content = data.Content;
-      } else if (data.Content) {
-        try { content = JSON.stringify(data.Content); } catch(e) { content = String(data.Content); }
-      }
-      // Zusätzlich Dictionary-Substitutionen durchsuchen (BC Activity v2)
-      if (data.Dictionary && Array.isArray(data.Dictionary)) {
-        data.Dictionary.forEach(function(d) {
-          if (d && typeof d.Text === 'string') content += ' ' + d.Text;
-        });
-      }
-      if (!content) return;
-
-      var lower = content.toLowerCase();
-      var isCurseStart = lower.indexOf('curse washes over') !== -1
-                      || lower.indexOf('curse wash') !== -1;
-      var isCurseEnd   = lower.indexOf('curses cease') !== -1
-                      || (lower.indexOf('sigh of relief') !== -1 && lower.indexOf('curse') !== -1);
-      if (!isCurseStart && !isCurseEnd) return;
-
-      BCK.info('[CurseTestMonitor] ' + (isCurseEnd ? 'CURSE END' : 'CURSE START') + ' → Type:' + (data.Type||'?') + ' Content:' + content.slice(0,80));
+      BCK.info('[CurseTestMonitor] ' + (event === 'curse_end' ? '✅ CURSE ENDE' : '🔮 CURSE START')
+        + ' → ' + content.slice(0, 100));
       popup.postMessage({
-        app: APP,
-        type: 'CT_CHAT_MSG',
-        event: isCurseEnd ? 'curse_end' : 'curse_start',
-        content: content,
-        msgType: data.Type || '',
-        sender: data.Sender || null
+        app: APP, type: 'CT_CHAT_MSG',
+        event: event, content: content,
+        msgType: '', sender: null
       }, ALLOWED_ORIGIN);
     };
+
+    var _ctMsgH = function(data) {
+      // ── Curse-START: Type:"Action" Content:"Beep" + Tag:"msg" ────────
+      if (data.Type === 'Action' && data.Content === 'Beep' && Array.isArray(data.Dictionary)) {
+        var startText = '';
+        data.Dictionary.forEach(function(d) {
+          if (d && d.Tag === 'msg' && typeof d.Text === 'string') startText += d.Text + ' ';
+        });
+        if (startText.toLowerCase().indexOf('curse washes over') !== -1) {
+          _ctCurseWasActive = true;
+          _ctSendEvent('curse_start', startText.trim());
+          return;
+        }
+      }
+
+      // ── Curse-ENDE via LSCG-Sync: Hidden/LSCGMsg ────────────────────
+      // Erkennung: cursed-item state wechselt zu active:false
+      // Kein Zeit-Limit — stattdessen tracken ob vorher ein Start kam
+      // ODER activationCount erhöht sich (neue Curse-Runde abgeschlossen)
+      if (data.Type === 'Hidden' && data.Content === 'LSCGMsg' && Array.isArray(data.Dictionary)) {
+        var dict0 = data.Dictionary[0];
+        if (dict0 && dict0.message && dict0.message.type === 'sync') {
+          var sm = dict0.message.settings && dict0.message.settings.StateModule;
+          if (sm && Array.isArray(sm.states)) {
+            sm.states.forEach(function(st) {
+              if (st.type === 'cursed-item') {
+                var cnt = st.activationCount || 0;
+                // Ende: war aktiv und ist jetzt inactive, ODER Count hat sich erhöht
+                if (_ctCurseWasActive && st.active === false) {
+                  _ctCurseWasActive = false;
+                  _ctLastCurseActivationCount = cnt;
+                  _ctSendEvent('curse_end', 'cursed-item beendet (count:' + cnt + ')');
+                } else if (cnt > _ctLastCurseActivationCount && _ctLastCurseActivationCount >= 0) {
+                  _ctLastCurseActivationCount = cnt;
+                  _ctSendEvent('curse_end', 'cursed-item count erhöht auf ' + cnt);
+                } else {
+                  _ctLastCurseActivationCount = cnt;
+                }
+              }
+            });
+          }
+        }
+      }
+    };
+
+    // ── MutationObserver: client-seitig gerenderte Chat-Texte ───────────
+    // LSCG rendert "sigh of relief" direkt in den DOM ohne Server-Message
+    var _ctObserver = null;
+    (function _installChatObserver() {
+      var chatLog = document.getElementById('TextAreaChatLog');
+      if (!chatLog) { setTimeout(_installChatObserver, 2000); return; }
+      _ctObserver = new MutationObserver(function(mutations) {
+        mutations.forEach(function(m) {
+          m.addedNodes.forEach(function(node) {
+            var txt = (node.textContent || node.innerText || '').toLowerCase();
+            if (txt.indexOf('sigh of relief') !== -1 && txt.indexOf('curse') !== -1) {
+              _ctCurseWasActive = false;
+              _ctSendEvent('curse_end', node.textContent.trim().slice(0, 120));
+            }
+          });
+        });
+      });
+      _ctObserver.observe(chatLog, { childList: true, subtree: true });
+      BCK.ok('[CurseTestMonitor] Chat-Observer aktiv');
+    })();
     ServerSocket.on('ChatRoomMessage', _ctMsgH);
     BCK.ok('[CurseTestMonitor] aktiv');
   })();
