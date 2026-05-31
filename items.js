@@ -8881,15 +8881,16 @@ function _cfreqRenderHarmony() {
 //  CURSE-TEST — alle gecurseden Items (ohne Outfit-Tag) der Reihe nach anlegen
 // ════════════════════════════════════════════════════════════════
 
-let _ctQueue     = [];   // [{dbKey, entry}] — gefilterte Liste
-let _ctIdx       = -1;   // aktueller Index
-let _ctTimer     = null; // setInterval handle
-let _ctInterval  = 10;   // Sekunden
+let _ctQueue     = [];
+let _ctIdx       = -1;
+let _ctTimer     = null;
+let _ctInterval  = 10;
 let _ctPaused    = false;
-let _ctCountdown = 0;    // Sekunden bis zum nächsten Schritt
+let _ctCountdown = 0;
 let _ctCountdownTimer = null;
 let _ctDragging  = false;
 let _ctDragOffX  = 0, _ctDragOffY = 0;
+let _ctRunId     = 0;   // erhöht sich bei jedem Start/Stop — ungültige Ketten werden abgebrochen
 
 // Sammelt alle cursed Items ohne Outfit-Flag, sortiert nach Owner → ItemName
 function _ctBuildQueue() {
@@ -8924,9 +8925,11 @@ function _ctStart() {
   }
   // Startposition aus Input lesen (1-basiert → 0-basiert)
   const startPos = parseInt(document.getElementById('curseTestStartPos')?.value || '1');
-  _ctIdx    = Math.max(0, Math.min(_ctQueue.length - 1, (startPos - 1))) - 1; // -1 weil _ctNext() +1 macht
+  _ctIdx    = Math.max(0, Math.min(_ctQueue.length - 1, (startPos - 1))) - 1;
   _ctDotsPage = 0;
   _ctPaused = false;
+  _ctCurseActive = false;
+  _ctRunId++;   // neue Session-ID
   document.getElementById('curseTestPanel').style.display = '';
   document.getElementById('curseTestBtn').textContent = '⏹ Test stoppen';
   document.getElementById('curseTestBtn').classList.replace('btn-yellow', 'btn-red');
@@ -8958,14 +8961,19 @@ function _ctStart() {
 }
 
 function _ctStop() {
+  _ctRunId++;                          // invalidiert alle laufenden setTimeout-Ketten
   clearInterval(_ctTimer);
   clearInterval(_ctCountdownTimer);
   _ctTimer = null;
   _ctCountdownTimer = null;
   _ctPaused = false;
-  _ctCurseActive = false;  // Curse-State zurücksetzen
+  _ctCurseActive = false;
   _ctIdx = -1;
+  // Loader-State zurücksetzen
+  bcSend({ type: 'EXEC', code: '(function(){if(window.__BCK_ctCurseWasActive!==undefined)window.__BCK_ctCurseWasActive=false;})();' }, true);
   document.getElementById('curseTestPanel').style.display = 'none';
+  const stateEl = document.getElementById('curseTestCurseState');
+  if (stateEl) stateEl.style.display = 'none';
   const btn = document.getElementById('curseTestBtn');
   if (btn) { btn.textContent = '🎭 Curse-Test'; btn.classList.replace('btn-red', 'btn-yellow'); }
   showStatus('⏹ Curse-Test beendet', 'info');
@@ -9327,11 +9335,16 @@ function _ctHandleChatMsg(event, content) {
     if (cd) cd.textContent = '⏳';
     showStatus('✅ Curse beendet', 'info');
 
-    const curItem = _ctQueue[_ctIdx];
-    const dbKey   = curItem?.dbKey;
+    const curItem  = _ctQueue[_ctIdx];
+    const dbKey    = curItem?.dbKey;
+    const myRunId  = _ctRunId;  // RunId dieser Kette — wird ungültig wenn Stop gedrückt wird
 
-    // Schritt 3 — weiter machen (fromCurse=true → kein Check-Eintrag)
+    // Prüft ob diese Kette noch gültig ist (Stop nicht gedrückt)
+    const _valid = () => _ctRunId === myRunId;
+
+    // Schritt 3 — weiter machen
     const _doNext = () => {
+      if (!_valid()) return;
       if (st) st.textContent = '';
       if (cd) cd.textContent = '';
       showStatus('▶ Curse-Test wird fortgesetzt', 'info');
@@ -9339,8 +9352,9 @@ function _ctHandleChatMsg(event, content) {
       _ctStartTimer();
     };
 
-    // Schritt 2b — Standard-Outfit anlegen, warten bis ausgerüstet
+    // Schritt 2b — Standard-Outfit anlegen
     const _runDefaultOutfit = (next) => {
+      if (!_valid()) return;
       if (CURSE_DEFAULT_OUTFIT_CODE) {
         if (st) st.textContent = '🏠 Standard-Outfit…';
         showStatus('🏠 Standard-Outfit wird wiederhergestellt…', 'info');
@@ -9350,23 +9364,25 @@ function _ctHandleChatMsg(event, content) {
             + JSON.stringify(CURSE_DEFAULT_OUTFIT_CODE)
             + ');var _a=JSON.parse(_d);if(Array.isArray(_a)){ServerPlayerInventoryLoad(_a);CharacterRefresh(Player,true,false);}}catch(e){}})();';
         bcSend({ type: 'EXEC', code });
-        setTimeout(next, 4000);
+        setTimeout(() => { if (_valid()) next(); }, 4000);
       } else {
         next();
       }
     };
 
-    // Schritt 2a — Dropdown-Profil ausführen (optional)
+    // Schritt 2a — Dropdown-Profil (optional)
     const _runExtraProfile = (next) => {
+      if (!_valid()) return;
       const ep = document.getElementById('curseTestResetProfile')?.value || '';
       if (ep && PROFILES[ep]) {
         if (st) st.textContent = '⚡ Profil…';
         showStatus('⚡ Profil "' + ep + '" wird ausgeführt…', 'info');
         loadProfile(ep);
         setTimeout(() => {
+          if (!_valid()) return;
           const code = document.getElementById('outfitCode')?.value?.trim();
           if (code) bcSend({ type: 'EXEC', code: '(function(){\n' + code + '\n})();' });
-          setTimeout(next, 3500);
+          setTimeout(() => { if (_valid()) next(); }, 3500);
         }, 60);
       } else {
         next();
@@ -9379,7 +9395,7 @@ function _ctHandleChatMsg(event, content) {
       showStatus('💾 Profil wird gespeichert…', 'info');
       _ctLogAdd(dbKey);
       _curseSaveAsProfileSilent(dbKey, () => {
-        _runExtraProfile(() => _runDefaultOutfit(_doNext));
+        if (_valid()) _runExtraProfile(() => _runDefaultOutfit(_doNext));
       });
     } else {
       _runExtraProfile(() => _runDefaultOutfit(_doNext));

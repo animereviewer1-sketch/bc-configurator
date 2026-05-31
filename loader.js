@@ -1342,7 +1342,8 @@ window.CurseScanner = (() => {
   (function _installCurseTestMonitor() {
     if (typeof ServerSocket === 'undefined') { setTimeout(_installCurseTestMonitor, 1000); return; }
     // Trackt ob ein Curse-Start erkannt wurde (für State-basierte Ende-Erkennung)
-    var _ctCurseWasActive = false;
+    // window-Property damit _ctStop() es von außen resetten kann
+    window.__BCK_ctCurseWasActive = false;
     var _ctLastCurseActivationCount = -1;
 
     var _ctSendEvent = function(event, content) {
@@ -1365,7 +1366,7 @@ window.CurseScanner = (() => {
           if (d && d.Tag === 'msg' && typeof d.Text === 'string') startText += d.Text + ' ';
         });
         if (startText.toLowerCase().indexOf('curse washes over') !== -1) {
-          _ctCurseWasActive = true;
+          window.__BCK_ctCurseWasActive = true;
           _ctSendEvent('curse_start', startText.trim());
           return;
         }
@@ -1384,13 +1385,13 @@ window.CurseScanner = (() => {
               if (st.type === 'cursed-item') {
                 var cnt = st.activationCount || 0;
                 // Ende: war aktiv und ist jetzt inactive, ODER Count hat sich erhöht
-                if (_ctCurseWasActive && st.active === false) {
-                  _ctCurseWasActive = false;
+                if (window.__BCK_ctCurseWasActive && st.active === false) {
+                  window.__BCK_ctCurseWasActive = false;
                   _ctLastCurseActivationCount = cnt;
                   _ctSendEvent('curse_end', 'cursed-item beendet (count:' + cnt + ')');
-                } else if (_ctCurseWasActive && cnt > _ctLastCurseActivationCount && _ctLastCurseActivationCount >= 0) {
+                } else if (window.__BCK_ctCurseWasActive && cnt > _ctLastCurseActivationCount && _ctLastCurseActivationCount >= 0) {
                   // Count-basiert: nur wenn vorher ein Start erkannt wurde
-                  _ctCurseWasActive = false;
+                  window.__BCK_ctCurseWasActive = false;
                   _ctLastCurseActivationCount = cnt;
                   _ctSendEvent('curse_end', 'cursed-item count erhöht auf ' + cnt);
                 } else {
@@ -1417,10 +1418,10 @@ window.CurseScanner = (() => {
       var obs = new MutationObserver(function(mutations) {
         mutations.forEach(function(m) {
           m.addedNodes.forEach(function(node) {
-            if (!_ctCurseWasActive) return; // nur wenn Start erkannt wurde
+            if (!window.__BCK_ctCurseWasActive) return; // nur wenn Start erkannt wurde
             var txt = (node.textContent || node.innerText || '').toLowerCase();
             if (txt.indexOf('sigh of relief') !== -1 && txt.indexOf('curse') !== -1) {
-              _ctCurseWasActive = false;
+              window.__BCK_ctCurseWasActive = false;
               _ctSendEvent('curse_end', node.textContent.trim().slice(0, 120));
             }
           });
