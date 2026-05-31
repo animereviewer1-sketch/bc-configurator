@@ -5075,16 +5075,49 @@ function scanOutfitAndSave() {
   showStatus('⏳ Scanne Outfit aus BC…', 'info');
 }
 // ── Stille Version: kein prompt(), Name 1:1 aus CraftName - OwnerName ────────
+// Erstellt einen Fingerprint aus Items: sortiertes "group:asset" Set
+function _ctItemFingerprint(items) {
+  return (items || [])
+    .map(i => ((i.group || i.Group || '') + ':' + (i.asset || i.Name || '')).toLowerCase())
+    .filter(s => s !== ':')
+    .sort()
+    .join('|');
+}
+
+// Fingerprint des Standard-Outfits aus CURSE_DEFAULT_OUTFIT_CODE
+function _ctStdOutfitFingerprint() {
+  if (!CURSE_DEFAULT_OUTFIT_CODE) return null;
+  try {
+    const raw = LZString.decompressFromBase64(CURSE_DEFAULT_OUTFIT_CODE);
+    const arr = JSON.parse(raw);
+    if (!Array.isArray(arr)) return null;
+    return _ctItemFingerprint(arr);
+  } catch(e) { return null; }
+}
+
 function _curseSaveAsProfileSilent(dbKey, afterSave) {
   const entry = CURSE_DB[dbKey];
   if (!entry) { showStatus('❌ Curse-Eintrag nicht gefunden: ' + dbKey, 'error'); return; }
 
-  const craftName  = entry.CraftName || entry.ItemName || 'Curse';
-  const ownerName  = entry.Besitzer?.Name || (entry.Besitzer?.Nummer ? '#' + entry.Besitzer.Nummer : 'Player');
-  const baseName   = craftName + ' - ' + ownerName;
-  const profileName = _uniqueProfileName(baseName); // v2, v3... falls bereits vorhanden
+  const craftName   = entry.CraftName || entry.ItemName || 'Curse';
+  const ownerName   = entry.Besitzer?.Name || (entry.Besitzer?.Nummer ? '#' + entry.Besitzer.Nummer : 'Player');
+  const baseName    = craftName + ' - ' + ownerName;
+  const profileName = _uniqueProfileName(baseName);
+
+  const _addToCheck = () => {
+    _ctCheckAdd(dbKey, craftName, ownerName);
+    showStatus('☑️ Kein Unterschied zum Standard-Outfit — "' + baseName + '" in Check-Liste', 'info');
+    if (typeof afterSave === 'function') afterSave();
+  };
 
   const _save = (items, keepHairGroups) => {
+    // Vergleich mit Standard-Outfit — falls identisch: nicht speichern
+    const stdFp      = _ctStdOutfitFingerprint();
+    const currentFp  = _ctItemFingerprint(items);
+    if (stdFp && currentFp && stdFp === currentFp) {
+      _addToCheck();
+      return;
+    }
     PROFILES[profileName] = {
       name:  profileName,
       date:  new Date().toLocaleDateString('de-DE'),
@@ -5111,14 +5144,15 @@ function _curseSaveAsProfileSilent(dbKey, afterSave) {
   const reqId = 'ct_save_' + Date.now();
   _pendingOutfitSave[reqId] = function(items) {
     if (!items?.length) {
-      _save([_curseEntryToProfileItem(entry)], undefined);
+      // Keine Items → direkt in Check-Liste
+      _addToCheck();
       return;
     }
     const { filteredItems, keepHairGroups } = _applyHairBaseline(items);
     _save(filteredItems.map(_appearanceItemToProfile), keepHairGroups);
   };
   bcSend({ type: 'GET_CHAR_APPEARANCE', memberNum: null, reqId });
-  showStatus('⏳ Outfit wird ausgelesen für "' + profileName + '"…', 'info');
+  showStatus('⏳ Outfit wird ausgelesen für "' + baseName + '"…', 'info');
 }
 
 // Button: 💾 Profil (pro Curse-Zeile) → "{CraftName} - {OwnerName}"
@@ -9158,6 +9192,43 @@ function curseTestJump(idx) {
   _ctUpdateUI();
   _ctResetCountdown();
   _ctStartTimer();
+}
+
+// ── Curse-Test Check-Liste (kein Unterschied zum Standard-Outfit) ─────────────
+let _ctCheckList = [];
+
+function _ctCheckAdd(dbKey, craftName, ownerName) {
+  _ctCheckList.push({
+    ts:        new Date().toLocaleTimeString('de-DE', {hour:'2-digit', minute:'2-digit', second:'2-digit'}),
+    craftName,
+    ownerName,
+    dbKey,
+  });
+  _ctRenderCheckList();
+}
+
+function _ctRenderCheckList() {
+  const el = document.getElementById('curseTestCheckList');
+  if (!el) return;
+  if (!_ctCheckList.length) {
+    el.innerHTML = '<span style="font-size:.62rem;color:var(--text3);font-style:italic">Keine</span>';
+    return;
+  }
+  el.innerHTML = _ctCheckList.slice().reverse().map((e, i) =>
+    '<div style="display:flex;align-items:center;gap:5px;padding:3px 5px;border-radius:4px;'
+    + (i === 0
+      ? 'background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.25)'
+      : 'background:var(--bg3);border:1px solid var(--border)') + '">'
+    + '<span style="font-size:.58rem;color:var(--text3);font-family:var(--font-mono);flex-shrink:0">' + escHtml(e.ts) + '</span>'
+    + '<span style="font-size:.68rem;font-weight:700;color:var(--yellow);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="' + escHtml(e.craftName + ' - ' + e.ownerName) + '">' + escHtml(e.craftName) + '</span>'
+    + '<span style="font-size:.6rem;color:var(--text3);white-space:nowrap;flex-shrink:0">' + escHtml(e.ownerName) + '</span>'
+    + '</div>'
+  ).join('');
+}
+
+function _ctClearCheckList() {
+  _ctCheckList = [];
+  _ctRenderCheckList();
 }
 
 // ── Curse-Test Verlaufs-Log ───────────────────────────────────

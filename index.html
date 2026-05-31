@@ -2893,11 +2893,22 @@ button { cursor: pointer; }
     <!-- Gespeicherte Curses Verlauf -->
     <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border)">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
-        <span style="font-size:.62rem;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.05em">💾 Gespeicherte Curses</span>
+        <span style="font-size:.62rem;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.05em">💾 Gespeichert</span>
         <button onclick="_ctClearLog()" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:.62rem;padding:0 2px" title="Verlauf leeren">✕</button>
       </div>
-      <div id="curseTestLog" style="max-height:120px;overflow-y:auto;display:flex;flex-direction:column;gap:2px">
+      <div id="curseTestLog" style="max-height:90px;overflow-y:auto;display:flex;flex-direction:column;gap:2px">
         <span style="font-size:.62rem;color:var(--text3);font-style:italic">Noch keine Curses gespeichert</span>
+      </div>
+    </div>
+    <!-- Check-Liste (kein Unterschied zum Standard-Outfit) -->
+    <div style="margin-top:6px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+        <span style="font-size:.62rem;color:var(--yellow);font-weight:700;text-transform:uppercase;letter-spacing:.05em">☑️ Check</span>
+        <span style="font-size:.58rem;color:var(--text3)">= kein Outfit-Unterschied</span>
+        <button onclick="_ctClearCheckList()" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:.62rem;padding:0 2px" title="Check-Liste leeren">✕</button>
+      </div>
+      <div id="curseTestCheckList" style="max-height:90px;overflow-y:auto;display:flex;flex-direction:column;gap:2px">
+        <span style="font-size:.62rem;color:var(--text3);font-style:italic">Keine</span>
       </div>
     </div>
     <!-- Profil nach Curse-Ende -->
