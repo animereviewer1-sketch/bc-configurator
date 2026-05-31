@@ -1551,10 +1551,9 @@ function buildItemInner({ group, asset, colors, tr, trStr, typeStr, propCode, cr
 // ── Einzelnes Item (mit TARGET-Deklaration + Sync) ──
 function buildItemCode({ group, asset, cfg, colors, tr, trStr, typeStr, propCode, craftStr, lock, lockParams, tightCode, isOther, memberNum }) {
   const inner = buildItemInner({ group, asset, colors, tr, trStr, typeStr, propCode, craftStr, lock, lockParams, tightCode });
-  const syncLine = (isOther && memberNum)
-    ? 'ChatRoomCharacterUpdate(TARGET);'
-    : 'ServerPlayerAppearanceSync(); ChatRoomCharacterUpdate(TARGET);';
-  const wrapped = inner + '\n  setTimeout(() => { ' + syncLine + ' }, 700);';
+  const wrapped = isOther && memberNum
+    ? inner + '\n  setTimeout(() => { ChatRoomCharacterUpdate(TARGET); }, 900);'
+    : inner + '\n  setTimeout(() => { ServerPlayerAppearanceSync(); setTimeout(()=>{ ChatRoomCharacterUpdate(TARGET); },600); }, 900);';
   if (isOther && memberNum) {
     return 'const TARGET = ChatRoomCharacter.find(c => c.MemberNumber === ' + memberNum + ');\n'
       + 'if (!TARGET) { console.error("❌ Spieler #' + memberNum + ' nicht im Raum!"); } else {\n' + wrapped + '\n}';
@@ -1883,15 +1882,21 @@ function generateOutfitCode() {
     }
   }
 
-  const syncLine = (isOther && memberNum)
-    ? '  ChatRoomCharacterUpdate(TARGET);'
-    : '  ServerPlayerAppearanceSync();\n  ChatRoomCharacterUpdate(TARGET);';
-  code += '// \u2500\u2500 Einmaliger Refresh + Sync \u2500\u2500\n'
+  // Sync-Strategie: zwei schwere Server-Calls mit Abstand um Rate-Limit zu vermeiden.
+  // AccountUpdate (ServerPlayerAppearanceSync) zuerst, dann 600ms sp\u00e4ter ChatRoomCharacterUpdate.
+  // F\u00fcr fremde Targets reicht ChatRoomCharacterUpdate allein.
+  let syncCode;
+  if (isOther && memberNum) {
+    syncCode = 'setTimeout(()=>{ ChatRoomCharacterUpdate(TARGET); console.log("\u2705 Outfit fertig!"); },2500);\n';
+  } else {
+    syncCode = 'setTimeout(()=>{\n'
+             + '  ServerPlayerAppearanceSync();\n'
+             + '  setTimeout(()=>{ ChatRoomCharacterUpdate(TARGET); console.log("\u2705 Outfit fertig!"); },600);\n'
+             + '},2500);\n';
+  }
+  code += '// \u2500\u2500 Einmaliger Refresh + Sync (Rate-Limit-sicher) \u2500\u2500\n'
         + 'CharacterRefresh(TARGET,false,false);\n'
-        + 'setTimeout(()=>{\n'
-        + syncLine + '\n'
-        + '  console.log("\u2705 Outfit fertig!");\n'
-        + '},1200);\n';
+        + syncCode;
 
   document.getElementById('outfitCode').value = code;
 }
@@ -3599,7 +3604,7 @@ function _cfreqRenderThemeEditor() {
   el.innerHTML = '<div class="cfreq-te-wrap">'
     + '<div class="cfreq-te-hdr">'
     +   '<span class="cfreq-te-nm">' + escHtml(th.icon + ' ' + th.name) + '</span>'
-    +   '<span class="cfreq-te-cnt">' + selCnt + ' von ' + th.colors.length + ' Farbe' + (th.colors.length!==1?'n':'') + ' gewählt</span>'
+    +   '<span class="cfreq-te-cnt">' + selCnt + ' von ' + th.colors.length + ' gewählt · ⇄ Reihenfolge bestimmt Zuordnung</span>'
     + '</div>'
     + '<div class="cfreq-te-row">' + swatchCols + '</div>'
     + '<div class="cfreq-te-acts">'
@@ -3651,9 +3656,11 @@ function _cfreqApplyActiveTheme() {
   });
   if (!colSet.size) { showStatus('⚠️ Keine Farben im Outfit', 'info'); return; }
 
-  // Beide nach Helligkeit sortieren und mappen
+  // Outfit-Farben nach Helligkeit sortieren (dunkelste → hellste).
+  // Theme-Farben bleiben in der vom Nutzer per ⇄ eingestellten Reihenfolge —
+  // nur so hat der Swap-Button eine sichtbare Wirkung.
   const outfitCols = [...colSet].sort((a, b) => _hexToHsl(a).l - _hexToHsl(b).l);
-  const themeCols  = [...selColors].sort((a, b) => _hexToHsl(a).l - _hexToHsl(b).l);
+  const themeCols  = [...selColors]; // Nutzer-Reihenfolge beibehalten
 
   _cfreqChanges = {}; _cfreqItemChanges = {};
   _cfreqLinked = new Set(); _cfreqLinkedShift = new Set();
@@ -3885,9 +3892,11 @@ function _cfreqTest() {
         +'if(_it)_it.Color='+JSON.stringify(p.colors)+';})();\n';
   });
   code+='CharacterRefresh(T,false,false);\n';
-  code+='setTimeout(function(){'
-      +(isOther&&_outfitTargetNum?'ChatRoomCharacterUpdate(T);':'ServerPlayerAppearanceSync();ChatRoomCharacterUpdate(T);')
-      +'console.log("✅ Farb-Test ('+patches.length+' Items)");},600);\n';
+  if(isOther&&_outfitTargetNum){
+    code+='setTimeout(function(){ChatRoomCharacterUpdate(T);console.log("✅ Farb-Test ('+patches.length+' Items)");},1500);\n';
+  } else {
+    code+='setTimeout(function(){ServerPlayerAppearanceSync();setTimeout(function(){ChatRoomCharacterUpdate(T);console.log("✅ Farb-Test ('+patches.length+' Items)");},600);},1500);\n';
+  }
   code+='})();';
 
   bcSend({type:'EXEC',code});
@@ -7766,9 +7775,9 @@ function applyLockEdit(mk, group) {
     code += '_item.Property.LockMemberNumber=' + newKH + ';\n';
     code += '_item.Property.MemberNumberListKeys=' + JSON.stringify(String(newKH)) + ';\n';
   }
-  // Sync with 600ms delay — both functions needed for room visibility
+  // Sync with delay — Self: split AccountUpdate + room broadcast to avoid rate-limit
   code += 'setTimeout(function(){\n';
-  code += '  if(C.MemberNumber===Player.MemberNumber){ServerPlayerAppearanceSync();ChatRoomCharacterUpdate(C);}';
+  code += '  if(C.MemberNumber===Player.MemberNumber){ServerPlayerAppearanceSync();setTimeout(function(){ChatRoomCharacterUpdate(C);},600);}';
   code += '  else{ChatRoomCharacterUpdate(C);}\n';
   code += '},600);\n';
   code += 'console.log("✅ Lock aktualisiert: ' + group + '");\n';
@@ -8376,118 +8385,6 @@ _renderProfileModal = function(name) {
   _renderPmodTags(name);
 };
 
-// ── Feature 5: Quick-Switch Widget ───────────────────────────
-
-const QS_MAX_SLOTS = 8;
-const QS_STORAGE_KEY = 'BC_QUICKSWITCH_v1';
-let _qsSlots = []; // array of profile names (or null for empty)
-let _qsCollapsed = false;
-let _qsDragging = false;
-let _qsDragOffX = 0, _qsDragOffY = 0;
-
-(function _qsInit() {
-  try {
-    const saved = JSON.parse(localStorage.getItem(QS_STORAGE_KEY) || '[]');
-    _qsSlots = Array.isArray(saved) ? saved.slice(0, QS_MAX_SLOTS) : [];
-  } catch {}
-  while (_qsSlots.length < QS_MAX_SLOTS) _qsSlots.push(null);
-
-  // Drag support — script loads after DOM is ready
-  const w = document.getElementById('quickSwitchWidget');
-  const hdr = document.getElementById('qsHeader');
-  if (hdr && w) {
-    hdr.addEventListener('mousedown', e => {
-      if (e.button !== 0) return;
-      _qsDragging = true;
-      const rect = w.getBoundingClientRect();
-      _qsDragOffX = e.clientX - rect.left;
-      _qsDragOffY = e.clientY - rect.top;
-      e.preventDefault();
-    });
-    document.addEventListener('mousemove', e => {
-      if (!_qsDragging) return;
-      const x = Math.max(0, Math.min(window.innerWidth - w.offsetWidth, e.clientX - _qsDragOffX));
-      const y = Math.max(0, Math.min(window.innerHeight - w.offsetHeight, e.clientY - _qsDragOffY));
-      w.style.right = 'auto';
-      w.style.bottom = 'auto';
-      w.style.left = x + 'px';
-      w.style.top = y + 'px';
-    });
-    document.addEventListener('mouseup', () => { _qsDragging = false; });
-  }
-  _qsRender();
-})();
-
-function _qsSave() {
-  try { localStorage.setItem(QS_STORAGE_KEY, JSON.stringify(_qsSlots)); } catch {}
-}
-
-function quickSwitchToggleVisible() {
-  const w = document.getElementById('quickSwitchWidget');
-  if (!w) return;
-  const visible = w.style.display !== 'none' && w.style.display !== '';
-  w.style.display = visible ? 'none' : 'flex';
-  if (!visible) _qsRender();
-}
-
-function quickSwitchToggleCollapse() {
-  _qsCollapsed = !_qsCollapsed;
-  const w = document.getElementById('quickSwitchWidget');
-  const slots = document.getElementById('qsSlotsContainer');
-  const hint = document.getElementById('qsAddHint');
-  const btn = w?.querySelector('.qs-toggle-btn');
-  if (slots) slots.style.display = _qsCollapsed ? 'none' : '';
-  if (hint)  hint.style.display  = _qsCollapsed ? 'none' : '';
-  if (btn)   btn.textContent = _qsCollapsed ? '▸' : '▾';
-}
-
-function _qsRender() {
-  const container = document.getElementById('qsSlotsContainer');
-  if (!container) return;
-  container.innerHTML = _qsSlots.map((name, i) => {
-    if (!name) return `<div class="qs-slot empty"><span class="qs-slot-name" style="color:var(--text3)">Slot ${i+1}</span></div>`;
-    const short = name.length > 20 ? name.slice(0, 18) + '…' : name;
-    return `<div class="qs-slot" onclick="_qsExec(${i})" title="${escHtml(name)}">
-      <span class="qs-slot-name">${escHtml(short)}</span>
-      <button class="qs-slot-del" onclick="event.stopPropagation();_qsClear(${i})" title="Entfernen">✕</button>
-    </div>`;
-  }).join('');
-}
-
-function _qsExec(idx) {
-  const name = _qsSlots[idx];
-  if (!name || !PROFILES[name]) { showStatus('⚠️ Profil nicht gefunden', 'error'); return; }
-  loadProfile(name);
-  executeOutfitCode();
-  showStatus('⚡ Quick-Switch: ' + name, 'success');
-}
-
-function _qsClear(idx) {
-  _qsSlots[idx] = null;
-  _qsSave();
-  _qsRender();
-}
-
-function quickSwitchPin(name) {
-  if (!name || !PROFILES[name]) return;
-  // Check if already pinned
-  if (_qsSlots.includes(name)) { showStatus('⚠️ Bereits im Quick-Switch', 'info'); return; }
-  // Find first empty slot
-  const emptyIdx = _qsSlots.indexOf(null);
-  if (emptyIdx === -1) { showStatus('⚠️ Quick-Switch voll (max ' + QS_MAX_SLOTS + ' Slots) – zuerst einen entfernen', 'error'); return; }
-  _qsSlots[emptyIdx] = name;
-  _qsSave();
-  const w = document.getElementById('quickSwitchWidget');
-  if (w) w.style.display = 'flex';
-  _qsRender();
-  showStatus('📌 "' + name + '" → Quick-Switch Slot ' + (emptyIdx + 1), 'success');
-}
-
-function _pmodPinToQuickSwitch() {
-  if (!_profileModalName) return;
-  quickSwitchPin(_profileModalName);
-}
-
 // ── Feature 6 + 7: Statistiken ───────────────────────────────
 
 let _statsCurrentTab = 'items';
@@ -8696,7 +8593,8 @@ function _cfreqInjectToolButtons(containerId) {
     '</div>' +
     '<div id="cfreqGradSwatches" class="ctool-swatch-row"></div>' +
     '<div style="display:flex;gap:6px;margin-top:5px">' +
-      '<button class="btn btn-primary cfreq-act-btn" onclick="_cfreqApplyGradient()">✅ Übernehmen</button>' +
+      '<button class="btn cfreq-act-btn" onclick="_cfreqAutoFillGradient()" title="Dunkelste + hellste Outfit-Farbe automatisch erkennen">🎯 Aus Outfit</button>' +
+      '<button class="btn btn-primary cfreq-act-btn" onclick="_cfreqApplyGradient()" title="Verlauf auf alle Outfit-Farben proportional mappen">✅ Übernehmen</button>' +
       '<span style="font-size:.62rem;color:var(--text3);align-self:center">Klick auf Farbe → Zwischenablage</span>' +
     '</div>';
   actions.after(gradPanel);
@@ -8791,16 +8689,77 @@ function _cfreqRenderGradient() {
   if (th) th.value = toHex;
 }
 
+// Alle unique Outfit-Farben nach Helligkeit sortiert zurückgeben
+function _cfreqOutfitColorsSorted() {
+  const colSet = new Set();
+  (_cfreqSrcItems || []).forEach(item => {
+    const cols = Array.isArray(item.colors) ? item.colors : (item.colors ? [item.colors] : []);
+    cols.forEach(c => { if (c && c !== 'Default' && /^#[0-9a-fA-F]{6}$/i.test(c)) colSet.add(c.toLowerCase()); });
+  });
+  return [...colSet].sort((a, b) => _hexToHsl(a).l - _hexToHsl(b).l);
+}
+
+// "🎯 Aus Outfit" — dunkelste + hellste Farbe als Von/Bis, N = Anzahl unique Farben
+function _cfreqAutoFillGradient() {
+  const cols = _cfreqOutfitColorsSorted();
+  if (!cols.length) { showStatus('⚠️ Keine Farben im Outfit/Profil', 'info'); return; }
+  const from = cols[0];                       // dunkelste
+  const to   = cols[cols.length - 1];         // hellste
+  const n    = Math.min(16, cols.length);
+
+  const pFrom = document.getElementById('cfreqGradFrom');
+  const pTo   = document.getElementById('cfreqGradTo');
+  const hFrom = document.getElementById('cfreqGradFromHex');
+  const hTo   = document.getElementById('cfreqGradToHex');
+  const nInp  = document.getElementById('cfreqGradN');
+
+  if (pFrom) pFrom.value = from;
+  if (pTo)   pTo.value   = to;
+  if (hFrom) hFrom.value = from;
+  if (hTo)   hTo.value   = to;
+  if (nInp)  nInp.value  = n;
+
+  _cfreqRenderGradient();
+  showStatus('🎯 ' + n + ' Farben erkannt · dunkelste → hellste vorausgefüllt', 'success');
+}
+
+// Verlauf auf Outfit-Farben anwenden (nach Helligkeit sortiert → Verlauf proportional gemappt)
 function _cfreqApplyGradient() {
   if (!_cfreqGradColors.length) { _cfreqRenderGradient(); }
-  const hexInps = document.querySelectorAll('#cfreq-content .cfreq-hex-inp');
-  _cfreqGradColors.forEach((color, i) => {
-    const inp = hexInps[i];
-    if (!inp) return;
-    inp.value = color;
-    _cfreqHexCommit(inp);
-  });
-  showStatus('🌈 Verlauf übernommen (' + _cfreqGradColors.length + ' Farben)', 'success');
+
+  const outfitCols = _cfreqOutfitColorsSorted();
+
+  if (outfitCols.length) {
+    // Smart-Modus: Outfit-Farben nach Helligkeit sortiert → jeder Farbe eine Verlaufsfarbe zuweisen
+    const grad = _cfreqGradColors;
+    _cfreqChanges = {}; _cfreqItemChanges = {};
+    _cfreqLinked = new Set(); _cfreqLinkedShift = new Set();
+    _cfreqLinkedItems = new Set(); _cfreqLinkedItemsShift = new Set();
+    outfitCols.forEach((hex, i) => {
+      // Position im Verlauf proportional zur Position in der sortierten Liste
+      const t = outfitCols.length === 1 ? 0 : i / (outfitCols.length - 1);
+      const gradIdx = Math.round(t * (grad.length - 1));
+      _cfreqChanges[hex] = grad[gradIdx];
+    });
+    // UI neu rendern damit die Änderungen sichtbar sind
+    const content = document.getElementById('cfreq-content');
+    if (content) {
+      content.innerHTML = (_cfreqViewMode === 'global')
+        ? _renderGlobalRows(_getColorFreq(_cfreqSrcItems || []))
+        : _renderItemRows(_cfreqSrcItems || []);
+    }
+    showStatus('🌈 Verlauf auf ' + outfitCols.length + ' Outfit-Farbe' + (outfitCols.length !== 1 ? 'n' : '') + ' gemappt', 'success');
+  } else {
+    // Fallback: einfach die ersten N globalen Hex-Zeilen patchen
+    const hexInps = document.querySelectorAll('#cfreq-content .cfreq-hex-inp');
+    _cfreqGradColors.forEach((color, i) => {
+      const inp = hexInps[i];
+      if (!inp) return;
+      inp.value = color;
+      _cfreqHexCommit(inp);
+    });
+    showStatus('🌈 Verlauf übernommen (' + _cfreqGradColors.length + ' Farben)', 'success');
+  }
 }
 
 // ── Feature 3: Komplementär-Vorschlag ────────────────────────

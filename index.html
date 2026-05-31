@@ -2173,44 +2173,6 @@ button { cursor: pointer; }
 }
 .oi-row.oi-flash { animation:oi-flash-anim 0.6s ease-out forwards; }
 
-/* ═══════════════════════════════════════════════
-   QUICK-SWITCH WIDGET
-═══════════════════════════════════════════════ */
-#quickSwitchWidget {
-  position: fixed; bottom: 22px; right: 22px; z-index: 500;
-  display: flex; flex-direction: column; gap: 5px;
-  background: var(--bg2); border: 1px solid var(--border2);
-  border-radius: var(--r-lg); padding: 10px 10px 8px;
-  box-shadow: var(--shadow-lg);
-  min-width: 160px; user-select: none;
-  cursor: default;
-  transition: opacity .15s;
-}
-#quickSwitchWidget.qs-collapsed { padding: 7px 10px; min-width: 0; }
-.qs-header {
-  display: flex; align-items: center; gap: 7px;
-  font-size: .68rem; font-weight: 800; color: var(--text3);
-  text-transform: uppercase; letter-spacing: .07em; cursor: grab; padding-bottom: 4px;
-}
-.qs-header:active { cursor: grabbing; }
-.qs-toggle-btn {
-  margin-left: auto; background: none; border: none; color: var(--text3);
-  cursor: pointer; font-size: .8rem; padding: 0 2px; line-height: 1;
-}
-.qs-slot {
-  display: flex; align-items: center; gap: 6px;
-  background: var(--bg3); border: 1px solid var(--border); border-radius: var(--r-sm);
-  padding: 5px 8px; cursor: pointer; transition: all .14s; min-width: 0;
-}
-.qs-slot:hover { border-color: var(--accent-line); background: var(--accent-soft); }
-.qs-slot.empty { border-style: dashed; opacity: .5; cursor: default; }
-.qs-slot.empty:hover { border-color: var(--border); background: var(--bg3); opacity: .5; }
-.qs-slot-name { flex: 1; font-size: .73rem; font-weight: 600; color: var(--text);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.qs-slot-del { background: none; border: none; color: var(--text3); cursor: pointer;
-  font-size: .65rem; padding: 1px 2px; opacity: .5; flex-shrink: 0; }
-.qs-slot-del:hover { color: var(--red); opacity: 1; }
-.qs-add-hint { font-size: .62rem; color: var(--text3); text-align: center; padding: 2px 0; }
 
 /* ═══════════════════════════════════════════════
    PROFILE TAGS
@@ -2733,7 +2695,6 @@ button { cursor: pointer; }
             <button class="btn btn-primary" onclick="toggleDefaultHairPanel()" title="Standard-Haare festlegen – wird beim Profil-Speichern als Baseline genutzt" style="font-size:.65rem;padding:3px 9px">💇 Standard-Haare</button>
             <button class="btn btn-red" onclick="markAllProfilesOld()" title="Alle Profile umbenennen: Owner bekommt '(old)' im Namen – neue Profile werden danach als eigene Einträge gespeichert" style="font-size:.65rem;padding:3px 9px">🗂️ Alle → (old)</button>
             <button class="btn btn-primary" onclick="openStatsModal()" title="Item- und Farbstatistiken über alle Profile" style="font-size:.65rem;padding:3px 9px">📊 Statistiken</button>
-            <button class="btn btn-primary" onclick="quickSwitchToggleVisible()" title="Quick-Switch Widget ein-/ausblenden" style="font-size:.65rem;padding:3px 9px">⚡ Quick-Switch</button>
           </div>
           <div style="display:flex;gap:6px;align-items:center">
             <input class="profile-name-input" id="profileNameInput" placeholder="Profilname..." maxlength="40" style="font-size:.72rem;padding:3px 7px">
@@ -2843,7 +2804,6 @@ button { cursor: pointer; }
           <button class="pmod-act-btn" id="pmodColorFreqBtn" onclick="_pmodToggleColorFreq()" title="Farb-Häufigkeit anzeigen und Farben ersetzen">🎨 Farben</button>
         </div>
         <div class="pmod-act-row">
-          <button class="pmod-act-btn" id="pmodPinBtn" onclick="_pmodPinToQuickSwitch()" title="Zum Quick-Switch Widget hinzufügen">📌 Quick-Switch</button>
           <button class="pmod-act-btn danger" id="pmodDelBtn" onclick="_pmodDelete()">🗑️ Profil löschen</button>
         </div>
       </div>
@@ -2861,16 +2821,6 @@ button { cursor: pointer; }
       <div id="pmodColorFreqPanel" style="display:none;border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:12px 14px;background:rgba(0,0,0,0.25);max-height:260px;overflow-y:auto"></div>
     </div>
   </div>
-</div>
-
-<!-- ── Quick-Switch Widget ── -->
-<div id="quickSwitchWidget" style="display:none">
-  <div class="qs-header" id="qsHeader">
-    ⚡ Quick-Switch
-    <button class="qs-toggle-btn" onclick="quickSwitchToggleCollapse()" title="Minimieren/Maximieren">▾</button>
-  </div>
-  <div id="qsSlotsContainer"></div>
-  <div class="qs-add-hint" id="qsAddHint">Rechtsklick auf Profil → Pin</div>
 </div>
 
 <!-- ── Stats Modal ── -->
