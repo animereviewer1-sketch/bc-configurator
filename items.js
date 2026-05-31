@@ -8970,6 +8970,8 @@ function _ctStop() {
   _ctPaused = false;
   _ctCurseActive = false;
   _ctCurseItemIdx = -1;
+  clearTimeout(_ctCurseDebounce);
+  _ctCurseDebounce = null;
   _ctIdx = -1;
   // Loader-State zurücksetzen
   bcSend({ type: 'EXEC', code: '(function(){if(window.__BCK_ctCurseWasActive!==undefined)window.__BCK_ctCurseWasActive=false;})();' }, true);
@@ -9002,6 +9004,7 @@ function _ctNext() {
   if (!_ctQueue.length) return;
   const prevEntry = _ctIdx >= 0 ? _ctQueue[_ctIdx]?.entry : null;
   _ctIdx = (_ctIdx + 1) % _ctQueue.length;
+  _ctCurseItemIdx = -1;  // altes cease-Event für diesen Index nicht mehr gültig
   _ctApplyCurrent(prevEntry);
   _ctUpdateUI();
   _ctResetCountdown();
@@ -9011,6 +9014,7 @@ function _ctNext() {
 function _ctNextSkipRemove() {
   if (!_ctQueue.length) return;
   _ctIdx = (_ctIdx + 1) % _ctQueue.length;
+  _ctCurseItemIdx = -1;  // altes cease-Event für diesen Index nicht mehr gültig
   _ctApplyCurrent(null);
   _ctUpdateUI();
   _ctResetCountdown();
@@ -9305,22 +9309,35 @@ function _ctRefreshProfileSelect() {
 }
 
 // ── Chat-Nachricht auswerten ──────────────────────────────────
-let _ctCurseActive = false;
-let _ctCurseItemIdx = -1;  // _ctIdx zum Zeitpunkt von curse_start — verhindert veraltete curse_end Events
+// Ein Item kann mehrere aufeinanderfolgende Curses auslösen (curse_start → cease → curse_start → cease…).
+// Erst nach dem LETZTEN cease (2s kein neuer curse_start) wird das Profil gespeichert.
+let _ctCurseActive   = false;
+let _ctCurseItemIdx  = -1;    // _ctIdx bei erstem curse_start — verhindert veraltete Events
+let _ctCurseDebounce = null;  // Debounce-Timer: feuert erst nach dem letzten cease
 
 function _ctHandleChatMsg(event, content) {
   const panel = document.getElementById('curseTestPanel');
   if (!panel || panel.style.display === 'none') return;
 
-  console.log('%c[CURSE-TEST] ' + (event === 'curse_end' ? '✅ CURSE ENDE' : '🔮 CURSE START') + ' → ' + (content||'').slice(0,80),
+  console.log('%c[CURSE-TEST] ' + (event === 'curse_end' ? '✅ CEASE' : '🔮 CURSE START') + ' → ' + (content||'').slice(0,80),
     'background:' + (event === 'curse_end' ? '#064e3b' : '#78350f') + ';color:#fff;font-weight:700;padding:2px 6px;border-radius:3px');
 
   if (event === 'curse_start') {
-    if (_ctCurseActive) return;
-    _ctCurseActive  = true;
-    _ctCurseItemIdx = _ctIdx;  // merken welches Item den Curse ausgelöst hat
+    // Laufenden Debounce abbrechen — noch nicht alle Curses beendet
+    clearTimeout(_ctCurseDebounce);
+    _ctCurseDebounce = null;
 
-    // Timer stoppen — warten bis Curse von selbst endet
+    if (_ctCurseActive) {
+      // Weiterer Curse auf dasselbe Item — Timer bleibt gestoppt, warten
+      showStatus('🔮 Weiterer Curse läuft…', 'info');
+      return;
+    }
+
+    // Erster curse_start für dieses Item
+    _ctCurseActive  = true;
+    _ctCurseItemIdx = _ctIdx;
+
+    // Timer stoppen — warten bis alle Curses von selbst enden
     clearInterval(_ctTimer);
     clearInterval(_ctCountdownTimer);
     _ctTimer = null;
@@ -9332,15 +9349,17 @@ function _ctHandleChatMsg(event, content) {
     if (st) st.textContent = '🔮 Curse läuft…';
     const cd = document.getElementById('curseTestCountdown');
     if (cd) cd.textContent = '⏳';
-    showStatus('🔮 Curse erkannt — warte bis Curse fertig ist', 'info');
+    showStatus('🔮 Curse erkannt — warte bis alle Curses fertig sind', 'info');
 
   } else if (event === 'curse_end') {
-    // Veraltetes Event: kein aktiver Curse, oder wir sind schon beim nächsten Item
-    if (!_ctCurseActive || _ctIdx !== _ctCurseItemIdx) {
-      console.log('[CURSE-TEST] curse_end ignoriert — kein aktiver Curse oder falsches Item (idx ' + _ctIdx + ' vs ' + _ctCurseItemIdx + ')');
+    // Veraltetes Event: falsches Item oder kein Curse-Kontext
+    if (_ctCurseItemIdx < 0 || _ctIdx !== _ctCurseItemIdx) {
+      console.log('[CURSE-TEST] cease ignoriert — falsches Item (idx ' + _ctIdx + ' vs ' + _ctCurseItemIdx + ')');
       _ctCurseActive = false;
       return;
     }
+
+    // Curse beendet — aber evtl. folgt gleich der nächste für dasselbe Item
     _ctCurseActive = false;
 
     const se = document.getElementById('curseTestCurseState');
@@ -9348,15 +9367,16 @@ function _ctHandleChatMsg(event, content) {
     const st = document.getElementById('curseTestStatus');
     const cd = document.getElementById('curseTestCountdown');
     if (cd) cd.textContent = '⏳';
+    if (st) st.textContent = '⏳ Warte auf weitere Curses…';
+    showStatus('✅ Cease — prüfe ob noch weitere Curses folgen…', 'info');
 
-    const curItem  = _ctQueue[_ctIdx];
-    const dbKey    = curItem?.dbKey;
-    const myRunId  = _ctRunId;  // RunId dieser Kette — wird ungültig wenn Stop gedrückt wird
+    // Snapshot für diese Kette
+    const capturedIdx   = _ctIdx;
+    const capturedDbKey = _ctQueue[_ctIdx]?.dbKey;
+    const capturedRunId = _ctRunId;
+    const _valid = () => _ctRunId === capturedRunId;
 
-    // Prüft ob diese Kette noch gültig ist (Stop nicht gedrückt)
-    const _valid = () => _ctRunId === myRunId;
-
-    // Schritt 3 — weiter machen (Standard-Outfit hat vorheriges Item schon ersetzt → kein Remove)
+    // Schritt 3 — weiter machen
     const _doNext = () => {
       if (!_valid()) return;
       if (st) st.textContent = '';
@@ -9403,16 +9423,20 @@ function _ctHandleChatMsg(event, content) {
       }
     };
 
-    // Schritt 1 — 2s warten damit BC alle Curse-Effekte vollständig anwenden kann
-    if (st) st.textContent = '⏳ Curse-Effekte werden angewandt…';
-    showStatus('✅ Curse beendet — warte auf vollständiges Outfit…', 'info');
-    setTimeout(() => {
-      if (!_valid()) return;
-      if (dbKey && CURSE_DB[dbKey]) {
-        if (st) st.textContent = '💾 Speichere…';
-        showStatus('💾 Profil wird gespeichert…', 'info');
-        _ctLogAdd(dbKey);
-        _curseSaveAsProfileSilent(dbKey, () => {
+    // Debounce 2s: falls curse_start erneut kommt → clearTimeout → warten auf nächsten cease
+    // Erst wenn 2s kein neuer Curse kommt: Outfit ist final → Profil speichern
+    clearTimeout(_ctCurseDebounce);
+    _ctCurseDebounce = setTimeout(() => {
+      _ctCurseDebounce = null;
+      if (!_valid() || _ctIdx !== capturedIdx) return;  // Stop oder Item gewechselt
+      if (_ctCurseActive) return;  // Neuer Curse läuft bereits
+
+      if (st) st.textContent = '💾 Speichere…';
+      showStatus('💾 Alle Curses beendet — Profil wird gespeichert…', 'info');
+
+      if (capturedDbKey && CURSE_DB[capturedDbKey]) {
+        _ctLogAdd(capturedDbKey);
+        _curseSaveAsProfileSilent(capturedDbKey, () => {
           if (_valid()) _runExtraProfile(() => _runDefaultOutfit(_doNext));
         });
       } else {
@@ -9428,8 +9452,10 @@ const _origCtStart = _ctStart;
 _ctStart = function() {
   _origCtStart();
   _ctRefreshProfileSelect();
-  _ctCurseActive  = false;
-  _ctCurseItemIdx = -1;
+  _ctCurseActive   = false;
+  _ctCurseItemIdx  = -1;
+  clearTimeout(_ctCurseDebounce);
+  _ctCurseDebounce = null;
   const stateEl = document.getElementById('curseTestCurseState');
   if (stateEl) stateEl.style.display = 'none';
 };
