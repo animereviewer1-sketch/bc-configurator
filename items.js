@@ -8969,6 +8969,7 @@ function _ctStop() {
   _ctCountdownTimer = null;
   _ctPaused = false;
   _ctCurseActive = false;
+  _ctCurseItemIdx = -1;
   _ctIdx = -1;
   // Loader-State zurücksetzen
   bcSend({ type: 'EXEC', code: '(function(){if(window.__BCK_ctCurseWasActive!==undefined)window.__BCK_ctCurseWasActive=false;})();' }, true);
@@ -9305,20 +9306,19 @@ function _ctRefreshProfileSelect() {
 
 // ── Chat-Nachricht auswerten ──────────────────────────────────
 let _ctCurseActive = false;
+let _ctCurseItemIdx = -1;  // _ctIdx zum Zeitpunkt von curse_start — verhindert veraltete curse_end Events
 
 function _ctHandleChatMsg(event, content) {
   const panel = document.getElementById('curseTestPanel');
   if (!panel || panel.style.display === 'none') return;
-  // RunId-Snapshot: Kette wird ungültig wenn Stop gedrückt wird
-  const _msgRunId = _ctRunId;
-  const _msgValid = () => _ctRunId === _msgRunId;
 
   console.log('%c[CURSE-TEST] ' + (event === 'curse_end' ? '✅ CURSE ENDE' : '🔮 CURSE START') + ' → ' + (content||'').slice(0,80),
     'background:' + (event === 'curse_end' ? '#064e3b' : '#78350f') + ';color:#fff;font-weight:700;padding:2px 6px;border-radius:3px');
 
   if (event === 'curse_start') {
     if (_ctCurseActive) return;
-    _ctCurseActive = true;
+    _ctCurseActive  = true;
+    _ctCurseItemIdx = _ctIdx;  // merken welches Item den Curse ausgelöst hat
 
     // Timer stoppen — warten bis Curse von selbst endet
     clearInterval(_ctTimer);
@@ -9335,8 +9335,10 @@ function _ctHandleChatMsg(event, content) {
     showStatus('🔮 Curse erkannt — warte bis Curse fertig ist', 'info');
 
   } else if (event === 'curse_end') {
-    if (!_ctCurseActive || !_msgValid()) {
-      console.log('[CURSE-TEST] curse_end ignoriert — kein aktiver Curse oder Test gestoppt');
+    // Veraltetes Event: kein aktiver Curse, oder wir sind schon beim nächsten Item
+    if (!_ctCurseActive || _ctIdx !== _ctCurseItemIdx) {
+      console.log('[CURSE-TEST] curse_end ignoriert — kein aktiver Curse oder falsches Item (idx ' + _ctIdx + ' vs ' + _ctCurseItemIdx + ')');
+      _ctCurseActive = false;
       return;
     }
     _ctCurseActive = false;
@@ -9346,7 +9348,6 @@ function _ctHandleChatMsg(event, content) {
     const st = document.getElementById('curseTestStatus');
     const cd = document.getElementById('curseTestCountdown');
     if (cd) cd.textContent = '⏳';
-    showStatus('✅ Curse beendet', 'info');
 
     const curItem  = _ctQueue[_ctIdx];
     const dbKey    = curItem?.dbKey;
@@ -9365,7 +9366,7 @@ function _ctHandleChatMsg(event, content) {
       _ctStartTimer();
     };
 
-    // Schritt 2b — Standard-Outfit anlegen + 5s warten + prüfen ob angewandt
+    // Schritt 2b — Standard-Outfit anlegen + 5s warten
     const _runDefaultOutfit = (next) => {
       if (!_valid()) return;
       if (CURSE_DEFAULT_OUTFIT_CODE) {
@@ -9377,31 +9378,7 @@ function _ctHandleChatMsg(event, content) {
             + JSON.stringify(CURSE_DEFAULT_OUTFIT_CODE)
             + ');var _a=JSON.parse(_d);if(Array.isArray(_a)){ServerPlayerInventoryLoad(_a);CharacterRefresh(Player,true,false);}}catch(e){}})();';
         bcSend({ type: 'EXEC', code });
-        // 5s warten, dann prüfen ob Standard-Outfit wirklich angewandt wurde
-        setTimeout(() => {
-          if (!_valid()) return;
-          if (st) st.textContent = '🔍 Standard-Outfit prüfen…';
-          const checkReqId = 'ct_stdchk_' + Date.now();
-          const checkRunId = _ctRunId;
-          _pendingOutfitSave[checkReqId] = function(items) {
-            if (_ctRunId !== checkRunId) { delete _pendingOutfitSave[checkReqId]; return; }
-            delete _pendingOutfitSave[checkReqId];
-            const stdFp = _ctStdOutfitFingerprint();
-            if (stdFp && items?.length) {
-              const { filteredItems } = _applyHairBaseline(items);
-              const curFp = _ctItemFingerprint(filteredItems.map(_appearanceItemToProfile));
-              if (curFp && stdFp !== curFp) {
-                // Outfit noch nicht angewandt → nochmal senden, dann 3s warten
-                showStatus('⚠️ Standard-Outfit nicht bestätigt — nochmal senden…', 'info');
-                bcSend({ type: 'EXEC', code });
-                setTimeout(() => { if (_valid()) next(); }, 3000);
-                return;
-              }
-            }
-            if (_valid()) next();
-          };
-          bcSend({ type: 'GET_CHAR_APPEARANCE', memberNum: null, reqId: checkReqId });
-        }, 5000);
+        setTimeout(() => { if (_valid()) next(); }, 5000);
       } else {
         next();
       }
@@ -9426,17 +9403,22 @@ function _ctHandleChatMsg(event, content) {
       }
     };
 
-    // Schritt 1 — Profil speichern, dann Kette
-    if (dbKey && CURSE_DB[dbKey]) {
-      if (st) st.textContent = '💾 Speichere…';
-      showStatus('💾 Profil wird gespeichert…', 'info');
-      _ctLogAdd(dbKey);
-      _curseSaveAsProfileSilent(dbKey, () => {
-        if (_valid()) _runExtraProfile(() => _runDefaultOutfit(_doNext));
-      });
-    } else {
-      _runExtraProfile(() => _runDefaultOutfit(_doNext));
-    }
+    // Schritt 1 — 2s warten damit BC alle Curse-Effekte vollständig anwenden kann
+    if (st) st.textContent = '⏳ Curse-Effekte werden angewandt…';
+    showStatus('✅ Curse beendet — warte auf vollständiges Outfit…', 'info');
+    setTimeout(() => {
+      if (!_valid()) return;
+      if (dbKey && CURSE_DB[dbKey]) {
+        if (st) st.textContent = '💾 Speichere…';
+        showStatus('💾 Profil wird gespeichert…', 'info');
+        _ctLogAdd(dbKey);
+        _curseSaveAsProfileSilent(dbKey, () => {
+          if (_valid()) _runExtraProfile(() => _runDefaultOutfit(_doNext));
+        });
+      } else {
+        _runExtraProfile(() => _runDefaultOutfit(_doNext));
+      }
+    }, 2000);
   }
 }
 
@@ -9446,7 +9428,8 @@ const _origCtStart = _ctStart;
 _ctStart = function() {
   _origCtStart();
   _ctRefreshProfileSelect();
-  _ctCurseActive = false;
+  _ctCurseActive  = false;
+  _ctCurseItemIdx = -1;
   const stateEl = document.getElementById('curseTestCurseState');
   if (stateEl) stateEl.style.display = 'none';
 };
