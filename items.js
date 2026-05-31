@@ -9159,6 +9159,47 @@ function curseTestJump(idx) {
   _ctStartTimer();
 }
 
+// ── Curse-Test Verlaufs-Log ───────────────────────────────────
+let _ctLog = [];
+
+function _ctLogAdd(dbKey) {
+  const entry = CURSE_DB[dbKey];
+  if (!entry) return;
+  const craftName = entry.CraftName || entry.ItemName || '?';
+  const owner     = entry.Besitzer?.Name || (entry.Besitzer?.Nummer ? '#' + entry.Besitzer.Nummer : '?');
+  _ctLog.push({
+    ts: new Date().toLocaleTimeString('de-DE', {hour:'2-digit', minute:'2-digit', second:'2-digit'}),
+    craftName,
+    owner,
+    profileName: craftName + ' - ' + owner,
+  });
+  _ctRenderLog();
+}
+
+function _ctRenderLog() {
+  const el = document.getElementById('curseTestLog');
+  if (!el) return;
+  if (!_ctLog.length) {
+    el.innerHTML = '<span style="font-size:.62rem;color:var(--text3);font-style:italic">Noch keine Curses gespeichert</span>';
+    return;
+  }
+  el.innerHTML = _ctLog.slice().reverse().map((e, i) =>
+    '<div style="display:flex;align-items:center;gap:5px;padding:3px 5px;border-radius:4px;'
+    + (i === 0
+      ? 'background:rgba(52,211,153,.08);border:1px solid rgba(52,211,153,.2)'
+      : 'background:var(--bg3);border:1px solid var(--border)') + '">'
+    + '<span style="font-size:.58rem;color:var(--text3);font-family:var(--font-mono);flex-shrink:0">' + escHtml(e.ts) + '</span>'
+    + '<span style="font-size:.68rem;font-weight:700;color:var(--text);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="' + escHtml(e.profileName) + '">' + escHtml(e.craftName) + '</span>'
+    + '<span style="font-size:.6rem;color:var(--text3);white-space:nowrap;flex-shrink:0">' + escHtml(e.owner) + '</span>'
+    + '</div>'
+  ).join('');
+}
+
+function _ctClearLog() {
+  _ctLog = [];
+  _ctRenderLog();
+}
+
 // ── Profil-Select im Panel befüllen ──────────────────────────
 function _ctRefreshProfileSelect() {
   const sel = document.getElementById('curseTestResetProfile');
@@ -9266,6 +9307,7 @@ function _ctHandleChatMsg(event, content) {
     if (dbKey && CURSE_DB[dbKey]) {
       if (st) st.textContent = '💾 Speichere…';
       showStatus('💾 Profil wird gespeichert…', 'info');
+      _ctLogAdd(dbKey);
       _curseSaveAsProfileSilent(dbKey, () => {
         _runExtraProfile(() => _runDefaultOutfit(_doNext));
       });

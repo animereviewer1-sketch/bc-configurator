@@ -2890,6 +2890,16 @@ button { cursor: pointer; }
         <input type="checkbox" id="curseTestRemove" checked style="accent-color:var(--yellow)"> Item ablegen
       </label>
     </div>
+    <!-- Gespeicherte Curses Verlauf -->
+    <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border)">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+        <span style="font-size:.62rem;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.05em">💾 Gespeicherte Curses</span>
+        <button onclick="_ctClearLog()" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:.62rem;padding:0 2px" title="Verlauf leeren">✕</button>
+      </div>
+      <div id="curseTestLog" style="max-height:120px;overflow-y:auto;display:flex;flex-direction:column;gap:2px">
+        <span style="font-size:.62rem;color:var(--text3);font-style:italic">Noch keine Curses gespeichert</span>
+      </div>
+    </div>
     <!-- Profil nach Curse-Ende -->
     <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border)">
       <div style="font-size:.62rem;color:var(--text3);margin-bottom:4px">⚡ Nach Curse-Ende zusätzlich ausführen:</div>
