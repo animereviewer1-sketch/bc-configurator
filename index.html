@@ -2872,6 +2872,15 @@ button { cursor: pointer; }
       <button onclick="curseTestNext()" class="btn" style="flex:1;font-size:.72rem;padding:5px 0">Weiter ⏭</button>
     </div>
     <div style="display:flex;gap:6px;margin-top:5px;align-items:center">
+      <span style="font-size:.65rem;color:var(--text3);white-space:nowrap">Startposition:</span>
+      <input type="number" id="curseTestStartPos" value="1" min="1"
+        style="width:62px;background:var(--bg3);border:1px solid var(--border);border-radius:5px;
+               color:var(--text);font-size:.72rem;padding:3px 6px;font-family:var(--font-mono)"
+        title="Bei welcher Nummer starten (1 = Anfang)">
+      <button onclick="curseTestGoTo()" style="background:var(--accent);border:none;border-radius:5px;
+        color:#1a1611;font-size:.7rem;font-weight:700;padding:3px 9px;cursor:pointer">→ Gehe zu</button>
+    </div>
+    <div style="display:flex;gap:6px;margin-top:5px;align-items:center">
       <span style="font-size:.65rem;color:var(--text3);white-space:nowrap">Interval:</span>
       <input type="number" id="curseTestInterval" value="10" min="3" max="120"
         style="width:52px;background:var(--bg3);border:1px solid var(--border);border-radius:5px;

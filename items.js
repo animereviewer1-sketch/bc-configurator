@@ -8840,7 +8840,10 @@ function _ctStart() {
   if (!_ctQueue.length) {
     showStatus('⚠️ Keine gecurseden Items ohne Outfit-Tag gefunden', 'info'); return;
   }
-  _ctIdx    = -1;
+  // Startposition aus Input lesen (1-basiert → 0-basiert)
+  const startPos = parseInt(document.getElementById('curseTestStartPos')?.value || '1');
+  _ctIdx    = Math.max(0, Math.min(_ctQueue.length - 1, (startPos - 1))) - 1; // -1 weil _ctNext() +1 macht
+  _ctDotsPage = 0;
   _ctPaused = false;
   document.getElementById('curseTestPanel').style.display = '';
   document.getElementById('curseTestBtn').textContent = '⏹ Test stoppen';
@@ -8985,6 +8988,8 @@ function _ctUpdateUI() {
   const next  = _ctQueue[(_ctIdx + 1) % total];
 
   document.getElementById('curseTestProgress').textContent = (_ctIdx + 1) + ' / ' + total;
+  const posInp = document.getElementById('curseTestStartPos');
+  if (posInp) posInp.value = _ctIdx + 1;
   document.getElementById('curseTestBar').style.width = ((_ctIdx + 1) / total * 100) + '%';
 
   const _setCard = (idName, idGroup, idOwner, entry) => {
@@ -9017,25 +9022,83 @@ function _ctResetCountdown() {
   _ctUpdateCountdown();
 }
 
+const CT_DOTS_PER_PAGE = 60;
+let _ctDotsPage = 0;
+
+function _ctDotsPageOf(idx) {
+  return Math.floor(idx / CT_DOTS_PER_PAGE);
+}
+
 function _ctRenderDots() {
   const el = document.getElementById('curseTestDots');
   if (!el || !_ctQueue.length) return;
-  el.innerHTML = _ctQueue.map((_, i) =>
-    '<span id="ctdot_' + i + '" style="width:8px;height:8px;border-radius:50%;flex-shrink:0;'
-    + 'background:' + (i === _ctIdx ? 'var(--yellow)' : 'var(--bg4)') + ';'
-    + 'border:1px solid ' + (i === _ctIdx ? 'var(--yellow)' : 'var(--border)') + ';'
-    + 'cursor:pointer;transition:background .15s" title="' + escHtml(_ctQueue[i].entry?.CraftName || '') + '"'
-    + ' onclick="curseTestJump(' + i + ')"></span>'
-  ).join('');
+  const total     = _ctQueue.length;
+  const totalPages = Math.ceil(total / CT_DOTS_PER_PAGE);
+  // Seite so setzen dass aktiver Dot sichtbar ist
+  if (_ctIdx >= 0) _ctDotsPage = _ctDotsPageOf(_ctIdx);
+  const start = _ctDotsPage * CT_DOTS_PER_PAGE;
+  const end   = Math.min(start + CT_DOTS_PER_PAGE, total);
+
+  const dots = [];
+  for (let i = start; i < end; i++) {
+    const active = i === _ctIdx;
+    dots.push(
+      '<span id="ctdot_' + i + '" style="width:8px;height:8px;border-radius:50%;flex-shrink:0;display:inline-block;'
+      + 'background:' + (active ? 'var(--yellow)' : 'var(--bg4)') + ';'
+      + 'border:1px solid ' + (active ? 'var(--yellow)' : 'var(--border)') + ';'
+      + 'cursor:pointer;transition:background .15s" title="#' + (i+1) + ' ' + escHtml(_ctQueue[i].entry?.CraftName || '') + '"'
+      + ' onclick="curseTestJump(' + i + ')"></span>'
+    );
+  }
+
+  // Pagination Buttons
+  const prevPageBtn = '<button onclick="_ctDotsGoPage(' + (_ctDotsPage-1) + ')" '
+    + ((_ctDotsPage > 0) ? '' : 'disabled ')
+    + 'style="background:none;border:1px solid var(--border);border-radius:4px;color:var(--text3);cursor:pointer;font-size:.6rem;padding:1px 5px;flex-shrink:0">◀</button>';
+  const nextPageBtn = '<button onclick="_ctDotsGoPage(' + (_ctDotsPage+1) + ')" '
+    + ((_ctDotsPage < totalPages-1) ? '' : 'disabled ')
+    + 'style="background:none;border:1px solid var(--border);border-radius:4px;color:var(--text3);cursor:pointer;font-size:.6rem;padding:1px 5px;flex-shrink:0">▶</button>';
+  const pageLabel = '<span style="font-size:.6rem;color:var(--text3);flex-shrink:0">'
+    + (start+1) + '–' + end + ' / ' + total + '</span>';
+
+  el.innerHTML = '<div style="display:flex;align-items:center;gap:4px;flex-wrap:nowrap;margin-bottom:3px">'
+    + prevPageBtn + pageLabel + nextPageBtn + '</div>'
+    + '<div style="display:flex;gap:3px;flex-wrap:wrap">' + dots.join('') + '</div>';
+}
+
+function _ctDotsGoPage(page) {
+  const totalPages = Math.ceil(_ctQueue.length / CT_DOTS_PER_PAGE);
+  _ctDotsPage = Math.max(0, Math.min(totalPages - 1, page));
+  _ctRenderDots();
 }
 
 function _ctUpdateDots() {
-  _ctQueue.forEach((_, i) => {
-    const dot = document.getElementById('ctdot_' + i);
-    if (!dot) return;
-    dot.style.background = i === _ctIdx ? 'var(--yellow)' : 'var(--bg4)';
-    dot.style.borderColor = i === _ctIdx ? 'var(--yellow)' : 'var(--border)';
+  // Prüfen ob aktiver Dot auf aktueller Seite liegt
+  if (_ctIdx >= 0 && _ctDotsPageOf(_ctIdx) !== _ctDotsPage) {
+    _ctRenderDots();  // Seite wechseln
+    return;
+  }
+  // Nur aktive Dots aktualisieren (kein komplettes Re-Render)
+  document.querySelectorAll('[id^="ctdot_"]').forEach(dot => {
+    const i = parseInt(dot.id.replace('ctdot_', ''));
+    const active = i === _ctIdx;
+    dot.style.background  = active ? 'var(--yellow)' : 'var(--bg4)';
+    dot.style.borderColor = active ? 'var(--yellow)' : 'var(--border)';
   });
+}
+
+function curseTestGoTo() {
+  const inp = document.getElementById('curseTestStartPos');
+  const pos = parseInt(inp?.value || '1');
+  const idx = Math.max(0, Math.min(_ctQueue.length - 1, pos - 1));
+  // Falls Test läuft: direkt springen
+  if (_ctTimer !== null || _ctPaused) {
+    curseTestJump(idx);
+  } else {
+    // Test noch nicht gestartet: nur Startposition setzen
+    if (inp) inp.value = pos;
+    showStatus('📍 Start bei Position ' + pos + ' gesetzt', 'info');
+  }
 }
 
 function curseTestJump(idx) {

@@ -1344,15 +1344,31 @@ window.CurseScanner = (() => {
     var _ctMsgH = function(data) {
       var popup = window.__BCK_popupRef;
       if (!popup || popup.closed) return;
-      var content = (typeof data.Content === 'string') ? data.Content : '';
+
+      // Content kann String oder strukturiertes Objekt/Array sein (BC Activity-Format)
+      // Alles in einen flachen String umwandeln für einfaches Matching
+      var content = '';
+      if (typeof data.Content === 'string') {
+        content = data.Content;
+      } else if (data.Content) {
+        try { content = JSON.stringify(data.Content); } catch(e) { content = String(data.Content); }
+      }
+      // Zusätzlich Dictionary-Substitutionen durchsuchen (BC Activity v2)
+      if (data.Dictionary && Array.isArray(data.Dictionary)) {
+        data.Dictionary.forEach(function(d) {
+          if (d && typeof d.Text === 'string') content += ' ' + d.Text;
+        });
+      }
       if (!content) return;
+
       var lower = content.toLowerCase();
-      // Curse startet: "shivers as a curse washes over"
-      // Curse endet:   "sigh of relief" + "curses cease"
-      var isCurseStart = lower.indexOf('curse washes over') !== -1 || lower.indexOf('curse wash') !== -1;
-      var isCurseEnd   = (lower.indexOf('sigh of relief') !== -1 && lower.indexOf('curse') !== -1)
-                      || lower.indexOf('curses cease') !== -1;
+      var isCurseStart = lower.indexOf('curse washes over') !== -1
+                      || lower.indexOf('curse wash') !== -1;
+      var isCurseEnd   = lower.indexOf('curses cease') !== -1
+                      || (lower.indexOf('sigh of relief') !== -1 && lower.indexOf('curse') !== -1);
       if (!isCurseStart && !isCurseEnd) return;
+
+      BCK.info('[CurseTestMonitor] ' + (isCurseEnd ? 'CURSE END' : 'CURSE START') + ' → Type:' + (data.Type||'?') + ' Content:' + content.slice(0,80));
       popup.postMessage({
         app: APP,
         type: 'CT_CHAT_MSG',
