@@ -9297,7 +9297,7 @@ function _ctHandleChatMsg(event, content) {
     if (_ctCurseActive) return;
     _ctCurseActive = true;
 
-    // Timer stoppen — nur warten bis Curse fertig
+    // Timer stoppen — warten bis Curse von selbst endet
     clearInterval(_ctTimer);
     clearInterval(_ctCountdownTimer);
     _ctTimer = null;
@@ -9309,7 +9309,7 @@ function _ctHandleChatMsg(event, content) {
     if (st) st.textContent = '🔮 Curse läuft…';
     const cd = document.getElementById('curseTestCountdown');
     if (cd) cd.textContent = '⏳';
-    showStatus('🔮 Curse erkannt — warte auf Ende', 'info');
+    showStatus('🔮 Curse erkannt — warte bis Curse fertig ist', 'info');
 
   } else if (event === 'curse_end') {
     if (!_ctCurseActive) {
