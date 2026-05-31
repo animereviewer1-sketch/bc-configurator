@@ -5104,16 +5104,17 @@ function _curseSaveAsProfileSilent(dbKey, afterSave) {
   const baseName    = craftName + ' - ' + ownerName;
   const profileName = _uniqueProfileName(baseName);
 
+  // Curse kam, Outfit gleich wie Standard → in Check-Liste
   const _addToCheck = () => {
     _ctCheckAdd(dbKey, craftName, ownerName);
-    showStatus('☑️ Kein Unterschied zum Standard-Outfit — "' + baseName + '" in Check-Liste', 'info');
+    showStatus('☑️ Curse ohne Outfit-Änderung — "' + baseName + '" in Check-Liste', 'info');
     if (typeof afterSave === 'function') afterSave();
   };
 
   const _save = (items, keepHairGroups) => {
-    // Vergleich mit Standard-Outfit — falls identisch: nicht speichern
-    const stdFp      = _ctStdOutfitFingerprint();
-    const currentFp  = _ctItemFingerprint(items);
+    // Vergleich mit Standard-Outfit — falls identisch: Check-Liste
+    const stdFp     = _ctStdOutfitFingerprint();
+    const currentFp = _ctItemFingerprint(items);
     if (stdFp && currentFp && stdFp === currentFp) {
       _addToCheck();
       return;
@@ -5144,7 +5145,6 @@ function _curseSaveAsProfileSilent(dbKey, afterSave) {
   const reqId = 'ct_save_' + Date.now();
   _pendingOutfitSave[reqId] = function(items) {
     if (!items?.length) {
-      // Keine Items → direkt in Check-Liste
       _addToCheck();
       return;
     }
@@ -8930,7 +8930,7 @@ function _ctStart() {
   document.getElementById('curseTestBtn').textContent = '⏹ Test stoppen';
   document.getElementById('curseTestBtn').classList.replace('btn-yellow', 'btn-red');
   _ctRenderDots();
-  _ctNext();   // sofort erstes Item
+  _ctNext();   // erstes Item — kein Check-Eintrag
   _ctStartTimer();
 
   // Drag-Support
@@ -8998,7 +8998,7 @@ function _ctNext() {
 function curseTestNext() {
   clearInterval(_ctTimer);
   clearInterval(_ctCountdownTimer);
-  _ctNext();
+  _ctNext(); // manuelle Navigation — kein Check-Eintrag
   _ctStartTimer();
 }
 
@@ -9328,7 +9328,7 @@ function _ctHandleChatMsg(event, content) {
     const curItem = _ctQueue[_ctIdx];
     const dbKey   = curItem?.dbKey;
 
-    // Schritt 3 — weiter machen
+    // Schritt 3 — weiter machen (fromCurse=true → kein Check-Eintrag)
     const _doNext = () => {
       if (st) st.textContent = '';
       if (cd) cd.textContent = '';
