@@ -9154,29 +9154,62 @@ function _ctHandleChatMsg(event, content) {
     showStatus('🔮 Curse erkannt — Rotation pausiert', 'info');
 
   } else if (event === 'curse_end') {
-    if (!_ctCurseActive) return; // kein Start erkannt, ignorieren
+    if (!_ctCurseActive) {
+      console.log('[CURSE-TEST] curse_end ignoriert — _ctCurseActive war false');
+      return;
+    }
     _ctCurseActive = false;
 
     const stateEl = document.getElementById('curseTestCurseState');
     if (stateEl) stateEl.style.display = 'none';
 
-    // Profil ausführen falls gewählt
     const profileName = document.getElementById('curseTestResetProfile')?.value || '';
-    if (profileName && PROFILES[profileName]) {
-      showStatus('⚡ Curse Ende → Profil "' + profileName + '" wird ausgeführt…', 'info');
-      loadProfile(profileName);
+    console.log('[CURSE-TEST] curse_end — profileName:', JSON.stringify(profileName),
+      '| PROFILES hat Eintrag:', !!(profileName && PROFILES[profileName]),
+      '| CURSE_DEFAULT_OUTFIT_CODE:', !!CURSE_DEFAULT_OUTFIT_CODE);
+
+    // ── Reihenfolge: erst Standard-Outfit, dann Profil, dann weiter ──
+    const _doNext = () => {
+      setTimeout(() => {
+        showStatus('▶ Curse-Test wird fortgesetzt', 'info');
+        _ctNext();
+        _ctStartTimer();
+      }, 500);
+    };
+
+    const _execProfile = (name, afterCb) => {
+      showStatus('⚡ Profil "' + name + '" wird ausgeführt…', 'info');
+      loadProfile(name);
       setTimeout(() => {
         const code = document.getElementById('outfitCode')?.value?.trim();
         if (code) bcSend({ type: 'EXEC', code: '(function(){\n' + code + '\n})();' });
-        setTimeout(() => {
-          showStatus('▶ Curse-Test wird fortgesetzt', 'info');
-          _ctNext();
-          _ctStartTimer();
-        }, 3200);
+        setTimeout(afterCb, 3200);
       }, 60);
+    };
+
+    const _execDefaultOutfit = (afterCb) => {
+      if (CURSE_DEFAULT_OUTFIT_CODE) {
+        showStatus('🏠 Standard-Outfit wird wiederhergestellt…', 'info');
+        bcSend({ type: 'EXEC', code: _oiBuildExecCode ? _oiBuildExecCode(CURSE_DEFAULT_OUTFIT_CODE)
+          : '(function(){try{var _d=LZString.decompressFromBase64(' + JSON.stringify(CURSE_DEFAULT_OUTFIT_CODE)
+            + ');var _a=JSON.parse(_d);if(Array.isArray(_a)){ServerPlayerInventoryLoad(_a);CharacterRefresh(Player,true,false);}}catch(e){}})();'
+        });
+        setTimeout(afterCb, 3200);
+      } else {
+        afterCb();
+      }
+    };
+
+    if (profileName && PROFILES[profileName]) {
+      // Profil gewählt → erst Profil, dann weiter
+      _execProfile(profileName, _doNext);
+    } else if (CURSE_DEFAULT_OUTFIT_CODE) {
+      // Kein Profil aber Standard-Outfit gesetzt → Standard-Outfit anwenden
+      _execDefaultOutfit(_doNext);
     } else {
+      // Nichts gesetzt → direkt weiter
       showStatus('✅ Curse beendet — Rotation wird fortgesetzt', 'success');
-      setTimeout(() => { _ctNext(); _ctStartTimer(); }, 800);
+      _doNext();
     }
   }
 }
