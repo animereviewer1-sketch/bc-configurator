@@ -9125,67 +9125,58 @@ function _ctRefreshProfileSelect() {
 }
 
 // ── Chat-Nachricht auswerten ──────────────────────────────────
-let _ctCurseActive = false;  // true = Curse gerade aktiv, Timer pausiert
+let _ctCurseActive = false;
 
 function _ctHandleChatMsg(event, content) {
-  // Nur aktiv wenn Curse-Test läuft
-  if (_ctTimer === null && !_ctPaused && !_ctCurseActive) return;
+  // Panel muss sichtbar sein (Test läuft oder war gestartet)
+  const panel = document.getElementById('curseTestPanel');
+  if (!panel || panel.style.display === 'none') return;
 
-  if (event === 'curse_start' && !_ctCurseActive) {
+  console.log('%c[CURSE-TEST] ' + (event === 'curse_end' ? '✅ CURSE ENDE' : '🔮 CURSE START') + ' → ' + (content||'').slice(0,80),
+    'background:' + (event === 'curse_end' ? '#064e3b' : '#78350f') + ';color:#fff;font-weight:700;padding:2px 6px;border-radius:3px');
+
+  if (event === 'curse_start') {
+    if (_ctCurseActive) return; // bereits pausiert
     _ctCurseActive = true;
 
-    // Timer pausieren (aber NICHT den Pause-Button — intern pausieren)
-    if (!_ctPaused) {
-      clearInterval(_ctTimer);
-      clearInterval(_ctCountdownTimer);
-      _ctTimer = null;
-      _ctCountdownTimer = null;
-    }
+    // Timer intern pausieren
+    clearInterval(_ctTimer);
+    clearInterval(_ctCountdownTimer);
+    _ctTimer = null;
+    _ctCountdownTimer = null;
 
-    // UI: Curse-State-Anzeige
     const stateEl = document.getElementById('curseTestCurseState');
     if (stateEl) stateEl.style.display = '';
-    document.getElementById('curseTestStatus').textContent = '🔮 Curse aktiv…';
-    document.getElementById('curseTestCountdown').textContent = '⏳ wartet';
-
+    const statusEl = document.getElementById('curseTestStatus');
+    if (statusEl) statusEl.textContent = '🔮 Curse aktiv…';
+    const cdEl = document.getElementById('curseTestCountdown');
+    if (cdEl) cdEl.textContent = '⏳ wartet';
     showStatus('🔮 Curse erkannt — Rotation pausiert', 'info');
 
-  } else if (event === 'curse_end' && _ctCurseActive) {
+  } else if (event === 'curse_end') {
+    if (!_ctCurseActive) return; // kein Start erkannt, ignorieren
     _ctCurseActive = false;
 
-    // UI: Curse-State ausblenden
     const stateEl = document.getElementById('curseTestCurseState');
     if (stateEl) stateEl.style.display = 'none';
 
     // Profil ausführen falls gewählt
-    const sel = document.getElementById('curseTestResetProfile');
-    const profileName = sel?.value || '';
+    const profileName = document.getElementById('curseTestResetProfile')?.value || '';
     if (profileName && PROFILES[profileName]) {
       showStatus('⚡ Curse Ende → Profil "' + profileName + '" wird ausgeführt…', 'info');
       loadProfile(profileName);
       setTimeout(() => {
         const code = document.getElementById('outfitCode')?.value?.trim();
-        if (code) {
-          bcSend({ type: 'EXEC', code: '(function(){\n' + code + '\n})();' });
-        }
-        // Nach Profil-Apply: Weiter mit nächstem Item (mit kleinem Delay)
+        if (code) bcSend({ type: 'EXEC', code: '(function(){\n' + code + '\n})();' });
         setTimeout(() => {
           showStatus('▶ Curse-Test wird fortgesetzt', 'info');
-          if (!_ctPaused) {
-            _ctNext();
-            _ctStartTimer();
-          }
-        }, 3200);  // warten bis Profil-Sync abgeschlossen
-      }, 60);
-    } else {
-      // Kein Profil → direkt weitermachen
-      showStatus('✅ Curse beendet — Rotation wird fortgesetzt', 'success');
-      if (!_ctPaused) {
-        setTimeout(() => {
           _ctNext();
           _ctStartTimer();
-        }, 800);
-      }
+        }, 3200);
+      }, 60);
+    } else {
+      showStatus('✅ Curse beendet — Rotation wird fortgesetzt', 'success');
+      setTimeout(() => { _ctNext(); _ctStartTimer(); }, 800);
     }
   }
 }
