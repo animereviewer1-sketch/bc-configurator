@@ -8890,7 +8890,8 @@ let _ctCountdown = 0;
 let _ctCountdownTimer = null;
 let _ctDragging  = false;
 let _ctDragOffX  = 0, _ctDragOffY = 0;
-let _ctRunId     = 0;   // erhöht sich bei jedem Start/Stop — ungültige Ketten werden abgebrochen
+let _ctRunId     = 0;
+let _ctRunning   = false;  // true = Test läuft (auch während Curse/Save-Kette)
 
 // Sammelt alle cursed Items ohne Outfit-Flag, sortiert nach Owner → ItemName
 function _ctBuildQueue() {
@@ -9001,6 +9002,15 @@ function _ctNext() {
   const prevEntry = _ctIdx >= 0 ? _ctQueue[_ctIdx]?.entry : null;
   _ctIdx = (_ctIdx + 1) % _ctQueue.length;
   _ctApplyCurrent(prevEntry);
+  _ctUpdateUI();
+  _ctResetCountdown();
+}
+
+// Nach Standard-Outfit: vorheriges Item wurde schon ersetzt → kein InventoryRemove
+function _ctNextSkipRemove() {
+  if (!_ctQueue.length) return;
+  _ctIdx = (_ctIdx + 1) % _ctQueue.length;
+  _ctApplyCurrent(null);
   _ctUpdateUI();
   _ctResetCountdown();
 }
@@ -9299,6 +9309,9 @@ let _ctCurseActive = false;
 function _ctHandleChatMsg(event, content) {
   const panel = document.getElementById('curseTestPanel');
   if (!panel || panel.style.display === 'none') return;
+  // RunId-Snapshot: Kette wird ungültig wenn Stop gedrückt wird
+  const _msgRunId = _ctRunId;
+  const _msgValid = () => _ctRunId === _msgRunId;
 
   console.log('%c[CURSE-TEST] ' + (event === 'curse_end' ? '✅ CURSE ENDE' : '🔮 CURSE START') + ' → ' + (content||'').slice(0,80),
     'background:' + (event === 'curse_end' ? '#064e3b' : '#78350f') + ';color:#fff;font-weight:700;padding:2px 6px;border-radius:3px');
@@ -9322,8 +9335,8 @@ function _ctHandleChatMsg(event, content) {
     showStatus('🔮 Curse erkannt — warte bis Curse fertig ist', 'info');
 
   } else if (event === 'curse_end') {
-    if (!_ctCurseActive) {
-      console.log('[CURSE-TEST] curse_end ignoriert — kein aktiver Curse');
+    if (!_ctCurseActive || !_msgValid()) {
+      console.log('[CURSE-TEST] curse_end ignoriert — kein aktiver Curse oder Test gestoppt');
       return;
     }
     _ctCurseActive = false;
@@ -9342,17 +9355,17 @@ function _ctHandleChatMsg(event, content) {
     // Prüft ob diese Kette noch gültig ist (Stop nicht gedrückt)
     const _valid = () => _ctRunId === myRunId;
 
-    // Schritt 3 — weiter machen
+    // Schritt 3 — weiter machen (Standard-Outfit hat vorheriges Item schon ersetzt → kein Remove)
     const _doNext = () => {
       if (!_valid()) return;
       if (st) st.textContent = '';
       if (cd) cd.textContent = '';
       showStatus('▶ Curse-Test wird fortgesetzt', 'info');
-      _ctNext();
+      _ctNextSkipRemove();
       _ctStartTimer();
     };
 
-    // Schritt 2b — Standard-Outfit anlegen
+    // Schritt 2b — Standard-Outfit anlegen + 5s warten + prüfen ob angewandt
     const _runDefaultOutfit = (next) => {
       if (!_valid()) return;
       if (CURSE_DEFAULT_OUTFIT_CODE) {
@@ -9364,7 +9377,31 @@ function _ctHandleChatMsg(event, content) {
             + JSON.stringify(CURSE_DEFAULT_OUTFIT_CODE)
             + ');var _a=JSON.parse(_d);if(Array.isArray(_a)){ServerPlayerInventoryLoad(_a);CharacterRefresh(Player,true,false);}}catch(e){}})();';
         bcSend({ type: 'EXEC', code });
-        setTimeout(() => { if (_valid()) next(); }, 4000);
+        // 5s warten, dann prüfen ob Standard-Outfit wirklich angewandt wurde
+        setTimeout(() => {
+          if (!_valid()) return;
+          if (st) st.textContent = '🔍 Standard-Outfit prüfen…';
+          const checkReqId = 'ct_stdchk_' + Date.now();
+          const checkRunId = _ctRunId;
+          _pendingOutfitSave[checkReqId] = function(items) {
+            if (_ctRunId !== checkRunId) { delete _pendingOutfitSave[checkReqId]; return; }
+            delete _pendingOutfitSave[checkReqId];
+            const stdFp = _ctStdOutfitFingerprint();
+            if (stdFp && items?.length) {
+              const { filteredItems } = _applyHairBaseline(items);
+              const curFp = _ctItemFingerprint(filteredItems.map(_appearanceItemToProfile));
+              if (curFp && stdFp !== curFp) {
+                // Outfit noch nicht angewandt → nochmal senden, dann 3s warten
+                showStatus('⚠️ Standard-Outfit nicht bestätigt — nochmal senden…', 'info');
+                bcSend({ type: 'EXEC', code });
+                setTimeout(() => { if (_valid()) next(); }, 3000);
+                return;
+              }
+            }
+            if (_valid()) next();
+          };
+          bcSend({ type: 'GET_CHAR_APPEARANCE', memberNum: null, reqId: checkReqId });
+        }, 5000);
       } else {
         next();
       }
