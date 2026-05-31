@@ -1336,6 +1336,36 @@ window.CurseScanner = (() => {
     BCK.ok('[OutfitScan] Auto-Scan aktiv (Run-ID: ' + _outfitRunId + ')');
   })();
 
+  // ── Curse-Test Chat-Monitor ────────────────────────────────────────────────
+  // Leitet LSCG-Curse-Systemmeldungen an das Popup weiter damit der Curse-Test
+  // automatisch pausieren / weitermachen kann.
+  (function _installCurseTestMonitor() {
+    if (typeof ServerSocket === 'undefined') { setTimeout(_installCurseTestMonitor, 1000); return; }
+    var _ctMsgH = function(data) {
+      var popup = window.__BCK_popupRef;
+      if (!popup || popup.closed) return;
+      var content = (typeof data.Content === 'string') ? data.Content : '';
+      if (!content) return;
+      var lower = content.toLowerCase();
+      // Curse startet: "shivers as a curse washes over"
+      // Curse endet:   "sigh of relief" + "curses cease"
+      var isCurseStart = lower.indexOf('curse washes over') !== -1 || lower.indexOf('curse wash') !== -1;
+      var isCurseEnd   = (lower.indexOf('sigh of relief') !== -1 && lower.indexOf('curse') !== -1)
+                      || lower.indexOf('curses cease') !== -1;
+      if (!isCurseStart && !isCurseEnd) return;
+      popup.postMessage({
+        app: APP,
+        type: 'CT_CHAT_MSG',
+        event: isCurseEnd ? 'curse_end' : 'curse_start',
+        content: content,
+        msgType: data.Type || '',
+        sender: data.Sender || null
+      }, ALLOWED_ORIGIN);
+    };
+    ServerSocket.on('ChatRoomMessage', _ctMsgH);
+    BCK.ok('[CurseTestMonitor] aktiv');
+  })();
+
   // ── Popup öffnen / fokussieren ─────────────────────────
   if (window.__BCK_WIN__ && !window.__BCK_WIN__.closed) {
     window.__BCK_WIN__.focus();
