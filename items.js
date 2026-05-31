@@ -8939,10 +8939,10 @@ function _ctStartTimer() {
   clearInterval(_ctCountdownTimer);
   _ctCountdown = _ctInterval;
   _ctTimer = setInterval(() => {
-    if (!_ctPaused && !_ctCurseActive) _ctNext();
+    if (!_ctPaused) _ctNext();
   }, _ctInterval * 1000);
   _ctCountdownTimer = setInterval(() => {
-    if (!_ctPaused && !_ctCurseActive) {
+    if (!_ctPaused) {
       _ctCountdown = Math.max(0, _ctCountdown - 1);
       _ctUpdateCountdown();
       if (_ctCountdown <= 0) _ctCountdown = _ctInterval;
@@ -9182,32 +9182,33 @@ function _ctHandleChatMsg(event, content) {
     'background:' + (event === 'curse_end' ? '#064e3b' : '#78350f') + ';color:#fff;font-weight:700;padding:2px 6px;border-radius:3px');
 
   if (event === 'curse_start') {
-    if (_ctCurseActive) return; // bereits pausiert
+    // Rotation läuft WEITER — nur merken dass Curse aktiv ist
     _ctCurseActive = true;
+    const stateEl = document.getElementById('curseTestCurseState');
+    if (stateEl) stateEl.style.display = '';
+    const statusEl = document.getElementById('curseTestStatus');
+    if (statusEl) statusEl.textContent = '🔮 Curse läuft…';
+    showStatus('🔮 Curse erkannt — Rotation läuft weiter', 'info');
 
-    // Timer intern pausieren
+  } else if (event === 'curse_end') {
+    if (!_ctCurseActive) {
+      console.log('[CURSE-TEST] curse_end ignoriert — kein Curse-Start erkannt');
+      return;
+    }
+    _ctCurseActive = false;
+
+    // Rotation JETZT pausieren für Profil-Speichern + Outfit-Restore
     clearInterval(_ctTimer);
     clearInterval(_ctCountdownTimer);
     _ctTimer = null;
     _ctCountdownTimer = null;
 
     const stateEl = document.getElementById('curseTestCurseState');
-    if (stateEl) stateEl.style.display = '';
-    const statusEl = document.getElementById('curseTestStatus');
-    if (statusEl) statusEl.textContent = '🔮 Curse aktiv…';
-    const cdEl = document.getElementById('curseTestCountdown');
-    if (cdEl) cdEl.textContent = '⏳ wartet';
-    showStatus('🔮 Curse erkannt — Rotation pausiert', 'info');
-
-  } else if (event === 'curse_end') {
-    if (!_ctCurseActive) {
-      console.log('[CURSE-TEST] curse_end ignoriert — _ctCurseActive war false');
-      return;
-    }
-    _ctCurseActive = false;
-
-    const stateEl = document.getElementById('curseTestCurseState');
     if (stateEl) stateEl.style.display = 'none';
+    const statusEl = document.getElementById('curseTestStatus');
+    if (statusEl) statusEl.textContent = '💾 Speichere…';
+    const cdEl = document.getElementById('curseTestCountdown');
+    if (cdEl) cdEl.textContent = '⏳';
 
     // Aktuelles Curse-Item aus der Queue
     const curItem = _ctQueue[_ctIdx];
