@@ -9174,7 +9174,6 @@ function _ctRefreshProfileSelect() {
 let _ctCurseActive = false;
 
 function _ctHandleChatMsg(event, content) {
-  // Panel muss sichtbar sein (Test läuft oder war gestartet)
   const panel = document.getElementById('curseTestPanel');
   if (!panel || panel.style.display === 'none') return;
 
@@ -9182,54 +9181,52 @@ function _ctHandleChatMsg(event, content) {
     'background:' + (event === 'curse_end' ? '#064e3b' : '#78350f') + ';color:#fff;font-weight:700;padding:2px 6px;border-radius:3px');
 
   if (event === 'curse_start') {
-    // Rotation läuft WEITER — nur merken dass Curse aktiv ist
+    if (_ctCurseActive) return;
     _ctCurseActive = true;
-    const stateEl = document.getElementById('curseTestCurseState');
-    if (stateEl) stateEl.style.display = '';
-    const statusEl = document.getElementById('curseTestStatus');
-    if (statusEl) statusEl.textContent = '🔮 Curse läuft…';
-    showStatus('🔮 Curse erkannt — Rotation läuft weiter', 'info');
 
-  } else if (event === 'curse_end') {
-    if (!_ctCurseActive) {
-      console.log('[CURSE-TEST] curse_end ignoriert — kein Curse-Start erkannt');
-      return;
-    }
-    _ctCurseActive = false;
-
-    // Rotation JETZT pausieren für Profil-Speichern + Outfit-Restore
+    // Rotation stoppen — LSCG legt Items an
     clearInterval(_ctTimer);
     clearInterval(_ctCountdownTimer);
     _ctTimer = null;
     _ctCountdownTimer = null;
 
-    const stateEl = document.getElementById('curseTestCurseState');
-    if (stateEl) stateEl.style.display = 'none';
+    document.getElementById('curseTestCurseState')?.style && (document.getElementById('curseTestCurseState').style.display = '');
     const statusEl = document.getElementById('curseTestStatus');
-    if (statusEl) statusEl.textContent = '💾 Speichere…';
-    const cdEl = document.getElementById('curseTestCountdown');
-    if (cdEl) cdEl.textContent = '⏳';
+    if (statusEl) statusEl.textContent = '🔮 Curse läuft…';
+    document.getElementById('curseTestCountdown') && (document.getElementById('curseTestCountdown').textContent = '⏳');
+    showStatus('🔮 Curse erkannt — Rotation gestoppt, warte auf Ende', 'info');
 
-    // Aktuelles Curse-Item aus der Queue
+    // Profil nach 800ms speichern damit LSCG alle Items anlegen kann
+    // (nicht bei curse_end: InstaStrip entfernt Items vor unserem Capture)
     const curItem = _ctQueue[_ctIdx];
     const dbKey   = curItem?.dbKey;
+    if (dbKey && CURSE_DB[dbKey]) {
+      setTimeout(() => {
+        if (!_ctCurseActive) return; // abgebrochen
+        showStatus('💾 Curse-Outfit wird gespeichert…', 'info');
+        _curseSaveAsProfileSilent(dbKey, null);
+      }, 800);
+    }
 
-    // Erst wenn Standard-Outfit fertig → nächstes Item + Timer neu starten
+  } else if (event === 'curse_end') {
+    if (!_ctCurseActive) {
+      console.log('[CURSE-TEST] curse_end ignoriert — kein Start erkannt');
+      return;
+    }
+    _ctCurseActive = false;
+
+    document.getElementById('curseTestCurseState')?.style && (document.getElementById('curseTestCurseState').style.display = 'none');
+    const statusEl = document.getElementById('curseTestStatus');
+    if (statusEl) statusEl.textContent = '🏠 Wird wiederhergestellt…';
+    showStatus('✅ Curse beendet', 'info');
+
     const _doNext = () => {
-      _ctCurseActive = false;
       showStatus('▶ Curse-Test wird fortgesetzt', 'info');
-      clearInterval(_ctTimer);
-      clearInterval(_ctCountdownTimer);
-      _ctTimer = null;
+      document.getElementById('curseTestCountdown') && (document.getElementById('curseTestCountdown').textContent = '');
+      document.getElementById('curseTestStatus') && (document.getElementById('curseTestStatus').textContent = '');
       _ctNext();
       _ctStartTimer();
     };
-
-    // Reihenfolge:
-    // 1. Profil-Speichern (automatisch, kein Prompt)
-    // 2. Dropdown-Profil ausführen (optional)
-    // 3. Standard-Outfit wiederherstellen (falls gesetzt)
-    // 4. Erst dann: nächstes Item + Timer neu starten
 
     const _runDefaultOutfit = (next) => {
       if (CURSE_DEFAULT_OUTFIT_CODE) {
@@ -9240,7 +9237,7 @@ function _ctHandleChatMsg(event, content) {
             + JSON.stringify(CURSE_DEFAULT_OUTFIT_CODE)
             + ');var _a=JSON.parse(_d);if(Array.isArray(_a)){ServerPlayerInventoryLoad(_a);CharacterRefresh(Player,true,false);}}catch(e){}})();';
         bcSend({ type: 'EXEC', code });
-        setTimeout(next, 4000);  // warten bis Outfit-Sync durch
+        setTimeout(next, 4000);
       } else {
         next();
       }
@@ -9261,18 +9258,9 @@ function _ctHandleChatMsg(event, content) {
       }
     };
 
-    const _afterSave = () => {
-      // Dropdown-Profil → Standard-Outfit → Weiter
-      _runExtraProfile(() => _runDefaultOutfit(_doNext));
-    };
-
-    if (dbKey && CURSE_DB[dbKey]) {
-      // 💾 Profil automatisch speichern — Name 1:1 aus CraftName - OwnerName
-      _curseSaveAsProfileSilent(dbKey, _afterSave);
-    } else {
-      // Kein gültiges Curse-Item → nur Standard-Outfit + weiter
-      _afterSave();
-    }
+    // Reihenfolge bei curse_end:
+    // Dropdown-Profil → Standard-Outfit → Nächstes Item
+    _runExtraProfile(() => _runDefaultOutfit(_doNext));
   }
 }
 
