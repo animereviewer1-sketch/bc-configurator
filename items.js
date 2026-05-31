@@ -8908,7 +8908,8 @@ function _ctBuildQueue() {
 
 // ── Start / Stop ──────────────────────────────────────────────
 function curseTestToggle() {
-  if (_ctTimer !== null || _ctPaused) {
+  // Test läuft wenn Timer aktiv, pausiert, ODER Curse gerade aktiv
+  if (_ctTimer !== null || _ctPaused || _ctCurseActive) {
     _ctStop();
   } else {
     _ctStart();
@@ -8962,6 +8963,7 @@ function _ctStop() {
   _ctTimer = null;
   _ctCountdownTimer = null;
   _ctPaused = false;
+  _ctCurseActive = false;  // Curse-State zurücksetzen
   _ctIdx = -1;
   document.getElementById('curseTestPanel').style.display = 'none';
   const btn = document.getElementById('curseTestBtn');
@@ -8974,10 +8976,10 @@ function _ctStartTimer() {
   clearInterval(_ctCountdownTimer);
   _ctCountdown = _ctInterval;
   _ctTimer = setInterval(() => {
-    if (!_ctPaused) _ctNext();
+    if (!_ctPaused && !_ctCurseActive) _ctNext();
   }, _ctInterval * 1000);
   _ctCountdownTimer = setInterval(() => {
-    if (!_ctPaused) {
+    if (!_ctPaused && !_ctCurseActive) {
       _ctCountdown = Math.max(0, _ctCountdown - 1);
       _ctUpdateCountdown();
       if (_ctCountdown <= 0) _ctCountdown = _ctInterval;
