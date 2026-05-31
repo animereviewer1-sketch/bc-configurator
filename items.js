@@ -8789,3 +8789,257 @@ function _cfreqRenderHarmony() {
       </div>
     </div>`).join('');
 }
+
+// ════════════════════════════════════════════════════════════════
+//  CURSE-TEST — alle gecurseden Items (ohne Outfit-Tag) der Reihe nach anlegen
+// ════════════════════════════════════════════════════════════════
+
+let _ctQueue     = [];   // [{dbKey, entry}] — gefilterte Liste
+let _ctIdx       = -1;   // aktueller Index
+let _ctTimer     = null; // setInterval handle
+let _ctInterval  = 10;   // Sekunden
+let _ctPaused    = false;
+let _ctCountdown = 0;    // Sekunden bis zum nächsten Schritt
+let _ctCountdownTimer = null;
+let _ctDragging  = false;
+let _ctDragOffX  = 0, _ctDragOffY = 0;
+
+// Sammelt alle cursed Items ohne Outfit-Flag, sortiert nach Owner → ItemName
+function _ctBuildQueue() {
+  const entries = Object.entries(CURSE_DB)
+    .filter(([k, e]) => e.IstCursed && !CURSE_OUTFIT_FLAGS[k])
+    .map(([k, e]) => ({ dbKey: k, entry: e }));
+  // Sortierung: Owner-Name → Craft-Name
+  entries.sort((a, b) => {
+    const oa = (a.entry.Besitzer?.Name || '').toLowerCase();
+    const ob = (b.entry.Besitzer?.Name || '').toLowerCase();
+    if (oa !== ob) return oa.localeCompare(ob);
+    return (a.entry.CraftName || '').localeCompare(b.entry.CraftName || '');
+  });
+  return entries;
+}
+
+// ── Start / Stop ──────────────────────────────────────────────
+function curseTestToggle() {
+  if (_ctTimer !== null || _ctPaused) {
+    _ctStop();
+  } else {
+    _ctStart();
+  }
+}
+
+function _ctStart() {
+  if (!_connected) { showStatus('❌ Nicht verbunden mit BC', 'error'); return; }
+  _ctQueue = _ctBuildQueue();
+  if (!_ctQueue.length) {
+    showStatus('⚠️ Keine gecurseden Items ohne Outfit-Tag gefunden', 'info'); return;
+  }
+  _ctIdx    = -1;
+  _ctPaused = false;
+  document.getElementById('curseTestPanel').style.display = '';
+  document.getElementById('curseTestBtn').textContent = '⏹ Test stoppen';
+  document.getElementById('curseTestBtn').classList.replace('btn-yellow', 'btn-red');
+  _ctRenderDots();
+  _ctNext();   // sofort erstes Item
+  _ctStartTimer();
+
+  // Drag-Support
+  const bar = document.getElementById('curseTestDragBar');
+  const panel = document.getElementById('curseTestPanel');
+  if (bar && panel && !bar._ctDragBound) {
+    bar._ctDragBound = true;
+    bar.addEventListener('mousedown', e => {
+      if (e.target.tagName === 'BUTTON') return;
+      _ctDragging = true;
+      const r = panel.getBoundingClientRect();
+      _ctDragOffX = e.clientX - r.left;
+      _ctDragOffY = e.clientY - r.top;
+      e.preventDefault();
+    });
+    document.addEventListener('mousemove', e => {
+      if (!_ctDragging) return;
+      panel.style.left   = Math.max(0, e.clientX - _ctDragOffX) + 'px';
+      panel.style.bottom = 'auto';
+      panel.style.top    = Math.max(0, e.clientY - _ctDragOffY) + 'px';
+    });
+    document.addEventListener('mouseup', () => { _ctDragging = false; });
+  }
+}
+
+function _ctStop() {
+  clearInterval(_ctTimer);
+  clearInterval(_ctCountdownTimer);
+  _ctTimer = null;
+  _ctCountdownTimer = null;
+  _ctPaused = false;
+  _ctIdx = -1;
+  document.getElementById('curseTestPanel').style.display = 'none';
+  const btn = document.getElementById('curseTestBtn');
+  if (btn) { btn.textContent = '🎭 Curse-Test'; btn.classList.replace('btn-red', 'btn-yellow'); }
+  showStatus('⏹ Curse-Test beendet', 'info');
+}
+
+function _ctStartTimer() {
+  clearInterval(_ctTimer);
+  clearInterval(_ctCountdownTimer);
+  _ctCountdown = _ctInterval;
+  _ctTimer = setInterval(() => {
+    if (!_ctPaused) _ctNext();
+  }, _ctInterval * 1000);
+  _ctCountdownTimer = setInterval(() => {
+    if (!_ctPaused) {
+      _ctCountdown = Math.max(0, _ctCountdown - 1);
+      _ctUpdateCountdown();
+      if (_ctCountdown <= 0) _ctCountdown = _ctInterval;
+    }
+  }, 1000);
+}
+
+// ── Navigation ────────────────────────────────────────────────
+function _ctNext() {
+  if (!_ctQueue.length) return;
+  const prevEntry = _ctIdx >= 0 ? _ctQueue[_ctIdx]?.entry : null;
+  _ctIdx = (_ctIdx + 1) % _ctQueue.length;
+  _ctApplyCurrent(prevEntry);
+  _ctUpdateUI();
+  _ctResetCountdown();
+}
+
+function curseTestNext() {
+  clearInterval(_ctTimer);
+  clearInterval(_ctCountdownTimer);
+  _ctNext();
+  _ctStartTimer();
+}
+
+function curseTestPrev() {
+  if (!_ctQueue.length) return;
+  clearInterval(_ctTimer);
+  clearInterval(_ctCountdownTimer);
+  const prevEntry = _ctIdx >= 0 ? _ctQueue[_ctIdx]?.entry : null;
+  _ctIdx = (_ctIdx - 1 + _ctQueue.length) % _ctQueue.length;
+  _ctApplyCurrent(prevEntry);
+  _ctUpdateUI();
+  _ctResetCountdown();
+  _ctStartTimer();
+}
+
+function curseTestPauseToggle() {
+  _ctPaused = !_ctPaused;
+  const btn = document.getElementById('curseTestPauseBtn');
+  if (btn) btn.textContent = _ctPaused ? '▶ Weiter' : '⏸ Pause';
+  document.getElementById('curseTestStatus').textContent = _ctPaused ? '⏸ Pausiert' : '';
+}
+
+function curseTestSetInterval(val) {
+  _ctInterval = Math.max(3, Math.min(120, val || 10));
+  if (_ctTimer !== null) {
+    clearInterval(_ctTimer);
+    clearInterval(_ctCountdownTimer);
+    _ctStartTimer();
+  }
+}
+
+// ── Item anlegen / ablegen ────────────────────────────────────
+function _ctApplyCurrent(prevEntry) {
+  if (!_connected) return;
+  const cur = _ctQueue[_ctIdx];
+  if (!cur) return;
+
+  const shouldRemove = document.getElementById('curseTestRemove')?.checked !== false;
+
+  // Vorheriges Item ablegen (per Gruppe)
+  if (shouldRemove && prevEntry) {
+    const prevGruppe = CURSE_GRUPPE_OVERRIDES[_ctQueue[(_ctIdx - 1 + _ctQueue.length) % _ctQueue.length]?.dbKey]
+      || prevEntry.Gruppe;
+    if (prevGruppe) {
+      bcSend({ type: 'EXEC', code:
+        '(function(){try{InventoryRemove(Player,' + JSON.stringify(prevGruppe) + ');'
+        + 'CharacterRefresh(Player,false,false);}catch(e){}})();'
+      }, true);
+    }
+  }
+
+  // Neues Item anlegen (mit kleinem Delay damit das Ablegen zuerst verarbeitet wird)
+  setTimeout(() => {
+    wearCurse(cur.dbKey, null);
+    // Aktuelle Zeile im Curse-Tab highlighten falls sichtbar
+    const rowId = 'crow_' + cur.dbKey.replace(/[^a-zA-Z0-9]/g, '_');
+    document.querySelectorAll('.cg-row.ct-active').forEach(r => r.classList.remove('ct-active'));
+    document.getElementById(rowId)?.classList.add('ct-active');
+    document.getElementById(rowId)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }, 400);
+}
+
+// ── UI-Updates ────────────────────────────────────────────────
+function _ctUpdateUI() {
+  const total = _ctQueue.length;
+  const cur   = _ctQueue[_ctIdx];
+  const prev  = _ctIdx > 0 ? _ctQueue[_ctIdx - 1] : _ctQueue[total - 1];
+  const next  = _ctQueue[(_ctIdx + 1) % total];
+
+  document.getElementById('curseTestProgress').textContent = (_ctIdx + 1) + ' / ' + total;
+  document.getElementById('curseTestBar').style.width = ((_ctIdx + 1) / total * 100) + '%';
+
+  const _setCard = (idName, idGroup, idOwner, entry) => {
+    const el = document.getElementById(idName);
+    if (el) el.textContent = entry ? (entry.CraftName || entry.ItemName || '–') : '–';
+    const eg = document.getElementById(idGroup);
+    if (eg) eg.textContent = entry ? (_getEffectiveGruppe(entry, '') || '–') : '–';
+    if (idOwner) {
+      const eo = document.getElementById(idOwner);
+      if (eo) eo.textContent = entry ? (entry.Besitzer?.Name || '–') : '–';
+    }
+  };
+  _setCard('ctPrevName', 'ctPrevGroup', null, prev);
+  _setCard('ctCurName',  'ctCurGroup',  'ctCurOwner', cur?.entry);
+  _setCard('ctNextName', 'ctNextGroup', null, next?.entry);
+
+  document.getElementById('curseTestStatus').textContent =
+    (cur?.entry?.Besitzer?.Name ? '👤 ' + cur.entry.Besitzer.Name : '');
+
+  _ctUpdateDots();
+}
+
+function _ctUpdateCountdown() {
+  const el = document.getElementById('curseTestCountdown');
+  if (el) el.textContent = _ctPaused ? '⏸' : '⏱ ' + _ctCountdown + 's';
+}
+
+function _ctResetCountdown() {
+  _ctCountdown = _ctInterval;
+  _ctUpdateCountdown();
+}
+
+function _ctRenderDots() {
+  const el = document.getElementById('curseTestDots');
+  if (!el || !_ctQueue.length) return;
+  el.innerHTML = _ctQueue.map((_, i) =>
+    '<span id="ctdot_' + i + '" style="width:8px;height:8px;border-radius:50%;flex-shrink:0;'
+    + 'background:' + (i === _ctIdx ? 'var(--yellow)' : 'var(--bg4)') + ';'
+    + 'border:1px solid ' + (i === _ctIdx ? 'var(--yellow)' : 'var(--border)') + ';'
+    + 'cursor:pointer;transition:background .15s" title="' + escHtml(_ctQueue[i].entry?.CraftName || '') + '"'
+    + ' onclick="curseTestJump(' + i + ')"></span>'
+  ).join('');
+}
+
+function _ctUpdateDots() {
+  _ctQueue.forEach((_, i) => {
+    const dot = document.getElementById('ctdot_' + i);
+    if (!dot) return;
+    dot.style.background = i === _ctIdx ? 'var(--yellow)' : 'var(--bg4)';
+    dot.style.borderColor = i === _ctIdx ? 'var(--yellow)' : 'var(--border)';
+  });
+}
+
+function curseTestJump(idx) {
+  if (idx < 0 || idx >= _ctQueue.length) return;
+  clearInterval(_ctTimer);
+  clearInterval(_ctCountdownTimer);
+  const prevEntry = _ctIdx >= 0 ? _ctQueue[_ctIdx]?.entry : null;
+  _ctIdx = idx;
+  _ctApplyCurrent(prevEntry);
+  _ctUpdateUI();
+  _ctResetCountdown();
+  _ctStartTimer();
+}

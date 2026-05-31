@@ -1445,6 +1445,7 @@ textarea.outfit-code { width: 100%; min-height: 210px; background: rgba(0,0,0,0.
 .cg-row.fav:hover { background: rgba(251,191,36,0.08); }
 .cg-row.outfit-flagged { background: rgba(52,211,153,0.05); }
 .cg-row.outfit-flagged:hover { background: rgba(52,211,153,0.09); }
+.cg-row.ct-active { background: rgba(251,191,36,0.10) !important; box-shadow: inset 3px 0 0 var(--yellow); }
 .cg-row.expanded .cursor-detail-toggle { transform: rotate(90deg); }
 
 /* All cells share base padding — text wraps by default */
@@ -2823,6 +2824,66 @@ button { cursor: pointer; }
   </div>
 </div>
 
+<!-- ── Curse-Test Panel ── -->
+<div id="curseTestPanel" style="display:none;position:fixed;bottom:22px;left:22px;z-index:500;
+  width:360px;background:var(--bg2);border:1px solid var(--border2);border-radius:var(--r-lg);
+  box-shadow:var(--shadow-lg);overflow:hidden;font-family:var(--font-ui)">
+  <div id="curseTestDragBar" style="display:flex;align-items:center;gap:8px;padding:10px 14px;
+    background:rgba(251,191,36,0.08);border-bottom:1px solid rgba(251,191,36,0.2);cursor:grab">
+    <span style="font-size:.75rem;font-weight:800;color:var(--yellow)">🎭 Curse-Test</span>
+    <span id="curseTestStatus" style="font-size:.68rem;color:var(--text3);flex:1"></span>
+    <button onclick="curseTestToggle()" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:.85rem;padding:0 3px" title="Stoppen">✕</button>
+  </div>
+  <!-- Fortschritts-Timeline -->
+  <div style="padding:10px 14px 6px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+      <span style="font-size:.65rem;color:var(--text3)" id="curseTestProgress">0 / 0</span>
+      <span style="font-size:.65rem;color:var(--yellow);font-weight:700" id="curseTestCountdown">–</span>
+    </div>
+    <!-- Fortschrittsbalken -->
+    <div style="background:var(--bg4);border-radius:99px;height:6px;overflow:hidden;margin-bottom:8px">
+      <div id="curseTestBar" style="height:100%;border-radius:99px;background:var(--yellow);transition:width .3s;width:0%"></div>
+    </div>
+    <!-- Timeline: prev · current · next -->
+    <div style="display:grid;grid-template-columns:1fr 1.3fr 1fr;gap:6px;margin-bottom:8px">
+      <div id="ctPrev" style="padding:7px 8px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r-sm);opacity:.5">
+        <div style="font-size:.58rem;color:var(--text3);margin-bottom:3px">⬅ Vorher</div>
+        <div id="ctPrevName" style="font-size:.7rem;font-weight:600;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">–</div>
+        <div id="ctPrevGroup" style="font-size:.6rem;color:var(--text3);font-family:var(--font-mono)">–</div>
+      </div>
+      <div id="ctCur" style="padding:7px 8px;background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.35);border-radius:var(--r-sm)">
+        <div style="font-size:.58rem;color:var(--yellow);margin-bottom:3px;font-weight:700">▶ Aktuell</div>
+        <div id="ctCurName" style="font-size:.74rem;font-weight:800;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">–</div>
+        <div id="ctCurGroup" style="font-size:.6rem;color:var(--text3);font-family:var(--font-mono)">–</div>
+        <div id="ctCurOwner" style="font-size:.6rem;color:var(--text3);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">–</div>
+      </div>
+      <div id="ctNext" style="padding:7px 8px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r-sm);opacity:.5">
+        <div style="font-size:.58rem;color:var(--text3);margin-bottom:3px">➡ Nächster</div>
+        <div id="ctNextName" style="font-size:.7rem;font-weight:600;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">–</div>
+        <div id="ctNextGroup" style="font-size:.6rem;color:var(--text3);font-family:var(--font-mono)">–</div>
+      </div>
+    </div>
+    <!-- Mini-Verlauf (Dots) -->
+    <div id="curseTestDots" style="display:flex;gap:3px;flex-wrap:wrap;max-height:32px;overflow:hidden;margin-bottom:8px"></div>
+    <!-- Controls -->
+    <div style="display:flex;gap:6px">
+      <button onclick="curseTestPrev()" class="btn" style="flex:1;font-size:.72rem;padding:5px 0">⏮ Zurück</button>
+      <button id="curseTestPauseBtn" onclick="curseTestPauseToggle()" class="btn btn-yellow" style="flex:1;font-size:.72rem;padding:5px 0">⏸ Pause</button>
+      <button onclick="curseTestNext()" class="btn" style="flex:1;font-size:.72rem;padding:5px 0">Weiter ⏭</button>
+    </div>
+    <div style="display:flex;gap:6px;margin-top:5px;align-items:center">
+      <span style="font-size:.65rem;color:var(--text3);white-space:nowrap">Interval:</span>
+      <input type="number" id="curseTestInterval" value="10" min="3" max="120"
+        style="width:52px;background:var(--bg3);border:1px solid var(--border);border-radius:5px;
+               color:var(--text);font-size:.72rem;padding:3px 6px;font-family:var(--font-mono)"
+        oninput="curseTestSetInterval(+this.value)"> sek
+      <label style="display:flex;align-items:center;gap:4px;font-size:.65rem;color:var(--text3);cursor:pointer;margin-left:auto">
+        <input type="checkbox" id="curseTestRemove" checked style="accent-color:var(--yellow)"> Item ablegen
+      </label>
+    </div>
+  </div>
+</div>
+
 <!-- ── Stats Modal ── -->
 <div id="statsModal" onclick="if(event.target===this)closeStatsModal()">
   <div class="stats-box">
@@ -2859,6 +2920,7 @@ document.write('<scr'+'ipt src="items.js?_='+_cbv+'"><\/scr'+'ipt>');
     <button class="btn btn-red" onclick="clearAllOutfitFlags()" title="Alle Outfit-Tags von allen Items entfernen – zum Neu-Anfangen">🗑️ Outfit-Tags leeren</button>
     <button class="btn btn-red" onclick="curseClear()" title="Alle gespeicherten Einträge löschen">🗑️ Leeren</button>
     <button class="btn btn-primary" id="curseDefaultOutfitBtn" onclick="captureAndSetCurseDefaultOutfit()" oncontextmenu="clearCurseDefaultOutfit(event)" title="Klicken → aktuelles Outfit merken und nach jedem 💾 Profil automatisch ausrüsten&#10;Rechtsklick → entfernen" style="white-space:nowrap">🏠 Standard-Outfit</button>
+    <button class="btn btn-yellow" id="curseTestBtn" onclick="curseTestToggle()" title="Alle gecurseden Items (ohne Outfit-Tag) der Reihe nach alle 10s anlegen">🎭 Curse-Test</button>
     <div class="curse-stats">
       <div class="curse-stat">Crafts: <span id="csStat-total">0</span></div>
       <div class="curse-stat">🔮 Cursed: <span id="csStat-cursed">0</span></div>
