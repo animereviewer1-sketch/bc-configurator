@@ -2892,7 +2892,7 @@ button { cursor: pointer; }
     </div>
     <!-- Profil nach Curse-Ende -->
     <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border)">
-      <div style="font-size:.62rem;color:var(--text3);margin-bottom:4px">⚡ Nach Curse-Ende automatisch ausführen:</div>
+      <div style="font-size:.62rem;color:var(--text3);margin-bottom:4px">⚡ Nach Curse-Ende zusätzlich ausführen:</div>
       <div style="display:flex;gap:5px;align-items:center">
         <select id="curseTestResetProfile" style="flex:1;background:var(--bg3);border:1px solid var(--border);
           border-radius:5px;color:var(--text);font-size:.7rem;padding:4px 7px;font-family:var(--font-ui)">
@@ -2901,10 +2901,11 @@ button { cursor: pointer; }
         <button onclick="_ctRefreshProfileSelect()" style="background:none;border:1px solid var(--border);
           border-radius:5px;color:var(--text3);cursor:pointer;font-size:.7rem;padding:3px 7px" title="Profile neu laden">↺</button>
       </div>
-      <div id="curseTestCurseState" style="margin-top:5px;font-size:.65rem;display:none;
-        padding:4px 8px;border-radius:5px;background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.25);color:var(--yellow)">
-        ⏳ Curse aktiv — warte auf Ende…
-      </div>
+    </div>
+    <!-- Curse-State Anzeige -->
+    <div id="curseTestCurseState" style="display:none;margin-top:8px;font-size:.65rem;
+      padding:5px 9px;border-radius:5px;background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.25);color:var(--yellow)">
+      ⏳ Curse aktiv — warte auf Ende… (💾 Profil wird automatisch gespeichert)
     </div>
   </div>
 </div>

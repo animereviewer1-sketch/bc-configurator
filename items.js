@@ -5074,6 +5074,52 @@ function scanOutfitAndSave() {
   bcSend({ type: 'GET_CHAR_APPEARANCE', memberNum: tgtNum, reqId });
   showStatus('⏳ Scanne Outfit aus BC…', 'info');
 }
+// ── Stille Version: kein prompt(), Name 1:1 aus CraftName - OwnerName ────────
+function _curseSaveAsProfileSilent(dbKey, afterSave) {
+  const entry = CURSE_DB[dbKey];
+  if (!entry) { showStatus('❌ Curse-Eintrag nicht gefunden: ' + dbKey, 'error'); return; }
+
+  const craftName  = entry.CraftName || entry.ItemName || 'Curse';
+  const ownerName  = entry.Besitzer?.Name || (entry.Besitzer?.Nummer ? '#' + entry.Besitzer.Nummer : 'Player');
+  const profileName = craftName + ' - ' + ownerName;
+
+  const _save = (items, keepHairGroups) => {
+    PROFILES[profileName] = {
+      name:  profileName,
+      date:  new Date().toLocaleDateString('de-DE'),
+      items,
+      keepHairGroups: keepHairGroups?.length ? keepHairGroups : undefined,
+    };
+    _saveProfiles();
+    renderProfileList();
+    showStatus('✅ Profil "' + profileName + '" gespeichert (' + items.length + ' Items)', 'success');
+    if (typeof afterSave === 'function') afterSave();
+  };
+
+  // Outfit-Flag setzen
+  if (!CURSE_OUTFIT_FLAGS[dbKey]) {
+    CURSE_OUTFIT_FLAGS[dbKey] = Date.now();
+    _saveCurseOutfitFlags();
+  }
+
+  if (!_connected) {
+    _save([_curseEntryToProfileItem(entry)], undefined);
+    return;
+  }
+
+  const reqId = 'ct_save_' + Date.now();
+  _pendingOutfitSave[reqId] = function(items) {
+    if (!items?.length) {
+      _save([_curseEntryToProfileItem(entry)], undefined);
+      return;
+    }
+    const { filteredItems, keepHairGroups } = _applyHairBaseline(items);
+    _save(filteredItems.map(_appearanceItemToProfile), keepHairGroups);
+  };
+  bcSend({ type: 'GET_CHAR_APPEARANCE', memberNum: null, reqId });
+  showStatus('⏳ Outfit wird ausgelesen für "' + profileName + '"…', 'info');
+}
+
 // Button: 💾 Profil (pro Curse-Zeile) → "{CraftName} - {OwnerName}"
 function curseSaveAsProfile(rowIdOrDbKey) {
   const dbKey = _curseEntryMap[rowIdOrDbKey] ?? rowIdOrDbKey;
@@ -9163,53 +9209,59 @@ function _ctHandleChatMsg(event, content) {
     const stateEl = document.getElementById('curseTestCurseState');
     if (stateEl) stateEl.style.display = 'none';
 
-    const profileName = document.getElementById('curseTestResetProfile')?.value || '';
-    console.log('[CURSE-TEST] curse_end — profileName:', JSON.stringify(profileName),
-      '| PROFILES hat Eintrag:', !!(profileName && PROFILES[profileName]),
-      '| CURSE_DEFAULT_OUTFIT_CODE:', !!CURSE_DEFAULT_OUTFIT_CODE);
+    // Aktuelles Curse-Item aus der Queue
+    const curItem = _ctQueue[_ctIdx];
+    const dbKey   = curItem?.dbKey;
 
-    // ── Reihenfolge: erst Standard-Outfit, dann Profil, dann weiter ──
     const _doNext = () => {
-      setTimeout(() => {
-        showStatus('▶ Curse-Test wird fortgesetzt', 'info');
-        _ctNext();
-        _ctStartTimer();
-      }, 500);
+      showStatus('▶ Curse-Test wird fortgesetzt', 'info');
+      _ctNext();
+      _ctStartTimer();
     };
 
-    const _execProfile = (name, afterCb) => {
-      showStatus('⚡ Profil "' + name + '" wird ausgeführt…', 'info');
-      loadProfile(name);
-      setTimeout(() => {
-        const code = document.getElementById('outfitCode')?.value?.trim();
-        if (code) bcSend({ type: 'EXEC', code: '(function(){\n' + code + '\n})();' });
-        setTimeout(afterCb, 3200);
-      }, 60);
+    const _afterSave = () => {
+      // Optional: Dropdown-Profil ausführen
+      const extraProfile = document.getElementById('curseTestResetProfile')?.value || '';
+      const _runExtraProfile = (next) => {
+        if (extraProfile && PROFILES[extraProfile]) {
+          showStatus('⚡ Profil "' + extraProfile + '" wird ausgeführt…', 'info');
+          loadProfile(extraProfile);
+          setTimeout(() => {
+            const code = document.getElementById('outfitCode')?.value?.trim();
+            if (code) bcSend({ type: 'EXEC', code: '(function(){\n' + code + '\n})();' });
+            setTimeout(next, 3200);
+          }, 60);
+        } else {
+          next();
+        }
+      };
+
+      // Standard-Outfit wiederherstellen falls gesetzt
+      const _runDefaultOutfit = (next) => {
+        if (CURSE_DEFAULT_OUTFIT_CODE) {
+          showStatus('🏠 Standard-Outfit wird wiederhergestellt…', 'info');
+          const code = typeof _oiBuildExecCode === 'function'
+            ? _oiBuildExecCode(CURSE_DEFAULT_OUTFIT_CODE)
+            : '(function(){try{var _d=LZString.decompressFromBase64('
+              + JSON.stringify(CURSE_DEFAULT_OUTFIT_CODE)
+              + ');var _a=JSON.parse(_d);if(Array.isArray(_a)){ServerPlayerInventoryLoad(_a);CharacterRefresh(Player,true,false);}}catch(e){}})();';
+          bcSend({ type: 'EXEC', code });
+          setTimeout(next, 3500);
+        } else {
+          next();
+        }
+      };
+
+      // Reihenfolge: Dropdown-Profil → Standard-Outfit → Weiter
+      _runExtraProfile(() => _runDefaultOutfit(_doNext));
     };
 
-    const _execDefaultOutfit = (afterCb) => {
-      if (CURSE_DEFAULT_OUTFIT_CODE) {
-        showStatus('🏠 Standard-Outfit wird wiederhergestellt…', 'info');
-        bcSend({ type: 'EXEC', code: _oiBuildExecCode ? _oiBuildExecCode(CURSE_DEFAULT_OUTFIT_CODE)
-          : '(function(){try{var _d=LZString.decompressFromBase64(' + JSON.stringify(CURSE_DEFAULT_OUTFIT_CODE)
-            + ');var _a=JSON.parse(_d);if(Array.isArray(_a)){ServerPlayerInventoryLoad(_a);CharacterRefresh(Player,true,false);}}catch(e){}})();'
-        });
-        setTimeout(afterCb, 3200);
-      } else {
-        afterCb();
-      }
-    };
-
-    if (profileName && PROFILES[profileName]) {
-      // Profil gewählt → erst Profil, dann weiter
-      _execProfile(profileName, _doNext);
-    } else if (CURSE_DEFAULT_OUTFIT_CODE) {
-      // Kein Profil aber Standard-Outfit gesetzt → Standard-Outfit anwenden
-      _execDefaultOutfit(_doNext);
+    if (dbKey && CURSE_DB[dbKey]) {
+      // 💾 Profil automatisch speichern — Name 1:1 aus CraftName - OwnerName
+      _curseSaveAsProfileSilent(dbKey, _afterSave);
     } else {
-      // Nichts gesetzt → direkt weiter
-      showStatus('✅ Curse beendet — Rotation wird fortgesetzt', 'success');
-      _doNext();
+      // Kein gültiges Curse-Item → nur Standard-Outfit + weiter
+      _afterSave();
     }
   }
 }
