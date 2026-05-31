@@ -5081,7 +5081,8 @@ function _curseSaveAsProfileSilent(dbKey, afterSave) {
 
   const craftName  = entry.CraftName || entry.ItemName || 'Curse';
   const ownerName  = entry.Besitzer?.Name || (entry.Besitzer?.Nummer ? '#' + entry.Besitzer.Nummer : 'Player');
-  const profileName = craftName + ' - ' + ownerName;
+  const baseName   = craftName + ' - ' + ownerName;
+  const profileName = _uniqueProfileName(baseName); // v2, v3... falls bereits vorhanden
 
   const _save = (items, keepHairGroups) => {
     PROFILES[profileName] = {
@@ -9240,14 +9241,10 @@ function _ctHandleChatMsg(event, content) {
     showStatus('🔮 Curse erkannt — warte auf Ende', 'info');
 
   } else if (event === 'curse_end') {
-    if (!_ctCurseActive) { console.log('[CURSE-TEST] curse_end ignoriert'); return; }
-
-    // Duplikat-Schutz
-    const _now = Date.now();
-    if (window._ctLastEndTs && _now - window._ctLastEndTs < 10000) {
-      console.log('[CURSE-TEST] curse_end Duplikat ignoriert'); return;
+    if (!_ctCurseActive) {
+      console.log('[CURSE-TEST] curse_end ignoriert — kein aktiver Curse');
+      return;
     }
-    window._ctLastEndTs = _now;
     _ctCurseActive = false;
 
     const se = document.getElementById('curseTestCurseState');

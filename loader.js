@@ -1388,10 +1388,13 @@ window.CurseScanner = (() => {
                   _ctCurseWasActive = false;
                   _ctLastCurseActivationCount = cnt;
                   _ctSendEvent('curse_end', 'cursed-item beendet (count:' + cnt + ')');
-                } else if (cnt > _ctLastCurseActivationCount && _ctLastCurseActivationCount >= 0) {
+                } else if (_ctCurseWasActive && cnt > _ctLastCurseActivationCount && _ctLastCurseActivationCount >= 0) {
+                  // Count-basiert: nur wenn vorher ein Start erkannt wurde
+                  _ctCurseWasActive = false;
                   _ctLastCurseActivationCount = cnt;
                   _ctSendEvent('curse_end', 'cursed-item count erhöht auf ' + cnt);
                 } else {
+                  // Kein aktiver Curse — Count nur aktualisieren, kein Event
                   _ctLastCurseActivationCount = cnt;
                 }
               }
@@ -1414,6 +1417,7 @@ window.CurseScanner = (() => {
       var obs = new MutationObserver(function(mutations) {
         mutations.forEach(function(m) {
           m.addedNodes.forEach(function(node) {
+            if (!_ctCurseWasActive) return; // nur wenn Start erkannt wurde
             var txt = (node.textContent || node.innerText || '').toLowerCase();
             if (txt.indexOf('sigh of relief') !== -1 && txt.indexOf('curse') !== -1) {
               _ctCurseWasActive = false;
