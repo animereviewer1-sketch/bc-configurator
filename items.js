@@ -8939,10 +8939,10 @@ function _ctStartTimer() {
   clearInterval(_ctCountdownTimer);
   _ctCountdown = _ctInterval;
   _ctTimer = setInterval(() => {
-    if (!_ctPaused) _ctNext();
+    if (!_ctPaused && !_ctCurseActive) _ctNext();
   }, _ctInterval * 1000);
   _ctCountdownTimer = setInterval(() => {
-    if (!_ctPaused) {
+    if (!_ctPaused && !_ctCurseActive) {
       _ctCountdown = Math.max(0, _ctCountdown - 1);
       _ctUpdateCountdown();
       if (_ctCountdown <= 0) _ctCountdown = _ctInterval;
@@ -9213,46 +9213,55 @@ function _ctHandleChatMsg(event, content) {
     const curItem = _ctQueue[_ctIdx];
     const dbKey   = curItem?.dbKey;
 
+    // Erst wenn Standard-Outfit fertig → nächstes Item + Timer neu starten
     const _doNext = () => {
+      _ctCurseActive = false;
       showStatus('▶ Curse-Test wird fortgesetzt', 'info');
+      clearInterval(_ctTimer);
+      clearInterval(_ctCountdownTimer);
+      _ctTimer = null;
       _ctNext();
       _ctStartTimer();
     };
 
-    const _afterSave = () => {
-      // Optional: Dropdown-Profil ausführen
+    // Reihenfolge:
+    // 1. Profil-Speichern (automatisch, kein Prompt)
+    // 2. Dropdown-Profil ausführen (optional)
+    // 3. Standard-Outfit wiederherstellen (falls gesetzt)
+    // 4. Erst dann: nächstes Item + Timer neu starten
+
+    const _runDefaultOutfit = (next) => {
+      if (CURSE_DEFAULT_OUTFIT_CODE) {
+        showStatus('🏠 Standard-Outfit wird wiederhergestellt…', 'info');
+        const code = typeof _oiBuildExecCode === 'function'
+          ? _oiBuildExecCode(CURSE_DEFAULT_OUTFIT_CODE)
+          : '(function(){try{var _d=LZString.decompressFromBase64('
+            + JSON.stringify(CURSE_DEFAULT_OUTFIT_CODE)
+            + ');var _a=JSON.parse(_d);if(Array.isArray(_a)){ServerPlayerInventoryLoad(_a);CharacterRefresh(Player,true,false);}}catch(e){}})();';
+        bcSend({ type: 'EXEC', code });
+        setTimeout(next, 4000);  // warten bis Outfit-Sync durch
+      } else {
+        next();
+      }
+    };
+
+    const _runExtraProfile = (next) => {
       const extraProfile = document.getElementById('curseTestResetProfile')?.value || '';
-      const _runExtraProfile = (next) => {
-        if (extraProfile && PROFILES[extraProfile]) {
-          showStatus('⚡ Profil "' + extraProfile + '" wird ausgeführt…', 'info');
-          loadProfile(extraProfile);
-          setTimeout(() => {
-            const code = document.getElementById('outfitCode')?.value?.trim();
-            if (code) bcSend({ type: 'EXEC', code: '(function(){\n' + code + '\n})();' });
-            setTimeout(next, 3200);
-          }, 60);
-        } else {
-          next();
-        }
-      };
-
-      // Standard-Outfit wiederherstellen falls gesetzt
-      const _runDefaultOutfit = (next) => {
-        if (CURSE_DEFAULT_OUTFIT_CODE) {
-          showStatus('🏠 Standard-Outfit wird wiederhergestellt…', 'info');
-          const code = typeof _oiBuildExecCode === 'function'
-            ? _oiBuildExecCode(CURSE_DEFAULT_OUTFIT_CODE)
-            : '(function(){try{var _d=LZString.decompressFromBase64('
-              + JSON.stringify(CURSE_DEFAULT_OUTFIT_CODE)
-              + ');var _a=JSON.parse(_d);if(Array.isArray(_a)){ServerPlayerInventoryLoad(_a);CharacterRefresh(Player,true,false);}}catch(e){}})();';
-          bcSend({ type: 'EXEC', code });
+      if (extraProfile && PROFILES[extraProfile]) {
+        showStatus('⚡ Profil "' + extraProfile + '" wird ausgeführt…', 'info');
+        loadProfile(extraProfile);
+        setTimeout(() => {
+          const code = document.getElementById('outfitCode')?.value?.trim();
+          if (code) bcSend({ type: 'EXEC', code: '(function(){\n' + code + '\n})();' });
           setTimeout(next, 3500);
-        } else {
-          next();
-        }
-      };
+        }, 60);
+      } else {
+        next();
+      }
+    };
 
-      // Reihenfolge: Dropdown-Profil → Standard-Outfit → Weiter
+    const _afterSave = () => {
+      // Dropdown-Profil → Standard-Outfit → Weiter
       _runExtraProfile(() => _runDefaultOutfit(_doNext));
     };
 
