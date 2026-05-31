@@ -8228,3 +8228,605 @@ function clearAllLscgOutfits() {
   renderOutfitScanTab();
   showStatus('🗑️ LSCG Outfits geleert', 'info');
 }
+
+// ════════════════════════════════════════════════════════════════
+//  FEATURE BLOCK: Tags · Quick-Switch · Stats · Color Tools
+// ════════════════════════════════════════════════════════════════
+
+// ── Feature 4: Profil-Tags ────────────────────────────────────
+
+let PROFILE_TAGS = {};
+let _profileTagFilter = null; // null = all, string = tag name
+
+(async () => {
+  const saved = await idbGet('BC_PROFILE_TAGS_v1');
+  if (saved && typeof saved === 'object') {
+    PROFILE_TAGS = saved;
+    _renderProfileTagFilterRow();
+  }
+})();
+
+function _saveProfileTags() {
+  idbSet('BC_PROFILE_TAGS_v1', PROFILE_TAGS);
+}
+
+function profileGetTags(name) {
+  return Array.isArray(PROFILE_TAGS[name]) ? PROFILE_TAGS[name] : [];
+}
+
+function profileAddTag(name, tag) {
+  tag = tag.trim().toLowerCase().replace(/\s+/g, '-');
+  if (!tag || tag.length > 30) return;
+  if (!PROFILE_TAGS[name]) PROFILE_TAGS[name] = [];
+  if (PROFILE_TAGS[name].includes(tag)) return;
+  PROFILE_TAGS[name].push(tag);
+  _saveProfileTags();
+  _renderProfileTagFilterRow();
+  _renderPmodTags(name);
+}
+
+function profileRemoveTag(name, tag) {
+  if (!PROFILE_TAGS[name]) return;
+  PROFILE_TAGS[name] = PROFILE_TAGS[name].filter(t => t !== tag);
+  if (!PROFILE_TAGS[name].length) delete PROFILE_TAGS[name];
+  _saveProfileTags();
+  _renderProfileTagFilterRow();
+  _renderPmodTags(name);
+}
+
+function profileAddTagFromModal() {
+  const inp = document.getElementById('pmodTagInput');
+  if (!inp || !_profileModalName) return;
+  profileAddTag(_profileModalName, inp.value);
+  inp.value = '';
+}
+
+function _renderPmodTags(name) {
+  const row = document.getElementById('pmodTagsRow');
+  if (!row) return;
+  const tags = profileGetTags(name);
+  row.innerHTML = tags.length
+    ? tags.map(t => `<span class="profile-tag">${escHtml(t)} <span class="tag-del" onclick="profileRemoveTag(${JSON.stringify(name)},${JSON.stringify(t)})" title="Entfernen">✕</span></span>`).join('')
+    : '<span style="color:var(--text3);font-size:.68rem">Keine Tags</span>';
+}
+
+function _allUsedTags() {
+  const all = new Set();
+  Object.values(PROFILE_TAGS).forEach(tags => tags.forEach(t => all.add(t)));
+  return [...all].sort();
+}
+
+function setProfileTagFilter(tag) {
+  _profileTagFilter = (_profileTagFilter === tag) ? null : tag;
+  _renderProfileTagFilterRow();
+  renderProfileList();
+}
+
+function _renderProfileTagFilterRow() {
+  const row = document.getElementById('profileTagFilterRow');
+  if (!row) return;
+  const tags = _allUsedTags();
+  if (!tags.length) { row.innerHTML = ''; return; }
+  row.innerHTML = tags.map(t =>
+    `<span class="tag-filter-chip${_profileTagFilter === t ? ' on' : ''}" onclick="setProfileTagFilter(${JSON.stringify(t)})">#${escHtml(t)}</span>`
+  ).join('');
+}
+
+// ── Extend renderProfileList with tag + item full-text search ──
+// Monkey-patch: store original and wrap with extended filter
+const _origRenderProfileList = renderProfileList;
+renderProfileList = function() {
+  // Intercept only the key filter — rebuild from scratch inline
+  const el = document.getElementById('profileListEl');
+  if (!el) { _origRenderProfileList(); return; }
+
+  const q = (document.getElementById('profileSearch')?.value || '').toLowerCase();
+  let keys = Object.keys(PROFILES).filter(k => {
+    if (!q) return true;
+    // name match
+    if (k.toLowerCase().includes(q)) return true;
+    // item match
+    const items = PROFILES[k]?.items || [];
+    if (items.some(it => (it.asset||'').toLowerCase().includes(q) || (it.group||'').toLowerCase().includes(q))) return true;
+    // tag match
+    if (profileGetTags(k).some(t => t.includes(q))) return true;
+    return false;
+  });
+
+  // Existing filters
+  if (_profileFilter === 'fav')      keys = keys.filter(k => PROFILE_FAVS.has(k));
+  if (_profileFilter === 'withshot') keys = keys.filter(k => !!PROFILE_SCREENSHOTS[k]);
+  if (_profileFilter === 'noshot')   keys = keys.filter(k => !PROFILE_SCREENSHOTS[k]);
+  if (_profileFilter === 'noold')    keys = keys.filter(k => !/\(old\)/i.test(_profileOwnerOf(k)));
+
+  // Tag filter
+  if (_profileTagFilter) keys = keys.filter(k => profileGetTags(k).includes(_profileTagFilter));
+
+  document.querySelectorAll('.profile-fc').forEach(chip => chip.classList.toggle('on', chip.dataset.filter === _profileFilter));
+
+  // Delegate rendering back to original by temporarily storing filtered keys
+  // Actually call original — it will re-filter, but we control display via CSS none if needed.
+  // Simpler: override keys in _profileNameMap by calling original (it re-reads from DOM)
+  // Since we can't cleanly inject, call original which re-reads the search input.
+  // Instead, if tag or item filter active just hide non-matching cards after render.
+  _origRenderProfileList();
+
+  // Post-filter by tag + item search after original renders
+  if (!q && !_profileTagFilter) return;
+  const allowedSet = new Set(keys);
+  // Hide owner blocks that have no matching cards
+  document.querySelectorAll('[id^="pb_"]').forEach(block => {
+    const thumbs = block.querySelectorAll('.pc-thumb[data-slot]');
+    let any = false;
+    thumbs.forEach(th => {
+      const name = _profileNameMap[th.dataset.slot];
+      const show = name && allowedSet.has(name);
+      const pc = th.closest('.pc');
+      if (pc) pc.style.display = show ? '' : 'none';
+      if (show) any = true;
+    });
+    block.style.display = any ? '' : 'none';
+  });
+};
+
+// Extend _renderProfileModal to also render tags
+const _origRenderProfileModal = _renderProfileModal;
+_renderProfileModal = function(name) {
+  _origRenderProfileModal(name);
+  _renderPmodTags(name);
+};
+
+// ── Feature 5: Quick-Switch Widget ───────────────────────────
+
+const QS_MAX_SLOTS = 8;
+const QS_STORAGE_KEY = 'BC_QUICKSWITCH_v1';
+let _qsSlots = []; // array of profile names (or null for empty)
+let _qsCollapsed = false;
+let _qsDragging = false;
+let _qsDragOffX = 0, _qsDragOffY = 0;
+
+(function _qsInit() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(QS_STORAGE_KEY) || '[]');
+    _qsSlots = Array.isArray(saved) ? saved.slice(0, QS_MAX_SLOTS) : [];
+  } catch {}
+  while (_qsSlots.length < QS_MAX_SLOTS) _qsSlots.push(null);
+
+  // Drag support — script loads after DOM is ready
+  const w = document.getElementById('quickSwitchWidget');
+  const hdr = document.getElementById('qsHeader');
+  if (hdr && w) {
+    hdr.addEventListener('mousedown', e => {
+      if (e.button !== 0) return;
+      _qsDragging = true;
+      const rect = w.getBoundingClientRect();
+      _qsDragOffX = e.clientX - rect.left;
+      _qsDragOffY = e.clientY - rect.top;
+      e.preventDefault();
+    });
+    document.addEventListener('mousemove', e => {
+      if (!_qsDragging) return;
+      const x = Math.max(0, Math.min(window.innerWidth - w.offsetWidth, e.clientX - _qsDragOffX));
+      const y = Math.max(0, Math.min(window.innerHeight - w.offsetHeight, e.clientY - _qsDragOffY));
+      w.style.right = 'auto';
+      w.style.bottom = 'auto';
+      w.style.left = x + 'px';
+      w.style.top = y + 'px';
+    });
+    document.addEventListener('mouseup', () => { _qsDragging = false; });
+  }
+  _qsRender();
+})();
+
+function _qsSave() {
+  try { localStorage.setItem(QS_STORAGE_KEY, JSON.stringify(_qsSlots)); } catch {}
+}
+
+function quickSwitchToggleVisible() {
+  const w = document.getElementById('quickSwitchWidget');
+  if (!w) return;
+  const visible = w.style.display !== 'none' && w.style.display !== '';
+  w.style.display = visible ? 'none' : 'flex';
+  if (!visible) _qsRender();
+}
+
+function quickSwitchToggleCollapse() {
+  _qsCollapsed = !_qsCollapsed;
+  const w = document.getElementById('quickSwitchWidget');
+  const slots = document.getElementById('qsSlotsContainer');
+  const hint = document.getElementById('qsAddHint');
+  const btn = w?.querySelector('.qs-toggle-btn');
+  if (slots) slots.style.display = _qsCollapsed ? 'none' : '';
+  if (hint)  hint.style.display  = _qsCollapsed ? 'none' : '';
+  if (btn)   btn.textContent = _qsCollapsed ? '▸' : '▾';
+}
+
+function _qsRender() {
+  const container = document.getElementById('qsSlotsContainer');
+  if (!container) return;
+  container.innerHTML = _qsSlots.map((name, i) => {
+    if (!name) return `<div class="qs-slot empty"><span class="qs-slot-name" style="color:var(--text3)">Slot ${i+1}</span></div>`;
+    const short = name.length > 20 ? name.slice(0, 18) + '…' : name;
+    return `<div class="qs-slot" onclick="_qsExec(${i})" title="${escHtml(name)}">
+      <span class="qs-slot-name">${escHtml(short)}</span>
+      <button class="qs-slot-del" onclick="event.stopPropagation();_qsClear(${i})" title="Entfernen">✕</button>
+    </div>`;
+  }).join('');
+}
+
+function _qsExec(idx) {
+  const name = _qsSlots[idx];
+  if (!name || !PROFILES[name]) { showStatus('⚠️ Profil nicht gefunden', 'error'); return; }
+  loadProfile(name);
+  executeOutfitCode();
+  showStatus('⚡ Quick-Switch: ' + name, 'success');
+}
+
+function _qsClear(idx) {
+  _qsSlots[idx] = null;
+  _qsSave();
+  _qsRender();
+}
+
+function quickSwitchPin(name) {
+  if (!name || !PROFILES[name]) return;
+  // Check if already pinned
+  if (_qsSlots.includes(name)) { showStatus('⚠️ Bereits im Quick-Switch', 'info'); return; }
+  // Find first empty slot
+  const emptyIdx = _qsSlots.indexOf(null);
+  if (emptyIdx === -1) { showStatus('⚠️ Quick-Switch voll (max ' + QS_MAX_SLOTS + ' Slots) – zuerst einen entfernen', 'error'); return; }
+  _qsSlots[emptyIdx] = name;
+  _qsSave();
+  const w = document.getElementById('quickSwitchWidget');
+  if (w) w.style.display = 'flex';
+  _qsRender();
+  showStatus('📌 "' + name + '" → Quick-Switch Slot ' + (emptyIdx + 1), 'success');
+}
+
+function _pmodPinToQuickSwitch() {
+  if (!_profileModalName) return;
+  quickSwitchPin(_profileModalName);
+}
+
+// ── Feature 6 + 7: Statistiken ───────────────────────────────
+
+let _statsCurrentTab = 'items';
+
+function openStatsModal() {
+  document.getElementById('statsModal')?.classList.add('open');
+  statsShowTab('items', document.querySelector('.stats-tab-btn'));
+}
+
+function closeStatsModal() {
+  document.getElementById('statsModal')?.classList.remove('open');
+}
+
+function statsShowTab(tab, btn) {
+  _statsCurrentTab = tab;
+  document.querySelectorAll('.stats-tab-btn').forEach(b => b.classList.toggle('active', b === btn));
+  _renderStatsContent(tab);
+}
+
+function _renderStatsContent(tab) {
+  const el = document.getElementById('statsContent');
+  if (!el) return;
+  if (tab === 'items')  { el.innerHTML = _buildItemStats(); return; }
+  if (tab === 'groups') { el.innerHTML = _buildGroupStats(); return; }
+  if (tab === 'colors') { el.innerHTML = _buildColorStats(); return; }
+}
+
+function _buildItemStats() {
+  const counts = {};
+  Object.values(PROFILES).forEach(p => {
+    (p.items || []).forEach(it => {
+      const key = it.asset || it.group || '?';
+      counts[key] = (counts[key] || 0) + 1;
+    });
+  });
+  const sorted = Object.entries(counts).sort((a,b) => b[1]-a[1]).slice(0, 40);
+  if (!sorted.length) return '<p style="color:var(--text3)">Keine Profil-Daten vorhanden.</p>';
+  const max = sorted[0][1];
+  return '<div style="display:flex;flex-direction:column;gap:3px">'
+    + sorted.map(([name, cnt], i) => `
+      <div class="stats-row">
+        <span class="stats-rank">#${i+1}</span>
+        <span class="stats-label">${escHtml(name)}</span>
+        <div class="stats-bar-wrap"><div class="stats-bar" style="width:${Math.round(cnt/max*100)}%"></div></div>
+        <span class="stats-count">${cnt}×</span>
+      </div>`).join('')
+    + '</div>';
+}
+
+function _buildGroupStats() {
+  const counts = {};
+  Object.values(PROFILES).forEach(p => {
+    (p.items || []).forEach(it => {
+      const key = it.group || '?';
+      counts[key] = (counts[key] || 0) + 1;
+    });
+  });
+  const sorted = Object.entries(counts).sort((a,b) => b[1]-a[1]).slice(0, 30);
+  if (!sorted.length) return '<p style="color:var(--text3)">Keine Profil-Daten vorhanden.</p>';
+  const max = sorted[0][1];
+  return '<div style="display:flex;flex-direction:column;gap:3px">'
+    + sorted.map(([grp, cnt], i) => `
+      <div class="stats-row">
+        <span class="stats-rank">#${i+1}</span>
+        <span class="stats-label">${escHtml(grp)}</span>
+        <div class="stats-bar-wrap"><div class="stats-bar" style="width:${Math.round(cnt/max*100)}%;background:var(--blue)"></div></div>
+        <span class="stats-count">${cnt}×</span>
+      </div>`).join('')
+    + '</div>';
+}
+
+function _buildColorStats() {
+  const counts = {};
+  Object.values(PROFILES).forEach(p => {
+    (p.items || []).forEach(it => {
+      const colors = Array.isArray(it.colors) ? it.colors : (it.colors ? [it.colors] : []);
+      colors.forEach(c => {
+        if (!c || c === 'Default') return;
+        const hex = c.toLowerCase();
+        counts[hex] = (counts[hex] || 0) + 1;
+      });
+    });
+  });
+  const sorted = Object.entries(counts).sort((a,b) => b[1]-a[1]).slice(0, 50);
+  if (!sorted.length) return '<p style="color:var(--text3)">Keine Farbdaten vorhanden.</p>';
+  const max = sorted[0][1];
+  return '<div style="display:flex;flex-direction:column;gap:3px">'
+    + sorted.map(([hex, cnt], i) => `
+      <div class="stats-row">
+        <span class="stats-rank">#${i+1}</span>
+        <span class="stats-color-swatch" style="background:${escHtml(hex)}" title="${escHtml(hex)}"></span>
+        <span class="stats-label" style="font-family:var(--font-mono);font-size:.7rem">${escHtml(hex)}</span>
+        <div class="stats-bar-wrap"><div class="stats-bar" style="width:${Math.round(cnt/max*100)}%;background:${escHtml(hex)}"></div></div>
+        <span class="stats-count">${cnt}×</span>
+      </div>`).join('')
+    + '</div>';
+}
+
+// ── Feature 1: Benutzerdefinierte Farbpaletten ────────────────
+
+let USER_COLOR_THEMES = [];
+try {
+  USER_COLOR_THEMES = JSON.parse(localStorage.getItem('BC_USER_COLOR_THEMES_v1') || '[]');
+  if (!Array.isArray(USER_COLOR_THEMES)) USER_COLOR_THEMES = [];
+} catch { USER_COLOR_THEMES = []; }
+
+function _saveUserColorThemes() {
+  try { localStorage.setItem('BC_USER_COLOR_THEMES_v1', JSON.stringify(USER_COLOR_THEMES)); } catch {}
+}
+
+function _cfreqSaveAsUserTheme() {
+  const name = prompt('Name für diese Farbpalette:', 'Meine Farben');
+  if (!name?.trim()) return;
+  const colors = Object.values(_cfreqChanges);
+  if (!colors.length) {
+    // collect current colors from global rows
+    const hexInputs = document.querySelectorAll('#cfreq-content .cfreq-hex-inp');
+    hexInputs.forEach(inp => { if (inp.value && inp.value !== inp.dataset.orig) colors.push(inp.value); });
+    // fallback: collect all current hex values
+    if (!colors.length) document.querySelectorAll('#cfreq-content .cfreq-hex-inp').forEach(inp => colors.push(inp.value));
+  }
+  const unique = [...new Set(colors.filter(c => /^#[0-9a-f]{6}$/i.test(c)))].slice(0, 8);
+  if (!unique.length) { showStatus('⚠️ Keine Farben zum Speichern', 'error'); return; }
+  const id = 'user_' + Date.now();
+  USER_COLOR_THEMES.push({ id, icon: '🎨', name: name.trim(), colors: unique, user: true });
+  _saveUserColorThemes();
+  showStatus('✅ Farbpalette "' + name.trim() + '" gespeichert', 'success');
+  // Re-render theme grid
+  const grid = document.querySelector('.cfreq-theme-grid');
+  if (grid) grid.innerHTML = _buildThemeGridHtml();
+}
+
+function _cfreqDeleteUserTheme(id) {
+  if (!confirm('Farbpalette löschen?')) return;
+  USER_COLOR_THEMES = USER_COLOR_THEMES.filter(t => t.id !== id);
+  _saveUserColorThemes();
+  const grid = document.querySelector('.cfreq-theme-grid');
+  if (grid) grid.innerHTML = _buildThemeGridHtml();
+}
+
+function _buildThemeGridHtml() {
+  const all = [...CFREQ_THEMES, ...USER_COLOR_THEMES];
+  return all.map(th => {
+    const swatches = th.colors.map(c => '<span class="cfreq-tswatch" style="background:' + c + '"></span>').join('');
+    const delBtn = th.user
+      ? '<button class="user-theme-del" onclick="event.stopPropagation();_cfreqDeleteUserTheme(\'' + th.id + '\')" title="Löschen">🗑</button>'
+      : '';
+    return '<div class="cfreq-theme-card" id="cfreq-tcard-' + th.id + '" onclick="_cfreqSelectTheme(\'' + th.id + '\')" title="' + escHtml(th.name) + '">'
+      + '<div class="cfreq-tswatches">' + swatches + '</div>'
+      + '<div class="cfreq-tname">' + escHtml(th.icon + ' ' + th.name) + '</div>'
+      + delBtn
+      + '</div>';
+  }).join('');
+}
+
+// Extend _cfreqSelectTheme to also look in USER_COLOR_THEMES
+const _origCfreqSelectTheme = _cfreqSelectTheme;
+_cfreqSelectTheme = function(themeId) {
+  const userTh = USER_COLOR_THEMES.find(t => t.id === themeId);
+  if (!userTh) { _origCfreqSelectTheme(themeId); return; }
+  if (_cfreqActiveTheme && _cfreqActiveTheme.id === themeId) {
+    _cfreqActiveTheme = null;
+    document.querySelectorAll('.cfreq-theme-card').forEach(c => c.classList.remove('active'));
+    _cfreqRenderThemeEditor();
+    return;
+  }
+  _cfreqActiveTheme = { id: themeId, name: userTh.name, icon: userTh.icon,
+    colors: [...userTh.colors], selected: userTh.colors.map(() => true) };
+  document.querySelectorAll('.cfreq-theme-card').forEach(c => c.classList.remove('active'));
+  document.getElementById('cfreq-tcard-' + themeId)?.classList.add('active');
+  _cfreqRenderThemeEditor();
+};
+
+// Inject extra color tool buttons + panels into a rendered color freq panel container
+function _cfreqInjectToolButtons(containerId) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  // Rebuild theme grid to include user themes
+  const grid = container.querySelector('.cfreq-theme-grid');
+  if (grid) grid.innerHTML = _buildThemeGridHtml();
+  // Don't inject twice
+  if (container.querySelector('#cfreq-gradient-panel')) return;
+  const actions = container.querySelector('.cfreq-actions');
+  if (!actions) return;
+  const extraRow = document.createElement('div');
+  extraRow.className = 'cfreq-act-row';
+  extraRow.style.marginTop = '4px';
+  extraRow.innerHTML =
+    '<button class="btn cfreq-act-btn" onclick="_cfreqSaveAsUserTheme()" title="Aktuelle Farben als eigene Palette speichern">💾 Palette speichern</button>' +
+    '<button class="btn cfreq-act-btn" onclick="_cfreqToggleGradientPanel()" title="Farbverlauf generieren">🌈 Verlauf</button>' +
+    '<button class="btn cfreq-act-btn" onclick="_cfreqToggleHarmonyPanel()" title="Harmonische Farben vorschlagen">🔮 Harmonien</button>';
+  actions.appendChild(extraRow);
+
+  const gradPanel = document.createElement('div');
+  gradPanel.id = 'cfreq-gradient-panel';
+  gradPanel.className = 'ctool-panel';
+  gradPanel.style.display = 'none';
+  gradPanel.innerHTML =
+    '<div class="ctool-label">🌈 Farbverlauf-Generator</div>' +
+    '<div class="ctool-row">' +
+      'Von: <input type="color" id="cfreqGradFrom" value="#ff0000" oninput="_cfreqRenderGradient()" style="width:34px;height:26px;padding:1px;border:1px solid var(--border);border-radius:4px;cursor:pointer">' +
+      '<input class="ctool-small-inp" id="cfreqGradFromHex" value="#ff0000" maxlength="7" oninput="document.getElementById(\'cfreqGradFrom\').value=this.value;_cfreqRenderGradient()">' +
+      'Bis: <input type="color" id="cfreqGradTo" value="#0000ff" oninput="_cfreqRenderGradient()" style="width:34px;height:26px;padding:1px;border:1px solid var(--border);border-radius:4px;cursor:pointer">' +
+      '<input class="ctool-small-inp" id="cfreqGradToHex" value="#0000ff" maxlength="7" oninput="document.getElementById(\'cfreqGradTo\').value=this.value;_cfreqRenderGradient()">' +
+      'N: <input class="ctool-n-inp" type="number" id="cfreqGradN" value="5" min="2" max="16" oninput="_cfreqRenderGradient()">' +
+    '</div>' +
+    '<div id="cfreqGradSwatches" class="ctool-swatch-row"></div>' +
+    '<div style="display:flex;gap:6px;margin-top:5px">' +
+      '<button class="btn btn-primary cfreq-act-btn" onclick="_cfreqApplyGradient()">✅ Übernehmen</button>' +
+      '<span style="font-size:.62rem;color:var(--text3);align-self:center">Klick auf Farbe → Zwischenablage</span>' +
+    '</div>';
+  actions.after(gradPanel);
+
+  const harmPanel = document.createElement('div');
+  harmPanel.id = 'cfreq-harmony-panel';
+  harmPanel.className = 'ctool-panel';
+  harmPanel.style.display = 'none';
+  harmPanel.innerHTML =
+    '<div class="ctool-label">🔮 Komplementär-Vorschläge</div>' +
+    '<div class="ctool-row">' +
+      'Basisfarbe: <input type="color" id="cfreqHarmBase" value="#3b82f6" oninput="_cfreqRenderHarmony()" style="width:34px;height:26px;padding:1px;border:1px solid var(--border);border-radius:4px;cursor:pointer">' +
+      '<input class="ctool-small-inp" id="cfreqHarmBaseHex" value="#3b82f6" maxlength="7" oninput="document.getElementById(\'cfreqHarmBase\').value=this.value;_cfreqRenderHarmony()">' +
+    '</div>' +
+    '<div id="cfreqHarmSwatches" style="display:flex;gap:12px;flex-wrap:wrap;margin-top:4px"></div>';
+  gradPanel.after(harmPanel);
+}
+
+// Patch toggleOutfitColorFreq to inject tools after render
+const _origToggleOutfitColorFreq = toggleOutfitColorFreq;
+toggleOutfitColorFreq = function() {
+  _origToggleOutfitColorFreq();
+  if (document.getElementById('outfitColorFreqPanel')?.style.display !== 'none') {
+    _cfreqInjectToolButtons('outfitColorFreqPanel');
+  }
+};
+
+// Patch refreshOutfitColorFreq similarly
+const _origRefreshOutfitColorFreq = refreshOutfitColorFreq;
+refreshOutfitColorFreq = function() {
+  _origRefreshOutfitColorFreq();
+  _cfreqInjectToolButtons('outfitColorFreqPanel');
+};
+
+// Patch _refreshPmodColorFreq to inject tools after render
+const _origRefreshPmodColorFreq = _refreshPmodColorFreq;
+_refreshPmodColorFreq = function() {
+  _origRefreshPmodColorFreq();
+  if (document.getElementById('pmodColorFreqPanel')?.style.display !== 'none') {
+    _cfreqInjectToolButtons('pmodColorFreqPanel');
+  }
+};
+
+// ── Feature 2: Farbverlauf-Generator ─────────────────────────
+
+let _cfreqGradPanelOpen = false;
+let _cfreqHarmPanelOpen = false;
+let _cfreqGradColors = [];
+
+function _cfreqToggleGradientPanel() {
+  _cfreqGradPanelOpen = !_cfreqGradPanelOpen;
+  const p = document.getElementById('cfreq-gradient-panel');
+  if (p) p.style.display = _cfreqGradPanelOpen ? '' : 'none';
+  if (_cfreqGradPanelOpen) _cfreqRenderGradient();
+}
+
+function _cfreqToggleHarmonyPanel() {
+  _cfreqHarmPanelOpen = !_cfreqHarmPanelOpen;
+  const p = document.getElementById('cfreq-harmony-panel');
+  if (p) p.style.display = _cfreqHarmPanelOpen ? '' : 'none';
+  if (_cfreqHarmPanelOpen) _cfreqRenderHarmony();
+}
+
+function _lerp(a, b, t) { return Math.round(a + (b - a) * t); }
+
+function _hexToRgb(hex) {
+  const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
+  return [r, g, b];
+}
+
+function _rgbToHex(r, g, b) {
+  return '#' + [r,g,b].map(v => Math.max(0,Math.min(255,v)).toString(16).padStart(2,'0')).join('');
+}
+
+function _cfreqRenderGradient() {
+  const fromHex = (document.getElementById('cfreqGradFrom')?.value || '#ff0000').toLowerCase();
+  const toHex   = (document.getElementById('cfreqGradTo')?.value   || '#0000ff').toLowerCase();
+  const n       = Math.max(2, Math.min(16, parseInt(document.getElementById('cfreqGradN')?.value) || 5));
+  const fromRgb = _hexToRgb(fromHex), toRgb = _hexToRgb(toHex);
+  _cfreqGradColors = Array.from({length: n}, (_, i) => {
+    const t = n === 1 ? 0 : i / (n - 1);
+    return _rgbToHex(_lerp(fromRgb[0], toRgb[0], t), _lerp(fromRgb[1], toRgb[1], t), _lerp(fromRgb[2], toRgb[2], t));
+  });
+  const sw = document.getElementById('cfreqGradSwatches');
+  if (sw) sw.innerHTML = _cfreqGradColors.map(c =>
+    `<span class="ctool-swatch" style="background:${c}" title="${c}" onclick="navigator.clipboard.writeText('${c}');showStatus('📋 ${c} kopiert','success')"></span>`
+  ).join('');
+  // sync hex inputs
+  const fh = document.getElementById('cfreqGradFromHex');
+  const th = document.getElementById('cfreqGradToHex');
+  if (fh) fh.value = fromHex;
+  if (th) th.value = toHex;
+}
+
+function _cfreqApplyGradient() {
+  if (!_cfreqGradColors.length) { _cfreqRenderGradient(); }
+  const hexInps = document.querySelectorAll('#cfreq-content .cfreq-hex-inp');
+  _cfreqGradColors.forEach((color, i) => {
+    const inp = hexInps[i];
+    if (!inp) return;
+    inp.value = color;
+    _cfreqHexCommit(inp);
+  });
+  showStatus('🌈 Verlauf übernommen (' + _cfreqGradColors.length + ' Farben)', 'success');
+}
+
+// ── Feature 3: Komplementär-Vorschlag ────────────────────────
+
+function _cfreqRenderHarmony() {
+  const baseHex = (document.getElementById('cfreqHarmBase')?.value || '#3b82f6').toLowerCase();
+  const bh = document.getElementById('cfreqHarmBaseHex');
+  if (bh) bh.value = baseHex;
+
+  const hsl = _hexToHsl(baseHex);
+  const harmonies = [
+    { label: 'Komplementär', colors: [baseHex, _hslToHex((hsl.h+180)%360, hsl.s, hsl.l)] },
+    { label: 'Triadisch', colors: [baseHex, _hslToHex((hsl.h+120)%360, hsl.s, hsl.l), _hslToHex((hsl.h+240)%360, hsl.s, hsl.l)] },
+    { label: 'Analog', colors: [_hslToHex((hsl.h-30+360)%360, hsl.s, hsl.l), baseHex, _hslToHex((hsl.h+30)%360, hsl.s, hsl.l)] },
+    { label: 'Split-Kompl.', colors: [baseHex, _hslToHex((hsl.h+150)%360, hsl.s, hsl.l), _hslToHex((hsl.h+210)%360, hsl.s, hsl.l)] },
+    { label: 'Heller', colors: [baseHex, _hslToHex(hsl.h, hsl.s, Math.min(0.95, hsl.l+0.2)), _hslToHex(hsl.h, hsl.s, Math.min(0.99, hsl.l+0.4))] },
+    { label: 'Dunkler', colors: [_hslToHex(hsl.h, hsl.s, Math.max(0.05, hsl.l-0.3)), _hslToHex(hsl.h, hsl.s, Math.max(0.05, hsl.l-0.15)), baseHex] },
+  ];
+
+  const container = document.getElementById('cfreqHarmSwatches');
+  if (!container) return;
+  container.innerHTML = harmonies.map(h => `
+    <div style="display:flex;flex-direction:column;gap:5px">
+      <span style="font-size:.6rem;color:var(--text3);font-weight:700">${escHtml(h.label)}</span>
+      <div style="display:flex;gap:4px">
+        ${h.colors.map(c => `<span class="ctool-swatch" style="background:${c};width:30px;height:30px" title="${c}" onclick="navigator.clipboard.writeText('${c}');showStatus('📋 ${c} kopiert','success')"></span>`).join('')}
+      </div>
+    </div>`).join('');
+}
