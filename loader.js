@@ -1403,11 +1403,15 @@ window.CurseScanner = (() => {
 
     // ── MutationObserver: client-seitig gerenderte Chat-Texte ───────────
     // LSCG rendert "sigh of relief" direkt in den DOM ohne Server-Message
-    var _ctObserver = null;
+    // Alten Observer vom vorherigen Bookmarklet-Aufruf entfernen
+    if (window.__BCK_ctObserver) {
+      try { window.__BCK_ctObserver.disconnect(); } catch(e) {}
+      window.__BCK_ctObserver = null;
+    }
     (function _installChatObserver() {
       var chatLog = document.getElementById('TextAreaChatLog');
       if (!chatLog) { setTimeout(_installChatObserver, 2000); return; }
-      _ctObserver = new MutationObserver(function(mutations) {
+      var obs = new MutationObserver(function(mutations) {
         mutations.forEach(function(m) {
           m.addedNodes.forEach(function(node) {
             var txt = (node.textContent || node.innerText || '').toLowerCase();
@@ -1418,9 +1422,15 @@ window.CurseScanner = (() => {
           });
         });
       });
-      _ctObserver.observe(chatLog, { childList: true, subtree: true });
+      obs.observe(chatLog, { childList: true, subtree: true });
+      window.__BCK_ctObserver = obs;
       BCK.ok('[CurseTestMonitor] Chat-Observer aktiv');
     })();
+    // Alten Listener vom vorherigen Bookmarklet-Aufruf entfernen
+    if (window.__BCK_ctMsgH) {
+      try { ServerSocket.off('ChatRoomMessage', window.__BCK_ctMsgH); } catch(e) {}
+    }
+    window.__BCK_ctMsgH = _ctMsgH;
     ServerSocket.on('ChatRoomMessage', _ctMsgH);
     BCK.ok('[CurseTestMonitor] aktiv');
   })();

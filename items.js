@@ -9184,52 +9184,54 @@ function _ctHandleChatMsg(event, content) {
     if (_ctCurseActive) return;
     _ctCurseActive = true;
 
-    // Rotation stoppen — LSCG legt Items an
+    // Timer stoppen — nur warten bis Curse fertig
     clearInterval(_ctTimer);
     clearInterval(_ctCountdownTimer);
     _ctTimer = null;
     _ctCountdownTimer = null;
 
-    document.getElementById('curseTestCurseState')?.style && (document.getElementById('curseTestCurseState').style.display = '');
-    const statusEl = document.getElementById('curseTestStatus');
-    if (statusEl) statusEl.textContent = '🔮 Curse läuft…';
-    document.getElementById('curseTestCountdown') && (document.getElementById('curseTestCountdown').textContent = '⏳');
-    showStatus('🔮 Curse erkannt — Rotation gestoppt, warte auf Ende', 'info');
-
-    // Profil nach 800ms speichern damit LSCG alle Items anlegen kann
-    // (nicht bei curse_end: InstaStrip entfernt Items vor unserem Capture)
-    const curItem = _ctQueue[_ctIdx];
-    const dbKey   = curItem?.dbKey;
-    if (dbKey && CURSE_DB[dbKey]) {
-      setTimeout(() => {
-        if (!_ctCurseActive) return; // abgebrochen
-        showStatus('💾 Curse-Outfit wird gespeichert…', 'info');
-        _curseSaveAsProfileSilent(dbKey, null);
-      }, 800);
-    }
+    const se = document.getElementById('curseTestCurseState');
+    if (se) se.style.display = '';
+    const st = document.getElementById('curseTestStatus');
+    if (st) st.textContent = '🔮 Curse läuft…';
+    const cd = document.getElementById('curseTestCountdown');
+    if (cd) cd.textContent = '⏳';
+    showStatus('🔮 Curse erkannt — warte auf Ende', 'info');
 
   } else if (event === 'curse_end') {
-    if (!_ctCurseActive) {
-      console.log('[CURSE-TEST] curse_end ignoriert — kein Start erkannt');
-      return;
+    if (!_ctCurseActive) { console.log('[CURSE-TEST] curse_end ignoriert'); return; }
+
+    // Duplikat-Schutz
+    const _now = Date.now();
+    if (window._ctLastEndTs && _now - window._ctLastEndTs < 10000) {
+      console.log('[CURSE-TEST] curse_end Duplikat ignoriert'); return;
     }
+    window._ctLastEndTs = _now;
     _ctCurseActive = false;
 
-    document.getElementById('curseTestCurseState')?.style && (document.getElementById('curseTestCurseState').style.display = 'none');
-    const statusEl = document.getElementById('curseTestStatus');
-    if (statusEl) statusEl.textContent = '🏠 Wird wiederhergestellt…';
+    const se = document.getElementById('curseTestCurseState');
+    if (se) se.style.display = 'none';
+    const st = document.getElementById('curseTestStatus');
+    const cd = document.getElementById('curseTestCountdown');
+    if (cd) cd.textContent = '⏳';
     showStatus('✅ Curse beendet', 'info');
 
+    const curItem = _ctQueue[_ctIdx];
+    const dbKey   = curItem?.dbKey;
+
+    // Schritt 3 — weiter machen
     const _doNext = () => {
+      if (st) st.textContent = '';
+      if (cd) cd.textContent = '';
       showStatus('▶ Curse-Test wird fortgesetzt', 'info');
-      document.getElementById('curseTestCountdown') && (document.getElementById('curseTestCountdown').textContent = '');
-      document.getElementById('curseTestStatus') && (document.getElementById('curseTestStatus').textContent = '');
       _ctNext();
       _ctStartTimer();
     };
 
+    // Schritt 2b — Standard-Outfit anlegen, warten bis ausgerüstet
     const _runDefaultOutfit = (next) => {
       if (CURSE_DEFAULT_OUTFIT_CODE) {
+        if (st) st.textContent = '🏠 Standard-Outfit…';
         showStatus('🏠 Standard-Outfit wird wiederhergestellt…', 'info');
         const code = typeof _oiBuildExecCode === 'function'
           ? _oiBuildExecCode(CURSE_DEFAULT_OUTFIT_CODE)
@@ -9243,11 +9245,13 @@ function _ctHandleChatMsg(event, content) {
       }
     };
 
+    // Schritt 2a — Dropdown-Profil ausführen (optional)
     const _runExtraProfile = (next) => {
-      const extraProfile = document.getElementById('curseTestResetProfile')?.value || '';
-      if (extraProfile && PROFILES[extraProfile]) {
-        showStatus('⚡ Profil "' + extraProfile + '" wird ausgeführt…', 'info');
-        loadProfile(extraProfile);
+      const ep = document.getElementById('curseTestResetProfile')?.value || '';
+      if (ep && PROFILES[ep]) {
+        if (st) st.textContent = '⚡ Profil…';
+        showStatus('⚡ Profil "' + ep + '" wird ausgeführt…', 'info');
+        loadProfile(ep);
         setTimeout(() => {
           const code = document.getElementById('outfitCode')?.value?.trim();
           if (code) bcSend({ type: 'EXEC', code: '(function(){\n' + code + '\n})();' });
@@ -9258,9 +9262,16 @@ function _ctHandleChatMsg(event, content) {
       }
     };
 
-    // Reihenfolge bei curse_end:
-    // Dropdown-Profil → Standard-Outfit → Nächstes Item
-    _runExtraProfile(() => _runDefaultOutfit(_doNext));
+    // Schritt 1 — Profil speichern, dann Kette
+    if (dbKey && CURSE_DB[dbKey]) {
+      if (st) st.textContent = '💾 Speichere…';
+      showStatus('💾 Profil wird gespeichert…', 'info');
+      _curseSaveAsProfileSilent(dbKey, () => {
+        _runExtraProfile(() => _runDefaultOutfit(_doNext));
+      });
+    } else {
+      _runExtraProfile(() => _runDefaultOutfit(_doNext));
+    }
   }
 }
 
