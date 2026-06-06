@@ -618,7 +618,7 @@ window.CurseScanner = (() => {
           Private:        craft.Private ?? false,
           IstCursed:      cursed,
           IstLSCGCurse:   lscg !== null,
-          Besitzer:       { Name: C.Name, Nummer: C.MemberNumber },
+          Besitzer:       { Name: C.Nickname || C.Name, Nummer: C.MemberNumber },
           ZuletztGesehen: new Date().toLocaleTimeString(),
           Craft:          { ...craft, MemberName: C.Name, MemberNumber: C.MemberNumber },
           LSCG:           lscg,

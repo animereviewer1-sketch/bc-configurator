@@ -4518,6 +4518,7 @@ function renderCurseTab() {
     if (e.ItemName?.toLowerCase().includes(searchTerm))         return true;
     if (e.Gruppe?.toLowerCase().includes(searchTerm))           return true;
     if (e.Besitzer?.Name?.toLowerCase().includes(searchTerm))   return true;
+    if (String(e.Besitzer?.Nummer ?? '').includes(searchTerm))  return true;
     // Kommentar durchsuchen
     const dbKey = (e.Besitzer?.Nummer ?? '') + ':' + e.ItemName + ':' + e.CraftName;
     if (CURSE_COMMENTS[dbKey]?.toLowerCase().includes(searchTerm)) return true;
