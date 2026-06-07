@@ -4678,7 +4678,7 @@ function _renderCurseOwnerRows(ownerNum) {
       + '<div class="cg-actions">'
       + '<button class="curse-apply-btn" data-rid="' + rowId + '" data-tgt="" onclick="wearCurseByData(this)" title="Auf mich anwenden">\uD83D\uDC64</button>'
       + (_selectedMemberNum ? '<button class="curse-apply-btn other" data-rid="' + rowId + '" data-tgt="' + _selectedMemberNum + '" onclick="wearCurseByData(this)" title="Auf #' + _selectedMemberNum + '">\uD83D\uDC65 #' + _selectedMemberNum + '</button>' : '')
-      + '<button data-rid="' + rowId + '" onclick="curseSaveAsProfile(this.dataset.rid)" style="background:rgba(139,92,246,0.12);border:1px solid rgba(139,92,246,0.3);color:#a78bfa;cursor:pointer;font-size:.72rem;padding:2px 6px;border-radius:4px;margin-left:2px" title="Als Outfit-Profil speichern">\uD83D\uDCBE Profil</button>'
+      + '<button data-rid="' + rowId + '" onclick="curseSaveAsProfile(this.dataset.rid)" style="background:rgba(139,92,246,0.12);border:1px solid rgba(139,92,246,0.3);color:#a78bfa;cursor:pointer;font-size:.72rem;padding:2px 6px;border-radius:4px;margin-left:2px" title="Mein Outfit (vor Curse) wiederherstellen">\uD83D\uDC57 Profil</button>'
       + '<button data-dbkey="' + escHtml(dbKey) + '" onclick="deleteCurseEntry(this.dataset.dbkey)" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.8rem;padding:2px 5px;margin-left:2px" title="L\u00f6schen">\u2715</button>'
       + '</div>';
 
@@ -4837,18 +4837,66 @@ function wearCurseByData(btn) {
 }
 
 
+// ── Vor-Curse-Snapshot (in-memory, nicht persistiert) ───────────────────────
+// Gespeichertes Bundle (LZString) des Outfits VOR dem letzten Curse-Anwenden auf sich selbst
+let _preCurseSnapshotCode = null;
+let _pendingPreCurseSnapshot = null; // reqId → callback
+
 function wearCurse(dbKey, targetNum) {
   if (!_connected) { showStatus('❌ Nicht verbunden', 'error'); return; }
   const entry = CURSE_DB[dbKey] ?? null;
   if (!entry) { showStatus('❌ Eintrag nicht in DB: ' + dbKey, 'error'); return; }
-  // Gruppen-Override anwenden, damit BC die korrekte Gruppe bekommt
   const effectiveEntry = CURSE_GRUPPE_OVERRIDES[dbKey]
     ? { ...entry, Gruppe: CURSE_GRUPPE_OVERRIDES[dbKey] }
     : entry;
-  CURSE_APPLIED_TS[dbKey] = Date.now();  // Neu-Badge läuft 5min nach Anwendung ab
+  CURSE_APPLIED_TS[dbKey] = Date.now();
+
+  // Nur bei Selbst-Anwendung: Snapshot + Standard-Outfit vor dem Curse
+  if (!targetNum) {
+    const reqId = 'pcs_' + Date.now();
+    _pendingPreCurseSnapshot = reqId;
+    showStatus('⏳ Outfit wird gesichert…', 'info');
+
+    const J = JSON.stringify(reqId);
+    const snapCode = '(function(){'
+      + 'try{'
+      + '  var b=typeof CharacterAppearanceBundle==="function"?CharacterAppearanceBundle(Player)'
+      + '    :Player.Appearance.map(function(i){'
+      + '      return{Group:i.Asset.Group.Name,Name:i.Asset.Name,Color:i.Color,'
+      + '        Difficulty:i.Difficulty||0,Property:i.Property?JSON.parse(JSON.stringify(i.Property)):{}};'
+      + '    });'
+      + '  window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"PRE_CURSE_SNAPSHOT_DATA",'
+      + '    reqId:' + J + ',data:LZString.compressToBase64(JSON.stringify(b))},"*");'
+      + '}catch(e){'
+      + '  window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"PRE_CURSE_SNAPSHOT_DATA",'
+      + '    reqId:' + J + ',err:e.message},"*");'
+      + '}'
+      + '})();';
+    bcSend({ type: 'EXEC', code: snapCode }, true);
+
+    // Callback wird in Message-Handler aufgerufen → dort Standard-Outfit + Curse
+    _pendingPreCurseSnapshotCb = function() {
+      // Standard-Outfit anlegen falls konfiguriert
+      if (CURSE_DEFAULT_OUTFIT_CODE) {
+        bcSend({ type: 'EXEC', code: '(function(){' + _buildApplyCode(CURSE_DEFAULT_OUTFIT_CODE) + '})();' });
+        showStatus('🏠 Standard-Outfit wird ausgerüstet…', 'info');
+        setTimeout(() => {
+          bcSend({ type: 'WEAR_CURSE', dbKey, targetNum: null, entry: effectiveEntry });
+          showStatus('⏳ Curse wird angelegt…', 'info');
+        }, 2000);
+      } else {
+        bcSend({ type: 'WEAR_CURSE', dbKey, targetNum: null, entry: effectiveEntry });
+        showStatus('⏳ Curse wird angelegt…', 'info');
+      }
+    };
+    return;
+  }
+
+  // Fremd-Anwendung: direkt ohne Snapshot
   bcSend({ type: 'WEAR_CURSE', dbKey, targetNum, entry: effectiveEntry });
   showStatus('⏳ Curse wird angelegt...', 'info');
 }
+let _pendingPreCurseSnapshotCb = null;
 
 // ── Curse → Outfit-Profil speichern ─────────────────────────────────────
 // Pending GET_CHAR_APPEARANCE callbacks: reqId → callback(items, name)
@@ -5159,26 +5207,19 @@ function _curseSaveAsProfileSilent(dbKey, afterSave) {
   showStatus('⏳ Outfit wird ausgelesen für "' + baseName + '"…', 'info');
 }
 
-// Button: 💾 Profil (pro Curse-Zeile) → "{CraftName} - {OwnerName}"
+// Button: 💾 Profil (pro Curse-Zeile) → Mein Outfit (vor Curse) wiederherstellen
 function curseSaveAsProfile(rowIdOrDbKey) {
-  const dbKey = _curseEntryMap[rowIdOrDbKey] ?? rowIdOrDbKey;
-  const entry = CURSE_DB[dbKey];
-  if (!entry) { showStatus('❌ Eintrag nicht gefunden', 'error'); return; }
-  // Auto-Flag setzen
-  if (!CURSE_OUTFIT_FLAGS[dbKey]) {
-    CURSE_OUTFIT_FLAGS[dbKey] = Date.now();
-    _saveCurseOutfitFlags();
-    const row = document.getElementById(rowIdOrDbKey);
-    if (row) {
-      row.classList.add('outfit-flagged');
-      const cell = row.querySelector('.cg-outfit');
-      if (cell) cell.innerHTML = '<button class="curse-outfit-btn on" style="pointer-events:none">👗 Outfit</button>';
-    }
+  if (!_connected) { showStatus('❌ Nicht verbunden', 'error'); return; }
+  if (!_preCurseSnapshotCode) {
+    showStatus('⚠️ Kein gesichertes Outfit – erst einen Curse per 👤 anwenden', 'info');
+    return;
   }
-  const craftName = entry.CraftName || entry.ItemName || 'Curse';
-  const ownerName = entry.Besitzer?.Name || (entry.Besitzer?.Nummer ? '#' + entry.Besitzer.Nummer : 'Player');
-  const defaultName = craftName + ' - ' + ownerName;
-  _fetchOutfitAndSave(null, defaultName, [_curseEntryToProfileItem(entry)], _applyCurseDefaultOutfit);
+  try {
+    bcSend({ type: 'EXEC', code: '(function(){' + _buildApplyCode(_preCurseSnapshotCode) + '})();' });
+    showStatus('👗 Mein Outfit wiederhergestellt', 'success');
+  } catch(e) {
+    showStatus('❌ Wiederherstellen fehlgeschlagen: ' + e.message, 'error');
+  }
 }
 
 // Button: 💾 Alle speichern (Owner-Header) → "{OwnerName} Outfit" (Sammlung mehrerer Items)
@@ -5699,6 +5740,23 @@ window.addEventListener('message', function(ev) {
       delete _pendingOutfitSave[ev.data.reqId];
       if (ev.data.err) { showStatus('\u274c Outfit-Laden fehlgeschlagen: ' + ev.data.err, 'error'); break; }
       _cb(ev.data.items ?? [], ev.data.name ?? '');
+      break;
+    }
+
+    case 'PRE_CURSE_SNAPSHOT_DATA': {
+      if (ev.data.reqId !== _pendingPreCurseSnapshot) break;
+      _pendingPreCurseSnapshot = null;
+      if (ev.data.err) {
+        showStatus('⚠️ Snapshot fehlgeschlagen – Curse wird trotzdem angelegt', 'info');
+      } else {
+        _preCurseSnapshotCode = ev.data.data;
+        showStatus('📸 Outfit gesichert', 'success');
+      }
+      if (typeof _pendingPreCurseSnapshotCb === 'function') {
+        const cb = _pendingPreCurseSnapshotCb;
+        _pendingPreCurseSnapshotCb = null;
+        cb();
+      }
       break;
     }
 
