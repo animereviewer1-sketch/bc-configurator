@@ -4852,7 +4852,8 @@ function wearCurse(dbKey, targetNum) {
   CURSE_APPLIED_TS[dbKey] = Date.now();
 
   // Nur bei Selbst-Anwendung: Snapshot + Standard-Outfit vor dem Curse
-  if (!targetNum) {
+  // ABER: falls bereits ein Snapshot existiert (Curse bereits aktiv) → direkt anlegen, nichts überschreiben
+  if (!targetNum && !_preCurseSnapshotCode) {
     const reqId = 'pcs_' + Date.now();
     _pendingPreCurseSnapshot = reqId;
     showStatus('⏳ Outfit wird gesichert…', 'info');
@@ -5092,11 +5093,12 @@ function curseRestoreUrsprung() {
     + '})();';
   bcSend({ type: 'EXEC', code: stripCode });
 
-  // 2. Nach kurzem Delay Ursprungs-Outfit anlegen
+  // 2. Nach kurzem Delay Ursprungs-Outfit anlegen + Snapshot leeren
   setTimeout(() => {
     if (!_connected) return;
     try {
       bcSend({ type: 'EXEC', code: '(function(){' + _buildApplyCode(_preCurseSnapshotCode) + '})();' });
+      _preCurseSnapshotCode = null;  // Snapshot leeren → nächster Curse startet frisch
       showStatus('🔄 Ursprungs-Outfit wiederhergestellt', 'success');
     } catch(e) {
       showStatus('❌ Ursprung konnte nicht angewendet werden: ' + e.message, 'error');
