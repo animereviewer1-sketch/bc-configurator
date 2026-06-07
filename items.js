@@ -5072,6 +5072,38 @@ function _applyCurseDefaultOutfit() {
 }
 // ── Ende Standard-Outfit ──────────────────────────────────────────────────────
 
+// 🔄 Ursprung – alle Items ablegen + Ursprungs-Outfit wiederherstellen
+function curseRestoreUrsprung() {
+  if (!_connected) { showStatus('❌ Nicht verbunden', 'error'); return; }
+  if (!_preCurseSnapshotCode) {
+    showStatus('⚠️ Kein Ursprungs-Outfit gespeichert – erst einen Curse per 👤 anwenden', 'info');
+    return;
+  }
+  // 1. Alle Items ablegen (außer Body/Hair-Gruppen die BC selbst verwaltet)
+  const stripCode = '(function(){'
+    + 'var skip=new Set(["BodyMarkings","HairAccessory1","HairAccessory2","HairAccessory3"]);'
+    + 'Player.Appearance.filter(function(i){'
+    + '  var g=i.Asset&&i.Asset.Group&&i.Asset.Group.Name;'
+    + '  return g&&!skip.has(g)&&i.Asset.Name&&i.Asset.Name!=="";'
+    + '}).forEach(function(i){'
+    + '  try{InventoryRemove(Player,i.Asset.Group.Name,false);}catch(e){}'
+    + '});'
+    + 'CharacterRefresh(Player,false,false);'
+    + '})();';
+  bcSend({ type: 'EXEC', code: stripCode });
+
+  // 2. Nach kurzem Delay Ursprungs-Outfit anlegen
+  setTimeout(() => {
+    if (!_connected) return;
+    try {
+      bcSend({ type: 'EXEC', code: '(function(){' + _buildApplyCode(_preCurseSnapshotCode) + '})();' });
+      showStatus('🔄 Ursprungs-Outfit wiederhergestellt', 'success');
+    } catch(e) {
+      showStatus('❌ Ursprung konnte nicht angewendet werden: ' + e.message, 'error');
+    }
+  }, 800);
+}
+
 // Request full Appearance for ownerNum, then call cb(items, charName)
 // Falls back to CURSE_DB-only if not connected
 // afterSave: optional callback forwarded to _doSaveProfile (e.g. _applyCurseDefaultOutfit)
