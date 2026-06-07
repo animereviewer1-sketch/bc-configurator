@@ -4861,12 +4861,11 @@ function wearCurse(dbKey, targetNum) {
 
     _pendingOutfitSave[reqId] = function(items) {
       if (items?.length) {
-        const { filteredItems, keepHairGroups } = _applyHairBaseline(items);
+        // Kein _applyHairBaseline: beim eigenen Ursprungs-Outfit alle Items inkl. Haare 1:1 sichern
         PROFILES[_URSPRUNG_PROFILE_KEY] = {
           name: _URSPRUNG_PROFILE_KEY,
           date: new Date().toLocaleDateString('de-DE'),
-          items: filteredItems.map(_appearanceItemToProfile),
-          keepHairGroups: keepHairGroups?.length ? keepHairGroups : undefined,
+          items: items.map(_appearanceItemToProfile),
           _temp: true,
         };
         _preCurseSnapshotCode = reqId;  // Sentinel: Snapshot aktiv
@@ -5278,6 +5277,9 @@ function curseSaveAsProfile(rowIdOrDbKey) {
         } else {
           _applyCurseDefaultOutfit();
         }
+        // Snapshot leeren → nächster 👤-Klick startet wieder mit Snapshot + Standard-Outfit
+        _preCurseSnapshotCode = null;
+        delete PROFILES[_URSPRUNG_PROFILE_KEY];
       }, 60);
     } else {
       _applyCurseDefaultOutfit();
