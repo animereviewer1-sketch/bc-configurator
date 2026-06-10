@@ -579,6 +579,9 @@ window.CurseScanner = (() => {
     _snapshotAllLSCG(Player);
     const spieler = raumChars;
     let neuDB = 0, aktualisiert = 0, neuLSCG = 0;
+    // Delta-Tracking: nur in DIESEM Scan geschriebene Einträge (Crafts der
+    // anwesenden Spieler) – Grundlage für die Delta-Übertragung ans Popup.
+    const changed = {};
     spieler.forEach(C => {
       _snapshotAllLSCG(C);
       // LSCG-Map einmal pro Charakter aufbauen (O(1) Lookup statt O(n) find pro Craft)
@@ -626,6 +629,7 @@ window.CurseScanner = (() => {
         };
         if (istNeu) neuDB++; else aktualisiert++;
         database[key] = eintrag;
+        changed[key]  = eintrag;
         // Persistenter Craft-Cache: immer aktualisieren wenn live-Daten vorhanden
         craftCache[key] = eintrag;
         _persistCraftCache();
@@ -642,7 +646,7 @@ window.CurseScanner = (() => {
         }
       });
     });
-    return { database, lscgTable, lscgCache, neuDB, aktualisiert, neuLSCG };
+    return { database, lscgTable, lscgCache, neuDB, aktualisiert, neuLSCG, changed };
   }
 
   function _finde(indexOderName) {
@@ -1170,9 +1174,15 @@ window.CurseScanner = (() => {
             const _curseRoomMembers = (typeof ChatRoomCharacter !== 'undefined' && Array.isArray(ChatRoomCharacter))
               ? ChatRoomCharacter.map(c => c.MemberNumber).filter(Boolean)
               : [];
+            // Delta-Übertragung: Die volle DB (kann >25k Einträge haben) wird nur
+            // gesendet wenn das Popup sie anfordert (full:true – erster Scan nach
+            // Connect/Reload). Sonst nur die in diesem Scan geänderten Einträge –
+            // das vermeidet teures Structured-Cloning + Komplett-Verarbeitung.
+            const _full = ev.data.full === true;
             src.postMessage({
               app: APP, type: 'CURSE_DATA',
-              database:  result.database,
+              database:  _full ? result.database : null,
+              delta:     _full ? null : result.changed,
               lscgTable: result.lscgTable,
               lscgCache: result.lscgCache,
               room: _curseRoom,
@@ -1181,7 +1191,7 @@ window.CurseScanner = (() => {
               aktualisiert: result.aktualisiert,
               _auto: ev.data._auto === true,
             }, ALLOWED_ORIGIN);
-            BCK.ok('CURSE_DATA gesendet: ' + Object.keys(result.database).length + ' Crafts');
+            BCK.ok('CURSE_DATA gesendet (' + (_full ? 'full: ' + Object.keys(result.database).length : 'delta: ' + Object.keys(result.changed).length) + ' Crafts)');
           } catch (ex) {
             BCK.err('SCAN_CURSES Fehler:', ex.message);
             src.postMessage({ app: APP, type: 'CURSE_DATA', err: ex.message }, ALLOWED_ORIGIN);

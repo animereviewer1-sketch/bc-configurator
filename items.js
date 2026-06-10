@@ -4177,7 +4177,7 @@ function toggleAutoCurseScan() {
       if (_connected) {
         // Kein GET_CACHE hier: buildBCCache() ist sehr teuer (komplettes Asset-Array
         // + Funktions-Parsing) und für den Curse-Scan nicht nötig → verursachte Freezes.
-        bcSend({ type: 'SCAN_CURSES', _auto: true });
+        _sendCurseScanRequest(true);
       }
     }, 30000);
     if (btn) { btn.textContent = '⏰ Auto (30s)'; btn.classList.add('on'); }
@@ -4257,12 +4257,20 @@ function toggleCurseFavourite(dbKey, cellEl) {
 
 
 // ── Scan ─────────────────────────────────────────────
+// Delta-Protokoll: Erster Scan nach Connect/Reload fordert die volle DB an
+// (full:true), danach schickt BC nur noch die im Scan geänderten Einträge.
+let _curseFullReceived = false;
+
+function _sendCurseScanRequest(auto) {
+  return bcSend({ type: 'SCAN_CURSES', _auto: auto === true, full: !_curseFullReceived }, auto === true);
+}
+
 function curseScan() {
   const statusEl = document.getElementById('csScanStatus');
   statusEl.textContent = '⏳ Scanne...';
   // Kein GET_CACHE mehr: Der Item-Cache (Asset-Array) ist statisch und für den
   // Curse-Scan irrelevant. buildBCCache() blockierte BC + Popup bei jedem Scan.
-  bcSend({ type: 'SCAN_CURSES' });
+  _sendCurseScanRequest(false);
 }
 
 // ── Handle SCAN_RESULT ────────────────────────────────
@@ -4278,43 +4286,68 @@ function _handleCurseData(data) {
   if (data.err) { showStatus('❌ Curse-Scan: ' + data.err, 'error'); return; }
   _curseDBFresh = true;
 
-  // ZuletztGescannt-Timestamps aus dem alten CURSE_DB retten BEVOR wir überschreiben.
-  // Nur cursed Items brauchen den Timestamp — einmalig per-key in einer Map sammeln (O(n)).
-  const _prevTs = {};
-  const _prevKeys = new Set(Object.keys(CURSE_DB));
-  for (const k of _prevKeys) {
-    const ts = CURSE_DB[k]?.ZuletztGescannt;
-    if (ts) _prevTs[k] = ts;
-  }
-
-  CURSE_DB         = data.database    ?? {};
-  CURSE_LSCG       = data.lscgTable   ?? {};
-  CURSE_CACHE_LSCG = data.lscgCache   ?? {};
-
+  const isDelta = !data.database && data.delta;
   const _now = Date.now();
   const _roomNums = data.roomMembers?.length
     ? new Set(data.roomMembers.map(String))
     : new Set(_lastRoomMembers.map(function(m) { return String(m.num); }));
 
-  // Timestamps setzen: nur cursed Items, nur einmal über CURSE_DB iterieren (O(n))
-  for (const k in CURSE_DB) {
-    const entry = CURSE_DB[k];
-    if (!entry.IstCursed) continue;
-    const ownerNum = String(entry.Besitzer?.Nummer ?? '');
-    if (_roomNums.has(ownerNum)) {
-      entry.ZuletztGescannt = _now;
-    } else if (_prevTs[k]) {
-      entry.ZuletztGescannt = _prevTs[k];
+  let _addedKeys = [];
+
+  if (isDelta) {
+    // ── Delta-Merge: nur geänderte Einträge ersetzen, Rest bleibt unberührt ──
+    // (inkl. vorhandener ZuletztGescannt-Timestamps abwesender Besitzer)
+    for (const k in data.delta) {
+      const entry = data.delta[k];
+      if (!CURSE_DB[k]) _addedKeys.push(k);
+      if (entry.IstCursed) {
+        const ownerNum = String(entry.Besitzer?.Nummer ?? '');
+        if (_roomNums.has(ownerNum)) entry.ZuletztGescannt = _now;
+        else if (CURSE_DB[k]?.ZuletztGescannt) entry.ZuletztGescannt = CURSE_DB[k].ZuletztGescannt;
+      }
+      CURSE_DB[k] = entry;
     }
+    // lscgTable/lscgCache sind klein – BC sendet sie weiterhin vollständig
+    if (data.lscgTable) CURSE_LSCG       = data.lscgTable;
+    if (data.lscgCache) CURSE_CACHE_LSCG = data.lscgCache;
+  } else {
+    // ── Full-Sync: komplette DB ersetzen (erster Scan nach Connect/Reload) ──
+    // ZuletztGescannt-Timestamps aus dem alten CURSE_DB retten BEVOR wir überschreiben.
+    const _prevTs = {};
+    const _prevKeys = new Set(Object.keys(CURSE_DB));
+    for (const k of _prevKeys) {
+      const ts = CURSE_DB[k]?.ZuletztGescannt;
+      if (ts) _prevTs[k] = ts;
+    }
+
+    CURSE_DB         = data.database    ?? {};
+    CURSE_LSCG       = data.lscgTable   ?? {};
+    CURSE_CACHE_LSCG = data.lscgCache   ?? {};
+    _curseFullReceived = true;
+
+    // Timestamps setzen: nur cursed Items, nur einmal über CURSE_DB iterieren (O(n))
+    for (const k in CURSE_DB) {
+      const entry = CURSE_DB[k];
+      if (!entry.IstCursed) continue;
+      const ownerNum = String(entry.Besitzer?.Nummer ?? '');
+      if (_roomNums.has(ownerNum)) {
+        entry.ZuletztGescannt = _now;
+      } else if (_prevTs[k]) {
+        entry.ZuletztGescannt = _prevTs[k];
+      }
+    }
+    _addedKeys = Object.keys(CURSE_DB).filter(k => !_prevKeys.has(k));
   }
 
-  // Scan-Meta: Raum + Zeitpunkt für aktuellen Raum speichern
+  // Scan-Meta: Raum + Zeitpunkt für aktuellen Raum speichern.
+  // Bei Delta reicht der Durchlauf über die geänderten Einträge (Besitzer im Raum).
   if (_roomNums.size > 0 && data.room) {
     const _scanRoom = data.room;
     const _scanTime = new Date().toLocaleString('de-DE', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
     const _seenOwners = new Set();
-    for (const k in CURSE_DB) {
-      const on = String(CURSE_DB[k].Besitzer?.Nummer ?? '');
+    const _metaSrc = isDelta ? data.delta : CURSE_DB;
+    for (const k in _metaSrc) {
+      const on = String(_metaSrc[k].Besitzer?.Nummer ?? '');
       if (on && _roomNums.has(on)) _seenOwners.add(on);
     }
     _seenOwners.forEach(function(on) { CURSE_SCAN_META[on] = { room: _scanRoom, time: _scanTime }; });
@@ -4331,10 +4364,6 @@ function _handleCurseData(data) {
   // Change-Detection: BC sendet neuDB/aktualisiert direkt mit → kein teurer JSON.stringify-Vergleich
   const addedCount   = data.neuDB       ?? 0;
   const updatedCount = data.aktualisiert ?? 0;
-  // Fallback: einfacher Key-Vergleich wenn BC-Werte fehlen (kein JSON.stringify!)
-  const _addedKeys = addedCount === 0 && updatedCount === 0
-    ? Object.keys(CURSE_DB).filter(k => !_prevKeys.has(k))
-    : [];
   const _finalAdded   = addedCount   || _addedKeys.length;
   const _finalUpdated = updatedCount || 0;
 
@@ -4459,15 +4488,21 @@ function _populateSlotFilter() {
   const sel = document.getElementById('slotFilter');
   if (!sel) return;
   const current = sel.value;
-  // Use effective gruppe (override wins)
-  const slots = [...new Set(
-    Object.entries(CURSE_DB).map(([k, e]) => _getEffectiveGruppe(e, k)).filter(Boolean)
-  )].sort((a, b) => {
+  // Use effective gruppe (override wins) – ein einziger Durchlauf über die DB
+  // (statt 2×): sammelt Slots + zählt UNBEKANNT in einem Pass (27k Einträge/Scan).
+  const slotSet = new Set();
+  let unknownCount = 0;
+  for (const k in CURSE_DB) {
+    const g = _getEffectiveGruppe(CURSE_DB[k], k);
+    if (!g) continue;
+    slotSet.add(g);
+    if (g === 'UNBEKANNT') unknownCount++;
+  }
+  const slots = [...slotSet].sort((a, b) => {
     if (a === 'UNBEKANNT') return -1;  // UNBEKANNT zuerst
     if (b === 'UNBEKANNT') return 1;
     return a.localeCompare(b);
   });
-  const unknownCount = Object.entries(CURSE_DB).filter(([k,e]) => _getEffectiveGruppe(e,k) === 'UNBEKANNT').length;
   sel.innerHTML = '<option value="">Alle Slots</option>' +
     slots.map(s => {
       const label = s === 'UNBEKANNT' ? '⚠️ UNBEKANNT (' + unknownCount + ')' : s;
@@ -5536,6 +5571,10 @@ const APP = 'BCKonfigurator';
 // ── Ping-Retry ────────────────────────────────────────
 let _pingInterval = null;
 let _connected    = false;
+// Echte BC-Origin – wird beim ersten empfangenen Message vom Opener gelernt.
+// Danach sendet bcSend gezielt dorthin statt an '*' (kein Daten-Leak, falls
+// der Opener zwischenzeitlich auf eine fremde Seite navigiert wurde).
+let _bcOrigin     = null;
 
 function startPingRetry() {
   if (_pingInterval) clearInterval(_pingInterval);
@@ -5568,7 +5607,8 @@ function bcSend(msg, silent) {
       return false;
     }
     if (!silent || msg.type !== 'PING') console.log('[BCK-Popup] bcSend \u2192', msg.type);
-    window.opener.postMessage({ app: APP, ...msg }, '*');
+    // Gezielte Origin sobald bekannt; '*' nur f\u00fcr den PING-Bootstrap n\u00f6tig
+    window.opener.postMessage({ app: APP, ...msg }, _bcOrigin || '*');
     return true;
   } catch(e) {
     console.error('[BCK-Popup] bcSend Exception:', e.message);
@@ -5579,6 +5619,14 @@ function bcSend(msg, silent) {
 
 window.addEventListener('message', function(ev) {
   if (!ev.data || ev.data.app !== APP) return;
+  // Sicherheit: nur Nachrichten vom BC-Fenster (opener) akzeptieren.
+  // Verhindert, dass fremde Fenster/Tabs gef\u00e4lschte CURSE_DATA/EXEC_OK etc. einschleusen.
+  if (window.opener && ev.source !== window.opener) {
+    console.warn('[BCK-Popup] message von fremder Quelle ignoriert');
+    return;
+  }
+  // BC-Origin lernen/aktuell halten (BC l\u00e4uft auf mehreren Domains)
+  if (ev.origin && ev.origin !== 'null') _bcOrigin = ev.origin;
   console.log('[BCK-Popup] \u2190 message:', ev.data.type);
 
   switch (ev.data.type) {
@@ -5587,6 +5635,9 @@ window.addEventListener('message', function(ev) {
       console.log('[BCK-Popup] PONG \u2705 Verbunden!');
       if (!_connected) {
         _connected = true;
+        // Nach (Re-)Connect einmal Full-Sync anfordern: Der BC-Tab kann neu
+        // geladen worden sein und hat dann andere/mehr Eintr\u00e4ge (craftCache aus IDB).
+        _curseFullReceived = false;
         if (_pingInterval) { clearInterval(_pingInterval); _pingInterval = null; }
         document.getElementById('connStatus').textContent = '\U0001f7e2 Verbunden';
         document.getElementById('connStatus').style.color = 'var(--green)';
@@ -5932,7 +5983,7 @@ function _triggerLscgScan(reason) {
 function _triggerCurseScan(reason) {
   if (!_connected) return;
   console.log('[BCU] Curse-Scan:', reason);
-  bcSend({ type: 'SCAN_CURSES', _auto: true }, true);
+  _sendCurseScanRequest(true);
 }
 
 function _triggerAutoScan(reason) {
