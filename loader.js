@@ -840,10 +840,20 @@ window.CurseScanner = (() => {
           BCK.info('GET_CACHE \u2013 baue Cache...');
           let cache = {}, err = null;
           try {
-            cache = buildBCCache();
-            const gc = Object.keys(cache).length;
-            const ic = Object.values(cache).reduce((n,g)=>n+Object.keys(g).length,0);
-            BCK.ok('Cache: ' + gc + ' Gruppen, ' + ic + ' Items');
+            // Memoize: Das Asset-Array ist nach Spielstart statisch. buildBCCache()
+            // (kompletter Asset-Durchlauf + fn.toString()-Parsing) blockiert den
+            // Main-Thread sekundenlang \u2192 nur einmal bauen, danach wiederverwenden.
+            // ev.data.force erzwingt einen Rebuild (z.B. nach Mod-Nachladen).
+            if (window.__BCK_cacheMemo && !ev.data.force) {
+              cache = window.__BCK_cacheMemo;
+              BCK.ok('Cache aus Memo (kein Rebuild)');
+            } else {
+              cache = buildBCCache();
+              window.__BCK_cacheMemo = cache;
+              const gc = Object.keys(cache).length;
+              const ic = Object.values(cache).reduce((n,g)=>n+Object.keys(g).length,0);
+              BCK.ok('Cache: ' + gc + ' Gruppen, ' + ic + ' Items');
+            }
           } catch (ex) {
             err = ex.message;
             BCK.err('buildBCCache FEHLER:', ex.message);

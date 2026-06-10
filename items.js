@@ -4175,9 +4175,9 @@ function toggleAutoCurseScan() {
   } else {
     _autoCurseScanTimer = setInterval(() => {
       if (_connected) {
-        const prevDb = JSON.stringify(CURSE_DB);
+        // Kein GET_CACHE hier: buildBCCache() ist sehr teuer (komplettes Asset-Array
+        // + Funktions-Parsing) und für den Curse-Scan nicht nötig → verursachte Freezes.
         bcSend({ type: 'SCAN_CURSES', _auto: true });
-        bcSend({ type: 'GET_CACHE' });
       }
     }, 30000);
     if (btn) { btn.textContent = '⏰ Auto (30s)'; btn.classList.add('on'); }
@@ -4260,9 +4260,9 @@ function toggleCurseFavourite(dbKey, cellEl) {
 function curseScan() {
   const statusEl = document.getElementById('csScanStatus');
   statusEl.textContent = '⏳ Scanne...';
-  // Gleichzeitig Cache-Scan auslösen
+  // Kein GET_CACHE mehr: Der Item-Cache (Asset-Array) ist statisch und für den
+  // Curse-Scan irrelevant. buildBCCache() blockierte BC + Popup bei jedem Scan.
   bcSend({ type: 'SCAN_CURSES' });
-  bcSend({ type: 'GET_CACHE' });
 }
 
 // ── Handle SCAN_RESULT ────────────────────────────────
@@ -4352,7 +4352,9 @@ function _handleCurseData(data) {
   if (!isAuto || _finalAdded || _finalUpdated) {
     showStatus(statusText, _finalAdded + _finalUpdated > 0 ? 'success' : 'info');
   }
-  _saveCurseDB();
+  // Debounced: strukturiertes Klonen der ~27k Einträge für IDB ist teuer;
+  // bei schnell aufeinanderfolgenden Scans nur einmal speichern.
+  _debouncedSaveCurseDB();
 }
 
 
@@ -5851,7 +5853,7 @@ function loadCacheFromBC() {
   btn.disabled = true;
   document.getElementById('loadingSpinner').classList.remove('hidden');
   showStatus('\u23f3 Verbinde mit Spiel\u2026', 'info');
-  if (!bcSend({ type: 'GET_CACHE' })) {
+  if (!bcSend({ type: 'GET_CACHE', force: true })) {
     document.getElementById('loadingSpinner').classList.add('hidden');
     btn.disabled = false;
   }
