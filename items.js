@@ -424,6 +424,12 @@ let CACHE   = {};
 let CURRENT = null;
 window._BCCurrent = () => CURRENT; // expose for bot tab
 
+// Asset-Basis fuer Vorschaubild-URLs (vom Loader gesetzt, persistiert)
+let BC_ASSET_BASE   = '';
+let BC_ASSET_FAMILY = 'Female3DCG';
+try { BC_ASSET_BASE   = localStorage.getItem('BC_ASSET_BASE_v1')   || ''; } catch {}
+try { BC_ASSET_FAMILY = localStorage.getItem('BC_ASSET_FAMILY_v1') || 'Female3DCG'; } catch {}
+
 let dimMode      = {};
 let dimSelected  = {};
 let dimSubProps  = {};
@@ -5694,6 +5700,9 @@ window.addEventListener('message', function(ev) {
       const _items = Object.values(_data).reduce((s,g) => s + Object.keys(g).length, 0);
       if (_items === 0) { showStatus('\u274c Kein Cache erhalten \u2013 Bist du im Spiel?', 'error'); return; }
       CACHE = _data;
+      // Asset-Basis fuer Vorschaubild-URLs merken (Export-Katalog)
+      if (ev.data.assetBase)   { BC_ASSET_BASE   = ev.data.assetBase;   try { localStorage.setItem('BC_ASSET_BASE_v1', BC_ASSET_BASE); } catch {} }
+      if (ev.data.assetFamily) { BC_ASSET_FAMILY = ev.data.assetFamily; try { localStorage.setItem('BC_ASSET_FAMILY_v1', BC_ASSET_FAMILY); } catch {} }
       try { localStorage.setItem('BC_CACHE_v12', JSON.stringify(_data)); } catch {}
       const _mc = Object.values(_data).flatMap(g => Object.values(g)).filter(i => i.archetype === 'modular').length;
       document.getElementById('cacheInfo').textContent = '\u2705 ' + _items + ' Items \u00b7 ' + Object.keys(_data).length + ' Gruppen \u00b7 \U0001f9e9 ' + _mc + ' modular';
@@ -5967,6 +5976,22 @@ let _lastRoomMembers   = [];    // letzter bekannter Raum-Snapshot
 const GRACE_NEEDED = 2;  // 2 × 5s = 10s grace for sync drops
 const _missCount   = {};  // memberNum → aufeinanderfolgende Fehlscans
 
+// ── Room Dropdown + Leiste ────────────────────────────────────────────────
+let _favMembers        = new Set();   // member numbers that are favorited
+let _leisteMembers     = [];          // [{num, name}] — ordered
+let _leisteActiveNum   = null;        // currently active chip in Leiste
+let _roomDdOpen        = false;
+let _roomDdFilter      = '';
+
+try {
+  const _fv = localStorage.getItem('BC_FAV_MEMBERS_v1');
+  if (_fv) _favMembers = new Set(JSON.parse(_fv));
+} catch(e) {}
+
+function _saveFavMembers() {
+  try { localStorage.setItem('BC_FAV_MEMBERS_v1', JSON.stringify([..._favMembers])); } catch(e) {}
+}
+
 // ── Auto-Scan: Craft/Curse + LSCG-Outfits ─────────────────────
 // Debounce statt Cooldown: Rapid-Fire-Events werden zu einem einzigen Scan zusammengefasst.
 // Beide Scanner laufen immer synchron – kein gegenseitiges Blockieren mehr.
@@ -6029,9 +6054,7 @@ function stopRoomScan() {
 }
 
 function renderRoomMembers(data) {
-  const container = document.getElementById('roomMembers');
-  const btn       = document.getElementById('roomRefreshBtn');
-  if (!container) return;
+  const btn = document.getElementById('roomRefreshBtn');
   if (btn) { btn.textContent = '🔄'; btn.classList.remove('room-scanning'); }
 
   _myMemberNumber = data.memberNumber;
@@ -6091,23 +6114,23 @@ function renderRoomMembers(data) {
   );
   _lastRoomMembers = [...freshMembers, ...graceMembers];
 
-  // ── Raum-Panel rendern ────────────────────────────────────────────────────
-  const displayList = _lastRoomMembers;
-  if (!displayList.length) {
-    container.innerHTML = '<span class="room-empty">– Niemand im Raum –</span>';
-  } else {
-    container.innerHTML = displayList.map(m => {
-      const isSelf  = m.num === _myMemberNumber;
-      const isSel   = m.num === _selectedMemberNum;
-      const inGrace = !freshNums.has(m.num) && !isSelf;
-      const cls = 'room-chip' + (isSelf ? ' self' : '') + (isSel ? ' selected' : '') + (inGrace ? ' grace' : '');
-      const click = isSelf ? '' : 'onclick="selectRoomMember(' + m.num + ')"';
-      const title = isSelf ? 'Du selbst' : (inGrace ? 'Sync... (kurz nicht sichtbar)' : 'Als Ziel setzen');
-      return '<span class="' + cls + '" ' + click + ' title="' + title + '">'
-        + (isSelf ? '👤' : (inGrace ? '⏳' : '👥')) + ' ' + escHtml(m.name)
-        + ' <span class="room-num">#' + m.num + '</span></span>';
-    }).join('');
+  // ── Dropdown-Trigger Label aktualisieren ─────────────────────────────────
+  const lbl = document.getElementById('roomDdLabel');
+  if (lbl) {
+    const cnt = _lastRoomMembers.length;
+    lbl.textContent = cnt ? cnt + ' Spieler im Raum' : '– Niemand im Raum –';
   }
+
+  // ── Leiste: Mitglieder die den Raum verlassen haben entfernen ────────────
+  const validNums = new Set(_lastRoomMembers.map(m => m.num));
+  _leisteMembers = _leisteMembers.filter(m => validNums.has(m.num));
+  if (_leisteActiveNum && !validNums.has(_leisteActiveNum)) _leisteActiveNum = null;
+
+  // ── Dropdown-Liste neu rendern ────────────────────────────────────────────
+  renderRoomDropdown();
+
+  // ── Leiste neu rendern ────────────────────────────────────────────────────
+  renderLeiste();
 
   // ── Konfigurator-Dropdown aktualisieren ───────────────────────────────────
   const sel = document.getElementById('targetMember');
@@ -6155,19 +6178,169 @@ function escHtml(s) {
 
 function selectRoomMember(num) {
   _selectedMemberNum = num;
-  // Ziel-Dropdown auf "Anderer Spieler" setzen
   const modeEl = document.getElementById('targetMode');
   if (modeEl) { modeEl.value = 'other'; onTargetChange(); }
   const sel = document.getElementById('targetMember');
   if (sel) { sel.value = num; }
   const direct = document.getElementById('targetMemberDirect');
   if (direct) { direct.value = num; }
-  // Chips neu rendern (selected-Klasse)
-  document.querySelectorAll('.room-chip').forEach(chip => {
-    chip.classList.toggle('selected', parseInt(chip.querySelector('.room-num')?.textContent?.replace('#','')) === num);
-  });
   if (typeof generate === 'function') generate();
   console.log('[BCK-Popup] Ziel gesetzt: #' + num);
+}
+
+// ── Room Dropdown ─────────────────────────────────────────────────────────
+
+function toggleRoomDropdown() {
+  _roomDdOpen = !_roomDdOpen;
+  const panel   = document.getElementById('roomDdPanel');
+  const trigger = document.getElementById('roomDdTrigger');
+  const search  = document.getElementById('roomDdSearch');
+  if (!panel) return;
+  panel.classList.toggle('open', _roomDdOpen);
+  trigger?.classList.toggle('open', _roomDdOpen);
+  if (_roomDdOpen) {
+    _roomDdFilter = '';
+    if (search) { search.value = ''; search.focus(); }
+    renderRoomDropdown();
+    // Close on outside click
+    setTimeout(() => {
+      document.addEventListener('click', _closeRoomDdOutside, { once: true, capture: true });
+    }, 0);
+  }
+}
+
+function _closeRoomDdOutside(e) {
+  const wrap = document.getElementById('roomDdWrap');
+  if (wrap && !wrap.contains(e.target)) {
+    _roomDdOpen = false;
+    document.getElementById('roomDdPanel')?.classList.remove('open');
+    document.getElementById('roomDdTrigger')?.classList.remove('open');
+  } else if (_roomDdOpen) {
+    // Re-attach if click was inside
+    setTimeout(() => {
+      document.addEventListener('click', _closeRoomDdOutside, { once: true, capture: true });
+    }, 0);
+  }
+}
+
+function filterRoomDropdown(val) {
+  _roomDdFilter = (val || '').toLowerCase();
+  renderRoomDropdown();
+}
+
+function renderRoomDropdown() {
+  const list = document.getElementById('roomDdList');
+  if (!list) return;
+
+  const all = _lastRoomMembers;
+  const filter = _roomDdFilter;
+
+  // Split into favs and others
+  const favs   = all.filter(m => _favMembers.has(m.num) && (!filter || m.name.toLowerCase().includes(filter) || String(m.num).includes(filter)));
+  const others  = all.filter(m => !_favMembers.has(m.num) && (!filter || m.name.toLowerCase().includes(filter) || String(m.num).includes(filter)));
+
+  function rowHtml(m) {
+    const isSelf     = m.num === _myMemberNumber;
+    const isFav      = _favMembers.has(m.num);
+    const inLeiste   = _leisteMembers.some(x => x.num === m.num);
+    let cls = 'room-dd-row';
+    if (isSelf)    cls += ' is-self';
+    if (inLeiste)  cls += ' in-leiste';
+    const favCls = 'room-dd-fav' + (isFav ? ' on' : '');
+    const check  = inLeiste ? '<span class="room-dd-check">✓</span>' : '';
+    const nameClick = isSelf ? '' : 'onclick="toggleLeisteMember(' + m.num + ',\'' + escHtml(m.name).replace(/'/g,"\\'") + '\')"';
+    return '<div class="' + cls + '">'
+      + '<button class="' + favCls + '" onclick="toggleFavMember(' + m.num + ',\'' + escHtml(m.name).replace(/'/g,"\\'") + '\')" title="Favorit">⭐</button>'
+      + '<div class="room-dd-name" ' + nameClick + ' title="' + (isSelf ? 'Du selbst' : (inLeiste ? 'Aus Leiste entfernen' : 'Zur Leiste hinzufügen')) + '">'
+      + escHtml(m.name) + ' <span class="room-num">#' + m.num + '</span>' + check
+      + '</div>'
+      + '</div>';
+  }
+
+  let html = '';
+  if (favs.length) {
+    html += '<div class="room-dd-divider">⭐ Favoriten</div>';
+    html += favs.map(rowHtml).join('');
+  }
+  if (others.length) {
+    if (favs.length) html += '<div class="room-dd-divider">Alle</div>';
+    html += others.map(rowHtml).join('');
+  }
+  if (!favs.length && !others.length) {
+    html = '<div style="padding:12px;color:var(--text3);font-size:.73rem;text-align:center">' + (filter ? 'Keine Treffer' : 'Niemand im Raum') + '</div>';
+  }
+  list.innerHTML = html;
+}
+
+function toggleFavMember(num, name) {
+  if (_favMembers.has(num)) {
+    _favMembers.delete(num);
+  } else {
+    _favMembers.add(num);
+  }
+  _saveFavMembers();
+  renderRoomDropdown();
+}
+
+function toggleLeisteMember(num, name) {
+  const idx = _leisteMembers.findIndex(m => m.num === num);
+  if (idx !== -1) {
+    // Already in Leiste → remove
+    _leisteMembers.splice(idx, 1);
+    if (_leisteActiveNum === num) {
+      _leisteActiveNum = _leisteMembers.length ? _leisteMembers[0].num : null;
+      if (_leisteActiveNum) selectRoomMember(_leisteActiveNum);
+    }
+  } else {
+    // Add to Leiste and make active
+    _leisteMembers.push({ num, name });
+    _leisteActiveNum = num;
+    selectRoomMember(num);
+  }
+  renderLeiste();
+  renderRoomDropdown();
+}
+
+function removeFromLeiste(num) {
+  _leisteMembers = _leisteMembers.filter(m => m.num !== num);
+  if (_leisteActiveNum === num) {
+    _leisteActiveNum = _leisteMembers.length ? _leisteMembers[0].num : null;
+    if (_leisteActiveNum) selectRoomMember(_leisteActiveNum);
+  }
+  renderLeiste();
+  renderRoomDropdown();
+}
+
+function setActiveLeisteMember(num) {
+  _leisteActiveNum = num;
+  selectRoomMember(num);
+  renderLeiste();
+}
+
+function renderLeiste() {
+  const el = document.getElementById('roomLeiste');
+  if (!el) return;
+
+  if (!_leisteMembers.length) {
+    el.style.display = 'none';
+    return;
+  }
+
+  el.style.display = 'flex';
+  el.innerHTML = _leisteMembers.map(m => {
+    const isSelf   = m.num === _myMemberNumber;
+    const isActive = m.num === _leisteActiveNum;
+    const isFav    = _favMembers.has(m.num);
+    let cls = 'room-leiste-chip';
+    if (isSelf)   cls += ' is-self';
+    if (isActive) cls += ' active';
+    return '<span class="' + cls + '" onclick="setActiveLeisteMember(' + m.num + ')" title="Als Ziel setzen">'
+      + (isFav ? '<span class="room-leiste-fav">⭐</span>' : '')
+      + (isSelf ? '👤 ' : '👥 ')
+      + escHtml(m.name) + ' <span class="room-num">#' + m.num + '</span>'
+      + '<button class="room-leiste-remove" onclick="event.stopPropagation();removeFromLeiste(' + m.num + ')" title="Entfernen">✕</button>'
+      + '</span>';
+  }).join('');
 }
 
 // ── Auto-load + initial PING ──────────────────────────
@@ -6283,6 +6456,81 @@ function enrichProfileNamesWithIDs() {
   }
 
   showStatus('✅ ' + changes.length + ' von ' + oldKeys.length + ' Profilen angereichert', 'success');
+}
+
+// ── Item-Katalog Export ──────────────────────────────────────────────────────
+// Exportiert JEDES Item + jede Klamotte aus dem Cache mit allen Feldern als JSON.
+// Jedes Item bekommt zusaetzlich eine previewUrl (BC Asset-Vorschaubild).
+function _catalogPreviewUrl(group, name) {
+  if (!BC_ASSET_BASE) return null;
+  return BC_ASSET_BASE + 'Assets/' + BC_ASSET_FAMILY + '/' + group + '/Preview/' + name + '.png';
+}
+
+function itemsExportCatalog() {
+  try {
+    const groups = Object.keys(CACHE);
+    if (!groups.length) {
+      showStatus('⚠️ Kein Cache geladen – erst „⚡ Laden" klicken', 'info');
+      return;
+    }
+
+    const items = [];
+    let withPreview = 0;
+    for (const group of groups) {
+      for (const name of Object.keys(CACHE[group])) {
+        const cfg = CACHE[group][name] || {};
+        const previewUrl = _catalogPreviewUrl(group, name);
+        if (previewUrl) withPreview++;
+        items.push({
+          group,
+          name,
+          isClothing: group.startsWith('Cloth'),
+          previewUrl,                              // BC Vorschaubild-URL (kann 404 sein, wenn kein Preview existiert)
+          ...cfg,                                  // alle gecachten Felder: archetype, colorCount, layerNames,
+                                                   // defaultColors, typeKeys, moduleNames, directOptions,
+                                                   // vibratingInfo, props, difficulty, allowedCraftProps,
+                                                   // hasLock, functions
+        });
+      }
+    }
+
+    // Sortiert: erst Gruppe, dann Name – stabil & lesbar
+    items.sort((a, b) => a.group.localeCompare(b.group) || a.name.localeCompare(b.name));
+
+    const payload = {
+      _meta: {
+        exportedAt:   new Date().toISOString(),
+        version:      1,
+        tool:         'BC Konfigurator',
+        type:         'item-catalog',
+        assetBase:    BC_ASSET_BASE || null,
+        assetFamily:  BC_ASSET_FAMILY,
+        counts: {
+          items:       items.length,
+          groups:      groups.length,
+          clothing:    items.filter(i => i.isClothing).length,
+          withPreview,
+        },
+      },
+      items,
+    };
+
+    const json = JSON.stringify(payload, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
+    const a    = document.createElement('a');
+    a.href     = URL.createObjectURL(blob);
+    a.download = 'BC_Item_Katalog_' + new Date().toISOString().slice(0, 10) + '.json';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(a.href);
+
+    const noBase = BC_ASSET_BASE ? '' : ' (⚠️ ohne Bild-URLs – Cache neu laden für Bilder)';
+    showStatus('✅ Katalog: ' + items.length + ' Items aus ' + groups.length + ' Gruppen exportiert' + noBase, 'success');
+  } catch (err) {
+    showStatus('❌ Katalog-Export fehlgeschlagen: ' + err.message, 'error');
+    console.error('[itemsExportCatalog]', err);
+  }
 }
 
 // ── Komplett-Backup Export / Import ──────────────────────────────────────────

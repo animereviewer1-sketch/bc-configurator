@@ -863,7 +863,14 @@ window.CurseScanner = (() => {
             BCK.err('buildBCCache FEHLER:', ex.message);
           }
           BCK.info('Sende CACHE_DATA | err:', err ?? 'keiner');
-          src.postMessage({ app: APP, type: 'CACHE_DATA', cache, err }, ALLOWED_ORIGIN);
+          // Asset-Basis fuer Vorschaubild-URLs (Export-Katalog). BC serviert Previews unter
+          // <origin>/Assets/<Family>/<Group>/Preview/<Name>.png
+          let assetBase = '', assetFamily = 'Female3DCG';
+          try {
+            assetBase   = location.origin + location.pathname.replace(/[^/]*$/, '');
+            assetFamily = (typeof Player !== 'undefined' && Player?.AssetFamily) ? Player.AssetFamily : 'Female3DCG';
+          } catch (e) {}
+          src.postMessage({ app: APP, type: 'CACHE_DATA', cache, err, assetBase, assetFamily }, ALLOWED_ORIGIN);
           break;
         }
 

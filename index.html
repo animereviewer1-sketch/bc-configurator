@@ -1891,17 +1891,46 @@ textarea.outfit-code { width: 100%; min-height: 210px; background: rgba(0,0,0,0.
 ═══════════════════════════════════════════════ */
 .room-panel { background: rgba(6,6,15,0.7); border-bottom: 1px solid rgba(255,255,255,0.07); padding: 7px 18px; display: flex; align-items: center; gap: 9px; flex-wrap: wrap; min-height: 36px; }
 .room-label { color: var(--text3); flex-shrink: 0; font-size: 0.7rem; white-space: nowrap; font-weight: 800; text-transform: uppercase; letter-spacing: 0.07em; }
-.room-members { display: flex; flex-wrap: wrap; gap: 5px; flex: 1; }
-.room-chip { display: inline-flex; align-items: center; gap: 5px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); border-radius: 99px; padding: 3px 11px; cursor: pointer; transition: all 0.18s; font-size: 0.74rem; color: var(--text2); white-space: nowrap; user-select: none; font-family: var(--font-ui); }
-.room-chip:hover { border-color: oklch(72% 0.13 58 / 0.5); color: oklch(82% 0.1 62); background: oklch(72% 0.13 58 / 0.08); }
-.room-chip.self { border-color: rgba(52,211,153,0.4); color: #6ee7b7; background: rgba(52,211,153,0.06); cursor: default; }
-.room-chip.selected { border-color: oklch(72% 0.13 58 / 0.5); color: oklch(82% 0.1 62); background: oklch(72% 0.13 58 / 0.12); font-weight: 700; }
 .room-num { font-size: 0.61rem; color: var(--text3); font-family: var(--font-mono); }
-.room-chip.self .room-num { color: rgba(52,211,153,0.65); }
 .room-refresh-btn { background: none; border: 1px solid rgba(255,255,255,0.1); border-radius: 99px; color: var(--text3); font-size: 0.7rem; padding: 3px 11px; cursor: pointer; flex-shrink: 0; transition: all 0.18s; font-family: var(--font-ui); }
 .room-refresh-btn:hover { border-color: oklch(72% 0.13 58 / 0.5); color: oklch(82% 0.1 62); }
-.room-empty { color: var(--text3); font-style: italic; font-size: 0.73rem; }
 .room-scanning { animation: roomPulse 1s infinite; }
+
+/* ── Room Dropdown ── */
+.room-dd-wrap { position: relative; }
+.room-dd-trigger { display: inline-flex; align-items: center; gap: 7px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 4px 12px; cursor: pointer; font-size: 0.74rem; color: var(--text2); font-family: var(--font-ui); transition: all 0.18s; white-space: nowrap; }
+.room-dd-trigger:hover { border-color: oklch(72% 0.13 58 / 0.5); color: oklch(82% 0.1 62); }
+.room-dd-trigger.open { border-color: oklch(72% 0.13 58 / 0.4); color: oklch(82% 0.1 62); background: oklch(72% 0.13 58 / 0.08); }
+.room-dd-arrow { font-size: 0.62rem; color: var(--text3); transition: transform 0.18s; }
+.room-dd-trigger.open .room-dd-arrow { transform: rotate(180deg); }
+.room-dd-panel { display: none; position: absolute; top: calc(100% + 5px); left: 0; min-width: 270px; max-height: 340px; background: rgba(10,10,20,0.98); border: 1px solid rgba(255,255,255,0.12); border-radius: 12px; box-shadow: 0 8px 32px rgba(0,0,0,0.6); z-index: 500; overflow: hidden; flex-direction: column; }
+.room-dd-panel.open { display: flex; }
+.room-dd-search { padding: 8px 10px; border-bottom: 1px solid rgba(255,255,255,0.07); flex-shrink: 0; }
+.room-dd-search input { width: 100%; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; padding: 5px 9px; font-size: 0.74rem; color: var(--text); font-family: var(--font-ui); outline: none; box-shadow: none !important; }
+.room-dd-list { overflow-y: auto; flex: 1; padding: 4px 0; }
+.room-dd-divider { font-size: 0.6rem; color: var(--text3); text-transform: uppercase; letter-spacing: 0.08em; padding: 6px 12px 2px; font-weight: 800; }
+.room-dd-row { display: flex; align-items: center; padding: 0 6px; transition: background 0.12s; }
+.room-dd-row:hover { background: rgba(255,255,255,0.04); }
+.room-dd-row.in-leiste { background: oklch(72% 0.13 58 / 0.07); }
+.room-dd-row.is-self { opacity: 0.5; pointer-events: none; }
+.room-dd-fav { background: none; border: none; font-size: 0.82rem; padding: 6px 4px 6px 6px; cursor: pointer; line-height: 1; opacity: 0.35; transition: opacity 0.15s, transform 0.15s; flex-shrink: 0; }
+.room-dd-fav:hover { opacity: 0.75; transform: scale(1.2); }
+.room-dd-fav.on { opacity: 1; }
+.room-dd-name { flex: 1; padding: 7px 6px; font-size: 0.74rem; color: var(--text2); cursor: pointer; user-select: none; display: flex; align-items: center; gap: 5px; }
+.room-dd-row:hover .room-dd-name { color: var(--text); }
+.room-dd-row.in-leiste .room-dd-name { color: oklch(82% 0.1 62); font-weight: 600; }
+.room-dd-check { font-size: 0.65rem; color: oklch(72% 0.13 58); margin-left: auto; }
+
+/* ── Room Leiste ── */
+.room-leiste { background: rgba(4,4,12,0.6); border-bottom: 1px solid rgba(255,255,255,0.05); padding: 5px 18px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-height: 34px; }
+.room-leiste-empty { color: var(--text3); font-size: 0.68rem; font-style: italic; }
+.room-leiste-chip { display: inline-flex; align-items: center; gap: 4px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1); border-radius: 99px; padding: 3px 6px 3px 10px; cursor: pointer; transition: all 0.18s; font-size: 0.73rem; color: var(--text2); user-select: none; font-family: var(--font-ui); white-space: nowrap; }
+.room-leiste-chip:hover { border-color: oklch(72% 0.13 58 / 0.4); color: oklch(82% 0.1 62); }
+.room-leiste-chip.active { border-color: oklch(72% 0.13 58 / 0.65); color: oklch(82% 0.1 62); background: oklch(72% 0.13 58 / 0.13); font-weight: 700; }
+.room-leiste-chip.is-self { border-color: rgba(52,211,153,0.35); color: #6ee7b7; background: rgba(52,211,153,0.06); }
+.room-leiste-chip.is-self.active { border-color: rgba(52,211,153,0.65); }
+.room-leiste-remove { background: none; border: none; color: var(--text3); font-size: 0.78rem; padding: 0 2px 0 4px; cursor: pointer; line-height: 1; transition: color 0.15s; flex-shrink: 0; }
+.room-leiste-remove:hover { color: var(--red); }
 
 /* ═══════════════════════════════════════════════
    ITEM PICKER
@@ -2374,15 +2403,44 @@ button { cursor: pointer; }
       <button class="tweaks-btn" onclick="importAllData()" title="Komplett-Backup einlesen">⬆️ Restore</button>
     </div>
   </div>
+
+  <div>
+    <div class="tweaks-section-title">📦 Item-Katalog</div>
+    <div style="font-size:.63rem;color:var(--text3);margin-bottom:7px">Exportiert jedes Item &amp; jede Klamotte aus dem Cache mit allen Infos + Bild-URL als JSON.</div>
+    <button class="tweaks-btn" style="width:100%" onclick="itemsExportCatalog()" title="Alle Items mit allen Feldern und Vorschaubild-URLs als JSON exportieren">⬇️ Katalog exportieren</button>
+  </div>
+
+  <div>
+    <div class="tweaks-section-title">🔓 DOGS</div>
+    <button class="tweaks-btn" id="dogsLockRemoverBtn" style="width:100%;color:var(--red);border-color:rgba(251,113,133,0.3)" onclick="removeAllDOGSLocks()" title="Alle DOGS Padlocks vom eigenen Charakter entfernen">🔓 Locks entfernen</button>
+    <div id="dogsLockStatus" style="font-size:0.7rem;color:var(--text3);margin-top:5px;min-height:14px"></div>
+  </div>
+  <div>
+    <div class="tweaks-section-title">🤖 DTS</div>
+    <button class="tweaks-btn" id="dtsResetBtn" style="width:100%;color:var(--red);border-color:rgba(251,113,133,0.3)" onclick="dtsResetDrone()" title="DTS Drone-Status zurücksetzen">🤖 Drone-Status zurücksetzen</button>
+    <div id="dtsResetStatus" style="font-size:0.7rem;color:var(--text3);margin-top:5px;min-height:14px"></div>
+  </div>
 </div>
 
 <!-- RAUM-SPIELER -->
 <div class="room-panel" id="roomPanel">
   <span class="room-label">👥 Im Raum:</span>
-  <div class="room-members" id="roomMembers">
-    <span class="room-empty" id="roomEmpty">– noch nicht verbunden –</span>
+  <div class="room-dd-wrap" id="roomDdWrap">
+    <button class="room-dd-trigger" id="roomDdTrigger" onclick="toggleRoomDropdown()">
+      <span id="roomDdLabel">– nicht verbunden –</span>
+      <span class="room-dd-arrow">▾</span>
+    </button>
+    <div class="room-dd-panel" id="roomDdPanel">
+      <div class="room-dd-search">
+        <input type="text" id="roomDdSearch" placeholder="Suchen…" oninput="filterRoomDropdown(this.value)" autocomplete="off">
+      </div>
+      <div class="room-dd-list" id="roomDdList"></div>
+    </div>
   </div>
   <button class="room-refresh-btn" id="roomRefreshBtn" onclick="scanRoom()" title="Raum neu scannen">🔄</button>
+</div>
+<div class="room-leiste" id="roomLeiste" style="display:none">
+  <span class="room-leiste-empty">Klick auf einen Spieler im Dropdown → Leiste</span>
 </div>
 
 
@@ -3412,6 +3470,72 @@ document.write('<scr'+'ipt src="outfit-import.js?_='+_cbv+'"><\/scr'+'ipt>');
   }
 
   _loadTweaks();
+
+  function dtsResetDrone() {
+    const statusEl = document.getElementById('dtsResetStatus');
+    const btn = document.getElementById('dtsResetBtn');
+    try {
+      if (typeof Player === 'undefined') {
+        statusEl.textContent = '❌ Nicht mit BC verbunden';
+        return;
+      }
+      const dts = Player.ExtensionSettings['DTSbyZajucd'];
+      if (!dts) {
+        statusEl.textContent = '✅ Kein DTS-Status gefunden';
+        return;
+      }
+      const wasDrone = dts.isDrone;
+      // Reset drone status
+      dts.isDrone  = false;
+      dts.ownerId  = -1;
+      dts.isOwner  = false;
+      // Sync to server
+      ServerPlayerExtensionSettingsSync('DTSbyZajucd');
+      statusEl.textContent = wasDrone
+        ? '✅ Drone-Status entfernt — bitte BC neu laden'
+        : '✅ War bereits keine Drone';
+      btn.disabled = true;
+    } catch(e) {
+      statusEl.textContent = '❌ Fehler: ' + e.message;
+    }
+  }
+
+  function removeAllDOGSLocks() {
+    const statusEl = document.getElementById('dogsLockStatus');
+    const btn = document.getElementById('dogsLockRemoverBtn');
+    try {
+      if (typeof Player === 'undefined' || !Player.ExtensionSettings?.DOGS) {
+        statusEl.textContent = '❌ Nicht mit BC verbunden';
+        return;
+      }
+      const data = JSON.parse(LZString.decompressFromBase64(Player.ExtensionSettings.DOGS));
+      const itemGroups = data?.deviousPadlock?.itemGroups;
+      if (!itemGroups || Object.keys(itemGroups).length === 0) {
+        statusEl.textContent = '✅ Keine DOGS Locks gefunden';
+        return;
+      }
+      const groups = Object.keys(itemGroups);
+      groups.forEach(groupName => {
+        const item = InventoryGet(Player, groupName);
+        if (item?.Property) {
+          delete item.Property.LockedBy;
+          delete item.Property.LockMemberNumber;
+          delete item.Property.LockMemberName;
+          delete item.Property.Name;
+          item.Property.Effect = (item.Property.Effect || []).filter(e => e !== 'Lock');
+        }
+      });
+      data.deviousPadlock.itemGroups = {};
+      Player.ExtensionSettings.DOGS = LZString.compressToBase64(JSON.stringify(data));
+      ServerPlayerExtensionSettingsSync('DOGS');
+      CharacterRefresh(Player);
+      ServerPlayerAppearanceSync();
+      statusEl.textContent = `✅ ${groups.length} Lock(s) entfernt — bitte BC neu laden`;
+      btn.disabled = true;
+    } catch (e) {
+      statusEl.textContent = '❌ Fehler: ' + e.message;
+    }
+  }
 </script>
 
 <!-- ══ TAB: OUTFIT IMPORT ════════════════════════════════════════════ -->
