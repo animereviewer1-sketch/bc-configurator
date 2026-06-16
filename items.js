@@ -9749,6 +9749,14 @@ function _ctHandleChatMsg(event, content) {
   const panel = document.getElementById('curseTestPanel');
   if (!panel || panel.style.display === 'none') return;
 
+  // Im Pause-Modus keine Curse-Events verarbeiten. Sonst würde ein manuell
+  // gestarteter Curse abgefangen und sein Ergebnis fälschlich unter dem aktuellen
+  // Queue-Item gespeichert.
+  if (_ctPaused) {
+    console.log('[CURSE-TEST] Event ignoriert — Test pausiert (manueller Curse)');
+    return;
+  }
+
   console.log('%c[CURSE-TEST] ' + (event === 'curse_end' ? '✅ CEASE' : '🔮 CURSE START') + ' → ' + (content||'').slice(0,80),
     'background:' + (event === 'curse_end' ? '#064e3b' : '#78350f') + ';color:#fff;font-weight:700;padding:2px 6px;border-radius:3px');
 

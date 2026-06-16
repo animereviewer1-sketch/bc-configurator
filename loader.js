@@ -1400,9 +1400,13 @@ window.CurseScanner = (() => {
       }
 
       // ── Curse-ENDE via LSCG-Sync: Hidden/LSCGMsg ────────────────────
-      // Erkennung: cursed-item state wechselt zu active:false
-      // Kein Zeit-Limit — stattdessen tracken ob vorher ein Start kam
-      // ODER activationCount erhöht sich (neue Curse-Runde abgeschlossen)
+      // Erkennung NUR über active:false (cursed-item gibt seinen Curse frei / fällt ab).
+      // WICHTIG: activationCount NICHT als Ende werten! Ein Curse, der nacheinander
+      // mehrere Items hinzufügt ("spreads further, adding …"), erhöht bei JEDER
+      // Hinzufügung den Count. Würde das als Ende gewertet, bräche der Test die
+      // Kette nach dem 1.–2. Item ab (Standard-Outfit entfernt die Items → Spiel
+      // beendet den Curse vorzeitig). Das echte Ende liefert active:false bzw. der
+      // "sigh of relief"-Chat-Observer weiter unten.
       if (data.Type === 'Hidden' && data.Content === 'LSCGMsg' && Array.isArray(data.Dictionary)) {
         var dict0 = data.Dictionary[0];
         if (dict0 && dict0.message && dict0.message.type === 'sync') {
@@ -1411,18 +1415,14 @@ window.CurseScanner = (() => {
             sm.states.forEach(function(st) {
               if (st.type === 'cursed-item') {
                 var cnt = st.activationCount || 0;
-                // Ende: war aktiv und ist jetzt inactive, ODER Count hat sich erhöht
+                // Ende NUR wenn der Curse vorher aktiv war und jetzt inactive ist.
                 if (window.__BCK_ctCurseWasActive && st.active === false) {
                   window.__BCK_ctCurseWasActive = false;
                   _ctLastCurseActivationCount = cnt;
                   _ctSendEvent('curse_end', 'cursed-item beendet (count:' + cnt + ')');
-                } else if (window.__BCK_ctCurseWasActive && cnt > _ctLastCurseActivationCount && _ctLastCurseActivationCount >= 0) {
-                  // Count-basiert: nur wenn vorher ein Start erkannt wurde
-                  window.__BCK_ctCurseWasActive = false;
-                  _ctLastCurseActivationCount = cnt;
-                  _ctSendEvent('curse_end', 'cursed-item count erhöht auf ' + cnt);
                 } else {
-                  // Kein aktiver Curse — Count nur aktualisieren, kein Event
+                  // Count nur mitführen — eine Erhöhung bedeutet "Curse fügt gerade
+                  // ein weiteres Item hinzu", NICHT dass er beendet ist.
                   _ctLastCurseActivationCount = cnt;
                 }
               }
