@@ -69,6 +69,7 @@ function _buildBotCode(bot) {
 
   return `(function(){
 const _BID='${safeId}';
+const _BOTID=${JSON.stringify(bot.id)};
 const _VER='${BOT_ENGINE_VERSION}';
 if(window['_BCBot_'+_BID]){console.warn('[Bot] Bereits aktiv – erst stoppen!');return;}
 // ── AntiStrip ────────────────────────────────────────────────
@@ -688,12 +689,13 @@ function _execAct(a,C,vars){
   const msgTyp=a[msgTypField]??'chat';
   const msgText=a[msgField];
   if(msgText&&msgTyp!=='nichts'){
+    const _msgDelay=(a.typ==='item'||a.typ==='teleport'||a.typ==='item_entf')?800:200; // Item zuerst sichtbar anlegen, dann Text
     setTimeout(()=>{
       const txt=_tpl(msgText,vars);
       if(msgTyp==='whisper')ServerSend('ChatRoomChat',{Content:txt,Type:'Whisper',Target:C.MemberNumber});
       else if(msgTyp==='emote')ServerSend('ChatRoomChat',{Content:txt,Type:'Emote'});
       else ServerSend('ChatRoomChat',{Content:txt,Type:'Chat'});
-    },200);
+    },_msgDelay);
   }
   return ok;
 }
@@ -1296,6 +1298,22 @@ function _handleShopCmd(rohText,buyerC){
 function _proc(rohText,typKey,C){
   if(!rohText)return;
   if(_sceneHandleAnswer(rohText,C))return;
+  // Admin (Player auf dem der Configurator läuft): !set <ZonenName> X|X1|X2
+  // → aktuelle Spielerposition in die gleichnamige Zone schreiben (persistiert + Re-Sync).
+  if(C&&typeof Player!=='undefined'&&Player&&C.MemberNumber===Player.MemberNumber){
+    var _st=(rohText||'').trim();
+    if(_st.toLowerCase().indexOf('!set ')===0){
+      var _sp=_st.slice(5).trim().split(' ').filter(function(z){return z;});
+      var _slot=(_sp.pop()||'').toUpperCase();
+      var _zn=_sp.join(' ');
+      if(_zn&&(_slot==='X'||_slot==='X1'||_slot==='X2')){
+        var _px=Player.X||0,_py=Player.Y||0;
+        try{window.__BCK_popupRef&&window.__BCK_popupRef.postMessage({app:'BCKonfigurator',type:'BOT_SET_ZONE',botId:_BOTID,zoneName:_zn,slot:_slot,x:_px,y:_py},'*');}catch(e){}
+        ServerSend('ChatRoomChat',{Content:'📍 Zone "'+_zn+'" '+_slot+' → '+_px+'/'+_py,Type:'Whisper',Target:C.MemberNumber});
+        return;
+      }
+    }
+  }
   // Money query command
   const qCmd=(_moneyCfg?.queryCmd||'').trim().toLowerCase();
   if(qCmd&&rohText.trim().toLowerCase()===qCmd.toLowerCase()){
@@ -1805,6 +1823,7 @@ let _mod = null;
 try {
   const _modName = 'BCBot_${safeId}_' + Date.now();
   _mod = bcModSdk.registerMod({name: _modName, fullName:'${safeName}', version:'1.0'});
+  if(typeof ChatRoomSendChat!=='function'){throw new Error('ChatRoomSendChat nicht patchbar – Socket-Fallback');}
   _mod.hookFunction('ChatRoomSendChat', 0, (args, next) => {
     // BC löscht InputChat.value vor dem Hook → args[0].Content ist zuverlässiger
     const msgData = args[0];
@@ -1987,6 +2006,31 @@ window['_BCBot_'+_BID]={
 };
 console.log('\u25B6\uFE0F [Bot:${safeName}] v'+_VER+' | Trigger:',_trigs.length,'| Modus:',_cfg.nurEigene?'Nur eigene':'Alle Spieler');
 })();`;
+}
+
+function botResyncById(id){
+  const b=_bots.find(x=>x.id===id); if(!b||!_connected) return;
+  if(!b.laufend){ botDeployById(id); return; }
+  const safeId=b.id.replace(/\W/g,'_');
+  bcSend({type:'EXEC',code:`if(window['_BCBot_${safeId}'])window['_BCBot_${safeId}'].stop();`});
+  setTimeout(()=>botDeployById(id),450);
+}
+function _botSetZone(botId, zoneName, slot, x, y){
+  let b=_bots.find(z=>z.id===botId) || _bots.find(z=>z.id.replace(/\W/g,'_')===botId);
+  if(!b){ showStatus('⚠️ Bot für Zone nicht gefunden','error'); return false; }
+  const wanted=String(zoneName||'').trim().toLowerCase();
+  let hit=null;
+  (b.triggers||[]).forEach(t=>(t.bedingungen||[]).forEach(c=>{
+    if((c.typ==='zone'||c.typ==='zone_rect') && String(c.name||'').trim().toLowerCase()===wanted) hit=c;
+  }));
+  if(!hit){ showStatus('⚠️ Keine Zone "'+zoneName+'" in Bot „'+b.name+'"','error'); return false; }
+  if(hit.typ==='zone'){ hit.x=x; hit.y=y; }
+  else { if(slot==='X2'){ hit.x2=x; hit.y2=y; } else { hit.x1=x; hit.y1=y; } }
+  _saveBots();
+  if(typeof _selBotId!=='undefined' && _selBotId===b.id) renderBotEditor();
+  botResyncById(b.id);
+  showStatus('📍 Zone "'+zoneName+'" '+slot+' = '+x+'/'+y+' gesetzt (Bot „'+b.name+'")','success');
+  return true;
 }
 
 function botDeployById(id) {

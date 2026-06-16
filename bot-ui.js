@@ -407,8 +407,8 @@ function _btCondPhrase(bot, c) {
       const k = ({any:'sagt/schreibt', chat:'sagt', emote:'als Emote', whisper:'flüstert'})[c.typ_msg||'any'] || 'sagt';
       return 'jemand '+k+' '+w;
     }
-    case 'zone':      return 'jemand auf Position '+(c.x??0)+'/'+(c.y??0)+' steht';
-    case 'zone_rect': return 'jemand im Bereich '+(c.x1??0)+'/'+(c.y1??0)+'–'+(c.x2??0)+'/'+(c.y2??0)+' steht';
+    case 'zone':      return 'jemand auf Position '+(c.x??0)+'/'+(c.y??0)+(c.name?' ('+e(c.name)+')':'')+' steht';
+    case 'zone_rect': return 'jemand im Bereich '+(c.x1??0)+'/'+(c.y1??0)+'–'+(c.x2??0)+'/'+(c.y2??0)+(c.name?' ('+e(c.name)+')':'')+' steht';
     case 'item_traegt':       return e(c.item||'ein Item')+' getragen wird';
     case 'item_traegt_nicht': return e(c.item||'ein Item')+' NICHT getragen wird';
     case 'trigger_war': { const rt=(bot?.triggers||[]).find(x=>x.id===c.trigId); return 'Vortrigger „'+e(rt?.name||'?')+'" erfüllt ist'; }
@@ -618,7 +618,7 @@ function renderCond(bot, tid, c, ci) {
       </select>`;
   } else if (c.typ === 'zone') {
     inner = `
-      <input class="cf cf-w100" value="${escHtml(c.name||'')}" oninput="condField('${tid}',${ci},'name',this.value)" placeholder="Zonenname (optional)">
+      <input class="cf cf-w100" value="${escHtml(c.name||'')}" oninput="condField('${tid}',${ci},'name',this.value)" placeholder="Zonen-Name (!set)" title="Name für den Admin-Befehl !set <Name> X">
       X<input class="cf" style="width:46px" type="number" value="${c.x??0}" oninput="condField('${tid}',${ci},'x',+this.value)">
       Y<input class="cf" style="width:46px" type="number" value="${c.y??0}" oninput="condField('${tid}',${ci},'y',+this.value)">
       ±<input class="cf" style="width:38px" type="number" value="${c.puffer??1}" oninput="condField('${tid}',${ci},'puffer',+this.value)" title="Puffer">`;
@@ -630,6 +630,7 @@ function renderCond(bot, tid, c, ci) {
       <button onclick="ipickerOpen('item',v=>{condField('${tid}',${ci},'item',v.asset||v.name);condField('${tid}',${ci},'gruppe',v.group);condRerender('${tid}');})" style="font-size:.62rem;padding:2px 7px;background:var(--pd);border:none;color:var(--pl);border-radius:4px;cursor:pointer">📦 Wählen</button>`;
   } else if (c.typ === 'zone_rect') {
     inner = `
+      <input class="cf cf-w100" value="${escHtml(c.name||'')}" oninput="condField('${tid}',${ci},'name',this.value)" placeholder="Zonen-Name (!set)" title="Name für den Admin-Befehl !set <Name> X1 / X2">
       <span style="font-size:.62rem;color:var(--text3)">Von</span>
       X<input class="cf" style="width:44px" type="number" value="${c.x1??0}" oninput="condField('${tid}',${ci},'x1',+this.value)" title="X-Start">
       Y<input class="cf" style="width:44px" type="number" value="${c.y1??0}" oninput="condField('${tid}',${ci},'y1',+this.value)" title="Y-Start">
