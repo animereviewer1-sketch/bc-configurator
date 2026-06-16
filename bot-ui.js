@@ -879,9 +879,13 @@ function renderAct(tid, a, ai, branch) {
       </div>
       ${(Array.isArray(a.profilItems)&&a.profilItems.length)?`
       <div class="as-act-box" style="margin-top:2px">
-        <label style="cursor:pointer;display:flex;align-items:center;gap:6px;font-size:.65rem;color:var(--text2)" title="Strip aus: bereits angelegte Items (z.B. vom Bot hinzugefügte) bleiben; Outfit wird darüber gelegt. Konflikt-Gruppen werden in Reihenfolge überschrieben – letztes Item gewinnt.">
+        <label style="cursor:pointer;display:flex;align-items:center;gap:6px;font-size:.65rem;color:var(--text2)" title="An: bereits angelegte Fesseln/Items (z.B. vom Bot, Cage) bleiben beim Outfit-Anlegen erhalten. Aus: werden vorher entfernt.">
           <input type="checkbox" ${a.outfitKeep?'checked':''} onchange="actField('${tid}',${ai},'outfitKeep',this.checked${branchArg})">
-          🛡️ Bereits angelegte Items behalten (kein Strip)
+          🛡️ Fesseln/Items behalten (nicht ablegen)
+        </label>
+        <label style="cursor:pointer;display:flex;align-items:center;gap:6px;font-size:.65rem;color:var(--text2);margin-top:3px" title="An: vorhandene Klamotten bleiben. Aus: alle Klamotten werden entfernt (Fesseln/Items bleiben je nach Option oben).">
+          <input type="checkbox" ${a.outfitKeepClothes?'checked':''} onchange="actField('${tid}',${ai},'outfitKeepClothes',this.checked${branchArg})">
+          👗 Klamotten behalten (sonst werden sie abgelegt)
         </label>
         <label style="cursor:pointer;display:flex;align-items:center;gap:6px;font-size:.65rem;color:var(--text2);margin-top:3px">
           <input type="checkbox" ${a.profilEinzeln?'checked':''} onchange="actField('${tid}',${ai},'profilEinzeln',this.checked${branchArg});actRerender('${tid}',${ai}${branchArg})">

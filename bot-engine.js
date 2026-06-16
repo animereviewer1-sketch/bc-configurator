@@ -524,14 +524,20 @@ function _applyProfilItemProps(C,item){
   }
 }
 // Outfit Item-für-Item nacheinander anlegen (in konfigurierter Reihenfolge)
+// Beim Outfit-Strip: behalten? Körperteile immer; Fesseln/Items wenn outfitKeep;
+// Klamotten/Accessoires wenn outfitKeepClothes.
+function _outfitKeepGroup(grp,a){
+  if(!grp) return true;
+  if(grp.AllowNone===false) return true;
+  var isItem = grp.Category==='Item' || (grp.Name && grp.Name.indexOf('Item')===0);
+  return isItem ? !!a.outfitKeep : !!a.outfitKeepClothes;
+}
 var _outfitPending=0; // laufende Outfit-Anlege-Vorgänge (für "warten bis komplett")
 function _applyOutfitSequential(a,C){
   var profilItems=a.profilItems??[];
   _outfitPending++;
-  if(!a.outfitKeep){
-    C.Appearance=C.Appearance.filter(function(item){ if(!item||!item.Asset||!item.Asset.Group)return true; return item.Asset.Group.AllowNone===false; });
-    CharacterRefresh(C);ChatRoomCharacterUpdate(C);
-  }
+  C.Appearance=C.Appearance.filter(function(item){ return _outfitKeepGroup(item&&item.Asset&&item.Asset.Group,a); });
+  CharacterRefresh(C);ChatRoomCharacterUpdate(C);
   var gap=Math.max(80, a.profilEinzelnGap||250);
   var _one=function(i){
     if(i>=profilItems.length){_outfitPending--;return;}
@@ -641,15 +647,11 @@ function _applyItemAction(a, C){
       if(a.profilEinzeln){ _applyOutfitSequential(a,C); return; }
       _outfitPending++;
 
-      // Phase 0: Strip – entfällt wenn a.outfitKeep (bereits angelegte Items, z.B. vom
-      // Bot hinzugefügte, behalten; Outfit wird darüber gelegt, Konflikt-Gruppen werden
-      // durch InventoryWear in Reihenfolge überschrieben – das letzte Item gewinnt).
-      if(!a.outfitKeep){
-        C.Appearance = C.Appearance.filter(function(item){
-          if(!item||!item.Asset||!item.Asset.Group) return true;
-          return item.Asset.Group.AllowNone === false;
-        });
-      }
+      // Phase 0: Strip – pro Gruppe entscheiden was behalten wird (Körper immer,
+      // Fesseln wenn outfitKeep, Klamotten wenn outfitKeepClothes).
+      C.Appearance = C.Appearance.filter(function(item){
+        return _outfitKeepGroup(item&&item.Asset&&item.Asset.Group, a);
+      });
 
       // Phase 1: Alle InventoryWear synchron (kein CharacterRefresh dazwischen)
       profilItems.forEach(function(item){
@@ -708,10 +710,11 @@ function _applyItemAction(a, C){
         // outfitKeep: vom Outfit (Block/Konflikt) verdrängte Items wiederherstellen,
         // AUSSER den Gruppen, die das Outfit selbst belegt → bot-angelegte Items (z.B.
         // Cage) bleiben erhalten und werden NICHT durch das Outfit-Anlegen entfernt.
-        if(a.outfitKeep){
+        if(a.outfitKeep||a.outfitKeepClothes){
           var _ofGroups=profilItems.map(function(i){return i.group;});
           snapshot.forEach(function(snap){
             if(!snap.Asset||_ofGroups.includes(snap.Group)) return;
+            if(!_outfitKeepGroup(snap.Asset.Group,a)) return; // diese Gruppe soll NICHT behalten werden
             if(InventoryGet(C,snap.Group)) return; // noch vorhanden → nichts zu tun
             try{
               InventoryWear(C,snap.Asset.Name,snap.Group,snap.Color,0,Player.MemberNumber,snap.Craft);
