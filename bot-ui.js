@@ -879,7 +879,11 @@ function renderAct(tid, a, ai, branch) {
       </div>
       ${(Array.isArray(a.profilItems)&&a.profilItems.length)?`
       <div class="as-act-box" style="margin-top:2px">
-        <label style="cursor:pointer;display:flex;align-items:center;gap:6px;font-size:.65rem;color:var(--text2)">
+        <label style="cursor:pointer;display:flex;align-items:center;gap:6px;font-size:.65rem;color:var(--text2)" title="Strip aus: bereits angelegte Items (z.B. vom Bot hinzugefügte) bleiben; Outfit wird darüber gelegt. Konflikt-Gruppen werden in Reihenfolge überschrieben – letztes Item gewinnt.">
+          <input type="checkbox" ${a.outfitKeep?'checked':''} onchange="actField('${tid}',${ai},'outfitKeep',this.checked${branchArg})">
+          🛡️ Bereits angelegte Items behalten (kein Strip)
+        </label>
+        <label style="cursor:pointer;display:flex;align-items:center;gap:6px;font-size:.65rem;color:var(--text2);margin-top:3px">
           <input type="checkbox" ${a.profilEinzeln?'checked':''} onchange="actField('${tid}',${ai},'profilEinzeln',this.checked${branchArg});actRerender('${tid}',${ai}${branchArg})">
           🧩 Items einzeln nacheinander anlegen (in Reihenfolge unten)
         </label>

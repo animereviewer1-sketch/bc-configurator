@@ -526,8 +526,10 @@ function _applyProfilItemProps(C,item){
 // Outfit Item-für-Item nacheinander anlegen (in konfigurierter Reihenfolge)
 function _applyOutfitSequential(a,C){
   var profilItems=a.profilItems??[];
-  C.Appearance=C.Appearance.filter(function(item){ if(!item||!item.Asset||!item.Asset.Group)return true; return item.Asset.Group.AllowNone===false; });
-  CharacterRefresh(C);ChatRoomCharacterUpdate(C);
+  if(!a.outfitKeep){
+    C.Appearance=C.Appearance.filter(function(item){ if(!item||!item.Asset||!item.Asset.Group)return true; return item.Asset.Group.AllowNone===false; });
+    CharacterRefresh(C);ChatRoomCharacterUpdate(C);
+  }
   var gap=Math.max(80, a.profilEinzelnGap||250);
   var _one=function(i){
     if(i>=profilItems.length)return;
@@ -636,11 +638,15 @@ function _applyItemAction(a, C){
       var profilItems = a.profilItems ?? [];
       if(a.profilEinzeln){ _applyOutfitSequential(a,C); return; }
 
-      // Phase 0: Strip
-      C.Appearance = C.Appearance.filter(function(item){
-        if(!item||!item.Asset||!item.Asset.Group) return true;
-        return item.Asset.Group.AllowNone === false;
-      });
+      // Phase 0: Strip – entfällt wenn a.outfitKeep (bereits angelegte Items, z.B. vom
+      // Bot hinzugefügte, behalten; Outfit wird darüber gelegt, Konflikt-Gruppen werden
+      // durch InventoryWear in Reihenfolge überschrieben – das letzte Item gewinnt).
+      if(!a.outfitKeep){
+        C.Appearance = C.Appearance.filter(function(item){
+          if(!item||!item.Asset||!item.Asset.Group) return true;
+          return item.Asset.Group.AllowNone === false;
+        });
+      }
 
       // Phase 1: Alle InventoryWear synchron (kein CharacterRefresh dazwischen)
       profilItems.forEach(function(item){
@@ -813,7 +819,10 @@ function _runSeq(aktionen,C,vars,trigBase,onDone,onUngueltig){
     // schneller Folge ServerSend/CharacterUpdate-Aufrufe verwirft (zufällig fehlende
     // Aktionen). Item-Aktionen brauchen länger, da ihr Appearance-Sync mehrere Phasen hat.
     if(rest.length){
-      const _settle=a.typ==='item'?230:a.typ==='item_entf'?100:(a.typ==='teleport'||a.typ==='chat'||a.typ==='emote'||a.typ==='whisper')?130:0; // Tempo: nahe an BCs Drossel-Grenze
+      const _isOutfit=a.typ==='item'&&(a.profilName||a.profilItems);
+      const _settle=_isOutfit
+          ? (a.profilEinzeln ? ((a.profilItems&&a.profilItems.length||0)*Math.max(80,a.profilEinzelnGap||250)+250) : 700) // Outfit: warten bis komplett angelegt
+          : a.typ==='item'?230:a.typ==='item_entf'?100:(a.typ==='teleport'||a.typ==='chat'||a.typ==='emote'||a.typ==='whisper')?130:0;
       setTimeout(()=>_runSeq(rest,C,vars,trigBase,onDone,onUngueltig),_settle);
     } else {
       _runSeq(rest,C,vars,trigBase,onDone,onUngueltig);
