@@ -705,6 +705,23 @@ function _applyItemAction(a, C){
           if(lockAsset) InventoryLock(C, worn, {Asset:lockAsset}, item.lockMember||Player.MemberNumber, false);
         });
 
+        // outfitKeep: vom Outfit (Block/Konflikt) verdrängte Items wiederherstellen,
+        // AUSSER den Gruppen, die das Outfit selbst belegt → bot-angelegte Items (z.B.
+        // Cage) bleiben erhalten und werden NICHT durch das Outfit-Anlegen entfernt.
+        if(a.outfitKeep){
+          var _ofGroups=profilItems.map(function(i){return i.group;});
+          snapshot.forEach(function(snap){
+            if(!snap.Asset||_ofGroups.includes(snap.Group)) return;
+            if(InventoryGet(C,snap.Group)) return; // noch vorhanden → nichts zu tun
+            try{
+              InventoryWear(C,snap.Asset.Name,snap.Group,snap.Color,0,Player.MemberNumber,snap.Craft);
+              var _r=InventoryGet(C,snap.Group);
+              if(_r&&snap.Property&&Object.keys(snap.Property).length) _r.Property=snap.Property;
+              _log('\u267B Behalten/Wiederhergestellt: '+snap.Group+'/'+snap.Asset.Name);
+            }catch(e){_log('\u26A0 Restore '+snap.Group+':',e.message);}
+          });
+        }
+
         // Phase 3: Ein einziger Refresh + Sync
         CharacterRefresh(C);
         ChatRoomCharacterUpdate(C);
