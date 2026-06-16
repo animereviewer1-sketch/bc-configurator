@@ -524,15 +524,17 @@ function _applyProfilItemProps(C,item){
   }
 }
 // Outfit Item-für-Item nacheinander anlegen (in konfigurierter Reihenfolge)
+var _outfitPending=0; // laufende Outfit-Anlege-Vorgänge (für "warten bis komplett")
 function _applyOutfitSequential(a,C){
   var profilItems=a.profilItems??[];
+  _outfitPending++;
   if(!a.outfitKeep){
     C.Appearance=C.Appearance.filter(function(item){ if(!item||!item.Asset||!item.Asset.Group)return true; return item.Asset.Group.AllowNone===false; });
     CharacterRefresh(C);ChatRoomCharacterUpdate(C);
   }
   var gap=Math.max(80, a.profilEinzelnGap||250);
   var _one=function(i){
-    if(i>=profilItems.length)return;
+    if(i>=profilItems.length){_outfitPending--;return;}
     var item=profilItems[i];
     var col=item.colors??(item.cfg&&item.cfg.Color)??'#ffffff'; if(typeof col==='string'&&col.includes(','))col=col.split(',');
     var craft=(item.craft&&item.craft.Name)?item.craft:null;
@@ -637,6 +639,7 @@ function _applyItemAction(a, C){
     }else if(a.profilName){
       var profilItems = a.profilItems ?? [];
       if(a.profilEinzeln){ _applyOutfitSequential(a,C); return; }
+      _outfitPending++;
 
       // Phase 0: Strip – entfällt wenn a.outfitKeep (bereits angelegte Items, z.B. vom
       // Bot hinzugefügte, behalten; Outfit wird darüber gelegt, Konflikt-Gruppen werden
@@ -705,6 +708,7 @@ function _applyItemAction(a, C){
         // Phase 3: Ein einziger Refresh + Sync
         CharacterRefresh(C);
         ChatRoomCharacterUpdate(C);
+        _outfitPending--;
       }, 600);
     }else if(a.item){
       InventoryWear(C,a.item,a.gruppe,a.farbe??'#ffffff',0,Player.MemberNumber);
@@ -820,10 +824,21 @@ function _runSeq(aktionen,C,vars,trigBase,onDone,onUngueltig){
     // Aktionen). Item-Aktionen brauchen länger, da ihr Appearance-Sync mehrere Phasen hat.
     if(rest.length){
       const _isOutfit=a.typ==='item'&&(a.profilName||a.profilItems);
-      const _settle=_isOutfit
-          ? (a.profilEinzeln ? ((a.profilItems&&a.profilItems.length||0)*Math.max(80,a.profilEinzelnGap||250)+250) : 700) // Outfit: warten bis komplett angelegt
-          : a.typ==='item'?230:a.typ==='item_entf'?100:(a.typ==='teleport'||a.typ==='chat'||a.typ==='emote'||a.typ==='whisper')?130:0;
-      setTimeout(()=>_runSeq(rest,C,vars,trigBase,onDone,onUngueltig),_settle);
+      const _next=()=>_runSeq(rest,C,vars,trigBase,onDone,onUngueltig);
+      if(_isOutfit){
+        // Deterministisch warten, bis das Outfit KOMPLETT angelegt ist: _outfitPending
+        // wird beim Start erhöht und nach dem finalen Sync gesenkt. Erst dann (plus
+        // kleiner Sync-Puffer) die nächste Aktion. Safety-Timeout 8s.
+        let _waited=0;
+        const _wait=()=>{
+          if(_outfitPending<=0 || _waited>8000){ setTimeout(_next,200); }
+          else { _waited+=50; setTimeout(_wait,50); }
+        };
+        setTimeout(_wait,50);
+      } else {
+        const _settle=a.typ==='item'?230:a.typ==='item_entf'?100:(a.typ==='teleport'||a.typ==='chat'||a.typ==='emote'||a.typ==='whisper')?130:0;
+        setTimeout(_next,_settle);
+      }
     } else {
       _runSeq(rest,C,vars,trigBase,onDone,onUngueltig);
     }
