@@ -448,26 +448,23 @@ function _teleport(a,C){
     return false;
   }
   const si=allSlots.indexOf(ziel);
-  if(C.MemberNumber===Player.MemberNumber){
-    // Selbst-Teleport: Map-Position direkt setzen (in dieser BC-Version bewiesen
-    // funktionierend). KEIN ChatRoomMapViewTeleport(x,y)-Aufruf – der hat eine andere
-    // Signatur und überschreibt die Position wieder. Sync an andere best-effort.
-    try{
-      if(!Player.MapData)Player.MapData={};
-      Player.MapData.Pos={X:ziel.x,Y:ziel.y};
-      if(typeof ChatRoomMapViewUpdatePlayerSync==='function') ChatRoomMapViewUpdatePlayerSync();
-      else if(typeof ChatRoomMapViewSyncMapData==='function') ChatRoomMapViewSyncMapData();
-    }catch(e){ _log('⚠️ TP self Pos:',e.message); }
-    _log('🌀 TP '+C.Name+' → X='+ziel.x+' Y='+ziel.y+(si>0?' [Fallback '+si+']':'')+' [pos]');
-  } else {
-    // Fremd-Teleport: gezielte Hidden-Nachricht an den Client des Ziel-Spielers.
-    ServerSend('ChatRoomChat',{
-      Content:'ChatRoomMapViewTeleport',Type:'Hidden',
-      Dictionary:[{Tag:'MapViewTeleport',Position:{X:ziel.x,Y:ziel.y}}],
-      Target:C.MemberNumber,
-    });
-    _log('🌀 TP '+C.Name+' → X='+ziel.x+' Y='+ziel.y+(si>0?' [Fallback '+si+']':'')+' [target]');
-  }
+  const _pos={X:ziel.x,Y:ziel.y};
+  let _tpVia='hidden';
+  try{
+    if(typeof ChatRoomMapViewTeleport==='function'){
+      // Offizielle BC-Funktion: setzt bei Selbst Player.Position, sonst korrekt
+      // formatierte Hidden-Nachricht an das Ziel. ACHTUNG: BC erlaubt Map-Teleport
+      // NUR für Raum-Admins – ist der Bot kein Admin, passiert nichts.
+      if(typeof ChatRoomPlayerIsAdmin==='function' && !ChatRoomPlayerIsAdmin())
+        _log('⚠️ TP: Bot ist KEIN Raum-Admin – BC blockiert den Teleport!');
+      ChatRoomMapViewTeleport(C,_pos);
+      _tpVia='fn';
+    } else {
+      // Fallback (sehr alte BC-Version): handgebaute Hidden-Nachricht
+      ServerSend('ChatRoomChat',{Content:'ChatRoomMapViewTeleport',Type:'Hidden',Dictionary:[{Tag:'MapViewTeleport',Position:_pos}],Target:C.MemberNumber});
+    }
+  }catch(e){ _log('⚠️ TP Fehler:',e.message); }
+  _log('🌀 TP '+C.Name+' → X='+ziel.x+' Y='+ziel.y+(si>0?' [Fallback '+si+']':'')+' ['+_tpVia+']');
   // Gültig-Flag: wenn Slot auf ❌ Fehler gesetzt → Aktion gilt als fehlgeschlagen
   const gueltig=ziel.gueltig??true;
   if(!gueltig)_log('⚠️ Slot '+si+' hat gueltig=false → gilt als Fehler');
@@ -498,6 +495,54 @@ function _restoreDisplaced(C, snapshot, targetGroup){
     });
     CharacterRefresh(C);ChatRoomCharacterUpdate(C);
   },150);
+}
+
+// Properties + Lock eines einzelnen Outfit-Items auf das getragene Item anwenden
+function _applyProfilItemProps(C,item){
+  var worn=InventoryGet(C,item.group); if(!worn) return;
+  worn.Property=worn.Property??{};
+  if(item.property && typeof item.property==='object'){
+    Object.keys(item.property).forEach(function(k){ if(k!=='LayerProperties'&&k!=='OverridePriority') worn.Property[k]=item.property[k]; });
+  } else if(item.tr && typeof item.tr==='object' && Object.keys(item.tr).length){
+    worn.Property.TypeRecord=item.tr;
+    worn.Property.Type=Object.entries(item.tr).map(function(e){return e[0]+e[1];}).join('');
+  }
+  try{ExtendedItemInit(C,worn,false,false);}catch(e){}
+  var lp=(item.property&&item.property.LayerProperties)||item.layerProperties;
+  var op=(item.property&&item.property.OverridePriority!=null)?item.property.OverridePriority:item.overridePriority;
+  if(lp) worn.Property.LayerProperties=lp;
+  if(op!=null) worn.Property.OverridePriority=op;
+  if(item.difficulty!=null) worn.Difficulty=item.difficulty;
+  var col=item.colors??'#ffffff'; if(typeof col==='string'&&col.includes(','))col=col.split(',');
+  worn.Color=col;
+  if(item.lock){
+    var BCX_LOCKS=['LewdCrestPadlock','DeviousPadlock','LuziPadlock'];
+    var lockAsset=BCX_LOCKS.includes(item.lock)
+      ?(Asset.find(function(x){return x.Name===item.lock&&x.Group?.Name==='ItemMisc';})??Asset.find(function(x){return x.Name===item.lock;}))
+      :Asset.find(function(x){return x.Name===item.lock&&x.Group?.Name==='ItemMisc';});
+    if(lockAsset) InventoryLock(C,worn,{Asset:lockAsset},item.lockMember||Player.MemberNumber,false);
+  }
+}
+// Outfit Item-für-Item nacheinander anlegen (in konfigurierter Reihenfolge)
+function _applyOutfitSequential(a,C){
+  var profilItems=a.profilItems??[];
+  C.Appearance=C.Appearance.filter(function(item){ if(!item||!item.Asset||!item.Asset.Group)return true; return item.Asset.Group.AllowNone===false; });
+  CharacterRefresh(C);ChatRoomCharacterUpdate(C);
+  var gap=Math.max(80, a.profilEinzelnGap||250);
+  var _one=function(i){
+    if(i>=profilItems.length)return;
+    var item=profilItems[i];
+    var col=item.colors??(item.cfg&&item.cfg.Color)??'#ffffff'; if(typeof col==='string'&&col.includes(','))col=col.split(',');
+    var craft=(item.craft&&item.craft.Name)?item.craft:null;
+    try{
+      InventoryWear(C,item.asset,item.group,col,0,Player.MemberNumber,craft);
+      _applyProfilItemProps(C,item);
+      CharacterRefresh(C);ChatRoomCharacterUpdate(C);
+      _log('\u{1F457} Outfit-Item '+(i+1)+'/'+profilItems.length+': '+item.group+'/'+item.asset);
+    }catch(e){_log('\u26A0 Outfit-Item '+item.asset+':',e.message);}
+    setTimeout(function(){_one(i+1);},gap);
+  };
+  _one(0);
 }
 
 function _applyItemAction(a, C){
@@ -582,13 +627,14 @@ function _applyItemAction(a, C){
           }
         }
         CharacterRefresh(C);ChatRoomCharacterUpdate(C);
-      },250);
+      },180);
     }else if(a.curseEntry){
       let col=a.curseEntry.Farbe;if(typeof col==='string'&&col.includes(','))col=col.split(',');
       InventoryWear(C,a.curseEntry.ItemName,a.curseEntry.Gruppe,col,0,Player.MemberNumber,a.curseEntry.Craft);
       _restoreDisplaced(C,snapshot,a.curseEntry.Gruppe);
     }else if(a.profilName){
       var profilItems = a.profilItems ?? [];
+      if(a.profilEinzeln){ _applyOutfitSequential(a,C); return; }
 
       // Phase 0: Strip
       C.Appearance = C.Appearance.filter(function(item){
@@ -711,7 +757,7 @@ function _execAct(a,C,vars){
   const msgTyp=a[msgTypField]??'chat';
   const msgText=a[msgField];
   if(msgText&&msgTyp!=='nichts'){
-    const _msgDelay=(a.typ==='item'||a.typ==='teleport'||a.typ==='item_entf')?350:120; // Item zuerst, dann kurz danach Text
+    const _msgDelay=a.typ==='item'?200:100; // Item zuerst, Text kurz danach
     setTimeout(()=>{
       const txt=_tpl(msgText,vars);
       if(msgTyp==='whisper')ServerSend('ChatRoomChat',{Content:txt,Type:'Whisper',Target:C.MemberNumber});
@@ -767,7 +813,7 @@ function _runSeq(aktionen,C,vars,trigBase,onDone,onUngueltig){
     // schneller Folge ServerSend/CharacterUpdate-Aufrufe verwirft (zufällig fehlende
     // Aktionen). Item-Aktionen brauchen länger, da ihr Appearance-Sync mehrere Phasen hat.
     if(rest.length){
-      const _settle=a.typ==='item'?450:(a.typ==='item_entf'||a.typ==='teleport'||a.typ==='chat'||a.typ==='emote'||a.typ==='whisper')?300:50;
+      const _settle=a.typ==='item'?230:a.typ==='item_entf'?100:(a.typ==='teleport'||a.typ==='chat'||a.typ==='emote'||a.typ==='whisper')?130:0; // Tempo: nahe an BCs Drossel-Grenze
       setTimeout(()=>_runSeq(rest,C,vars,trigBase,onDone,onUngueltig),_settle);
     } else {
       _runSeq(rest,C,vars,trigBase,onDone,onUngueltig);

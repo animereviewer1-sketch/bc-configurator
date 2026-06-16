@@ -468,6 +468,15 @@ function actEntfRemoveGruppe(tid, ai, idx, branch){
   a.gruppen.splice(idx,1);
   _saveBots(); actRerender(tid,ai,branch);
 }
+function profilItemMove(tid, ai, idx, dir, branch){
+  const b=_selBot(); if(!b) return;
+  const t=b.triggers.find(z=>z.id===tid); if(!t) return;
+  const arr=branch==='sonst'?(t.aktionen_sonst||[]):(t.aktionen||[]);
+  const a=arr[ai]; if(!a||!Array.isArray(a.profilItems)) return;
+  const j=idx+dir; if(j<0||j>=a.profilItems.length) return;
+  [a.profilItems[idx],a.profilItems[j]]=[a.profilItems[j],a.profilItems[idx]];
+  _saveBots(); actRerender(tid,ai,branch);
+}
 
 function _btLogikWort(l) {
   return ({und:'und', oder:'oder', und_oder:'und/oder', und_nicht:'aber NICHT'})[l||'und'] || 'und';
@@ -867,7 +876,28 @@ function renderAct(tid, a, ai, branch) {
           <input type="checkbox" ${a.nostrip?'checked':''} onchange="actField('${tid}',${ai},'nostrip',this.checked${branchArg})">
           🔒 NoStrip – Freeze + AntiStrip wenn K&auml;ufer /nostrip tippt
         </label>
-      </div>`;
+      </div>
+      ${(Array.isArray(a.profilItems)&&a.profilItems.length)?`
+      <div class="as-act-box" style="margin-top:2px">
+        <label style="cursor:pointer;display:flex;align-items:center;gap:6px;font-size:.65rem;color:var(--text2)">
+          <input type="checkbox" ${a.profilEinzeln?'checked':''} onchange="actField('${tid}',${ai},'profilEinzeln',this.checked${branchArg});actRerender('${tid}',${ai}${branchArg})">
+          🧩 Items einzeln nacheinander anlegen (in Reihenfolge unten)
+        </label>
+        ${a.profilEinzeln?`<div style="display:flex;gap:6px;align-items:center;margin-top:3px">
+          <span style="font-size:.6rem;color:var(--text3)">Abstand pro Item:</span>
+          <input class="cf" type="number" min="80" step="10" value="${a.profilEinzelnGap??250}" style="width:72px" oninput="actField('${tid}',${ai},'profilEinzelnGap',+this.value${branchArg})"> ms
+        </div>`:''}
+        <div style="margin-top:4px;display:flex;flex-direction:column;gap:2px;max-height:230px;overflow:auto">
+          ${a.profilItems.map((it,ii)=>`<div style="display:flex;gap:5px;align-items:center;font-size:.62rem;background:rgba(255,255,255,0.03);border-radius:4px;padding:2px 5px">
+            <span style="display:flex;flex-direction:column;gap:0">
+              <button class="order-btn" onclick="profilItemMove('${tid}',${ai},${ii},-1${branchArg})" ${ii===0?'disabled':''}>▲</button>
+              <button class="order-btn" onclick="profilItemMove('${tid}',${ai},${ii},1${branchArg})" ${ii===a.profilItems.length-1?'disabled':''}>▼</button>
+            </span>
+            <span style="color:var(--text3);min-width:20px">${ii+1}.</span>
+            <span style="flex:1;color:var(--text2)">${escHtml(it.group||'?')}/<b>${escHtml(it.asset||'?')}</b>${it.lock?' 🔒':''}</span>
+          </div>`).join('')}
+        </div>
+      </div>`:''}`;
   } else if (a.typ === 'item_entf') {
     const _entfList = Array.isArray(a.gruppen) ? a.gruppen : (a.gruppe ? [a.gruppe] : []);
     const _entfGroups = _botItemGroups();
