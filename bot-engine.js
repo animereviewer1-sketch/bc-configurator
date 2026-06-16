@@ -448,13 +448,26 @@ function _teleport(a,C){
     return false;
   }
   const si=allSlots.indexOf(ziel);
-  // Bewährte Originalversion: gezielte Hidden-Nachricht (Selbst & Fremd identisch).
-  ServerSend('ChatRoomChat',{
-    Content:'ChatRoomMapViewTeleport',Type:'Hidden',
-    Dictionary:[{Tag:'MapViewTeleport',Position:{X:ziel.x,Y:ziel.y}}],
-    Target:C.MemberNumber,
-  });
-  _log('🌀 TP '+C.Name+' → X='+ziel.x+' Y='+ziel.y+(si>0?' [Fallback '+si+']':''));
+  if(C.MemberNumber===Player.MemberNumber){
+    // Selbst-Teleport: Map-Position direkt setzen (in dieser BC-Version bewiesen
+    // funktionierend). KEIN ChatRoomMapViewTeleport(x,y)-Aufruf – der hat eine andere
+    // Signatur und überschreibt die Position wieder. Sync an andere best-effort.
+    try{
+      if(!Player.MapData)Player.MapData={};
+      Player.MapData.Pos={X:ziel.x,Y:ziel.y};
+      if(typeof ChatRoomMapViewUpdatePlayerSync==='function') ChatRoomMapViewUpdatePlayerSync();
+      else if(typeof ChatRoomMapViewSyncMapData==='function') ChatRoomMapViewSyncMapData();
+    }catch(e){ _log('⚠️ TP self Pos:',e.message); }
+    _log('🌀 TP '+C.Name+' → X='+ziel.x+' Y='+ziel.y+(si>0?' [Fallback '+si+']':'')+' [pos]');
+  } else {
+    // Fremd-Teleport: gezielte Hidden-Nachricht an den Client des Ziel-Spielers.
+    ServerSend('ChatRoomChat',{
+      Content:'ChatRoomMapViewTeleport',Type:'Hidden',
+      Dictionary:[{Tag:'MapViewTeleport',Position:{X:ziel.x,Y:ziel.y}}],
+      Target:C.MemberNumber,
+    });
+    _log('🌀 TP '+C.Name+' → X='+ziel.x+' Y='+ziel.y+(si>0?' [Fallback '+si+']':'')+' [target]');
+  }
   // Gültig-Flag: wenn Slot auf ❌ Fehler gesetzt → Aktion gilt als fehlgeschlagen
   const gueltig=ziel.gueltig??true;
   if(!gueltig)_log('⚠️ Slot '+si+' hat gueltig=false → gilt als Fehler');
