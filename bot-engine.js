@@ -523,6 +523,32 @@ function _applyProfilItemProps(C,item){
     if(lockAsset) InventoryLock(C,worn,{Asset:lockAsset},item.lockMember||Player.MemberNumber,false);
   }
 }
+// Prüft nach dem Outfit, ob alle Items wirklich angelegt sind; fehlende erneut versuchen
+// (bis zu 3 Versuche). Pro Gruppe wird das LETZTE Outfit-Item erwartet (Reihenfolge gewinnt).
+function _verifyOutfit(a,C,attempt,done){
+  var items=a.profilItems||[];
+  var byGroup={}; items.forEach(function(it){ if(it&&it.group&&it.asset) byGroup[it.group]=it; });
+  var missing=Object.keys(byGroup).filter(function(g){
+    var it=byGroup[g], w=InventoryGet(C,g);
+    return !w || !w.Asset || w.Asset.Name!==it.asset;
+  }).map(function(g){return byGroup[g];});
+  if(!missing.length){ _log('\u2705 Outfit-Check: vollständig angelegt'); if(done)done(); return; }
+  if(attempt>=3){
+    _log('\u26A0 Outfit-Check: '+missing.length+' Item(s) fehlen weiterhin: '+missing.map(function(i){return i.group+'/'+i.asset;}).join(', '));
+    if(done)done(); return;
+  }
+  _log('\u{1F501} Outfit-Check: '+missing.length+' fehlen \u2192 erneut anlegen (Versuch '+(attempt+1)+'): '+missing.map(function(i){return i.group+'/'+i.asset;}).join(', '));
+  missing.forEach(function(it){
+    try{
+      var col=it.colors??(it.cfg&&it.cfg.Color)??'#ffffff'; if(typeof col==='string'&&col.includes(','))col=col.split(',');
+      var craft=(it.craft&&it.craft.Name)?it.craft:null;
+      InventoryWear(C,it.asset,it.group,col,0,Player.MemberNumber,craft);
+      _applyProfilItemProps(C,it);
+    }catch(e){_log('\u26A0 Retry '+it.group+':',e.message);}
+  });
+  CharacterRefresh(C); ChatRoomCharacterUpdate(C);
+  setTimeout(function(){ _verifyOutfit(a,C,attempt+1,done); }, 400);
+}
 // Outfit Item-für-Item nacheinander anlegen (in konfigurierter Reihenfolge)
 // Beim Outfit-Strip: behalten? Körperteile immer; Fesseln/Items wenn outfitKeep;
 // Klamotten/Accessoires wenn outfitKeepClothes.
@@ -555,7 +581,7 @@ function _applyOutfitSequential(a,C){
   CharacterRefresh(C);ChatRoomCharacterUpdate(C);
   var gap=Math.max(80, a.profilEinzelnGap||250);
   var _one=function(i){
-    if(i>=profilItems.length){_outfitPending--;return;}
+    if(i>=profilItems.length){ _verifyOutfit(a,C,0,function(){_outfitPending--;}); return; }
     var item=profilItems[i];
     var col=item.colors??(item.cfg&&item.cfg.Color)??'#ffffff'; if(typeof col==='string'&&col.includes(','))col=col.split(',');
     var craft=(item.craft&&item.craft.Name)?item.craft:null;
@@ -753,7 +779,8 @@ function _applyItemAction(a, C){
         // Phase 3: Ein einziger Refresh + Sync
         CharacterRefresh(C);
         ChatRoomCharacterUpdate(C);
-        _outfitPending--;
+        // Verifizieren ob alles sitzt, fehlende erneut versuchen – erst danach freigeben
+        _verifyOutfit(a,C,0,function(){ _outfitPending--; });
       }, 600);
     }else if(a.item){
       InventoryWear(C,a.item,a.gruppe,a.farbe??'#ffffff',0,Player.MemberNumber);

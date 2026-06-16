@@ -477,6 +477,25 @@ function profilItemMove(tid, ai, idx, dir, branch){
   [a.profilItems[idx],a.profilItems[j]]=[a.profilItems[j],a.profilItems[idx]];
   _saveBots(); actRerender(tid,ai,branch);
 }
+function _outfitKeepArr(t, ai, branch){
+  const arr=branch==='sonst'?(t.aktionen_sonst||[]):(t.aktionen||[]);
+  const a=arr[ai]; if(!a) return null;
+  if(!Array.isArray(a.outfitKeepGroups)) a.outfitKeepGroups = a.outfitKeepGroups ? (''+a.outfitKeepGroups).split(',').map(s=>s.trim()).filter(Boolean) : [];
+  return a;
+}
+function outfitKeepAdd(tid, ai, grp, branch){
+  const b=_selBot(); if(!b) return;
+  const t=b.triggers.find(z=>z.id===tid); if(!t) return;
+  const a=_outfitKeepArr(t,ai,branch); if(!a) return;
+  grp=(''+grp).trim(); if(grp && !a.outfitKeepGroups.includes(grp)) a.outfitKeepGroups.push(grp);
+  _saveBots(); actRerender(tid,ai,branch);
+}
+function outfitKeepRemove(tid, ai, idx, branch){
+  const b=_selBot(); if(!b) return;
+  const t=b.triggers.find(z=>z.id===tid); if(!t) return;
+  const a=_outfitKeepArr(t,ai,branch); if(!a) return;
+  a.outfitKeepGroups.splice(idx,1); _saveBots(); actRerender(tid,ai,branch);
+}
 
 function _btLogikWort(l) {
   return ({und:'und', oder:'oder', und_oder:'und/oder', und_nicht:'aber NICHT'})[l||'und'] || 'und';
@@ -841,6 +860,7 @@ function renderAct(tid, a, ai, branch) {
   } else if (a.typ === 'item') {
     const cfgInfo = a.itemConfig ? ` <span style="font-size:.58rem;background:var(--gd);color:var(--green);padding:1px 4px;border-radius:3px">✓ Konfig</span>` : '';
     const label = a.itemConfig ? `📦 ${a.itemConfig.group}/${a.itemConfig.asset}` : a.profilName ? `👗 ${a.profilName}` : a.curseName ? `🔮 ${a.curseName}` : a.item ? `📦 ${a.gruppe||'?'}/${a.item}` : '– nichts gewählt –';
+    const _keepList = Array.isArray(a.outfitKeepGroups) ? a.outfitKeepGroups : (a.outfitKeepGroups ? (''+a.outfitKeepGroups).split(',').map(s=>s.trim()).filter(Boolean) : []);
     const asLabel = a.antiStrip_itemConfig ? `📦 ${a.antiStrip_itemConfig.group}/${a.antiStrip_itemConfig.asset}`
                   : a.antiStrip_curseName  ? `🔮 ${a.antiStrip_curseName}`
                   : a.antiStrip_ersatz     ? `📦 ${a.antiStrip_gruppe||'?'}/${a.antiStrip_ersatz}`
@@ -887,9 +907,16 @@ function renderAct(tid, a, ai, branch) {
           <input type="checkbox" ${a.outfitKeepClothes?'checked':''} onchange="actField('${tid}',${ai},'outfitKeepClothes',this.checked${branchArg})">
           👗 Klamotten behalten (sonst werden sie abgelegt)
         </label>
-        <div style="display:flex;gap:5px;align-items:center;margin-top:3px">
-          <span style="font-size:.6rem;color:var(--text3)" title="Haare (auch 发/Hair) bleiben automatisch. Hier zusätzliche Gruppennamen eintragen, die NIE abgelegt werden sollen – kommagetrennt, exakte Gruppennamen aus dem Log.">🔒 immer behalten:</span>
-          <input class="cf" style="flex:1;min-width:160px;font-size:.62rem" value="${escHtml(a.outfitKeepGroups||'')}" placeholder="z.B. 左眼_Luzi, 右眼_Luzi" oninput="actField('${tid}',${ai},'outfitKeepGroups',this.value${branchArg})">
+        <div style="margin-top:3px">
+          <span style="font-size:.6rem;color:var(--text3)" title="Haare (Hair/发) bleiben automatisch. Hier weitere Gruppen wählen, die NIE abgelegt werden (z.B. Augen). Eigene/Custom-Namen rechts eintippen + Enter.">🔒 immer behalten (zusätzlich):</span>
+          <div style="display:flex;gap:5px;align-items:center;margin-top:2px;flex-wrap:wrap">
+            <select class="cf" style="min-width:150px" onchange="if(this.value){outfitKeepAdd('${tid}',${ai},this.value${branchArg});this.value='';}">
+              <option value="">➕ Gruppe wählen …</option>
+              ${_botItemGroups().map(g=>`<option value="${escHtml(g)}">${escHtml(g)}</option>`).join('')}
+            </select>
+            <input class="cf" style="width:150px;font-size:.62rem" placeholder="eigener Name + Enter" onkeydown="if(event.key==='Enter'&&this.value.trim()){outfitKeepAdd('${tid}',${ai},this.value${branchArg});this.value='';event.preventDefault();}">
+          </div>
+          <div style="margin-top:3px">${_keepList.length?_keepList.map((g,gi)=>`<span style="display:inline-flex;align-items:center;gap:4px;background:var(--pd);color:var(--pl);padding:2px 8px;border-radius:11px;font-size:.62rem;margin:2px 3px 0 0">${escHtml(g)}<button onclick="outfitKeepRemove('${tid}',${ai},${gi}${branchArg})" style="background:none;border:none;color:var(--pl);cursor:pointer;font-size:.7rem;padding:0 1px;line-height:1">✕</button></span>`).join(''):`<span style="font-size:.6rem;color:var(--text3)">– nur Haare automatisch geschützt –</span>`}</div>
         </div>
         <label style="cursor:pointer;display:flex;align-items:center;gap:6px;font-size:.65rem;color:var(--text2);margin-top:3px">
           <input type="checkbox" ${a.profilEinzeln?'checked':''} onchange="actField('${tid}',${ai},'profilEinzeln',this.checked${branchArg});actRerender('${tid}',${ai}${branchArg})">
