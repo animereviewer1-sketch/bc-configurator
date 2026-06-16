@@ -887,6 +887,10 @@ function renderAct(tid, a, ai, branch) {
           <input type="checkbox" ${a.outfitKeepClothes?'checked':''} onchange="actField('${tid}',${ai},'outfitKeepClothes',this.checked${branchArg})">
           👗 Klamotten behalten (sonst werden sie abgelegt)
         </label>
+        <div style="display:flex;gap:5px;align-items:center;margin-top:3px">
+          <span style="font-size:.6rem;color:var(--text3)" title="Haare (auch 发/Hair) bleiben automatisch. Hier zusätzliche Gruppennamen eintragen, die NIE abgelegt werden sollen – kommagetrennt, exakte Gruppennamen aus dem Log.">🔒 immer behalten:</span>
+          <input class="cf" style="flex:1;min-width:160px;font-size:.62rem" value="${escHtml(a.outfitKeepGroups||'')}" placeholder="z.B. 左眼_Luzi, 右眼_Luzi" oninput="actField('${tid}',${ai},'outfitKeepGroups',this.value${branchArg})">
+        </div>
         <label style="cursor:pointer;display:flex;align-items:center;gap:6px;font-size:.65rem;color:var(--text2);margin-top:3px">
           <input type="checkbox" ${a.profilEinzeln?'checked':''} onchange="actField('${tid}',${ai},'profilEinzeln',this.checked${branchArg});actRerender('${tid}',${ai}${branchArg})">
           🧩 Items einzeln nacheinander anlegen (in Reihenfolge unten)

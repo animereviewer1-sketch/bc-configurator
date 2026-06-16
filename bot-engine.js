@@ -529,10 +529,16 @@ function _applyProfilItemProps(C,item){
 function _outfitKeepGroup(grp,a){
   if(!grp) return true;
   if(grp.AllowNone===false) return true;
-  // Haare nie wegstrippen – sie werden nur überschrieben, wenn das Outfit selbst
-  // ein Haar-Item für die Gruppe enthält.
-  if(grp.Name && grp.Name.indexOf('Hair')===0) return true;
-  var isItem = grp.Category==='Item' || (grp.Name && grp.Name.indexOf('Item')===0);
+  var nm = grp.Name || '';
+  // Haare nie wegstrippen (Standard "Hair…" UND Custom/Chinesisch mit "发" = Haar).
+  // Sie werden nur überschrieben, wenn das Outfit selbst ein Haar-Item dafür enthält.
+  if(/hair/i.test(nm) || nm.indexOf('发')!==-1) return true;
+  // Benutzer-Behalteliste (kommagetrennte Gruppennamen) – immer behalten.
+  if(a.outfitKeepGroups){
+    var _kl=(''+a.outfitKeepGroups).split(',');
+    for(var _i=0;_i<_kl.length;_i++){ if(_kl[_i].trim()===nm) return true; }
+  }
+  var isItem = grp.Category==='Item' || nm.indexOf('Item')===0;
   return isItem ? !!a.outfitKeep : !!a.outfitKeepClothes;
 }
 var _outfitPending=0; // laufende Outfit-Anlege-Vorgänge (für "warten bis komplett")
