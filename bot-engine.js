@@ -665,7 +665,7 @@ function _execAct(a,C,vars){
     if(a.typ==='chat'){ServerSend('ChatRoomChat',{Content:_tpl(a.text,vars),Type:'Chat'});ok=true;}
     else if(a.typ==='emote'){ServerSend('ChatRoomChat',{Content:_tpl(a.text,vars),Type:'Emote'});ok=true;}
     else if(a.typ==='whisper'){ServerSend('ChatRoomChat',{Content:_tpl(a.text,vars),Type:'Whisper',Target:C.MemberNumber});ok=true;}
-    else if(a.typ==='item_entf'){const _entfGruppe=a.gruppe;InventoryRemove(C,_entfGruppe);CharacterRefresh(C);ChatRoomCharacterUpdate(C);_asUnregister(C,_entfGruppe);ok=true;}
+    else if(a.typ==='item_entf'){const _gr=(Array.isArray(a.gruppen)&&a.gruppen.length)?a.gruppen:(a.gruppe?[a.gruppe]:[]);_gr.forEach(function(g){if(g){try{InventoryRemove(C,g);_asUnregister(C,g);}catch(e){}}});if(_gr.length){CharacterRefresh(C);ChatRoomCharacterUpdate(C);}ok=true;}
     else if(a.typ==='item'){
       _applyItemAction(a,C);
       if(a.antiStrip)_asRegister(C,a);

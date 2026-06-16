@@ -438,6 +438,37 @@ function tpAreaSetPos(tid, ai, corner, branch){
   });
 }
 
+// ── Item-Entfernen: Gruppen-Dropdown (mehrere nacheinander) ─────────────
+const _BOT_ITEM_GROUPS_FALLBACK = ['ItemArms','ItemHands','ItemHandheld','ItemMouth','ItemMouth2','ItemMouth3','ItemNeck','ItemNeckAccessories','ItemNeckRestraints','ItemHood','ItemHead','ItemNose','ItemEars','ItemNipples','ItemNipplesPiercings','ItemBreast','ItemTorso','ItemTorso2','ItemPelvis','ItemVulva','ItemVulvaPiercings','ItemButt','ItemLegs','ItemBoots','ItemFeet','ItemAddon','ItemMisc','ItemDevices','ItemHidden'];
+function _botItemGroups(){
+  let groups=[];
+  try{ if(typeof CACHE!=='undefined' && CACHE) groups=Object.keys(CACHE); }catch(e){}
+  const set=new Set(groups);
+  _BOT_ITEM_GROUPS_FALLBACK.forEach(g=>set.add(g));
+  return [...set].sort();
+}
+function _actEntf(t, ai, branch){
+  const arr = branch==='sonst' ? (t.aktionen_sonst||[]) : (t.aktionen||[]);
+  const a=arr[ai]; if(!a) return null;
+  if(!Array.isArray(a.gruppen)) a.gruppen = a.gruppe ? [a.gruppe] : [];
+  return a;
+}
+function actEntfAddGruppe(tid, ai, grp, branch){
+  const b=_selBot(); if(!b) return;
+  const t=b.triggers.find(z=>z.id===tid); if(!t) return;
+  const a=_actEntf(t,ai,branch); if(!a) return;
+  if(grp && !a.gruppen.includes(grp)) a.gruppen.push(grp);
+  delete a.gruppe;
+  _saveBots(); actRerender(tid,ai,branch);
+}
+function actEntfRemoveGruppe(tid, ai, idx, branch){
+  const b=_selBot(); if(!b) return;
+  const t=b.triggers.find(z=>z.id===tid); if(!t) return;
+  const a=_actEntf(t,ai,branch); if(!a) return;
+  a.gruppen.splice(idx,1);
+  _saveBots(); actRerender(tid,ai,branch);
+}
+
 function _btLogikWort(l) {
   return ({und:'und', oder:'oder', und_oder:'und/oder', und_nicht:'aber NICHT'})[l||'und'] || 'und';
 }
@@ -479,7 +510,7 @@ function _btActPhrase(bot, a) {
       const what = a.itemConfig ? a.itemConfig.asset : a.profilName || a.curseName || a.item || 'Item';
       return '📦 '+e(what)+' anlegen'+z;
     }
-    case 'item_entf': return '🗑️ '+e(a.gruppe||'Item')+' entfernen'+z;
+    case 'item_entf': { const gs=Array.isArray(a.gruppen)?a.gruppen:(a.gruppe?[a.gruppe]:[]); return '🗑️ '+(gs.length?e(gs.join(', ')):'Gruppe')+' entfernen'+z; }
     case 'teleport':  return '🌀 Teleport'+z;
     case 'money': { const op=({add:'+',sub:'−',set:'=',reset:'reset'})[a.money_op||'add']; return '💰 Money '+op+(a.money_op==='reset'?'':(a.money_val??1))+z; }
     case 'rang': { const op=({setzen:'setzen',entfernen:'entfernen',naechster:'+1 Lv',vorheriger:'−1 Lv'})[a.rang_op||'setzen']; return '🏆 Rang '+op+z; }
@@ -838,8 +869,18 @@ function renderAct(tid, a, ai, branch) {
         </label>
       </div>`;
   } else if (a.typ === 'item_entf') {
-    extra = `<input class="cf" style="width:100%;margin-top:4px" value="${escHtml(a.gruppe||'')}"
-        oninput="actField('${tid}',${ai},'gruppe',this.value${branchArg})" placeholder="Gruppe (z.B. ItemMouth, ItemArms …)">`;
+    const _entfList = Array.isArray(a.gruppen) ? a.gruppen : (a.gruppe ? [a.gruppe] : []);
+    const _entfGroups = _botItemGroups();
+    const _entfChips = _entfList.length
+      ? _entfList.map((g,gi)=>`<span style="display:inline-flex;align-items:center;gap:4px;background:var(--pd);color:var(--pl);padding:2px 8px;border-radius:11px;font-size:.65rem;margin:2px 3px 0 0">${escHtml(g)}<button onclick="actEntfRemoveGruppe('${tid}',${ai},${gi}${branchArg})" style="background:none;border:none;color:var(--pl);cursor:pointer;font-size:.7rem;padding:0 1px;line-height:1">✕</button></span>`).join('')
+      : `<span style="font-size:.62rem;color:var(--text3)">– noch keine Gruppe gewählt –</span>`;
+    extra = `<div style="margin-top:4px">
+      <select class="cf" style="width:100%" onchange="if(this.value){actEntfAddGruppe('${tid}',${ai},this.value${branchArg});this.value='';}">
+        <option value="">➕ Gruppe hinzufügen …</option>
+        ${_entfGroups.map(g=>`<option value="${escHtml(g)}">${escHtml(g)}</option>`).join('')}
+      </select>
+      <div style="margin-top:5px">${_entfChips}</div>
+    </div>`;
   } else if (a.typ === 'teleport') {
     const slots = a.tpSlots ?? [];
     const slotsHtml = slots.map((s, si) => {
