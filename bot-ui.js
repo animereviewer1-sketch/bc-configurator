@@ -429,6 +429,14 @@ function tpSlotSetPos(tid, ai, si, branch){
     showStatus('📍 Teleport-Ziel = '+x+'/'+y,'success');
   });
 }
+function tpAreaSetPos(tid, ai, corner, branch){
+  _requestPos((x,y)=>{
+    if(corner==='B'){ actField(tid,ai,'tpBx',x,branch); actField(tid,ai,'tpBy',y,branch); }
+    else { actField(tid,ai,'tpAx',x,branch); actField(tid,ai,'tpAy',y,branch); }
+    actRerender(tid,ai,branch);
+    showStatus('📍 Ecke '+corner+' = '+x+'/'+y,'success');
+  });
+}
 
 function _btLogikWort(l) {
   return ({und:'und', oder:'oder', und_oder:'und/oder', und_nicht:'aber NICHT'})[l||'und'] || 'und';
@@ -851,12 +859,37 @@ function renderAct(tid, a, ai, branch) {
         <button onclick="tpSlotRemove('${tid}',${ai},${si}${branchArg})" style="margin-left:auto;background:none;border:none;color:var(--red);cursor:pointer;font-size:.7rem;padding:1px 4px" title="Entfernen">✕</button>
       </div>`;
     }).join('');
-    extra = `
-      <div style="font-size:.63rem;color:var(--text3);margin-top:5px">
-        🌀 Teleportiert den Auslöser. Wenn alle Positionen belegt sind → gilt als Fehler.
-      </div>
-      <div class="tp-slot-list" id="tpslots-${tid}-${ai}">${slotsHtml}</div>
-      <button class="tp-slot-add-btn" onclick="tpSlotAdd('${tid}',${ai}${branchArg})">+ Position / Fallback hinzufügen</button>`;
+    const tpMode = a.tpMode || 'punkte';
+    const modeSel = `<div style="display:flex;gap:8px;align-items:center;margin-top:5px;flex-wrap:wrap">
+      <span style="font-size:.63rem;color:var(--text3)">Modus:</span>
+      <select class="cf" style="width:200px" onchange="actField('${tid}',${ai},'tpMode',this.value${branchArg});actRerender('${tid}',${ai}${branchArg})">
+        <option value="punkte" ${tpMode==='punkte'?'selected':''}>📍 Punkte (Primär + Fallbacks)</option>
+        <option value="bereich" ${tpMode==='bereich'?'selected':''}>⬛ Bereich (zufälliger freier Punkt)</option>
+      </select>
+    </div>`;
+    if (tpMode === 'bereich') {
+      extra = modeSel + `
+        <div style="font-size:.63rem;color:var(--text3);margin-top:5px">🌀 Teleportiert auf einen zufälligen freien Punkt im Rechteck A→B. Alles belegt → Fehler.</div>
+        <div class="tp-slot-row" style="margin-top:4px">
+          <span class="tp-slot-badge primary">Ecke A</span>
+          <span style="font-size:.63rem;color:var(--text3)">X</span><input class="cf" type="number" style="width:54px" value="${a.tpAx??0}" oninput="actField('${tid}',${ai},'tpAx',+this.value${branchArg})">
+          <span style="font-size:.63rem;color:var(--text3)">Y</span><input class="cf" type="number" style="width:54px" value="${a.tpAy??0}" oninput="actField('${tid}',${ai},'tpAy',+this.value${branchArg})">
+          <button onclick="tpAreaSetPos('${tid}',${ai},'A'${branchArg})" style="font-size:.62rem;padding:1px 7px;background:var(--pd);border:none;color:var(--pl);border-radius:4px;cursor:pointer" title="Ecke A = aktuelle Position">📍 Set A</button>
+        </div>
+        <div class="tp-slot-row" style="margin-top:3px">
+          <span class="tp-slot-badge fallback">Ecke B</span>
+          <span style="font-size:.63rem;color:var(--text3)">X</span><input class="cf" type="number" style="width:54px" value="${a.tpBx??2}" oninput="actField('${tid}',${ai},'tpBx',+this.value${branchArg})">
+          <span style="font-size:.63rem;color:var(--text3)">Y</span><input class="cf" type="number" style="width:54px" value="${a.tpBy??2}" oninput="actField('${tid}',${ai},'tpBy',+this.value${branchArg})">
+          <button onclick="tpAreaSetPos('${tid}',${ai},'B'${branchArg})" style="font-size:.62rem;padding:1px 7px;background:var(--pd);border:none;color:var(--pl);border-radius:4px;cursor:pointer" title="Ecke B = aktuelle Position">📍 Set B</button>
+        </div>`;
+    } else {
+      extra = modeSel + `
+        <div style="font-size:.63rem;color:var(--text3);margin-top:5px">
+          🌀 Teleportiert den Auslöser. Wenn alle Positionen belegt sind → gilt als Fehler.
+        </div>
+        <div class="tp-slot-list" id="tpslots-${tid}-${ai}">${slotsHtml}</div>
+        <button class="tp-slot-add-btn" onclick="tpSlotAdd('${tid}',${ai}${branchArg})">+ Position / Fallback hinzufügen</button>`;
+    }
   } else if (a.typ === 'money') {
     const moneyName = _money?.settings?.name || 'Gold';
     const mop = a.money_op ?? 'add';

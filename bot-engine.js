@@ -431,8 +431,16 @@ function _istBesetzt(x,y,ausschliessen){
 }
 
 function _teleport(a,C){
-  const allSlots=a.tpSlots??[];
-  if(!allSlots.length){_log('⚠️ Keine TP-Slots');return false;}
+  let allSlots=a.tpSlots??[];
+  if(a.tpMode==='bereich'){
+    const ax=Math.min(a.tpAx??0,a.tpBx??0), bx=Math.max(a.tpAx??0,a.tpBx??0);
+    const ay=Math.min(a.tpAy??0,a.tpBy??0), by=Math.max(a.tpAy??0,a.tpBy??0);
+    const cells=[];
+    for(let xx=ax;xx<=bx;xx++)for(let yy=ay;yy<=by;yy++)cells.push({x:xx,y:yy,gueltig:true});
+    for(let i=cells.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));const t=cells[i];cells[i]=cells[j];cells[j]=t;}
+    allSlots=cells;
+  }
+  if(!allSlots.length){_log('⚠️ Keine TP-Ziele');return false;}
   // Find first free slot (respecting gueltig flag for return value)
   const ziel=allSlots.find(s=>!_istBesetzt(s.x,s.y,[C.MemberNumber]));
   if(!ziel){
@@ -689,7 +697,7 @@ function _execAct(a,C,vars){
   const msgTyp=a[msgTypField]??'chat';
   const msgText=a[msgField];
   if(msgText&&msgTyp!=='nichts'){
-    const _msgDelay=(a.typ==='item'||a.typ==='teleport'||a.typ==='item_entf')?800:200; // Item zuerst sichtbar anlegen, dann Text
+    const _msgDelay=(a.typ==='item'||a.typ==='teleport'||a.typ==='item_entf')?350:120; // Item zuerst, dann kurz danach Text
     setTimeout(()=>{
       const txt=_tpl(msgText,vars);
       if(msgTyp==='whisper')ServerSend('ChatRoomChat',{Content:txt,Type:'Whisper',Target:C.MemberNumber});
@@ -1824,6 +1832,8 @@ try {
   const _modName = 'BCBot_${safeId}_' + Date.now();
   _mod = bcModSdk.registerMod({name: _modName, fullName:'${safeName}', version:'1.0'});
   if(typeof ChatRoomSendChat!=='function'){throw new Error('ChatRoomSendChat nicht patchbar – Socket-Fallback');}
+  var _bckOrigAlert=window.alert; window.alert=function(){}; var _hookOk=false;
+  try {
   _mod.hookFunction('ChatRoomSendChat', 0, (args, next) => {
     // BC löscht InputChat.value vor dem Hook → args[0].Content ist zuverlässiger
     const msgData = args[0];
@@ -1841,6 +1851,9 @@ try {
     }
     return next(args);
   });
+  _hookOk=true;
+  } finally { window.alert=_bckOrigAlert; }
+  if(!_hookOk) throw new Error('hookFunction-Patch fehlgeschlagen – Socket-Fallback');
   _log('✅ hookFunction aktiv');
 } catch(hookErr) {
   _log('⚠️ hookFunction nicht verfügbar (eigene Nachrichten via Socket):', hookErr.message);
