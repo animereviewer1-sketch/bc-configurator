@@ -448,23 +448,22 @@ function _teleport(a,C){
     return false;
   }
   const si=allSlots.indexOf(ziel);
-  // Selbst-Teleport: direkter lokaler Aufruf (kein Server-Round-Trip → quasi instant).
-  // Schlägt das fehl/ist nicht verfügbar → Hidden-Nachricht (wie für andere Spieler).
-  let _tpDone=false;
+  // Selbst-Teleport: zusätzlich direkter lokaler Aufruf (instant, wenn die BC-Version
+  // ihn unterstützt). NUR Beschleunigung – schlägt er fehl, greift die Hidden-Nachricht.
+  let _tpDirect=false;
   if(C.MemberNumber===Player.MemberNumber){
     try{
-      if(typeof ChatRoomMapViewTeleport==='function'){ ChatRoomMapViewTeleport(ziel.x,ziel.y); _tpDone=true; }
-      else if(typeof ChatRoomMapViewTeleportTo==='function'){ ChatRoomMapViewTeleportTo(ziel.x,ziel.y); _tpDone=true; }
-    }catch(e){ _log('⚠️ TP direkt fehlgeschlagen, nutze Hidden:',e.message); _tpDone=false; }
+      if(typeof ChatRoomMapViewTeleport==='function'){ ChatRoomMapViewTeleport(ziel.x,ziel.y); _tpDirect=true; }
+    }catch(e){ _log('⚠️ TP direkt-Aufruf Fehler:',e.message); }
   }
-  if(!_tpDone){
-    ServerSend('ChatRoomChat',{
-      Content:'ChatRoomMapViewTeleport',Type:'Hidden',
-      Dictionary:[{Tag:'MapViewTeleport',Position:{X:ziel.x,Y:ziel.y}}],
-      Target:C.MemberNumber,
-    });
-  }
-  _log('🌀 TP '+C.Name+' → X='+ziel.x+' Y='+ziel.y+(si>0?' [Fallback '+si+']':'')+(_tpDone?' [direkt]':' [hidden]'));
+  // Hidden-Nachricht IMMER senden – garantiert den Teleport (Selbst & Fremd), auch wenn
+  // der direkte Aufruf in dieser BC-Version nichts bewirkt.
+  ServerSend('ChatRoomChat',{
+    Content:'ChatRoomMapViewTeleport',Type:'Hidden',
+    Dictionary:[{Tag:'MapViewTeleport',Position:{X:ziel.x,Y:ziel.y}}],
+    Target:C.MemberNumber,
+  });
+  _log('🌀 TP '+C.Name+' → X='+ziel.x+' Y='+ziel.y+(si>0?' [Fallback '+si+']':'')+(_tpDirect?' [direkt+hidden]':' [hidden]'));
   // Gültig-Flag: wenn Slot auf ❌ Fehler gesetzt → Aktion gilt als fehlgeschlagen
   const gueltig=ziel.gueltig??true;
   if(!gueltig)_log('⚠️ Slot '+si+' hat gueltig=false → gilt als Fehler');
