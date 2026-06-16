@@ -529,6 +529,9 @@ function _applyProfilItemProps(C,item){
 function _outfitKeepGroup(grp,a){
   if(!grp) return true;
   if(grp.AllowNone===false) return true;
+  // Haare nie wegstrippen – sie werden nur überschrieben, wenn das Outfit selbst
+  // ein Haar-Item für die Gruppe enthält.
+  if(grp.Name && grp.Name.indexOf('Hair')===0) return true;
   var isItem = grp.Category==='Item' || (grp.Name && grp.Name.indexOf('Item')===0);
   return isItem ? !!a.outfitKeep : !!a.outfitKeepClothes;
 }
