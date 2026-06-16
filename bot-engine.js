@@ -760,7 +760,15 @@ function _runSeq(aktionen,C,vars,trigBase,onDone,onUngueltig){
       if(bf==='kette_stoppen'){onDone();return;}
       if(bf==='trigger_ungueltig'){onUngueltig();return;}
     }
-    _runSeq(rest,C,vars,trigBase,onDone,onUngueltig);
+    // Mindest-Settle-Zeit BEVOR die nächste Aktion feuert: verhindert, dass BC bei
+    // schneller Folge ServerSend/CharacterUpdate-Aufrufe verwirft (zufällig fehlende
+    // Aktionen). Item-Aktionen brauchen länger, da ihr Appearance-Sync mehrere Phasen hat.
+    if(rest.length){
+      const _settle=(a.typ==='item'||a.typ==='item_entf')?750:(a.typ==='teleport'||a.typ==='chat'||a.typ==='emote'||a.typ==='whisper')?300:50;
+      setTimeout(()=>_runSeq(rest,C,vars,trigBase,onDone,onUngueltig),_settle);
+    } else {
+      _runSeq(rest,C,vars,trigBase,onDone,onUngueltig);
+    }
   },a.delay??0);
 }
 
