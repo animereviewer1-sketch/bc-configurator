@@ -5717,6 +5717,10 @@ window.addEventListener('message', function(ev) {
       break;
     }
 
+    case 'POS_DATA':
+      _handlePosData(ev.data);
+      break;
+
     case 'PLAYER_DATA':
       if (!ev.data.err) {
         const _pi = document.getElementById('playerInfo');

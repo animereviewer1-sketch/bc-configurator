@@ -396,6 +396,40 @@ function renderSzeneCard(b, s, i){
 
 // ── Trigger Cards ─────────────────────────────────────────────
 // ── Klartext-Zusammenfassung eines Triggers (für die eingeklappte Ansicht) ──
+// ── 📍 Aktuelle Spielerposition abrufen (für Set-Buttons) ───────────────
+const _posCbs = {};
+function _requestPos(cb){
+  if(typeof _connected!=='undefined' && !_connected){ showStatus('❌ Nicht mit BC verbunden','error'); return; }
+  const reqId='pos'+Date.now()+Math.floor(Math.random()*9999);
+  _posCbs[reqId]=cb;
+  bcSend({type:'GET_POS', reqId});
+  setTimeout(()=>{ if(_posCbs[reqId]){ delete _posCbs[reqId]; showStatus('⚠️ Keine Position erhalten – bist du im Raum?','error'); } },4000);
+}
+function _handlePosData(d){
+  const cb=_posCbs[d.reqId]; if(!cb) return; delete _posCbs[d.reqId];
+  if(d.err){ showStatus('⚠️ Position: '+d.err,'error'); return; }
+  cb(d.x??0, d.y??0);
+}
+function condSetZone(tid, ci, slot){
+  _requestPos((x,y)=>{
+    const b=_selBot(); if(!b) return;
+    const t=b.triggers.find(z=>z.id===tid); if(!t) return;
+    const c=(t.bedingungen||[])[ci]; if(!c) return;
+    if(c.typ==='zone'){ c.x=x; c.y=y; }
+    else if(c.typ==='zone_rect'){ if(slot==='B'){ c.x2=x; c.y2=y; } else { c.x1=x; c.y1=y; } }
+    _saveBots(); condRerender(tid);
+    showStatus('📍 '+(slot?slot+' ':'')+'= '+x+'/'+y+' übernommen','success');
+  });
+}
+function tpSlotSetPos(tid, ai, si, branch){
+  _requestPos((x,y)=>{
+    tpSlotField(tid,ai,si,'x',x,branch);
+    tpSlotField(tid,ai,si,'y',y,branch);
+    actRerender(tid,ai,branch);
+    showStatus('📍 Teleport-Ziel = '+x+'/'+y,'success');
+  });
+}
+
 function _btLogikWort(l) {
   return ({und:'und', oder:'oder', und_oder:'und/oder', und_nicht:'aber NICHT'})[l||'und'] || 'und';
 }
@@ -621,7 +655,8 @@ function renderCond(bot, tid, c, ci) {
       <input class="cf cf-w100" value="${escHtml(c.name||'')}" oninput="condField('${tid}',${ci},'name',this.value)" placeholder="Zonen-Name (!set)" title="Name für den Admin-Befehl !set <Name> X">
       X<input class="cf" style="width:46px" type="number" value="${c.x??0}" oninput="condField('${tid}',${ci},'x',+this.value)">
       Y<input class="cf" style="width:46px" type="number" value="${c.y??0}" oninput="condField('${tid}',${ci},'y',+this.value)">
-      ±<input class="cf" style="width:38px" type="number" value="${c.puffer??1}" oninput="condField('${tid}',${ci},'puffer',+this.value)" title="Puffer">`;
+      ±<input class="cf" style="width:38px" type="number" value="${c.puffer??1}" oninput="condField('${tid}',${ci},'puffer',+this.value)" title="Puffer">
+      <button onclick="condSetZone('${tid}',${ci})" style="font-size:.62rem;padding:2px 8px;background:var(--pd);border:none;color:var(--pl);border-radius:4px;cursor:pointer" title="Aktuelle Spielerposition übernehmen">📍 Set</button>`;
   } else if (c.typ === 'item_traegt' || c.typ === 'item_traegt_nicht') {
     const negLabel = c.typ === 'item_traegt_nicht' ? '<span style="color:#e55;font-size:.65rem;font-weight:600;margin-right:4px">🚫 NICHT</span>' : '';
     inner = `
@@ -636,7 +671,9 @@ function renderCond(bot, tid, c, ci) {
       Y<input class="cf" style="width:44px" type="number" value="${c.y1??0}" oninput="condField('${tid}',${ci},'y1',+this.value)" title="Y-Start">
       <span style="font-size:.62rem;color:var(--text3)">Bis</span>
       X<input class="cf" style="width:44px" type="number" value="${c.x2??2}" oninput="condField('${tid}',${ci},'x2',+this.value)" title="X-Ende">
-      Y<input class="cf" style="width:44px" type="number" value="${c.y2??2}" oninput="condField('${tid}',${ci},'y2',+this.value)" title="Y-Ende">`;
+      Y<input class="cf" style="width:44px" type="number" value="${c.y2??2}" oninput="condField('${tid}',${ci},'y2',+this.value)" title="Y-Ende">
+      <button onclick="condSetZone('${tid}',${ci},'A')" style="font-size:.62rem;padding:2px 8px;background:var(--pd);border:none;color:var(--pl);border-radius:4px;cursor:pointer" title="Von-Ecke = aktuelle Position">📍 Set A</button>
+      <button onclick="condSetZone('${tid}',${ci},'B')" style="font-size:.62rem;padding:2px 8px;background:var(--pd);border:none;color:var(--pl);border-radius:4px;cursor:pointer" title="Bis-Ecke = aktuelle Position">📍 Set B</button>`;
   } else if (c.typ === 'trigger_war') {
     const trigs = bot?.triggers ?? [];
     const opts = trigs.filter(t=>t.id!==tid).map(t=>`<option value="${t.id}" ${c.trigId===t.id?'selected':''}>${escHtml(t.name||t.id)}</option>`).join('');
@@ -805,6 +842,7 @@ function renderAct(tid, a, ai, branch) {
         <input class="cf" type="number" style="width:54px" value="${s.x??0}" oninput="tpSlotField('${tid}',${ai},${si},'x',+this.value${branchArg})" placeholder="X">
         <span style="font-size:.63rem;color:var(--text3)">Y</span>
         <input class="cf" type="number" style="width:54px" value="${s.y??0}" oninput="tpSlotField('${tid}',${ai},${si},'y',+this.value${branchArg})" placeholder="Y">
+        <button onclick="tpSlotSetPos('${tid}',${ai},${si}${branchArg})" style="font-size:.62rem;padding:1px 7px;background:var(--pd);border:none;color:var(--pl);border-radius:4px;cursor:pointer" title="Aktuelle Spielerposition übernehmen">📍 Set</button>
         <button class="tp-slot-valid ${gueltig?'zählt':'zählt-nicht'}"
           onclick="tpSlotField('${tid}',${ai},${si},'gueltig',!${gueltig}${branchArg});actRerender('${tid}',${ai}${branchArg})"
           title="${gueltig?'Dieser Slot zählt als Erfolg – klicken um zu ändern':'Dieser Slot gilt als Fehler (bei_fehler greift) – klicken um zu ändern'}">

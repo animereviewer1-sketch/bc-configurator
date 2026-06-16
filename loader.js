@@ -888,6 +888,16 @@ window.CurseScanner = (() => {
           break;
         }
 
+        case 'GET_POS': {
+          try {
+            const P = window.Player;
+            src.postMessage({ app: APP, type: 'POS_DATA', reqId: ev.data.reqId, x: P?.X ?? 0, y: P?.Y ?? 0 }, ALLOWED_ORIGIN);
+          } catch (ex) {
+            src.postMessage({ app: APP, type: 'POS_DATA', reqId: ev.data.reqId, err: ex.message }, ALLOWED_ORIGIN);
+          }
+          break;
+        }
+
         case 'GET_CHAR_APPEARANCE': {
           // Returns the full Appearance of a character as a saveable profile item list.
           // memberNum: number – target character. null/undefined → Player.
