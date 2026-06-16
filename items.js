@@ -9303,6 +9303,8 @@ let _ctDragging  = false;
 let _ctDragOffX  = 0, _ctDragOffY = 0;
 let _ctRunId     = 0;
 let _ctRunning   = false;  // true = Test läuft (auch während Curse/Save-Kette)
+let _ctCurseGraceUntil = 0;     // Timer darf erst ab diesem Zeitpunkt weiterschalten
+const _ctCurseGraceMs  = 4000;  // Wartezeit nach wearCurse, damit der Curse sich ankündigen kann
 
 // Sammelt alle cursed Items ohne Outfit-Flag, sortiert nach Owner → ItemName
 function _ctBuildQueue() {
@@ -9382,6 +9384,7 @@ function _ctStop() {
   _ctCurseActive   = false;
   _ctCurseItemIdx  = -1;
   _ctReadyForCurse = false;
+  _ctCurseGraceUntil = 0;
   clearTimeout(_ctCurseDebounce);
   _ctCurseDebounce = null;
   _ctIdx = -1;
@@ -9400,7 +9403,9 @@ function _ctStartTimer() {
   clearInterval(_ctCountdownTimer);
   _ctCountdown = _ctInterval;
   _ctTimer = setInterval(() => {
-    if (!_ctPaused && !_ctCurseActive) _ctNext();
+    // Nicht weiterschalten während ein Curse läuft ODER das Grace-Fenster noch offen
+    // ist (Curse hatte noch keine Chance sich anzukündigen).
+    if (!_ctPaused && !_ctCurseActive && Date.now() >= _ctCurseGraceUntil) _ctNext();
   }, _ctInterval * 1000);
   _ctCountdownTimer = setInterval(() => {
     if (!_ctPaused && !_ctCurseActive) {
@@ -9475,6 +9480,14 @@ function _ctApplyCurrent(prevEntry) {
 
   const shouldRemove = document.getElementById('curseTestRemove')?.checked !== false;
 
+  // WICHTIG: Curse-Events sperren BEVOR abgelegt wird. Das InventoryRemove erzeugt
+  // selbst ein "curses cease" (cursed-item state → active:false). Ohne diese Sperre
+  // würde dieses eigene cease als "Curse fertig" gewertet und das Outfit zu früh
+  // angewendet — obwohl der Curse des neuen Items noch gar nicht durchgelaufen ist.
+  _ctReadyForCurse = false;  // Erst nach wearCurse Curse-Events akzeptieren
+  _ctCurseActive   = false;
+  _ctCurseItemIdx  = -1;
+
   // Vorheriges Item ablegen (per Gruppe)
   if (shouldRemove && prevEntry) {
     const prevGruppe = CURSE_GRUPPE_OVERRIDES[_ctQueue[(_ctIdx - 1 + _ctQueue.length) % _ctQueue.length]?.dbKey]
@@ -9488,10 +9501,12 @@ function _ctApplyCurrent(prevEntry) {
   }
 
   // Neues Item anlegen (mit kleinem Delay damit das Ablegen zuerst verarbeitet wird)
-  _ctReadyForCurse = false;  // Erst nach wearCurse curse_start Events akzeptieren
   setTimeout(() => {
     wearCurse(cur.dbKey, null);
     _ctReadyForCurse = true;  // Item gesendet — ab jetzt Curses vom aktuellen Item erwartet
+    // Grace-Fenster: dem Curse Zeit geben sich anzukündigen ("washes over"), bevor der
+    // Timer weiterschalten und das Item wieder ablegen darf.
+    _ctCurseGraceUntil = Date.now() + _ctCurseGraceMs;
     // Aktuelle Zeile im Curse-Tab highlighten falls sichtbar
     const rowId = 'crow_' + cur.dbKey.replace(/[^a-zA-Z0-9]/g, '_');
     document.querySelectorAll('.cg-row.ct-active').forEach(r => r.classList.remove('ct-active'));
@@ -9773,6 +9788,14 @@ function _ctHandleChatMsg(event, content) {
     showStatus('🔮 Curse erkannt — warte bis alle Curses fertig sind', 'info');
 
   } else if (event === 'curse_end') {
+    // Selbst ausgelöstes cease: das Item ist noch nicht "scharf" (z.B. cease durch
+    // das InventoryRemove beim Weiterschalten, bevor das neue Item per wearCurse läuft).
+    // Solche ceases dürfen das Outfit NICHT auslösen.
+    if (!_ctReadyForCurse) {
+      console.log('[CURSE-TEST] cease ignoriert — Item noch nicht scharf (Eigen-Remove?)');
+      _ctCurseActive = false;
+      return;
+    }
     // Veraltetes Event: falsches Item oder kein Curse-Kontext
     if (_ctCurseItemIdx < 0 || _ctIdx !== _ctCurseItemIdx) {
       console.log('[CURSE-TEST] cease ignoriert — falsches Item (idx ' + _ctIdx + ' vs ' + _ctCurseItemIdx + ')');
