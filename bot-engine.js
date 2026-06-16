@@ -448,22 +448,22 @@ function _teleport(a,C){
     return false;
   }
   const si=allSlots.indexOf(ziel);
-  // Selbst-Teleport: zusätzlich direkter lokaler Aufruf (instant, wenn die BC-Version
-  // ihn unterstützt). NUR Beschleunigung – schlägt er fehl, greift die Hidden-Nachricht.
-  let _tpDirect=false;
-  if(C.MemberNumber===Player.MemberNumber){
-    try{
-      if(typeof ChatRoomMapViewTeleport==='function'){ ChatRoomMapViewTeleport(ziel.x,ziel.y); _tpDirect=true; }
-    }catch(e){ _log('⚠️ TP direkt-Aufruf Fehler:',e.message); }
+  const _isSelf = C.MemberNumber===Player.MemberNumber;
+  let _tpWay=[];
+  if(_isSelf){
+    // WICHTIG: Eigene Hidden-Nachrichten kommen NICHT an einen selbst zurück → eine
+    // Nachricht mit Target=self teleportiert nie (das war die Ursache). Stattdessen:
+    // 1) eigene Map-Position lokal direkt setzen, 2) per Funktion anwenden falls vorhanden,
+    // 3) an alle anderen broadcasten (ohne Target), damit sie die neue Position sehen.
+    try{ if(!Player.MapData)Player.MapData={}; Player.MapData.Pos={X:ziel.x,Y:ziel.y}; _tpWay.push('pos'); }catch(e){ _log('⚠️ TP Pos-Set:',e.message); }
+    try{ if(typeof ChatRoomMapViewTeleport==='function'){ ChatRoomMapViewTeleport(ziel.x,ziel.y); _tpWay.push('fn'); } }catch(e){}
+    try{ ServerSend('ChatRoomChat',{Content:'ChatRoomMapViewTeleport',Type:'Hidden',Dictionary:[{Tag:'MapViewTeleport',Position:{X:ziel.x,Y:ziel.y}}]}); _tpWay.push('broadcast'); }catch(e){}
+  } else {
+    // Anderen Spieler teleportieren: gezielte Hidden-Nachricht an dessen Client.
+    ServerSend('ChatRoomChat',{Content:'ChatRoomMapViewTeleport',Type:'Hidden',Dictionary:[{Tag:'MapViewTeleport',Position:{X:ziel.x,Y:ziel.y}}],Target:C.MemberNumber});
+    _tpWay.push('target');
   }
-  // Hidden-Nachricht IMMER senden – garantiert den Teleport (Selbst & Fremd), auch wenn
-  // der direkte Aufruf in dieser BC-Version nichts bewirkt.
-  ServerSend('ChatRoomChat',{
-    Content:'ChatRoomMapViewTeleport',Type:'Hidden',
-    Dictionary:[{Tag:'MapViewTeleport',Position:{X:ziel.x,Y:ziel.y}}],
-    Target:C.MemberNumber,
-  });
-  _log('🌀 TP '+C.Name+' → X='+ziel.x+' Y='+ziel.y+(si>0?' [Fallback '+si+']':'')+(_tpDirect?' [direkt+hidden]':' [hidden]'));
+  _log('🌀 TP '+C.Name+' → X='+ziel.x+' Y='+ziel.y+(si>0?' [Fallback '+si+']':'')+' ['+_tpWay.join('+')+']');
   // Gültig-Flag: wenn Slot auf ❌ Fehler gesetzt → Aktion gilt als fehlgeschlagen
   const gueltig=ziel.gueltig??true;
   if(!gueltig)_log('⚠️ Slot '+si+' hat gueltig=false → gilt als Fehler');
