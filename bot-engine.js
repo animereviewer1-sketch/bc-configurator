@@ -51,6 +51,7 @@ function _buildBotCode(bot) {
     }),
   }));
   const eventsJson = btoa(unescape(encodeURIComponent(JSON.stringify(events))));
+  const scenesJson = btoa(unescape(encodeURIComponent(JSON.stringify(bot.szenen||[]))));
   // Build roomEver from logs – members who joined and haven't left yet
   // This is the authoritative source: Log löschen = Erstes Mal joinen
   const persistedRoomEver = (() => {
@@ -161,6 +162,111 @@ const _joinTrigs=_trigs.filter(t=>(t.bedingungen??[]).some(c=>c.typ==='player_be
 const _rejoinWindow=new Map(); // memberNum → timestamp when opened
 const _REJOIN_GRACE=1000; // ms window stays open regardless of other triggers
 const _evts=JSON.parse(decodeURIComponent(escape(atob('${eventsJson}'))));
+const _scenes=JSON.parse(decodeURIComponent(escape(atob('${scenesJson}'))));
+// ════════════════════ SZENEN-LAUFZEIT (Story-Player) ════════════════════
+var _sceneVars  = {};   // memberNum -> { name: value }   (Variablen/Flags pro Spieler)
+var _sceneWait  = {};   // memberNum -> wartet auf Antwort
+var _sceneRunId = 0;
+function _vget(mn,name){ return (_sceneVars[mn]||{})[name]; }
+function _vset(mn,name,val){
+  (_sceneVars[mn]=_sceneVars[mn]||{})[name]=val;
+  try{window.__BCK_popupRef&&window.__BCK_popupRef.postMessage({app:'BCKonfigurator',type:'BOT_VAR',memberNum:mn,name:name,value:val},'*');}catch(e){}
+}
+function _scTpl(s,C){
+  var mn=C&&C.MemberNumber;
+  var out=String(s==null?'':s).replace(/\{v:([^}]+)\}/g,function(_m,n){var val=_vget(mn,String(n).trim());return val==null?'':String(val);});
+  return _tpl(out,{name:C&&C.Name,C:C,memberNum:mn});
+}
+function _scSend(typ,txt,C){
+  if(typ==='whisper')ServerSend('ChatRoomChat',{Content:txt,Type:'Whisper',Target:C.MemberNumber});
+  else if(typ==='emote')ServerSend('ChatRoomChat',{Content:txt,Type:'Emote'});
+  else ServerSend('ChatRoomChat',{Content:txt,Type:'Chat'});
+}
+function _scVarApply(mn,op,name,wert){
+  if(!name)return;
+  var cur=_vget(mn,name), curN=Number(cur)||0, wN=Number(wert), nv;
+  if(op==='add') nv=curN+(isNaN(wN)?0:wN);
+  else if(op==='sub') nv=curN-(isNaN(wN)?0:wN);
+  else if(op==='toggle') nv=(cur?0:1);
+  else nv=isNaN(wN)||wert===''||wert==null?wert:wN; // set
+  _vset(mn,name,nv);
+}
+function _scTruth(cur,op,wert){
+  var curN=Number(cur), wN=Number(wert);
+  if(op==='!=') return String(cur)!==String(wert);
+  if(op==='>')  return curN>wN;
+  if(op==='<')  return curN<wN;
+  if(op==='>=') return curN>=wN;
+  if(op==='<=') return curN<=wN;
+  if(op==='gesetzt') return cur!=null&&cur!==''&&cur!==0&&cur!=='0';
+  if(op==='leer')    return cur==null||cur===''||cur===0||cur==='0';
+  return String(cur)===String(wert); // '=='
+}
+function _scGoto(sc,steps,ziel,curIdx,C){
+  if(ziel==='ende')return;
+  if(!ziel){_scStep(sc,steps,curIdx+1,C);return;}
+  var j=steps.findIndex(function(s){return s.id===ziel;});
+  _scStep(sc,steps,(j<0?curIdx+1:j),C);
+}
+function _scStep(sc,steps,idx,C){
+  if(idx<0||idx>=steps.length)return;
+  var st=steps[idx], mn=C.MemberNumber;
+  try{
+    if(st.typ==='nachricht'){
+      if(st.text)_scSend(st.msgTyp,_scTpl(st.text,C),C);
+      setTimeout(function(){_scStep(sc,steps,idx+1,C);},(Number(st.pause)||0)*1000);
+    } else if(st.typ==='warte'){
+      setTimeout(function(){_scStep(sc,steps,idx+1,C);},(Number(st.sek)||0)*1000);
+    } else if(st.typ==='variable'){
+      _scVarApply(mn,st.varOp||'set',st.varName,st.varWert);
+      _scStep(sc,steps,idx+1,C);
+    } else if(st.typ==='wenn'){
+      var truth=_scTruth(_vget(mn,st.varName),st.varCmp||'==',st.varWert);
+      _scGoto(sc,steps,truth?st.zielJa:st.zielNein,idx,C);
+    } else if(st.typ==='frage'){
+      if(st.text)_scSend(st.msgTyp,_scTpl(st.text,C),C);
+      var rid=++_sceneRunId;
+      var w={sid:sc.id,steps:steps,idx:idx,answers:(st.antworten||[]),rid:rid,timer:null};
+      if(Number(st.timeout)>0){
+        w.timer=setTimeout(function(){
+          if(_sceneWait[mn]&&_sceneWait[mn].rid===rid){delete _sceneWait[mn];_scGoto(sc,steps,st.timeoutZiel,idx,C);}
+        },Number(st.timeout)*1000);
+      }
+      _sceneWait[mn]=w;
+    } else if(st.typ==='sprung'){
+      _scGoto(sc,steps,st.ziel,idx,C);
+    } else if(st.typ==='ende'){
+      return;
+    } else {
+      _scStep(sc,steps,idx+1,C);
+    }
+  }catch(ex){_log('Szenen-Schritt Fehler:',ex.message);}
+}
+function _playScene(sid,C,vars,startId){
+  if(!C||!C.MemberNumber)return;
+  var sc=(_scenes||[]).find(function(x){return x.id===sid;});
+  if(!sc){_log('Szene nicht gefunden:',sid);return;}
+  var mn=C.MemberNumber;
+  if(_sceneWait[mn]){try{clearTimeout(_sceneWait[mn].timer);}catch(e){}delete _sceneWait[mn];}
+  var steps=sc.steps||[];
+  var idx=startId==null?0:steps.findIndex(function(s){return s.id===startId;});
+  if(idx<0)idx=0;
+  _log('Szene start:',sc.name,'für',C.Name);
+  _scStep(sc,steps,idx,C);
+}
+function _sceneHandleAnswer(rohText,C){
+  if(!C||!C.MemberNumber)return false;
+  var w=_sceneWait[C.MemberNumber];if(!w)return false;
+  var txt=(rohText||'').toLowerCase();
+  var match=(w.answers||[]).find(function(a){return a.wort&&txt.indexOf(String(a.wort).toLowerCase())!==-1;});
+  if(!match)return false;
+  try{clearTimeout(w.timer);}catch(e){}
+  delete _sceneWait[C.MemberNumber];
+  var sc=(_scenes||[]).find(function(x){return x.id===w.sid;});
+  if(sc)_scGoto(sc,w.steps,match.ziel,w.idx,C);
+  return true;
+}
+
 
 // Rang-State: memberNum -> aktueller rankId (laut Popup-State)
 // Beim Start mit gespeicherten Spieler-Rang-Zuweisungen initialisieren
@@ -572,6 +678,8 @@ function _execAct(a,C,vars){
         memberNum:C.MemberNumber,name:C.Name,rankId:newRankId},'*');
       ok=true;
     }
+    else if(a.typ==='szene'){ _playScene(a.szeneId,C,vars,a.szeneStep||null); ok=true; }
+    else if(a.typ==='variable'){ _scVarApply(C.MemberNumber,a.varOp||'set',a.varName,a.varWert); ok=true; }
     else ok=true;
   }catch(ex){_log('\u26A0 Aktion '+a.typ+' Fehler:',ex.message);ok=false;}
   // Dann / Sonst Nachrichten senden
@@ -876,7 +984,8 @@ function _tpl(s,v){
     .replace(/{waehrung}/gi,cur)
     .replace(/{kontostand}/gi,String((_moneyBalances[v.shopBuyer?.MemberNumber??v.C?.MemberNumber]?.balance)??0))
     .replace(/{anzahl}/gi,String(v.shopAnzahl??''))
-    .replace(/{gesamt}/gi,String(v.shopGesamt??''));
+    .replace(/{gesamt}/gi,String(v.shopGesamt??''))
+    .replace(/\{v:([^}]+)\}/gi,function(_m,n){var mn=(v.C&&v.C.MemberNumber)||v.memberNum;var val=(_sceneVars[mn]||{})[String(n).trim()];return val==null?'':String(val);});
 }
 
 // ── Shop-Befehl Parsing ───────────────────────────────
@@ -1186,6 +1295,7 @@ function _handleShopCmd(rohText,buyerC){
 
 function _proc(rohText,typKey,C){
   if(!rohText)return;
+  if(_sceneHandleAnswer(rohText,C))return;
   // Money query command
   const qCmd=(_moneyCfg?.queryCmd||'').trim().toLowerCase();
   if(qCmd&&rohText.trim().toLowerCase()===qCmd.toLowerCase()){
@@ -1819,6 +1929,7 @@ const _msgH=function(data){
 ServerSocket.on('ChatRoomMessage',_msgH);
 
 window['_BCBot_'+_BID]={
+  playScene(sid){try{_playScene(sid,Player,{},null);}catch(e){console.warn(e);}},
   stop(){
     clearInterval(_itPoll);
     clearInterval(_joinPoll);

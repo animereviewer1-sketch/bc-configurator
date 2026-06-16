@@ -114,6 +114,9 @@ function renderBotEditor() {
     <div class="be-body">
       <div id="trig-list">${(bot.triggers||[]).map((t,i)=>renderTrigCard(bot,t,i)).join('')}</div>
       <button class="be-addtrig" onclick="botAddTrig()">+ Trigger hinzufügen</button>
+      <div style="margin:14px 0 6px;font-size:.72rem;font-weight:700;color:var(--purple);border-top:1px solid var(--border2);padding-top:10px">📖 Szenen / Story</div>
+      <div id="szene-list">${_szenen(bot).map((s,i)=>renderSzeneCard(bot,s,i)).join('')}</div>
+      <button class="be-addtrig" onclick="szeneNew()">+ Szene hinzufügen</button>
     </div>`;
   document.getElementById('botEditor').innerHTML = html;
   // Offene Trigger-Bodies wiederherstellen
@@ -131,7 +134,330 @@ function botSetting(key, val) {
   b.settings[key] = val; _saveBots();
 }
 
+// ════════════════════ SZENEN-MODUS (Story-Editor) ════════════════════
+// Eine Szene ist ein linearer Ablauf aus Schritten, der nacheinander abgespielt
+// wird. Schritt-Typen: nachricht, warte, frage (auf Antwort warten/verzweigen),
+// sprung (zu anderem Schritt), ende.
+function _szenen(b){ if(!b.szenen) b.szenen=[]; return b.szenen; }
+function _szene(b,sid){ return _szenen(b).find(x=>x.id===sid)||null; }
+
+function szeneNew(){
+  const b=_selBot(); if(!b) return;
+  _szenen(b).push({id:'sz'+Date.now(), name:'Neue Szene', open:true, steps:[]});
+  _saveBots(); renderBotEditor();
+}
+function szeneTest(sid){
+  const b=_selBot(); if(!b) return;
+  if(!b.laufend){ alert('Der Bot muss zuerst laufen (▶️ Starten), damit die Szene getestet werden kann.'); return; }
+  const safeId=b.id.replace(/\W/g,'_');
+  bcSend({type:'EXEC', code:"window['_BCBot_"+safeId+"']&&window['_BCBot_"+safeId+"'].playScene("+JSON.stringify(sid)+");"});
+}
+function szeneDelete(sid){
+  const b=_selBot(); if(!b) return;
+  const s=_szene(b,sid); if(!s) return;
+  if(!confirm('Szene „'+(s.name||'')+'" löschen?')) return;
+  b.szenen=_szenen(b).filter(x=>x.id!==sid); _saveBots(); renderBotEditor();
+}
+function szeneField(sid,field,val){
+  const b=_selBot(); if(!b) return;
+  const s=_szene(b,sid); if(!s) return;
+  s[field]=val; _saveBots();
+}
+function szeneToggle(sid){
+  const b=_selBot(); if(!b) return;
+  const s=_szene(b,sid); if(!s) return;
+  s.open=!s.open;
+  document.getElementById('szbody-'+sid)?.classList.toggle('open',s.open);
+}
+function szeneMove(sid,dir){
+  const b=_selBot(); if(!b) return;
+  const arr=_szenen(b); const i=arr.findIndex(x=>x.id===sid); if(i<0) return;
+  const j=i+dir; if(j<0||j>=arr.length) return;
+  [arr[i],arr[j]]=[arr[j],arr[i]]; _saveBots(); renderBotEditor();
+}
+
+function _newStep(typ){
+  const st={id:'st'+Date.now()+Math.floor(Math.random()*9999), typ};
+  if(typ==='nachricht'){ st.msgTyp='chat'; st.text=''; st.pause=2; }
+  else if(typ==='warte'){ st.sek=3; }
+  else if(typ==='frage'){ st.msgTyp='chat'; st.text=''; st.antworten=[{wort:'',ziel:''}]; st.timeout=0; st.timeoutZiel=''; }
+  else if(typ==='sprung'){ st.ziel=''; }
+  else if(typ==='variable'){ st.varName=''; st.varOp='set'; st.varWert=''; }
+  else if(typ==='wenn'){ st.varName=''; st.varCmp='=='; st.varWert=''; st.zielJa=''; st.zielNein=''; }
+  return st;
+}
+function stepAdd(sid,typ){
+  const b=_selBot(); if(!b) return;
+  const s=_szene(b,sid); if(!s) return;
+  s.steps=s.steps||[]; s.steps.push(_newStep(typ));
+  _saveBots(); _szeneRerenderSteps(sid);
+}
+function stepField(sid,stid,field,val){
+  const b=_selBot(); if(!b) return;
+  const s=_szene(b,sid); if(!s) return;
+  const st=(s.steps||[]).find(x=>x.id===stid); if(!st) return;
+  st[field]=val; _saveBots();
+}
+function stepRemove(sid,stid){
+  const b=_selBot(); if(!b) return;
+  const s=_szene(b,sid); if(!s) return;
+  s.steps=(s.steps||[]).filter(x=>x.id!==stid); _saveBots(); _szeneRerenderSteps(sid);
+}
+function stepMove(sid,stid,dir){
+  const b=_selBot(); if(!b) return;
+  const s=_szene(b,sid); if(!s) return;
+  const arr=s.steps||[]; const i=arr.findIndex(x=>x.id===stid); if(i<0) return;
+  const j=i+dir; if(j<0||j>=arr.length) return;
+  [arr[i],arr[j]]=[arr[j],arr[i]]; _saveBots(); _szeneRerenderSteps(sid);
+}
+function antwortAdd(sid,stid){
+  const b=_selBot(); if(!b) return;
+  const st=(_szene(b,sid)?.steps||[]).find(x=>x.id===stid); if(!st) return;
+  st.antworten=st.antworten||[]; st.antworten.push({wort:'',ziel:''});
+  _saveBots(); _stepRerender(sid,stid);
+}
+function antwortField(sid,stid,ai,field,val){
+  const b=_selBot(); if(!b) return;
+  const st=(_szene(b,sid)?.steps||[]).find(x=>x.id===stid); if(!st) return;
+  if(!st.antworten?.[ai]) return; st.antworten[ai][field]=val; _saveBots();
+}
+function antwortRemove(sid,stid,ai){
+  const b=_selBot(); if(!b) return;
+  const st=(_szene(b,sid)?.steps||[]).find(x=>x.id===stid); if(!st) return;
+  st.antworten=(st.antworten||[]).filter((_,i)=>i!==ai); _saveBots(); _stepRerender(sid,stid);
+}
+
+function _szeneRerenderSteps(sid){
+  const b=_selBot(); const s=_szene(b,sid); if(!s) return;
+  const el=document.getElementById('szsteps-'+sid);
+  if(el) el.innerHTML=(s.steps||[]).map((st,i)=>renderStep(sid,s,st,i)).join('');
+}
+function _stepRerender(sid,stid){
+  const b=_selBot(); const s=_szene(b,sid); if(!s) return;
+  const st=(s.steps||[]).find(x=>x.id===stid); const i=(s.steps||[]).findIndex(x=>x.id===stid);
+  if(!st) return;
+  const el=document.getElementById('szstep-'+sid+'-'+stid);
+  if(el){ const tmp=document.createElement('div'); tmp.innerHTML=renderStep(sid,s,st,i); el.replaceWith(tmp.firstElementChild); }
+}
+
+function _stepKurz(st){
+  if(st.typ==='nachricht'||st.typ==='frage') return ((st.text||'').slice(0,16)||st.typ);
+  if(st.typ==='warte') return (st.sek||0)+'s';
+  if(st.typ==='sprung') return 'Sprung';
+  return st.typ;
+}
+function _stepZielOpts(s, sel){
+  let o='<option value="" '+(!sel?'selected':'')+'>▶ Weiter (nächster Schritt)</option>';
+  (s.steps||[]).forEach((st,i)=>{
+    o+='<option value="'+st.id+'" '+(sel===st.id?'selected':'')+'>↪ Schritt '+(i+1)+' – '+escHtml(_stepKurz(st))+'</option>';
+  });
+  o+='<option value="ende" '+(sel==='ende'?'selected':'')+'>🏁 Szene beenden</option>';
+  return o;
+}
+
+function renderStep(sid, s, st, idx){
+  const tot=(s.steps||[]).length;
+  const icons={nachricht:'💬',warte:'⏳',frage:'❓',sprung:'🔀',ende:'🏁',variable:'🔢',wenn:'❔'};
+  const names={nachricht:'Nachricht',warte:'Warte',frage:'Frage / Antwort',sprung:'Sprung',ende:'Ende',variable:'Variable setzen',wenn:'Wenn (Bedingung)'};
+  let body='';
+  if(st.typ==='nachricht'){
+    body=`<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+        <select class="cf" style="width:96px" onchange="stepField('${sid}','${st.id}','msgTyp',this.value)">
+          <option value="chat" ${(!st.msgTyp||st.msgTyp==='chat')?'selected':''}>💬 Chat</option>
+          <option value="emote" ${st.msgTyp==='emote'?'selected':''}>✨ Emote</option>
+          <option value="whisper" ${st.msgTyp==='whisper'?'selected':''}>🤫 Whisper</option>
+        </select>
+        <span style="font-size:.62rem;color:var(--text3)">Pause danach:</span>
+        <input class="cf" type="number" min="0" step="0.5" value="${st.pause??0}" style="width:62px" oninput="stepField('${sid}','${st.id}','pause',+this.value)"> s
+      </div>
+      <textarea class="cf" style="width:100%;resize:vertical;min-height:40px;margin-top:4px" rows="2" placeholder="Was der Bot sagt … Variablen: {name}" oninput="stepField('${sid}','${st.id}','text',this.value)">${escHtml(st.text||'')}</textarea>`;
+  } else if(st.typ==='warte'){
+    body=`<span style="font-size:.65rem;color:var(--text3)">Warte</span>
+      <input class="cf" type="number" min="0" step="0.5" value="${st.sek??3}" style="width:70px" oninput="stepField('${sid}','${st.id}','sek',+this.value)"> Sekunden, dann weiter`;
+  } else if(st.typ==='frage'){
+    const ant=(st.antworten||[]);
+    const antRows=ant.map((a,ai)=>`<div style="display:flex;gap:5px;align-items:center;margin-top:3px">
+        <span style="font-size:.6rem;color:var(--text3)">wenn</span>
+        <input class="cf" style="width:120px" value="${escHtml(a.wort||'')}" placeholder="Antwort-Wort" oninput="antwortField('${sid}','${st.id}',${ai},'wort',this.value)">
+        <span style="font-size:.6rem;color:var(--text3)">→</span>
+        <select class="cf" style="flex:1;min-width:150px" onchange="antwortField('${sid}','${st.id}',${ai},'ziel',this.value)">${_stepZielOpts(s,a.ziel)}</select>
+        <button class="rm-btn" onclick="antwortRemove('${sid}','${st.id}',${ai})">✕</button>
+      </div>`).join('');
+    body=`<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+        <select class="cf" style="width:96px" onchange="stepField('${sid}','${st.id}','msgTyp',this.value)">
+          <option value="chat" ${(!st.msgTyp||st.msgTyp==='chat')?'selected':''}>💬 Chat</option>
+          <option value="emote" ${st.msgTyp==='emote'?'selected':''}>✨ Emote</option>
+          <option value="whisper" ${st.msgTyp==='whisper'?'selected':''}>🤫 Whisper</option>
+        </select>
+        <span style="font-size:.6rem;color:var(--text3)">Frage-Text (optional)</span>
+      </div>
+      <textarea class="cf" style="width:100%;resize:vertical;min-height:36px;margin-top:4px" rows="2" placeholder="Frage an den Spieler …" oninput="stepField('${sid}','${st.id}','text',this.value)">${escHtml(st.text||'')}</textarea>
+      <div style="margin-top:4px;padding:5px 7px;background:rgba(139,92,246,0.05);border-radius:6px">
+        <div style="font-size:.6rem;color:var(--purple);font-weight:700">ANTWORTEN</div>
+        ${antRows}
+        <button onclick="antwortAdd('${sid}','${st.id}')" style="margin-top:4px;font-size:.62rem;padding:2px 8px;background:var(--pd);border:none;color:var(--pl);border-radius:4px;cursor:pointer">+ Antwort</button>
+      </div>
+      <div style="display:flex;gap:5px;align-items:center;margin-top:4px">
+        <span style="font-size:.6rem;color:var(--text3)">⏱ Timeout</span>
+        <input class="cf" type="number" min="0" value="${st.timeout??0}" style="width:62px" oninput="stepField('${sid}','${st.id}','timeout',+this.value)"> s (0 = aus) →
+        <select class="cf" style="flex:1;min-width:150px" onchange="stepField('${sid}','${st.id}','timeoutZiel',this.value)">${_stepZielOpts(s,st.timeoutZiel)}</select>
+      </div>`;
+  } else if(st.typ==='sprung'){
+    body=`<span style="font-size:.65rem;color:var(--text3)">Springe zu</span>
+      <select class="cf" style="flex:1;min-width:170px" onchange="stepField('${sid}','${st.id}','ziel',this.value)">${_stepZielOpts(s,st.ziel)}</select>`;
+  } else if(st.typ==='variable'){
+    body=`<span style="font-size:.62rem;color:var(--text3)">Variable</span>
+      <input class="cf" style="width:130px" value="${escHtml(st.varName||'')}" placeholder="Name (z.B. gehorsam)" oninput="stepField('${sid}','${st.id}','varName',this.value)">
+      <select class="cf" style="width:104px" onchange="stepField('${sid}','${st.id}','varOp',this.value)">
+        <option value="set" ${(!st.varOp||st.varOp==='set')?'selected':''}>= Setzen</option>
+        <option value="add" ${st.varOp==='add'?'selected':''}>➕ Plus</option>
+        <option value="sub" ${st.varOp==='sub'?'selected':''}>➖ Minus</option>
+        <option value="toggle" ${st.varOp==='toggle'?'selected':''}>🔁 Umschalten 0/1</option>
+      </select>
+      <input class="cf" style="width:90px" value="${escHtml(st.varWert||'')}" placeholder="Wert" oninput="stepField('${sid}','${st.id}','varWert',this.value)">`;
+  } else if(st.typ==='wenn'){
+    body=`<div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap">
+        <span style="font-size:.62rem;color:var(--text3)">wenn</span>
+        <input class="cf" style="width:120px" value="${escHtml(st.varName||'')}" placeholder="Variable" oninput="stepField('${sid}','${st.id}','varName',this.value)">
+        <select class="cf" style="width:96px" onchange="stepField('${sid}','${st.id}','varCmp',this.value)">
+          ${['==','!=','>','<','>=','<=','gesetzt','leer'].map(o=>`<option value="${o}" ${(st.varCmp||'==')===o?'selected':''}>${o}</option>`).join('')}
+        </select>
+        <input class="cf" style="width:80px" value="${escHtml(st.varWert||'')}" placeholder="Wert" oninput="stepField('${sid}','${st.id}','varWert',this.value)">
+      </div>
+      <div style="display:flex;gap:5px;align-items:center;margin-top:4px">
+        <span style="font-size:.6rem;color:#5c5">✅ Ja →</span>
+        <select class="cf" style="flex:1;min-width:140px" onchange="stepField('${sid}','${st.id}','zielJa',this.value)">${_stepZielOpts(s,st.zielJa)}</select>
+      </div>
+      <div style="display:flex;gap:5px;align-items:center;margin-top:3px">
+        <span style="font-size:.6rem;color:#e55">❌ Nein →</span>
+        <select class="cf" style="flex:1;min-width:140px" onchange="stepField('${sid}','${st.id}','zielNein',this.value)">${_stepZielOpts(s,st.zielNein)}</select>
+      </div>`;
+  } else if(st.typ==='ende'){
+    body=`<span style="font-size:.65rem;color:var(--text3)">🏁 Die Szene endet hier.</span>`;
+  }
+  return `<div class="act-card" id="szstep-${sid}-${st.id}">
+    <div style="flex:1">
+      <div style="display:flex;gap:4px;align-items:center">
+        <span style="display:flex;flex-direction:column;gap:1px;flex-shrink:0">
+          <button class="order-btn" onclick="stepMove('${sid}','${st.id}',-1)" ${idx===0?'disabled':''}>▲</button>
+          <button class="order-btn" onclick="stepMove('${sid}','${st.id}',1)" ${idx===tot-1?'disabled':''}>▼</button>
+        </span>
+        <span class="trig-order-num" style="margin-right:2px">${idx+1}</span>
+        <span style="font-size:.7rem;font-weight:600;color:var(--purple)">${icons[st.typ]||'•'} ${names[st.typ]||st.typ}</span>
+        <button class="rm-btn" style="margin-left:auto" onclick="stepRemove('${sid}','${st.id}')">✕</button>
+      </div>
+      <div style="margin-top:4px;margin-left:6px">${body}</div>
+    </div>
+  </div>`;
+}
+
+function _szeneSummary(s){
+  const n=(s.steps||[]).length;
+  const first=(s.steps||[]).find(x=>x.typ==='nachricht'||x.typ==='frage');
+  const prev=first?('„'+escHtml((first.text||'').slice(0,40))+'"'):'(leer)';
+  return n+' Schritt'+(n===1?'':'e')+' · '+prev;
+}
+function renderSzeneCard(b, s, i){
+  const tot=_szenen(b).length;
+  return `<div class="trig-card" id="szc-${s.id}">
+    <div class="trig-head" onclick="szeneToggle('${s.id}')">
+      <span class="trig-order-num">${i+1}</span>
+      <span style="display:flex;flex-direction:column;gap:1px;margin-right:2px">
+        <button class="order-btn" onclick="event.stopPropagation();szeneMove('${s.id}',-1)" ${i===0?'disabled':''}>▲</button>
+        <button class="order-btn" onclick="event.stopPropagation();szeneMove('${s.id}',1)" ${i===tot-1?'disabled':''}>▼</button>
+      </span>
+      <span style="display:flex;flex-direction:column;gap:1px;flex:1;min-width:0">
+        <span class="trig-label" id="szlabel-${s.id}">📖 ${escHtml(s.name||'Szene')}</span>
+        <span style="font-size:.62rem;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${_szeneSummary(s)}</span>
+      </span>
+      <button onclick="event.stopPropagation();szeneTest('${s.id}')" class="rm-btn" title="Szene jetzt testen (Bot muss laufen)" style="color:var(--green)">▶</button>
+      <button onclick="event.stopPropagation();szeneDelete('${s.id}')" class="rm-btn" title="Szene löschen">✕</button>
+    </div>
+    <div class="trig-body ${s.open?'open':''}" id="szbody-${s.id}">
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+        <label style="font-size:.65rem;color:var(--text3)">Name:</label>
+        <input class="cf cf-w160" value="${escHtml(s.name||'')}" oninput="szeneField('${s.id}','name',this.value);document.getElementById('szlabel-${s.id}').textContent='📖 '+this.value">
+      </div>
+      <div class="te-section">
+        <div class="te-section-title">🎬 Ablauf
+          <button onclick="stepAdd('${s.id}','nachricht')">+ 💬 Nachricht</button>
+          <button onclick="stepAdd('${s.id}','warte')">+ ⏳ Warte</button>
+          <button onclick="stepAdd('${s.id}','frage')">+ ❓ Frage</button>
+          <button onclick="stepAdd('${s.id}','variable')">+ 🔢 Variable</button>
+          <button onclick="stepAdd('${s.id}','wenn')">+ ❔ Wenn</button>
+          <button onclick="stepAdd('${s.id}','sprung')">+ 🔀 Sprung</button>
+          <button onclick="stepAdd('${s.id}','ende')">+ 🏁 Ende</button>
+        </div>
+        <div id="szsteps-${s.id}">${(s.steps||[]).map((st,si)=>renderStep(s.id,s,st,si)).join('')}</div>
+      </div>
+    </div>
+  </div>`;
+}
+
 // ── Trigger Cards ─────────────────────────────────────────────
+// ── Klartext-Zusammenfassung eines Triggers (für die eingeklappte Ansicht) ──
+function _btLogikWort(l) {
+  return ({und:'und', oder:'oder', und_oder:'und/oder', und_nicht:'aber NICHT'})[l||'und'] || 'und';
+}
+function _btCondPhrase(bot, c) {
+  const e = (s)=>escHtml(String(s));
+  switch (c?.typ) {
+    case 'wort': {
+      const w = c.wort ? '„'+e(c.wort)+'"' : '(leeres Wort)';
+      const k = ({any:'sagt/schreibt', chat:'sagt', emote:'als Emote', whisper:'flüstert'})[c.typ_msg||'any'] || 'sagt';
+      return 'jemand '+k+' '+w;
+    }
+    case 'zone':      return 'jemand auf Position '+(c.x??0)+'/'+(c.y??0)+' steht';
+    case 'zone_rect': return 'jemand im Bereich '+(c.x1??0)+'/'+(c.y1??0)+'–'+(c.x2??0)+'/'+(c.y2??0)+' steht';
+    case 'item_traegt':       return e(c.item||'ein Item')+' getragen wird';
+    case 'item_traegt_nicht': return e(c.item||'ein Item')+' NICHT getragen wird';
+    case 'trigger_war': { const rt=(bot?.triggers||[]).find(x=>x.id===c.trigId); return 'Vortrigger „'+e(rt?.name||'?')+'" erfüllt ist'; }
+    case 'player_betritt': return ({alle:'jemand den Raum betritt',neu:'jemand zum ersten Mal den Raum betritt',rejoin:'jemand wieder den Raum betritt'})[c.betritt_typ||'alle'];
+    case 'rang': {
+      if (c.rang_op==='kein') return 'jemand keinen Rang hat';
+      const op = ({'=':'genau','min':'mind.','max':'höchstens'})[c.rang_op||'='];
+      const r = _rankSorted().find(x=>x.id===c.rang_id);
+      return 'jemand Rang '+op+' '+e(r?r.name:'?')+' hat';
+    }
+    case 'shop_kauf': { const it=_shop.items.find(x=>x.id===c.shop_id); return it?'„'+e(it.name)+'" im Shop gekauft wird':'etwas im Shop gekauft wird'; }
+    case 'ev_timer':    return 'nach '+(c.sek??10)+'s (einmalig)';
+    case 'ev_interval': return 'alle '+(c.sek_min??30)+'–'+(c.sek_max??180)+'s';
+    default: return e(c?.typ||'?');
+  }
+}
+function _btActPhrase(bot, a) {
+  const e = (s)=>escHtml(String(s));
+  const z = ({ausloeser:'',shop_kaeufer:' →Käufer',alle:' →alle',whitelist:' →Whitelist'})[a?.aktZiel||'ausloeser'] || '';
+  const txt = (a?.text||'').trim().replace(/\s+/g,' ').slice(0,28);
+  switch (a?.typ) {
+    case 'chat':    return '💬 „'+e(txt||'…')+'"';
+    case 'emote':   return '✨ „'+e(txt||'…')+'"';
+    case 'whisper': return '🤫 „'+e(txt||'…')+'"';
+    case 'item': {
+      const what = a.itemConfig ? a.itemConfig.asset : a.profilName || a.curseName || a.item || 'Item';
+      return '📦 '+e(what)+' anlegen'+z;
+    }
+    case 'item_entf': return '🗑️ '+e(a.gruppe||'Item')+' entfernen'+z;
+    case 'teleport':  return '🌀 Teleport'+z;
+    case 'money': { const op=({add:'+',sub:'−',set:'=',reset:'reset'})[a.money_op||'add']; return '💰 Money '+op+(a.money_op==='reset'?'':(a.money_val??1))+z; }
+    case 'rang': { const op=({setzen:'setzen',entfernen:'entfernen',naechster:'+1 Lv',vorheriger:'−1 Lv'})[a.rang_op||'setzen']; return '🏆 Rang '+op+z; }
+    case 'szene': { const sz=(bot?.szenen||[]).find(x=>x.id===a.szeneId); return '📖 Szene „'+e(sz?.name||'?')+'" starten'; }
+    case 'variable': { const op=({set:'=',add:'+',sub:'−',toggle:'⇄'})[a.varOp||'set']; return '🔢 '+e(a.varName||'var')+' '+op+(a.varOp==='toggle'?'':' '+e(a.varWert??'')); }
+    default: return e(a?.typ||'?');
+  }
+}
+function _btTrigSummary(bot, t) {
+  const conds = t.bedingungen || [];
+  const acts  = t.aktionen || [];
+  const condStr = conds.length
+    ? '<b style="color:var(--purple)">WENN</b> ' + conds.map((c,i)=>(i>0?'<i style="opacity:.7">'+_btLogikWort(c.logik)+'</i> ':'')+_btCondPhrase(bot,c)).join(' ')
+    : '<span style="color:#e8a020">⚠️ keine Bedingung – feuert nie</span>';
+  const actStr = acts.length
+    ? '<b style="color:var(--purple)">→</b> ' + acts.map(a=>_btActPhrase(bot,a)).join(', ')
+    : '<span style="color:#e8a020">→ keine Aktion</span>';
+  return condStr + ' ' + actStr;
+}
+
 function renderTrigCard(bot, t, i) {
   const condN = (t.bedingungen||[]).length;
   const actN  = (t.aktionen||[]).length;
@@ -147,8 +473,11 @@ function renderTrigCard(bot, t, i) {
         <button class="order-btn" onclick="event.stopPropagation();trigMoveDown('${t.id}')" ${i===total-1?'disabled':''} title="Nach unten">▼</button>
       </span>
       <input type="checkbox" ${t.aktiv?'checked':''} onclick="event.stopPropagation();trigField('${t.id}','aktiv',this.checked)" style="accent-color:var(--purple)">
-      <span class="trig-label" id="tlabel-${t.id}">${escHtml(t.name||'Trigger')}</span>
-      <span class="trig-meta">${condN} Bed. · ${actN} Akt. · <span style="color:${wdh_color}">${wdh_lbl}</span></span>
+      <span style="display:flex;flex-direction:column;gap:1px;flex:1;min-width:0">
+        <span class="trig-label" id="tlabel-${t.id}">${escHtml(t.name||'Trigger')}</span>
+        <span class="trig-summary" title="Klartext-Zusammenfassung" style="font-size:.62rem;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%">${_btTrigSummary(bot,t)}</span>
+      </span>
+      <span class="trig-meta" style="flex-shrink:0">${condN} Bed. · ${actN} Akt. · <span style="color:${wdh_color}">${wdh_lbl}</span></span>
       <button onclick="event.stopPropagation();trigDelete('${t.id}')" class="rm-btn" title="Trigger löschen">✕</button>
     </div>
     <div class="trig-body" id="tb-${t.id}">
@@ -412,6 +741,7 @@ function renderAct(tid, a, ai, branch) {
     ['teleport','🌀 Teleport'],
     ['money','💰 Money ändern'],
     ['rang','🏆 Rang setzen'],
+    ['szene','📖 Szene starten'],['variable','🔢 Variable setzen'],
   ];
   const typeOpts = types.map(([v,l])=>`<option value="${v}" ${a.typ===v?'selected':''}>${l}</option>`).join('');
   const branchArg = branch ? `,'${branch}'` : '';
@@ -517,6 +847,26 @@ function renderAct(tid, a, ai, branch) {
         ${ranks.map(r=>`<option value="${r.id}" ${a.rang_id===r.id?'selected':''}>${escHtml(r.icon+' '+r.name)} (Lv.${r.level})</option>`).join('')}
       </select>`:''}
       ${rop==='naechster'||rop==='vorheriger'?`<span style="font-size:.62rem;color:var(--text3)">Bei Lv.Max/Min: kein Wechsel</span>`:''}
+    </div>`;
+  } else if (a.typ === 'szene') {
+    extra = `<div style="display:flex;gap:8px;align-items:center;margin-top:5px;flex-wrap:wrap">
+      <span style="font-size:.65rem;color:var(--text3)">📖 Szene:</span>
+      <select class="cf" style="flex:1;min-width:170px" onchange="actField('${tid}',${ai},'szeneId',this.value${branchArg})">
+        <option value="">– Szene wählen –</option>
+        ${_szenen(b).map(sz=>`<option value="${sz.id}" ${a.szeneId===sz.id?'selected':''}>${escHtml(sz.name||sz.id)}</option>`).join('')}
+      </select>
+    </div>`;
+  } else if (a.typ === 'variable') {
+    extra = `<div style="display:flex;gap:6px;align-items:center;margin-top:5px;flex-wrap:wrap">
+      <input class="cf" style="width:130px" value="${escHtml(a.varName||'')}" placeholder="Variablen-Name" oninput="actField('${tid}',${ai},'varName',this.value${branchArg})">
+      <select class="cf" style="width:104px" onchange="actField('${tid}',${ai},'varOp',this.value${branchArg})">
+        <option value="set" ${(!a.varOp||a.varOp==='set')?'selected':''}>= Setzen</option>
+        <option value="add" ${a.varOp==='add'?'selected':''}>➕ Plus</option>
+        <option value="sub" ${a.varOp==='sub'?'selected':''}>➖ Minus</option>
+        <option value="toggle" ${a.varOp==='toggle'?'selected':''}>🔁 Umschalten</option>
+      </select>
+      <input class="cf" style="width:90px" value="${escHtml(a.varWert||'')}" placeholder="Wert" oninput="actField('${tid}',${ai},'varWert',this.value${branchArg})">
+      <span style="font-size:.6rem;color:var(--text3)">Ziel: Auslöser</span>
     </div>`;
   }
 
