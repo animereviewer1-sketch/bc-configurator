@@ -539,7 +539,13 @@ var _outfitPending=0; // laufende Outfit-Anlege-Vorgänge (für "warten bis komp
 function _applyOutfitSequential(a,C){
   var profilItems=a.profilItems??[];
   _outfitPending++;
-  C.Appearance=C.Appearance.filter(function(item){ return _outfitKeepGroup(item&&item.Asset&&item.Asset.Group,a); });
+  var _rmSeq=[];
+  C.Appearance=C.Appearance.filter(function(item){
+    var k=_outfitKeepGroup(item&&item.Asset&&item.Asset.Group,a);
+    if(!k&&item&&item.Asset&&item.Asset.Group)_rmSeq.push(item.Asset.Group.Name+'/'+(item.Asset.Name||'?'));
+    return k;
+  });
+  if(_rmSeq.length)_log('\u{1F9F9} Strip entfernt ('+_rmSeq.length+'): '+_rmSeq.join(', '));
   CharacterRefresh(C);ChatRoomCharacterUpdate(C);
   var gap=Math.max(80, a.profilEinzelnGap||250);
   var _one=function(i){
@@ -652,9 +658,13 @@ function _applyItemAction(a, C){
 
       // Phase 0: Strip – pro Gruppe entscheiden was behalten wird (Körper immer,
       // Fesseln wenn outfitKeep, Klamotten wenn outfitKeepClothes).
+      var _rmBatch=[];
       C.Appearance = C.Appearance.filter(function(item){
-        return _outfitKeepGroup(item&&item.Asset&&item.Asset.Group, a);
+        var k=_outfitKeepGroup(item&&item.Asset&&item.Asset.Group, a);
+        if(!k&&item&&item.Asset&&item.Asset.Group)_rmBatch.push(item.Asset.Group.Name+'/'+(item.Asset.Name||'?'));
+        return k;
       });
+      if(_rmBatch.length)_log('\u{1F9F9} Strip entfernt ('+_rmBatch.length+'): '+_rmBatch.join(', '));
 
       // Phase 1: Alle InventoryWear synchron (kein CharacterRefresh dazwischen)
       profilItems.forEach(function(item){
@@ -713,6 +723,12 @@ function _applyItemAction(a, C){
         // outfitKeep: vom Outfit (Block/Konflikt) verdrängte Items wiederherstellen,
         // AUSSER den Gruppen, die das Outfit selbst belegt → bot-angelegte Items (z.B.
         // Cage) bleiben erhalten und werden NICHT durch das Outfit-Anlegen entfernt.
+        // Diagnose: was war vorher da und ist jetzt (ohne Outfit-Gruppe) weg?
+        try{
+          var _ofG0=profilItems.map(function(i){return i.group;});
+          var _gone=snapshot.filter(function(s){return s.Asset&&_ofG0.indexOf(s.Group)===-1&&!InventoryGet(C,s.Group);}).map(function(s){return s.Group+'/'+s.Asset.Name;});
+          if(_gone.length)_log('\u{1F50E} Nach Outfit weg/verdrängt ('+_gone.length+'): '+_gone.join(', '));
+        }catch(e){}
         if(a.outfitKeep||a.outfitKeepClothes){
           var _ofGroups=profilItems.map(function(i){return i.group;});
           snapshot.forEach(function(snap){
