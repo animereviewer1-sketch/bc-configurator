@@ -579,7 +579,7 @@ function _applyItemAction(a, C){
           }
         }
         CharacterRefresh(C);ChatRoomCharacterUpdate(C);
-      },500);
+      },250);
     }else if(a.curseEntry){
       let col=a.curseEntry.Farbe;if(typeof col==='string'&&col.includes(','))col=col.split(',');
       InventoryWear(C,a.curseEntry.ItemName,a.curseEntry.Gruppe,col,0,Player.MemberNumber,a.curseEntry.Craft);
@@ -764,7 +764,7 @@ function _runSeq(aktionen,C,vars,trigBase,onDone,onUngueltig){
     // schneller Folge ServerSend/CharacterUpdate-Aufrufe verwirft (zufällig fehlende
     // Aktionen). Item-Aktionen brauchen länger, da ihr Appearance-Sync mehrere Phasen hat.
     if(rest.length){
-      const _settle=(a.typ==='item'||a.typ==='item_entf')?750:(a.typ==='teleport'||a.typ==='chat'||a.typ==='emote'||a.typ==='whisper')?300:50;
+      const _settle=a.typ==='item'?450:(a.typ==='item_entf'||a.typ==='teleport'||a.typ==='chat'||a.typ==='emote'||a.typ==='whisper')?300:50;
       setTimeout(()=>_runSeq(rest,C,vars,trigBase,onDone,onUngueltig),_settle);
     } else {
       _runSeq(rest,C,vars,trigBase,onDone,onUngueltig);
