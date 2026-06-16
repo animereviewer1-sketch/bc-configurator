@@ -845,10 +845,13 @@ function _runSeq(aktionen,C,vars,trigBase,onDone,onUngueltig){
       if(_isOutfit){
         // Deterministisch warten, bis das Outfit KOMPLETT angelegt ist: _outfitPending
         // wird beim Start erhöht und nach dem finalen Sync gesenkt. Erst dann (plus
-        // kleiner Sync-Puffer) die nächste Aktion. Safety-Timeout 8s.
+        // kleiner Sync-Puffer) die nächste Aktion. Safety-Limit abhängig von der
+        // Item-Anzahl (Einzeln-Modus kann bei vielen Items >8s dauern).
+        const _itemN=(a.profilItems&&a.profilItems.length)||0;
+        const _maxWait=a.profilEinzeln ? (_itemN*Math.max(80,a.profilEinzelnGap||250)+1000) : 6000;
         let _waited=0;
         const _wait=()=>{
-          if(_outfitPending<=0 || _waited>8000){ setTimeout(_next,200); }
+          if(_outfitPending<=0 || _waited>_maxWait){ setTimeout(_next,200); }
           else { _waited+=50; setTimeout(_wait,50); }
         };
         setTimeout(_wait,50);
