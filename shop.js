@@ -132,7 +132,7 @@ function _shopNostripHint(){
     hint=document.createElement('div');
     hint.id='shop-nostrip-hint';
     hint.style.cssText='font-size:.62rem;color:#f87171;background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.2);border-radius:4px;padding:5px 8px;margin-top:6px;line-height:1.4';
-    hint.textContent='\u26A0\uFE0F Hinweis: /nostrip funktioniert nur wenn ein Trigger mit Bedingung "shop_kauf" und einer Item-Aktion f\u00fcr diesen Artikel existiert. Ohne passenden Trigger hat /nostrip keinen Effekt.';
+    hint.textContent='\u26A0\uFE0F Hinweis: /nostrip wirkt nur, wenn dieser Artikel ein Item anlegt \u2013 entweder oben \u00fcber "Item/Curse/Outfit beim Kauf anlegen" oder \u00fcber einen Trigger mit Bedingung "shop_kauf". Ohne angelegtes Item hat /nostrip keinen Effekt.';
     anchor.parentNode.insertBefore(hint,anchor.nextSibling);
   }
 }
@@ -169,13 +169,44 @@ function _shopKaufItemLabel(){
     : k.curseName  ? ('🔮 '+k.curseName)
     : k.item       ? ('📦 '+(k.gruppe||'?')+'/'+k.item) : '– nichts gewählt –';
 }
+let _shopFormState=null;
+function _shopSaveFormState(){
+  const g=id=>document.getElementById(id);
+  _shopFormState={
+    id:g('shop-modal-id').value, name:g('shop-modal-name').value, desc:g('shop-modal-desc').value,
+    icon:g('shop-modal-icon').value, preis:g('shop-modal-preis').value, aktiv:g('shop-modal-aktiv').value,
+    confirm:g('shop-modal-confirm').value, announce:g('shop-modal-announce').value, announceAll:g('shop-modal-announce-all').value,
+    error:g('shop-modal-error').value, preisU:g('shop-modal-preis-u').value, preisNostrip:g('shop-modal-preis-nostrip').value,
+    reqrank:(g('shop-modal-reqrank')||{}).value||'', reqgroup:(g('shop-modal-reqgroup')||{}).value||'',
+    hidelocked:!!(g('shop-modal-hidelocked')||{}).checked, kaufItem:_shopKaufItem
+  };
+}
+function _shopRestoreFormState(){
+  const s=_shopFormState; if(!s) return;
+  const g=id=>document.getElementById(id);
+  g('shop-modal-title').textContent = s.id ? '✏️ Artikel bearbeiten' : '🛒 Neuer Artikel';
+  g('shop-modal-id').value=s.id; g('shop-modal-name').value=s.name; g('shop-modal-desc').value=s.desc;
+  g('shop-modal-icon').value=s.icon; g('shop-modal-preis').value=s.preis; g('shop-modal-aktiv').value=s.aktiv;
+  g('shop-modal-confirm').value=s.confirm; g('shop-modal-announce').value=s.announce; g('shop-modal-announce-all').value=s.announceAll;
+  g('shop-modal-error').value=s.error; g('shop-modal-preis-u').value=s.preisU; g('shop-modal-preis-nostrip').value=s.preisNostrip;
+  _shopFillRankSelect(s.reqrank); _shopFillGroupSelect(s.reqgroup);
+  { const h=g('shop-modal-hidelocked'); if(h)h.checked=s.hidelocked; }
+  _shopKaufItemLabel();
+  { const a=g('shop-modal-kaufitem-aktiv'); if(a)a.checked=true; }
+  g('shop-modal-overlay').style.display='flex';
+  if(typeof _shopNostripHint==='function')_shopNostripHint();
+}
 function shopPickKaufItem(){
+  _shopSaveFormState();
+  window._shopPickActive=true;
+  shopModalClose();                 // Shop-Overlay schließen, damit der Picker/Item-Manager sichtbar ist
   ipickerOpen('item', v=>{
     if(v.type==='item') _shopKaufItem = v.itemConfig ? {itemConfig:v.itemConfig,item:v.itemConfig.asset,gruppe:v.itemConfig.group} : {item:v.name,gruppe:v.group,farbe:'#ffffff'};
     else if(v.type==='curse') _shopKaufItem={curseKey:v.key,curseName:v.name,curseEntry:v.entry};
     else if(v.type==='profil') _shopKaufItem={profilName:v.name,profilItems:(typeof PROFILES!=='undefined'&&PROFILES[v.name]&&PROFILES[v.name].items)||[]};
-    _shopKaufItemLabel();
-    const a=document.getElementById('shop-modal-kaufitem-aktiv'); if(a)a.checked=true;
+    window._shopPickActive=false;
+    if(_shopFormState) _shopFormState.kaufItem=_shopKaufItem;
+    _shopRestoreFormState();        // Shop-Modal mit allen Eingaben wieder öffnen
   });
 }
 function shopClearKaufItem(){ _shopKaufItem=null; _shopKaufItemLabel(); const a=document.getElementById('shop-modal-kaufitem-aktiv'); if(a)a.checked=false; }

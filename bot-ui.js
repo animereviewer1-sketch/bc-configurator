@@ -1802,8 +1802,9 @@ function _showTriggerAddBanner() {
   const banner = document.createElement('div');
   banner.id = '_trigBanner';
   banner.style.cssText = 'position:fixed;bottom:0;left:0;right:0;z-index:400;background:#1e1040;border-top:2px solid var(--purple);padding:8px 18px;display:flex;align-items:center;gap:12px;font-size:.73rem';
-  banner.innerHTML = `<span style="color:var(--pl)">🎯 Item für Trigger wählen:</span>
-    <span style="color:var(--text3);flex:1">Klicke ein Item in der Sidebar, dann auf <b style="color:var(--pl)">➕ Zum Trigger</b></span>
+  const _ziel = window._shopPickActive ? 'Shop' : 'Trigger';
+  banner.innerHTML = `<span style="color:var(--pl)">🎯 Item für ${_ziel} wählen:</span>
+    <span style="color:var(--text3);flex:1">Klicke ein Item in der Sidebar, dann auf <b style="color:var(--pl)">➕ Zum ${_ziel}</b></span>
     <button onclick="_cancelTrigPending()" style="background:var(--rd);border:none;color:var(--red);border-radius:5px;padding:4px 10px;cursor:pointer;font-size:.68rem">✕ Abbrechen</button>`;
   document.body.appendChild(banner);
 
@@ -1830,7 +1831,7 @@ function _injectTriggerButton() {
   btn.id = '_trigAddBtn';
   btn.className = 'btn btn-green';
   btn.style.cssText = 'min-width:130px;font-size:.8rem;border:2px solid var(--green)';
-  btn.textContent = '➕ Zum Trigger';
+  btn.textContent = window._shopPickActive ? '➕ Zum Shop' : '➕ Zum Trigger';
   btn.onclick = _addCurrentItemToTrigger;
   btnRow.appendChild(btn);
 }
@@ -1885,9 +1886,11 @@ function _addCurrentItemToTrigger() {
 
   const itemConfig = { asset, group, colors, tr, typeStr, props, archetype: cfg.archetype, craft, lock: lockType, lockParams };
   const val = { type:'item', name: asset, group: group, itemConfig };
+  const _wasShop = window._shopPickActive;
   const _pendingTid = _trigPending?.tid; // save before cancel
   _trigPending.cb(val);
   _cancelTrigPending();
+  if (_wasShop) { showStatus('✅ ' + asset + ' zum Shop-Artikel hinzugefügt','success'); return; }
   switchTab('bot');
   showStatus('✅ ' + asset + ' mit vollständiger Konfiguration zum Trigger hinzugefügt','success');
   // Trigger-Body öffnen + scrollen
