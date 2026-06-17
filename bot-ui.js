@@ -1890,7 +1890,7 @@ function _addCurrentItemToTrigger() {
   const _pendingTid = _trigPending?.tid; // save before cancel
   _trigPending.cb(val);
   _cancelTrigPending();
-  if (_wasShop) { showStatus('✅ ' + asset + ' zum Shop-Artikel hinzugefügt','success'); return; }
+  if (_wasShop) { if(typeof switchTab==='function')switchTab('shop'); showStatus('✅ ' + asset + ' zum Shop-Artikel hinzugefügt','success'); return; }
   switchTab('bot');
   showStatus('✅ ' + asset + ' mit vollständiger Konfiguration zum Trigger hinzugefügt','success');
   // Trigger-Body öffnen + scrollen

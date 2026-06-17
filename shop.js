@@ -30,6 +30,17 @@ let _shop = {
 function _saveShop() { idbSet(SHOP_KEY, _shop); }
 function _shopById(id) { return _shop.items.find(i=>i.id===id)??null; }
 
+// Editor aus dem Vollbild-Overlay in den Shop-Tab verschieben (Inline statt Popup)
+function _shopMountEditor(){
+  const ov=document.getElementById('shop-modal-overlay');
+  const host=document.getElementById('shop-editor-host');
+  if(ov&&host&&ov.parentElement!==host){ ov.classList.add('inline'); host.appendChild(ov); }
+}
+function _shopScrollToEditor(){
+  const ov=document.getElementById('shop-modal-overlay');
+  if(ov&&ov.scrollIntoView) try{ ov.scrollIntoView({behavior:'smooth',block:'nearest'}); }catch(e){}
+}
+
 function renderShopTab() {
   // Sync settings inputs
   const cmdEl = document.getElementById('shop-cmd-inp');
@@ -50,6 +61,7 @@ function renderShopTab() {
   if (uEl) uEl.value = _shop.settings.preisU ?? 0;
   const nsEl = document.getElementById('shop-preis-nostrip-inp');
   if (nsEl) nsEl.value = _shop.settings.preisNostrip ?? 0;
+  _shopMountEditor();
   renderShopItems();
   renderShopLog();
   // Update tab badge
@@ -155,8 +167,10 @@ function shopItemNew() {
   _shopFillGroupSelect('');
   { const _h=document.getElementById('shop-modal-hidelocked'); if(_h)_h.checked=false; }
   _shopKaufItem=null; _shopKaufItemLabel(); { const _ka=document.getElementById('shop-modal-kaufitem-aktiv'); if(_ka)_ka.checked=false; }
-  document.getElementById('shop-modal-overlay').style.display = 'flex';
+  _shopMountEditor();
+  document.getElementById('shop-modal-overlay').style.display = 'block';
   _shopNostripHint(); // FIX: nostrip
+  _shopScrollToEditor();
 }
 
 let _shopKaufItem=null;
@@ -193,7 +207,8 @@ function _shopRestoreFormState(){
   { const h=g('shop-modal-hidelocked'); if(h)h.checked=s.hidelocked; }
   _shopKaufItemLabel();
   { const a=g('shop-modal-kaufitem-aktiv'); if(a)a.checked=true; }
-  g('shop-modal-overlay').style.display='flex';
+  _shopMountEditor();
+  g('shop-modal-overlay').style.display='block';
   if(typeof _shopNostripHint==='function')_shopNostripHint();
 }
 function shopPickKaufItem(){
@@ -242,7 +257,9 @@ function shopItemEdit(id) {
   _shopFillGroupSelect(item.reqGroup||'');
   { const _h=document.getElementById('shop-modal-hidelocked'); if(_h)_h.checked=!!item.shopHideLocked; }
   _shopKaufItem=item.kaufItem||null; _shopKaufItemLabel(); { const _ka=document.getElementById('shop-modal-kaufitem-aktiv'); if(_ka)_ka.checked=!!item.kaufItemAktiv; }
-  document.getElementById('shop-modal-overlay').style.display = 'flex';
+  _shopMountEditor();
+  document.getElementById('shop-modal-overlay').style.display = 'block';
+  _shopScrollToEditor();
   _shopNostripHint(); // FIX: nostrip
 }
 
