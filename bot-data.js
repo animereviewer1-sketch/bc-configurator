@@ -12,6 +12,18 @@ let _botGroups = [];
 
 function _saveBots()      { idbSet(BOT_KEY,      _bots);      }
 function _saveBotGroups() { idbSet(BOT_GROUP_KEY, _botGroups); }
+
+// ── Persistente Spieler-Variablen/-Profile (pro MemberNumber, über Sessions) ──
+const BOT_VARS_KEY = 'BC_BotVars_v1';
+let _botVars = {};            // { memberNum: { varName: value, ... } }
+function _saveBotVars(){ idbSet(BOT_VARS_KEY, _botVars); }
+function _botVarApply(memberNum, name, value){
+  if(memberNum==null || !name) return;
+  const k = String(memberNum);
+  (_botVars[k] = _botVars[k] || {})[name] = value;
+  _saveBotVars();
+}
+idbGet(BOT_VARS_KEY).then(d => { if (d && typeof d === 'object' && !Array.isArray(d)) _botVars = d; });
 function _loadBots()      {} // no-op: async init
 function _loadBotGroups() {} // no-op: async init
 function _selBot() { return _bots.find(b => b.id === _selBotId) ?? null; }

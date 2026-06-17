@@ -78,6 +78,112 @@ function botDelete(id) {
 }
 
 // ── Bot Editor ────────────────────────────────────────────────
+// ════════════════════ VORLAGEN-BAUKASTEN ════════════════════
+const BOT_TEMPLATES = {
+  mantra: { label:'⚠️ Pflichtwort „Master"', triggers:[
+    { name:'Pflichtwort: Master', aktiv:true, cooldownSek:5,
+      bedingungen:[{typ:'wort', wort:'master', modus:'fehlt', typ_msg:'chat'}],
+      aktionen:[ {typ:'variable', varName:'verstoesse', varOp:'add', varWert:'1', aktZiel:'ausloeser'},
+                 {typ:'whisper', text:'⚠️ Du musst „Master" sagen! Verstoß +1.', aktZiel:'ausloeser'} ] }
+  ]},
+  eskalation: { label:'📈 Eskalation bei Verstößen (≥3)', triggers:[
+    { name:'Eskalation (≥3 Verstöße)', aktiv:true,
+      bedingungen:[{typ:'ev_interval', sek_min:10, sek_max:10},
+                   {typ:'variable', varName:'verstoesse', varCmp:'>=', varWert:'3', logik:'und'}],
+      aktionen:[ {typ:'whisper', text:'Zu viele Verstöße – Strafe! (hier Item/Erregung ergänzen)', aktZiel:'ausloeser'},
+                 {typ:'variable', varName:'verstoesse', varOp:'set', varWert:'0', aktZiel:'ausloeser'} ] }
+  ]},
+  daily: { label:'🎁 Tägliche Belohnung (!daily)', triggers:[
+    { name:'Tägliche Belohnung', aktiv:true, cooldownSek:86400,
+      bedingungen:[{typ:'wort', wort:'!daily', typ_msg:'chat'}],
+      aktionen:[ {typ:'money', money_op:'add', money_val:50, aktZiel:'ausloeser'},
+                 {typ:'whisper', text:'🎁 Tagesbelohnung: +50! Komm morgen wieder.', aktZiel:'ausloeser'} ] }
+  ]},
+  gluecksrad: { label:'🎲 Glücksrad (!spin, 40% Gewinn)', triggers:[
+    { name:'Glücksrad – Gewinn', aktiv:true, cooldownSek:30,
+      bedingungen:[{typ:'wort', wort:'!spin', typ_msg:'chat'},{typ:'zufall', prozent:40, logik:'und'}],
+      aktionen:[ {typ:'money', money_op:'add', money_val:20, aktZiel:'ausloeser'},
+                 {typ:'whisper', text:'🎉 Gewonnen! +20', aktZiel:'ausloeser'} ] }
+  ]},
+  gefaengnis: { label:'🔒 Gefängnis (Einsperren + Ausbruch-Check)', triggers:[
+    { name:'Zelle: Einsperren', aktiv:true,
+      bedingungen:[{typ:'zone_rect', name:'Zelle', x1:0,y1:0,x2:2,y2:2}],
+      aktionen:[ {typ:'variable', varName:'gefangen', varOp:'set', varWert:'1', aktZiel:'ausloeser'},
+                 {typ:'whisper', text:'🔒 Du bist jetzt eingesperrt. (Cage-Item hier ergänzen)', aktZiel:'ausloeser'} ] },
+    { name:'Zelle: Ausbruch-Check', aktiv:true,
+      bedingungen:[{typ:'ev_interval', sek_min:10, sek_max:10},
+                   {typ:'variable', varName:'gefangen', varCmp:'==', varWert:'1', logik:'und'},
+                   {typ:'zone_rect', name:'Zelle', x1:0,y1:0,x2:2,y2:2, logik:'und_nicht'}],
+      aktionen:[ {typ:'teleport', tpMode:'punkte', tpSlots:[{x:1,y:1,gueltig:true}]},
+                 {typ:'whisper', text:'⛔ Zurück in die Zelle!', aktZiel:'ausloeser'} ] }
+  ]},
+  tuersteher: { label:'🚪 Türsteher (Whitelist/Rang)', triggers:[
+    { name:'Türsteher: Zutritt prüfen', aktiv:true,
+      bedingungen:[{typ:'ev_interval', sek_min:5, sek_max:5},
+                   {typ:'zone_rect', name:'VIP', x1:0,y1:0,x2:2,y2:2, logik:'und'}],
+      aktionen:[ {typ:'teleport', tpMode:'punkte', tpSlots:[{x:5,y:5,gueltig:true}]},
+                 {typ:'whisper', text:'⛔ Kein Zutritt – nur für Berechtigte. (Rang/Whitelist als Bedingung ergänzen)', aktZiel:'ausloeser'} ] }
+  ]},
+  autorang: { label:'🏆 Auto-Rang nach Punkten (Rang je Stufe wählen)', triggers:[
+    { name:'Auto-Rang: Stufe 1 (≥50 Punkte)', aktiv:true, cooldownSek:10,
+      bedingungen:[{typ:'ev_interval', sek_min:15, sek_max:15},{typ:'variable', varName:'punkte', varCmp:'>=', varWert:'50', logik:'und'}],
+      aktionen:[{typ:'rang', rang_op:'setzen', rang_id:'', aktZiel:'ausloeser'},{typ:'whisper', text:'🏆 Aufgestiegen (Stufe 1)! (Rang in der Aktion wählen)', aktZiel:'ausloeser'}] },
+    { name:'Auto-Rang: Stufe 2 (≥150 Punkte)', aktiv:true, cooldownSek:10,
+      bedingungen:[{typ:'ev_interval', sek_min:15, sek_max:15},{typ:'variable', varName:'punkte', varCmp:'>=', varWert:'150', logik:'und'}],
+      aktionen:[{typ:'rang', rang_op:'setzen', rang_id:'', aktZiel:'ausloeser'},{typ:'whisper', text:'🏆 Aufgestiegen (Stufe 2)! (Rang wählen)', aktZiel:'ausloeser'}] },
+    { name:'Auto-Rang: Stufe 3 (≥300 Punkte)', aktiv:true, cooldownSek:10,
+      bedingungen:[{typ:'ev_interval', sek_min:15, sek_max:15},{typ:'variable', varName:'punkte', varCmp:'>=', varWert:'300', logik:'und'}],
+      aktionen:[{typ:'rang', rang_op:'setzen', rang_id:'', aktZiel:'ausloeser'},{typ:'whisper', text:'🏆 Aufgestiegen (Stufe 3)! (Rang wählen)', aktZiel:'ausloeser'}] }
+  ]},
+  uniform: { label:'👕 Auto-Uniform (Begrüßung + !exit)', triggers:[
+    { name:'Begrüßung (Betreten)', aktiv:true,
+      bedingungen:[{typ:'player_betritt', betritt_typ:'alle'}],
+      aktionen:[ {typ:'whisper', text:'Willkommen! Uniform wird angelegt. (Outfit-Aktion hier ergänzen)', aktZiel:'ausloeser'} ] },
+    { name:'Entlassen bei „!exit"', aktiv:true,
+      bedingungen:[{typ:'wort', wort:'!exit', typ_msg:'chat'}],
+      aktionen:[ {typ:'whisper', text:'Du wurdest entlassen. (Outfit zurücksetzen hier ergänzen)', aktZiel:'ausloeser'} ] }
+  ]}
+};
+function botInsertTemplate(key){
+  const b=_selBot(); if(!b) return;
+  const tpl=BOT_TEMPLATES[key]; if(!tpl) return;
+  b.triggers = b.triggers || [];
+  let n=0;
+  (tpl.triggers||[]).forEach((t,i)=>{
+    const clone=JSON.parse(JSON.stringify(t));
+    clone.id='t'+Date.now()+Math.floor(Math.random()*99999)+'_'+i;
+    b.triggers.push(clone); n++;
+  });
+  _saveBots(); renderBotEditor();
+  if(typeof showStatus==='function') showStatus('📋 Vorlage „'+(tpl.label||key)+'" eingefügt ('+n+' Trigger) – Felder ggf. anpassen','success');
+}
+
+// ════════════════════ LIVE-DASHBOARD (Spieler-Profile) ════════════════════
+function botDashboard(){
+  let p=document.getElementById('botDashPanel');
+  if(p){ p.remove(); return; }
+  const bv=(typeof _botVars!=='undefined'&&_botVars)?_botVars:{};
+  const rpl=(typeof _rankData!=='undefined'&&_rankData&&_rankData.players)?_rankData.players:{};
+  const rd=(typeof _rankData!=='undefined'&&_rankData&&_rankData.defs)?_rankData.defs:[];
+  const mbl=(typeof _money!=='undefined'&&_money&&_money.balances)?_money.balances:{};
+  const members=new Set([...Object.keys(bv),...Object.keys(rpl),...Object.keys(mbl)]);
+  const rows=[...members].map(m=>{
+    const v=bv[m]||{};
+    const name=(rpl[m]&&rpl[m].name)||(mbl[m]&&mbl[m].name)||('#'+m);
+    const rkDef=rd.find(r=>r.id===(rpl[m]&&rpl[m].rankId));
+    const rank=rkDef?escHtml(rkDef.icon+' '+rkDef.name):'–';
+    const money=(mbl[m]&&mbl[m].balance!=null)?mbl[m].balance:0;
+    const lb=v.letzterBesuch?new Date(v.letzterBesuch).toLocaleString('de-DE',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'–';
+    const others=Object.keys(v).filter(k=>k!=='letzterBesuch').map(k=>escHtml(k)+'=<b>'+escHtml(String(v[k]))+'</b>').join(', ')||'–';
+    return `<tr style="border-top:1px solid var(--border2,#333)"><td style="padding:3px 6px">${escHtml(name)} <span style="color:var(--text3)">#${escHtml(m)}</span></td><td style="padding:3px 6px">${rank}</td><td style="padding:3px 6px;text-align:right">${money}</td><td style="padding:3px 6px;font-size:.62rem">${others}</td><td style="padding:3px 6px;font-size:.62rem;color:var(--text3)">${escHtml(lb)}</td></tr>`;
+  }).join('');
+  p=document.createElement('div');
+  p.id='botDashPanel';
+  p.style.cssText='position:fixed;top:60px;right:20px;width:560px;max-height:78vh;overflow:auto;z-index:99999;background:var(--bg2,#1c1c1c);border:1px solid var(--purple,#8b5cf6);border-radius:10px;padding:12px;box-shadow:0 10px 36px rgba(0,0,0,.6);font-family:var(--mono,monospace);font-size:.68rem;color:var(--text,#ddd)';
+  p.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b style="color:var(--purple,#8b5cf6)">📊 Spieler-Profile (${members.size})</b><span><button onclick="botDashboard();botDashboard()" title="Aktualisieren" style="background:var(--pd,#3a2a6a);border:none;color:var(--pl,#cbb6ff);border-radius:5px;cursor:pointer;padding:2px 8px;margin-right:4px">🔄</button><button onclick="document.getElementById('botDashPanel').remove()" style="background:none;border:none;color:#e55;cursor:pointer;font-size:.9rem">✕</button></span></div>${members.size?`<table style="width:100%;border-collapse:collapse"><thead><tr style="color:var(--text3)"><th style="text-align:left;padding:2px 6px">Spieler</th><th style="text-align:left;padding:2px 6px">Rang</th><th style="text-align:right;padding:2px 6px">💰</th><th style="text-align:left;padding:2px 6px">Variablen</th><th style="text-align:left;padding:2px 6px">Letzter Besuch</th></tr></thead><tbody>${rows}</tbody></table>`:'<div style="color:var(--text3)">Noch keine Profile gespeichert.</div>'}`;
+  document.body.appendChild(p);
+}
+
 function renderBotEditor() {
   const bot = _selBot(); if (!bot) return;
   // Offene Trigger-Bodies vor Re-Render sichern
@@ -107,6 +213,7 @@ function renderBotEditor() {
            <button class="btn btn-sync" id="syncBtn" onclick="botSync()" title="Bot stoppen, Änderungen speichern und neu starten" style="font-size:.68rem;padding:4px 12px">🔄 Sync</button>`
         : `<button class="btn btn-green" onclick="botDeploy()" style="font-size:.68rem;padding:4px 12px">▶️ Starten</button>`
       }
+      <button class="btn btn-primary" onclick="botDashboard()" title="Spieler-Profile: Punkte, Rang, Money, Besuche, letzter Besuch" style="font-size:.65rem;padding:4px 8px">📊</button>
       <button class="btn btn-primary" onclick="botExportConfig()" title="Export" style="font-size:.65rem;padding:4px 8px">⬇️</button>
       <button class="btn btn-primary" onclick="botImportConfig()" title="Import" style="font-size:.65rem;padding:4px 8px">⬆️</button>
     </div>
@@ -114,6 +221,10 @@ function renderBotEditor() {
     <div class="be-body">
       <div id="trig-list">${(bot.triggers||[]).map((t,i)=>renderTrigCard(bot,t,i)).join('')}</div>
       <button class="be-addtrig" onclick="botAddTrig()">+ Trigger hinzufügen</button>
+      <select class="be-addtrig" style="cursor:pointer" onchange="if(this.value){botInsertTemplate(this.value);this.value='';}" title="Fertige Trigger-Sets einfügen">
+        <option value="">📋 Vorlage einfügen …</option>
+        ${Object.entries(BOT_TEMPLATES).map(([k,v])=>`<option value="${k}">${escHtml(v.label)}</option>`).join('')}
+      </select>
       <div style="margin:14px 0 6px;font-size:.72rem;font-weight:700;color:var(--purple);border-top:1px solid var(--border2);padding-top:10px">📖 Szenen / Story</div>
       <div id="szene-list">${_szenen(bot).map((s,i)=>renderSzeneCard(bot,s,i)).join('')}</div>
       <button class="be-addtrig" onclick="szeneNew()">+ Szene hinzufügen</button>
@@ -506,7 +617,7 @@ function _btCondPhrase(bot, c) {
     case 'wort': {
       const w = c.wort ? '„'+e(c.wort)+'"' : '(leeres Wort)';
       const k = ({any:'sagt/schreibt', chat:'sagt', emote:'als Emote', whisper:'flüstert'})[c.typ_msg||'any'] || 'sagt';
-      return 'jemand '+k+' '+w;
+      return c.modus==='fehlt' ? ('jemand schreibt OHNE '+w) : ('jemand '+k+' '+w);
     }
     case 'zone':      return 'jemand auf Position '+(c.x??0)+'/'+(c.y??0)+(c.name?' ('+e(c.name)+')':'')+' steht';
     case 'zone_rect': return 'jemand im Bereich '+(c.x1??0)+'/'+(c.y1??0)+'–'+(c.x2??0)+'/'+(c.y2??0)+(c.name?' ('+e(c.name)+')':'')+' steht';
@@ -523,6 +634,8 @@ function _btCondPhrase(bot, c) {
     case 'shop_kauf': { const it=_shop.items.find(x=>x.id===c.shop_id); return it?'„'+e(it.name)+'" im Shop gekauft wird':'etwas im Shop gekauft wird'; }
     case 'ev_timer':    return 'nach '+(c.sek??10)+'s (einmalig)';
     case 'ev_interval': return 'alle '+(c.sek_min??30)+'–'+(c.sek_max??180)+'s';
+    case 'variable': return e(c.varName||'var')+' '+(c.varCmp||'==')+' '+e(c.varWert??'');
+    case 'zufall': return (c.prozent??50)+'% Chance';
     default: return e(c?.typ||'?');
   }
 }
@@ -544,6 +657,7 @@ function _btActPhrase(bot, a) {
     case 'rang': { const op=({setzen:'setzen',entfernen:'entfernen',naechster:'+1 Lv',vorheriger:'−1 Lv'})[a.rang_op||'setzen']; return '🏆 Rang '+op+z; }
     case 'szene': { const sz=(bot?.szenen||[]).find(x=>x.id===a.szeneId); return '📖 Szene „'+e(sz?.name||'?')+'" starten'; }
     case 'variable': { const op=({set:'=',add:'+',sub:'−',toggle:'⇄'})[a.varOp||'set']; return '🔢 '+e(a.varName||'var')+' '+op+(a.varOp==='toggle'?'':' '+e(a.varWert??'')); }
+    case 'erregung': { const op=({set:'Erregung =',add:'Erregung +',sub:'Erregung −',orgasm:'Orgasmus 💥',stop:'Orgasmus-Stop'})[a.erregOp||'set']; return '💗 '+op+((a.erregOp==='orgasm'||a.erregOp==='stop')?'':' '+(a.erregVal??50)+'%')+z; }
     default: return e(a?.typ||'?');
   }
 }
@@ -594,6 +708,8 @@ function renderTrigCard(bot, t, i) {
           <option value="n_mal"    ${wdh==='n_mal'?'selected':''}>N× N-mal</option>
         </select>
         ${wdh==='n_mal'?`<input class="cf cf-w80" type="number" min="1" value="${t.maxMal??2}" oninput="trigField('${t.id}','maxMal',+this.value)" title="Wie oft max. feuern">× max.`:''}
+        <label style="font-size:.65rem;color:var(--text3);margin-left:8px" title="Mindestabstand zwischen zwei Auslösungen pro Spieler (0 = aus)">⏳ Cooldown:</label>
+        <input class="cf cf-w80" type="number" min="0" value="${t.cooldownSek??0}" oninput="trigField('${t.id}','cooldownSek',+this.value)" title="Sekunden pro Spieler"> s
         <label style="font-size:.65rem;color:var(--text3);margin-left:8px">🔑 Als Vorbedingung:</label>
         <select class="cf" style="width:170px" title="Wie zählt dieser Trigger als Vorbedingung für andere Trigger?" onchange="trigField('${t.id}','charSpec',this.value==='true');trigRerender('${t.id}')">
           <option value="false" ${!t.charSpec?'selected':''}>🌐 Global – einmal gilt für alle</option>
@@ -631,6 +747,8 @@ function renderTrigCard(bot, t, i) {
           <button onclick="trigAddCond('${t.id}','shop_kauf')" title="Wird ausgelöst wenn ein Spieler einen Shop-Artikel kauft">🛒 Shop-Kauf</button>
           <button onclick="trigAddCond('${t.id}','ev_timer')" title="Einmalig nach X Sekunden automatisch feuern">⏱ Timer</button>
           <button onclick="trigAddCond('${t.id}','ev_interval')" title="Wiederholt alle X–Y Sekunden feuern">🔁 Intervall</button>
+          <button onclick="trigAddCond('${t.id}','variable')" title="Prüft eine Spieler-Variable/Punkte (z.B. punkte ≥ 100)">🔢 Variable</button>
+          <button onclick="trigAddCond('${t.id}','zufall')" title="X% Wahrscheinlichkeit, dass der Trigger zutrifft">🎲 Zufall</button>
         </div>
         <div id="conds-${t.id}">${(t.bedingungen||[]).map((c,ci)=>renderCond(bot,t.id,c,ci)).join('')}</div>
       </div>
@@ -716,6 +834,10 @@ function renderCond(bot, tid, c, ci) {
         <option value="chat"    ${c.typ_msg==='chat'?'selected':''}>Nur Chat</option>
         <option value="emote"   ${c.typ_msg==='emote'?'selected':''}>Nur Emote</option>
         <option value="whisper" ${c.typ_msg==='whisper'?'selected':''}>Nur Whisper</option>
+      </select>
+      <select class="cf" style="width:118px" onchange="condField('${tid}',${ci},'modus',this.value)" title="enthält: Wort muss vorkommen. fehlt: Trigger löst aus, wenn das Wort FEHLT (Pflichtwort, z.B. immer 'Master').">
+        <option value="enthält" ${(!c.modus||c.modus==='enthält')?'selected':''}>enthält</option>
+        <option value="fehlt" ${c.modus==='fehlt'?'selected':''}>⚠️ fehlt</option>
       </select>`;
   } else if (c.typ === 'zone') {
     inner = `
@@ -800,8 +922,20 @@ function renderCond(bot, tid, c, ci) {
       <input class="cf cf-w70" type="number" min="1" value="${c.sek_max??180}"
         oninput="condField('${tid}',${ci},'sek_max',+this.value)">
       <span style="font-size:.65rem;color:var(--text3)">Sekunden wiederholt feuern</span>`;
+  } else if (c.typ === 'variable') {
+    inner = `
+      <input class="cf cf-w120" value="${escHtml(c.varName||'')}" oninput="condField('${tid}',${ci},'varName',this.value)" placeholder="Variable (z.B. punkte)">
+      <select class="cf" style="width:88px" onchange="condField('${tid}',${ci},'varCmp',this.value)">
+        ${['==','!=','>','<','>=','<=','gesetzt','leer'].map(o=>`<option value="${o}" ${(c.varCmp||'==')===o?'selected':''}>${o}</option>`).join('')}
+      </select>
+      <input class="cf cf-w80" value="${escHtml(c.varWert||'')}" oninput="condField('${tid}',${ci},'varWert',this.value)" placeholder="Wert">`;
+  } else if (c.typ === 'zufall') {
+    inner = `
+      <span style="font-size:.65rem;color:var(--text3)">Chance</span>
+      <input class="cf cf-w70" type="number" min="0" max="100" value="${c.prozent??50}" oninput="condField('${tid}',${ci},'prozent',+this.value)"> %
+      <span style="font-size:.62rem;color:var(--text3)">dass die Bedingung zutrifft</span>`;
   }
-  const icons = {wort:'💬',zone:'🗺️',zone_rect:'📐',item_traegt:'👗',item_traegt_nicht:'🚫',trigger_war:'🔗',player_betritt:'👋',ev_timer:'⏱',ev_interval:'🔁',rang:'🏆',shop_kauf:'🛒'};
+  const icons = {wort:'💬',zone:'🗺️',zone_rect:'📐',item_traegt:'👗',item_traegt_nicht:'🚫',trigger_war:'🔗',player_betritt:'👋',ev_timer:'⏱',ev_interval:'🔁',rang:'🏆',shop_kauf:'🛒',variable:'🔢',zufall:'🎲'};
   // Logik-Operator: verbindet diese Bedingung mit der vorherigen
   const logik = c.logik ?? 'und';
   const logikBadge = ci === 0
@@ -846,7 +980,7 @@ function renderAct(tid, a, ai, branch) {
     ['teleport','🌀 Teleport'],
     ['money','💰 Money ändern'],
     ['rang','🏆 Rang setzen'],
-    ['szene','📖 Szene starten'],['variable','🔢 Variable setzen'],
+    ['szene','📖 Szene starten'],['variable','🔢 Variable setzen'],['erregung','💗 Erregung/Orgasmus'],
   ];
   const typeOpts = types.map(([v,l])=>`<option value="${v}" ${a.typ===v?'selected':''}>${l}</option>`).join('');
   const branchArg = branch ? `,'${branch}'` : '';
@@ -856,7 +990,11 @@ function renderAct(tid, a, ai, branch) {
     extra = `<textarea class="cf" style="width:100%;resize:vertical;min-height:44px;margin-top:4px" rows="2"
         oninput="actField('${tid}',${ai},'text',this.value${branch?`,'${branch}'`:''})"
         placeholder="{name} schrieb: {wort} – Pos: {x}/{y}">${escHtml(a.text||'')}</textarea>
-      <div style="font-size:.59rem;color:var(--text3);margin-top:2px">Variablen: {name} {wort} {typ} {x} {y}</div>`;
+      <div style="font-size:.59rem;color:var(--text3);margin-top:2px">Variablen: {name} {wort} {typ} {x} {y}</div>
+      <label style="cursor:pointer;display:flex;align-items:center;gap:5px;font-size:.62rem;color:var(--text2);margin-top:2px" title="An: jede Zeile ist eine Variante. Es wird zufällig EINE Zeile gesendet.">
+        <input type="checkbox" ${a.zufallstext?'checked':''} onchange="actField('${tid}',${ai},'zufallstext',this.checked${branch?`,'${branch}'`:''})">
+        🎲 Zufallszeile (1 Zeile = 1 Variante, zufällig gewählt)
+      </label>`;
   } else if (a.typ === 'item') {
     const cfgInfo = a.itemConfig ? ` <span style="font-size:.58rem;background:var(--gd);color:var(--green);padding:1px 4px;border-radius:3px">✓ Konfig</span>` : '';
     const label = a.itemConfig ? `📦 ${a.itemConfig.group}/${a.itemConfig.asset}` : a.profilName ? `👗 ${a.profilName}` : a.curseName ? `🔮 ${a.curseName}` : a.item ? `📦 ${a.gruppe||'?'}/${a.item}` : '– nichts gewählt –';
@@ -883,6 +1021,10 @@ function renderAct(tid, a, ai, branch) {
         <span style="font-size:.7rem;color:var(--text2);flex:1">${escHtml(label)}${cfgInfo}</span>
         <button onclick="ipickerOpenForAct('${tid}',${ai}${branchArg})" style="font-size:.63rem;padding:3px 9px;background:var(--pd);border:none;color:var(--pl);border-radius:5px;cursor:pointer">📂 Auswählen…</button>
         ${a.item && !a.itemConfig ? `<input class="cf" type="color" value="${a.farbe||'#ffffff'}" oninput="actField('${tid}',${ai},'farbe',this.value${branchArg})" style="width:28px;padding:1px;cursor:pointer" title="Farbe">` : ''}
+      </div>
+      <div style="display:flex;gap:5px;align-items:center;margin-top:3px">
+        <span style="font-size:.62rem;color:var(--text3)" title="0 = aus. Nach X Sekunden wird das angelegte Item/Outfit automatisch wieder entfernt (Verfall).">⏳ Verfall nach:</span>
+        <input class="cf cf-w80" type="number" min="0" value="${a.verfallSek??0}" oninput="actField('${tid}',${ai},'verfallSek',+this.value${branchArg})"> s <span style="font-size:.6rem;color:var(--text3)">(0 = aus, auto-entfernen)</span>
       </div>
       <div class="as-act-box">
         <label style="cursor:pointer;display:flex;align-items:center;gap:6px;font-size:.65rem;color:var(--text2)">
@@ -1049,6 +1191,19 @@ function renderAct(tid, a, ai, branch) {
       </select>
       <input class="cf" style="width:90px" value="${escHtml(a.varWert||'')}" placeholder="Wert" oninput="actField('${tid}',${ai},'varWert',this.value${branchArg})">
       <span style="font-size:.6rem;color:var(--text3)">Ziel: Auslöser</span>
+    </div>`;
+  } else if (a.typ === 'erregung') {
+    const eop = a.erregOp||'set';
+    extra = `<div style="display:flex;gap:6px;align-items:center;margin-top:5px;flex-wrap:wrap">
+      <select class="cf" style="width:170px" onchange="actField('${tid}',${ai},'erregOp',this.value${branchArg});actRerender('${tid}',${ai}${branchArg})">
+        <option value="set" ${eop==='set'?'selected':''}>= Erregung setzen</option>
+        <option value="add" ${eop==='add'?'selected':''}>➕ Erregung erhöhen</option>
+        <option value="sub" ${eop==='sub'?'selected':''}>➖ Erregung senken</option>
+        <option value="orgasm" ${eop==='orgasm'?'selected':''}>💥 Orgasmus erzwingen</option>
+        <option value="stop" ${eop==='stop'?'selected':''}>🛑 Orgasmus stoppen</option>
+      </select>
+      ${(eop==='set'||eop==='add'||eop==='sub')?`<input class="cf cf-w70" type="number" min="0" max="100" value="${a.erregVal??50}" oninput="actField('${tid}',${ai},'erregVal',+this.value${branchArg})"> %`:''}
+      <span style="font-size:.6rem;color:var(--text3)">wirkt zuverlässig auf dich selbst (BC synct nur eigene Erregung)</span>
     </div>`;
   }
 

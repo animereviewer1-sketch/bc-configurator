@@ -5755,6 +5755,10 @@ window.addEventListener('message', function(ev) {
       _botSetZone(ev.data.botId, ev.data.zoneName, ev.data.slot, ev.data.x, ev.data.y);
       break;
 
+    case 'BOT_VAR':
+      _botVarApply(ev.data.memberNum, ev.data.name, ev.data.value);
+      break;
+
     case 'RANG_INIT': {
       // Spieler registrieren ohne Rang – nur wenn noch nicht bekannt
       const rid = String(ev.data.memberNum);

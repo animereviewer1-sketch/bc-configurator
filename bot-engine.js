@@ -5,7 +5,7 @@ function _buildBotCode(bot) {
   const s = bot.settings;
   const triggers = (bot.triggers||[]).filter(t=>t.aktiv).map(t => ({
     id: t.id, name: t.name, delay: t.delay??0,
-      wiederholung: t.wiederholung??'immer', maxMal: t.maxMal??2,
+      wiederholung: t.wiederholung??'immer', maxMal: t.maxMal??2, cooldownSek: t.cooldownSek??0,
       fallbackTyp: t.fallbackTyp??'nichts', fallbackText: t.fallbackText??'',
       charSpec: !!t.charSpec, resetOnLeave: !!t.resetOnLeave,
       von: t.von??'alle',
@@ -34,7 +34,7 @@ function _buildBotCode(bot) {
   const safeName = bot.name.replace(/\\/g,'\\\\').replace(/`/g,'\\`');
 
   // Alle User-Daten als Base64 kodieren → kein Zeichen kann das Template-Literal brechen
-  const _cfgRaw = JSON.stringify({hearChat:s.hearChat,hearEmote:s.hearEmote,hearWhisper:s.hearWhisper,nurEigene:s.nurEigene,logAktiv:s.logAktiv??true,modus:s.modus,moneyQueryCmd:_money?.settings?.queryCmd??'',moneyQueryTyp:_money?.settings?.queryTyp??'whisper',moneyName:_money?.settings?.name??'Gold',rankQueryCmd:_rankData?.settings?.queryCmd??'',rankQueryTyp:_rankData?.settings?.queryCmdTyp??'whisper',rankQueryText:_rankData?.settings?.queryCmdText??'{name} hat Rang: {rang_icon} {rang}',rankDefs:_rankData?.defs??[],rankPlayers:Object.fromEntries(Object.entries(_rankData?.players??{}).map(([k,v])=>[k,v.rankId??null])),shopCmd:_shop?.settings?.cmd??'!pay',shopListCmd:_shop?.settings?.listCmd??'!shop',shopAnnounceNostripMsg:_shop?.settings?.announceNostripMsg??'',shopConfirmMsg:_shop?.settings?.confirmMsg??'',shopAnnounceMsg:_shop?.settings?.announceMsg??'',shopAnnounceAllMsg:_shop?.settings?.announceAllMsg??'',shopErrorMsg:_shop?.settings?.errorMsg??'',shopPreisU:_shop?.settings?.preisU??0,shopPreisNostrip:_shop?.settings?.preisNostrip??0,shopItems:(_shop?.items??[]).filter(i=>i.aktiv!==false),moneyBalances:Object.fromEntries(Object.entries(_money?.balances??{}).map(([k,v])=>[k,{balance:v.balance??0,name:v.name??''}]))});
+  const _cfgRaw = JSON.stringify({hearChat:s.hearChat,hearEmote:s.hearEmote,hearWhisper:s.hearWhisper,nurEigene:s.nurEigene,logAktiv:s.logAktiv??true,modus:s.modus,moneyQueryCmd:_money?.settings?.queryCmd??'',moneyQueryTyp:_money?.settings?.queryTyp??'whisper',moneyName:_money?.settings?.name??'Gold',rankQueryCmd:_rankData?.settings?.queryCmd??'',rankQueryTyp:_rankData?.settings?.queryCmdTyp??'whisper',rankQueryText:_rankData?.settings?.queryCmdText??'{name} hat Rang: {rang_icon} {rang}',rankDefs:_rankData?.defs??[],rankPlayers:Object.fromEntries(Object.entries(_rankData?.players??{}).map(([k,v])=>[k,v.rankId??null])),shopCmd:_shop?.settings?.cmd??'!pay',shopListCmd:_shop?.settings?.listCmd??'!shop',shopAnnounceNostripMsg:_shop?.settings?.announceNostripMsg??'',shopConfirmMsg:_shop?.settings?.confirmMsg??'',shopAnnounceMsg:_shop?.settings?.announceMsg??'',shopAnnounceAllMsg:_shop?.settings?.announceAllMsg??'',shopErrorMsg:_shop?.settings?.errorMsg??'',shopPreisU:_shop?.settings?.preisU??0,shopPreisNostrip:_shop?.settings?.preisNostrip??0,shopItems:(_shop?.items??[]).filter(i=>i.aktiv!==false),moneyBalances:Object.fromEntries(Object.entries(_money?.balances??{}).map(([k,v])=>[k,{balance:v.balance??0,name:v.name??''}])),botVars:(typeof _botVars!=='undefined'&&_botVars)?_botVars:{}});
   const cfgJson  = btoa(unescape(encodeURIComponent(_cfgRaw)));
   const trigsJson = btoa(unescape(encodeURIComponent(JSON.stringify(triggers))));
   const events = (bot.events||[]).filter(e=>e.aktiv).map(e => ({
@@ -165,7 +165,7 @@ const _REJOIN_GRACE=1000; // ms window stays open regardless of other triggers
 const _evts=JSON.parse(decodeURIComponent(escape(atob('${eventsJson}'))));
 const _scenes=JSON.parse(decodeURIComponent(escape(atob('${scenesJson}'))));
 // ════════════════════ SZENEN-LAUFZEIT (Story-Player) ════════════════════
-var _sceneVars  = {};   // memberNum -> { name: value }   (Variablen/Flags pro Spieler)
+var _sceneVars  = (_cfg&&_cfg.botVars)?JSON.parse(JSON.stringify(_cfg.botVars)):{};   // persistente Variablen/Flags pro Spieler (aus Profilen)
 var _sceneWait  = {};   // memberNum -> wartet auf Antwort
 var _sceneRunId = 0;
 function _vget(mn,name){ return (_sceneVars[mn]||{})[name]; }
@@ -173,6 +173,13 @@ function _vset(mn,name,val){
   (_sceneVars[mn]=_sceneVars[mn]||{})[name]=val;
   try{window.__BCK_popupRef&&window.__BCK_popupRef.postMessage({app:'BCKonfigurator',type:'BOT_VAR',memberNum:mn,name:name,value:val},'*');}catch(e){}
 }
+// Trigger-Bedingung auf eine Variable/Punkte prüfen (nutzt _scTruth + persistente Vars)
+function _varCondOk(c,C){
+  if(!c||!c.varName) return true;
+  return _scTruth(_vget(C&&C.MemberNumber, c.varName), c.varCmp||'==', c.varWert);
+}
+// Wahrscheinlichkeits-Bedingung: X% Chance, dass sie zutrifft
+function _chanceOk(c){ return Math.random()*100 < (Number(c&&c.prozent)||0); }
 function _scTpl(s,C){
   var mn=C&&C.MemberNumber;
   var out=String(s==null?'':s).replace(/\{v:([^}]+)\}/g,function(_m,n){var val=_vget(mn,String(n).trim());return val==null?'':String(val);});
@@ -310,7 +317,7 @@ function _ok(trig,rohText,typKey,C){
     if(c.typ==='wort'){
       const m=c.typ_msg||'any';
       if(m!=='any'&&m!==typKey)return false;
-      return!c.wort||(rohText||'').toLowerCase().includes((c.wort||'').toLowerCase());
+      return (c.modus==='fehlt')?(!!c.wort&&!!rohText&&!((rohText||'').toLowerCase().includes((c.wort||'').toLowerCase()))):(!c.wort||(rohText||'').toLowerCase().includes((c.wort||'').toLowerCase()));
     }
     if(c.typ==='zone'){
       const p=c.puffer??1;
@@ -334,7 +341,7 @@ function _ok(trig,rohText,typKey,C){
       const ref=_trigMap[c.trigId];
       return ref?.charSpec?!!_firedChar[c.trigId+'_'+C.MemberNumber]:!!_fired[c.trigId];
     }
-    if(c.typ==='rang'){
+    if(c.typ==='variable'){return _varCondOk(c,C);} if(c.typ==='zufall'){return _chanceOk(c);} if(c.typ==='rang'){
       const op=c.rang_op??'=';
       const currentId=_rangState[C.MemberNumber]??null;
       if(op==='kein') return !currentId;
@@ -374,7 +381,7 @@ function _okIf(trig,rohText,typKey,C){
     if(c.typ==='wort'){
       const m=c.typ_msg||'any';
       if(m!=='any'&&m!==typKey)return false;
-      return!c.wort||(rohText||'').toLowerCase().includes((c.wort||'').toLowerCase());
+      return (c.modus==='fehlt')?(!!c.wort&&!!rohText&&!((rohText||'').toLowerCase().includes((c.wort||'').toLowerCase()))):(!c.wort||(rohText||'').toLowerCase().includes((c.wort||'').toLowerCase()));
     }
     if(c.typ==='zone'){
       const p=c.puffer??1;
@@ -395,7 +402,7 @@ function _okIf(trig,rohText,typKey,C){
       const ref=_trigMap[c.trigId];
       return ref?.charSpec?!!_firedChar[c.trigId+'_'+C.MemberNumber]:!!_fired[c.trigId];
     }
-    if(c.typ==='rang'){
+    if(c.typ==='variable'){return _varCondOk(c,C);} if(c.typ==='zufall'){return _chanceOk(c);} if(c.typ==='rang'){
       const op=c.rang_op??'=';
       const currentId=_rangState[C.MemberNumber]??null;
       if(op==='kein') return !currentId;
@@ -596,6 +603,14 @@ function _applyOutfitSequential(a,C){
   _one(0);
 }
 
+// Welche Gruppen hat diese Item-Aktion belegt? (für Verfall/Auto-Entfernen)
+function _verfallGroups(a){
+  if(a.itemConfig) return [a.itemConfig.group];
+  if(a.curseEntry) return [a.curseEntry.Gruppe];
+  if(a.profilName) return (a.profilItems||[]).map(function(i){return i.group;});
+  if(a.item) return [a.gruppe];
+  return [];
+}
 function _applyItemAction(a, C){
   try{
     // Snapshot ALLER aktuellen Items vor dem Anlegen
@@ -790,17 +805,34 @@ function _applyItemAction(a, C){
 }
 
 // Führt eine einzelne Aktion aus; gibt true/false zurück (Erfolg)
+// Text wählen: bei Zufallstext eine zufällige nicht-leere Zeile aus a.text
+function _pickText(a){
+  var t=a.text||'';
+  if(a.zufallstext){
+    var lines=t.split('\\n').map(function(s){return s.trim();}).filter(Boolean);
+    if(lines.length) return lines[Math.floor(Math.random()*lines.length)];
+  }
+  return t;
+}
 function _execAct(a,C,vars){
   let ok=false;
   try{
-    if(a.typ==='chat'){ServerSend('ChatRoomChat',{Content:_tpl(a.text,vars),Type:'Chat'});ok=true;}
-    else if(a.typ==='emote'){ServerSend('ChatRoomChat',{Content:_tpl(a.text,vars),Type:'Emote'});ok=true;}
-    else if(a.typ==='whisper'){ServerSend('ChatRoomChat',{Content:_tpl(a.text,vars),Type:'Whisper',Target:C.MemberNumber});ok=true;}
+    if(a.typ==='chat'){ServerSend('ChatRoomChat',{Content:_tpl(_pickText(a),vars),Type:'Chat'});ok=true;}
+    else if(a.typ==='emote'){ServerSend('ChatRoomChat',{Content:_tpl(_pickText(a),vars),Type:'Emote'});ok=true;}
+    else if(a.typ==='whisper'){ServerSend('ChatRoomChat',{Content:_tpl(_pickText(a),vars),Type:'Whisper',Target:C.MemberNumber});ok=true;}
     else if(a.typ==='item_entf'){const _gr=(Array.isArray(a.gruppen)&&a.gruppen.length)?a.gruppen:(a.gruppe?[a.gruppe]:[]);_gr.forEach(function(g){if(g){try{InventoryRemove(C,g);_asUnregister(C,g);}catch(e){}}});if(_gr.length){CharacterRefresh(C);ChatRoomCharacterUpdate(C);}ok=true;}
     else if(a.typ==='item'){
       _applyItemAction(a,C);
       if(a.antiStrip)_asRegister(C,a);
       if(vars?.shopNostrip)_nsRegister(C,a);
+      if(a.verfallSek>0){
+        var _vg=_verfallGroups(a);
+        setTimeout(function(){
+          _vg.forEach(function(g){ if(g){ try{ InventoryRemove(C,g); _asUnregister(C,g); }catch(e){} } });
+          try{ CharacterRefresh(C); ChatRoomCharacterUpdate(C); }catch(e){}
+          _log('\u23F3 Verfall: '+_vg.join(', ')+' nach '+a.verfallSek+'s entfernt ('+C.Name+')');
+        }, a.verfallSek*1000);
+      }
       ok=true;
     }
     else if(a.typ==='teleport'){ok=_teleport(a,C);}
@@ -831,6 +863,23 @@ function _execAct(a,C,vars){
     }
     else if(a.typ==='szene'){ _playScene(a.szeneId,C,vars,a.szeneStep||null); ok=true; }
     else if(a.typ==='variable'){ _scVarApply(C.MemberNumber,a.varOp||'set',a.varName,a.varWert); ok=true; }
+    else if(a.typ==='erregung'){
+      try{
+        var _eop=a.erregOp||'set';
+        if(_eop==='orgasm'){ if(typeof ActivityOrgasmStart==='function') ActivityOrgasmStart(C); }
+        else if(_eop==='stop'){ if(typeof ActivityOrgasmStop==='function') ActivityOrgasmStop(C); }
+        else {
+          var _curAr=(C.ArousalSettings&&C.ArousalSettings.Progress)||0;
+          var _amt=Number(a.erregVal)||0;
+          var _newAr=_eop==='add'?_curAr+_amt:_eop==='sub'?_curAr-_amt:_amt;
+          _newAr=Math.max(0,Math.min(100,_newAr));
+          if(typeof ActivitySetArousal==='function') ActivitySetArousal(C,_newAr);
+          if(typeof ActivityChatRoomArousalSync==='function') ActivityChatRoomArousalSync(C);
+        }
+        _log('\u{1F497} Erregung '+_eop+(a.erregVal!=null?' '+a.erregVal:'')+' ('+C.Name+')');
+        ok=true;
+      }catch(e){_log('\u26A0 Erregung Fehler:',e.message); ok=false;}
+    }
     else ok=true;
   }catch(ex){_log('\u26A0 Aktion '+a.typ+' Fehler:',ex.message);ok=false;}
   // Dann / Sonst Nachrichten senden
@@ -937,14 +986,14 @@ function _okEv(ev,C,rohText,typKey){
       if(!rohText)return true; // no chat context → skip wort check (timer/interval)
       const m=c.typ_msg||'any';
       if(m!=='any'&&m!==typKey)return false;
-      return!c.wort||(rohText||'').toLowerCase().includes((c.wort||'').toLowerCase());
+      return (c.modus==='fehlt')?(!!c.wort&&!!rohText&&!((rohText||'').toLowerCase().includes((c.wort||'').toLowerCase()))):(!c.wort||(rohText||'').toLowerCase().includes((c.wort||'').toLowerCase()));
     }
     if(c.typ==='zone'){const p=c.puffer??1;return cx>=c.x-p&&cx<=c.x+p&&cy>=c.y-p&&cy<=c.y+p;}
     if(c.typ==='zone_rect'){return cx>=Math.min(c.x1,c.x2)&&cx<=Math.max(c.x1,c.x2)&&cy>=Math.min(c.y1,c.y2)&&cy<=Math.max(c.y1,c.y2);}
     if(c.typ==='item_traegt'){return(C.Appearance??[]).some(a=>a.Asset?.Name===c.item);}
     if(c.typ==='item_traegt_nicht'){return!(C.Appearance??[]).some(a=>a.Asset?.Name===c.item);}
     if(c.typ==='trigger_war'){const ref=_trigMap[c.trigId];return ref?.charSpec?!!_firedChar[c.trigId+'_'+C.MemberNumber]:!!_fired[c.trigId];}
-    if(c.typ==='rang'){
+    if(c.typ==='variable'){return _varCondOk(c,C);} if(c.typ==='zufall'){return _chanceOk(c);} if(c.typ==='rang'){
       const op=c.rang_op??'=';
       const currentId=_rangState[C.MemberNumber]??null;
       if(op==='kein') return !currentId;
@@ -1096,6 +1145,14 @@ function _run(trig,vars){
     _log('⏭ "'+trig.name+'" max '+trig.maxMal+'× erreicht');
     _pushLog({status:'skip_max',msg:'Max '+trig.maxMal+'× erreicht'},vars,trig);
     return;
+  }
+  if(trig.cooldownSek>0){
+    const _cdLast=_firedChar[trig.id+'_'+C.MemberNumber]||0;
+    if(Date.now()-_cdLast < trig.cooldownSek*1000){
+      _log('\u23F3 "'+trig.name+'" Cooldown aktiv ('+trig.cooldownSek+'s/Spieler)');
+      _pushLog({status:'skip_cooldown',msg:'Cooldown '+trig.cooldownSek+'s'},vars,trig);
+      return;
+    }
   }
 
   _log('\u{1F3AF} "'+trig.name+'" von '+vars.name+' | X='+vars.x+' Y='+vars.y+' | #'+(cnt+1)+(wdh==='n_mal'?' von '+trig.maxMal:''));
@@ -1318,7 +1375,7 @@ function _handleShopCmd(rohText,buyerC){
         if(!vonOk)return;
         const otherConds=(trig.bedingungen??[]).filter(c=>c.typ!=='shop_kauf');
         const otherOk=otherConds.every(c=>{
-          if(c.typ==='rang'){
+          if(c.typ==='variable'){return _varCondOk(c,C);} if(c.typ==='zufall'){return _chanceOk(c);} if(c.typ==='rang'){
             const op=c.rang_op??'=';
             const cid=_rangState[buyerC.MemberNumber]??null;
             if(op==='kein') return !cid;
@@ -1442,7 +1499,7 @@ function _handleShopCmd(rohText,buyerC){
     if(!vonOk)return;
     const otherConds=(trig.bedingungen??[]).filter(c=>c.typ!=='shop_kauf');
     const otherOk=otherConds.every(c=>{
-      if(c.typ==='rang'){
+      if(c.typ==='variable'){return _varCondOk(c,C);} if(c.typ==='zufall'){return _chanceOk(c);} if(c.typ==='rang'){
         const op=c.rang_op??'=';
         const currentId=_rangState[buyerC.MemberNumber]??null;
         if(op==='kein') return !currentId;
@@ -1639,7 +1696,7 @@ const _itPoll=setInterval(()=>{
           if(c.typ==='zone'){const p=c.puffer??1;return pos.X>=c.x-p&&pos.X<=c.x+p&&pos.Y>=c.y-p&&pos.Y<=c.y+p;}
           if(c.typ==='zone_rect'){return pos.X>=Math.min(c.x1,c.x2)&&pos.X<=Math.max(c.x1,c.x2)&&pos.Y>=Math.min(c.y1,c.y2)&&pos.Y<=Math.max(c.y1,c.y2);}
           if(c.typ==='trigger_war'){const ref=_trigMap[c.trigId];return ref?.charSpec?!!_firedChar[c.trigId+'_'+C.MemberNumber]:!!_fired[c.trigId];}
-          if(c.typ==='rang'){
+          if(c.typ==='variable'){return _varCondOk(c,C);} if(c.typ==='zufall'){return _chanceOk(c);} if(c.typ==='rang'){
             const op=c.rang_op??'=';
             const currentId=_rangState[C.MemberNumber]??null;
             if(op==='kein') return !currentId;
@@ -1692,6 +1749,8 @@ function _processJoinQueue(){
   _syncRoomEver();
   // Skip trigger firing during startup grace period (avoids blasting all triggers on room load)
   if(Date.now()-_startupTs<_JOIN_GRACE_MS)return;
+  // Profil: Besuche + letzter Besuch automatisch mitführen (persistent)
+  try{ var _bs=Number(_vget(C.MemberNumber,'besuche'))||0; _vset(C.MemberNumber,'besuche',_bs+1); _vset(C.MemberNumber,'letzterBesuch',Date.now()); }catch(e){}
   if(!istNeu) _rejoinWindow.set(C.MemberNumber, Date.now());
   if(!istNeu) setTimeout(()=>{ _rejoinWindow.delete(C.MemberNumber); _log('\u{1F6AA} Rejoin-Fenster für #'+C.MemberNumber+' automatisch geschlossen (1s)'); },_REJOIN_GRACE);
 
@@ -1725,7 +1784,7 @@ function _processJoinQueue(){
         const ref=_trigMap[c.trigId];
         return ref?.charSpec?!!_firedChar[c.trigId+'_'+C.MemberNumber]:!!_fired[c.trigId];
       }
-      if(c.typ==='rang'){
+      if(c.typ==='variable'){return _varCondOk(c,C);} if(c.typ==='zufall'){return _chanceOk(c);} if(c.typ==='rang'){
         const op=c.rang_op??'=';
         const currentId=_rangState[C.MemberNumber]??null;
         if(op==='kein') return !currentId;
@@ -1773,7 +1832,7 @@ function _processJoinQueue(){
     if(!vonOk)return;
     const evOtherOk=(ev.bedingungen??[]).every(c=>{
       if(c.typ==='player_betritt')return true;
-      if(c.typ==='rang'){
+      if(c.typ==='variable'){return _varCondOk(c,C);} if(c.typ==='zufall'){return _chanceOk(c);} if(c.typ==='rang'){
         const op=c.rang_op??'=';
         const currentId=_rangState[C.MemberNumber]??null;
         if(op==='kein') return !currentId;
@@ -1911,7 +1970,7 @@ const _zonePoll=setInterval(()=>{
           if(c.typ==='trigger_war'){const ref=_trigMap[c.trigId];return ref?.charSpec?!!_firedChar[c.trigId+'_'+C.MemberNumber]:!!_fired[c.trigId];}
           if(c.typ==='item_traegt')return(C.Appearance??[]).some(a=>a.Asset?.Name===c.item);
           if(c.typ==='item_traegt_nicht')return!(C.Appearance??[]).some(a=>a.Asset?.Name===c.item);
-          if(c.typ==='rang'){
+          if(c.typ==='variable'){return _varCondOk(c,C);} if(c.typ==='zufall'){return _chanceOk(c);} if(c.typ==='rang'){
             const op=c.rang_op??'=';
             const currentId=_rangState[C.MemberNumber]??null;
             if(op==='kein') return !currentId;
