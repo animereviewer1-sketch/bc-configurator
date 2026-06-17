@@ -4139,7 +4139,9 @@ function switchGroup(group){
 
 function switchTab(tab) {
   _activeTab = tab;
-  _applyGroupUI(_tabGroupOf(tab));
+  // Sichtbarkeits-Schleife nur, wenn sich der Obertab wirklich ändert (verhindert Lag bei Tab-Wechsel innerhalb einer Gruppe)
+  const _grp = _tabGroupOf(tab);
+  if (_grp !== _activeGroup) _applyGroupUI(_grp);
   ['items','outfit','curse','bot','log','money','events','rank','shop','outfit-import','outfit-scan','locks','spieler'].forEach(t => {
     document.getElementById('tab-'+t)?.classList.toggle('active', t===tab);
     document.getElementById('tab-'+t+'-btn')?.classList.toggle('active', t===tab);
