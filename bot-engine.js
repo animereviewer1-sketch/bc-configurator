@@ -1969,6 +1969,7 @@ const _joinPoll=setInterval(()=>{
 
 // ── Zonen-Betreten Polling – direkt C.X/C.Y (wie ZoneMonitor-Pattern) ──
 const _zoneState={}; // 'memberNum_trigId' -> bool (war zuletzt drin)
+const _zonePos={};   // 'memberNum_trigId' -> 'x,y' (letzte Position, für 'dauerhaft' = pro Feld-Wechsel)
 // FIX: 500ms is sufficient for zone detection, 100ms caused unnecessary CPU load
 const _zonePoll=setInterval(()=>{
   if(!_zoneTrigs.length)return;
@@ -1986,10 +1987,12 @@ const _zonePoll=setInterval(()=>{
       });
       const key=C.MemberNumber+'_'+trig.id;
       const war=_zoneState[key]??false;
-      // Zonen-Modus: 'dauerhaft' = bei JEDEM Check feuern solange drin (z.B. % pro Schritt);
-      // sonst nur beim Eintritt (Übergang draußen→drin).
+      // Zonen-Modus: 'dauerhaft' = bei jedem FELD-WECHSEL feuern solange drin (pro Schritt,
+      // NICHT bei jedem Poll-Tick wenn man stehen bleibt); sonst nur beim Eintritt.
       const _zCont=zoneConds.some(c=>c.zoneMode==='dauerhaft');
-      if(inZone&&(_zCont||!war)){
+      const _posKey=cx+','+cy;
+      const _moved=_zonePos[key]!==_posKey;
+      if(inZone&&(_zCont?_moved:!war)){
         // Prüfe andere Bedingungen (vortrigger, item_traegt)
         const vonOk=(()=>{
           if(trig.von==='bot')return C.MemberNumber===Player.MemberNumber;
@@ -2025,6 +2028,7 @@ const _zonePoll=setInterval(()=>{
         }
       }
       _zoneState[key]=inZone;
+      _zonePos[key]=inZone?_posKey:null;
     });
   });
 },500);
