@@ -153,6 +153,7 @@ function shopItemNew() {
   document.getElementById('shop-modal-preis-nostrip').value = '';
   _shopFillRankSelect('');
   { const _g=document.getElementById('shop-modal-reqgroup-only'); if(_g)_g.checked=false; }
+  { const _h=document.getElementById('shop-modal-hidelocked'); if(_h)_h.checked=false; }
   document.getElementById('shop-modal-overlay').style.display = 'flex';
   _shopNostripHint(); // FIX: nostrip
 }
@@ -181,6 +182,7 @@ function shopItemEdit(id) {
   document.getElementById('shop-modal-preis-nostrip').value = item.preisNostrip != null ? item.preisNostrip : '';
   _shopFillRankSelect(item.reqRankId || '');
   { const _g=document.getElementById('shop-modal-reqgroup-only'); if(_g)_g.checked=!!item.reqGroupOnly; }
+  { const _h=document.getElementById('shop-modal-hidelocked'); if(_h)_h.checked=!!item.shopHideLocked; }
   document.getElementById('shop-modal-overlay').style.display = 'flex';
   _shopNostripHint(); // FIX: nostrip
 }
@@ -205,6 +207,7 @@ function shopModalSave() {
     preisNostrip: document.getElementById('shop-modal-preis-nostrip').value.trim()!=='' ? parseInt(document.getElementById('shop-modal-preis-nostrip').value)||0 : null,
     reqRankId: (document.getElementById('shop-modal-reqrank')||{}).value || '',
     reqGroupOnly: !!(document.getElementById('shop-modal-reqgroup-only')||{}).checked,
+    shopHideLocked: !!(document.getElementById('shop-modal-hidelocked')||{}).checked,
   };
   if (id) {
     const item = _shopById(id); if (item) Object.assign(item, data);

@@ -1281,6 +1281,17 @@ function _shopTpl(raw, buyerC, targetC, shopItem, preis, newBal, anzahl, gesamt)
     .replace(/{gesamt}/gi,String(gesamt??''));
 }
 
+// Prüft, ob ein Spieler einen Shop-Artikel freigeschaltet hat (Rang/Gruppe/Level)
+function _shopItemAllowed(item,C){
+  if(!(item.reqRankId||item.reqGroup||item.reqLevel)) return true;
+  let rg=item.reqGroup||'', rl=item.reqLevel||0;
+  if(item.reqRankId){ const rd=(_cfg.rankDefs||[]).find(r=>r.id===item.reqRankId); if(rd){ rl=rd.level||0; if(item.reqGroupOnly) rg=rd.group||''; } }
+  const bId=_rangState[C.MemberNumber]??null;
+  const bDef=(_cfg.rankDefs||[]).find(r=>r.id===bId);
+  const bG=bDef?(bDef.group||''):'';
+  const bL=bDef?(bDef.level||0):0;
+  return (!rg||bG===rg) && (!rl||bL>=rl);
+}
 function _handleShopCmd(rohText,buyerC){
   const cmd=_shopCfg.cmd.trim();
   const rest=rohText.trim().slice(cmd.length);
@@ -1292,6 +1303,12 @@ function _handleShopCmd(rohText,buyerC){
   const flagNostrip=flags.has('nostrip');
 
   // shopItem ZUERST – muss vor flagAufpreis stehen (sonst TDZ-ReferenceError!)
+  // Mehrteilige Artikelnamen (z.B. "Rabbit Carrot") ohne Anführungszeichen: längsten
+  // passenden Namen aus den führenden Args zu args[0] zusammenfassen.
+  for(let _n=args.length;_n>=2;_n--){
+    const _cand=args.slice(0,_n).join(' ').toLowerCase();
+    if(_shopCfg.items.some(i=>(i.name||'').toLowerCase()===_cand)){ args.splice(0,_n,args.slice(0,_n).join(' ')); break; }
+  }
   const itemName=args[0].toLowerCase();
   const shopItem=_shopCfg.items.find(i=>i.name.toLowerCase()===itemName);
   if(!shopItem){ _log('🛒 Kein Artikel "'+args[0]+'"'); return; }
@@ -1597,7 +1614,7 @@ function _proc(rohText,typKey,C){
   const shopListCmd=(_shopCfg.listCmd||'').trim().toLowerCase();
   if(shopListCmd&&rohText.trim().toLowerCase()===shopListCmd){
     const cur=_shopCfg.moneyName||'Gold';
-    const aktive=_shopCfg.items.filter(i=>i.aktiv!==false);
+    const aktive=_shopCfg.items.filter(i=>i.aktiv!==false && !(i.shopHideLocked && !_shopItemAllowed(i,C)));
     if(!aktive.length){ServerSend('ChatRoomChat',{Content:'🛒 Noch keine Artikel.',Type:'Whisper',Target:C.MemberNumber});return;}
     const hdr='🛒 Shop ('+aktive.length+' Artikel):';
     const chunks=[];let buf=hdr;
