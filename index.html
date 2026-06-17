@@ -3362,10 +3362,9 @@ document.write('<scr'+'ipt src="items.js?_='+_cbv+'"><\/scr'+'ipt>');
       <option value="true">✅ Aktiv</option>
       <option value="false">❌ Deaktiviert</option>
     </select>
-    <label>🔒 Freischaltung – Ranggruppe (optional)</label>
-    <input class="cf" id="shop-modal-reqgroup" placeholder="leer = für alle · z.B. pet / drohne">
-    <label>🔒 Freischaltung – min. Level in der Gruppe (0 = egal)</label>
-    <input class="cf" id="shop-modal-reqlevel" type="number" min="0" value="0">
+    <label>🔒 Freischaltung – Mindest-Rang (optional)</label>
+    <select class="cf" id="shop-modal-reqrank"><option value="">– keiner (für alle) –</option></select>
+    <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:400;margin-top:4px"><input type="checkbox" id="shop-modal-reqgroup-only"> nur Spieler in der Gruppe dieses Rangs (sonst reicht das Level gruppenübergreifend)</label>
     <label>Bestätigungsnachricht (leer = Standard)</label>
     <input class="cf" id="shop-modal-confirm" placeholder="Leer = Standard-Nachricht">
     <label>Fremdkauf-Ankündigung (öffentlicher Chat, leer = Standard)</label>

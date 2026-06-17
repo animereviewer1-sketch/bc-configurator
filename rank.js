@@ -40,24 +40,33 @@ function renderRankTab() {
 
 function renderRankDefs() {
   const el = document.getElementById('rank-def-list'); if(!el) return;
-  const sorted = _rankSorted();
-  if(!sorted.length) {
+  const defs = _rankData.defs||[];
+  if(!defs.length) {
     el.innerHTML = '<div style="color:var(--text3);font-size:.72rem;text-align:center;padding:18px 0">Noch keine Raenge. Fuege deinen ersten Rang hinzu!</div>';
     return;
   }
-  el.innerHTML = sorted.map((r,i)=>`
+  const sortedAll = _rankSorted();
+  const gIdx = id => sortedAll.findIndex(r=>r.id===id);
+  const card = r => { const i=gIdx(r.id); return `
     <div class="rank-def-card" id="rdef-${r.id}">
       <span style="display:flex;flex-direction:column;gap:1px">
         <button class="order-btn" onclick="rankDefMoveUp('${r.id}')" ${i===0?'disabled':''}>&#9650;</button>
-        <button class="order-btn" onclick="rankDefMoveDown('${r.id}')" ${i===sorted.length-1?'disabled':''}>&#9660;</button>
+        <button class="order-btn" onclick="rankDefMoveDown('${r.id}')" ${i===sortedAll.length-1?'disabled':''}>&#9660;</button>
       </span>
       <span class="rank-def-badge" style="background:${r.farbe}22;color:${r.farbe};border-color:${r.farbe}55">${escHtml(r.icon||'\uD83C\uDFC5')} ${escHtml(r.name)}</span>
       <span class="rank-def-level">Lv.${r.level}</span>
-      ${r.group?`<span style="font-size:.6rem;background:rgba(139,92,246,0.15);color:var(--pl,#c4b5fd);border-radius:8px;padding:1px 7px">👥 ${escHtml(r.group)}</span>`:''}
       <span style="flex:1"></span>
       <button onclick="rankDefEdit('${r.id}')" style="background:none;border:1px solid rgba(255,255,255,0.1);border-radius:5px;color:var(--text3);font-size:.62rem;padding:2px 7px;cursor:pointer">&#9999;&#65039;</button>
       <button onclick="rankDefDelete('${r.id}')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.75rem;padding:2px 5px">&#x2715;</button>
-    </div>`).join('');
+    </div>`; };
+  const groups = {};
+  defs.forEach(r=>{ const g=r.group||''; (groups[g]=groups[g]||[]).push(r); });
+  const order = Object.keys(groups).sort((a,b)=>{ if(a===''&&b!=='')return -1; if(b===''&&a!=='')return 1; return a.localeCompare(b); });
+  el.innerHTML = order.map(g=>{
+    const items = groups[g].slice().sort((a,b)=>a.level-b.level);
+    const title = g ? ('\uD83D\uDC65 '+escHtml(g)) : '\u26AA Ohne Gruppe';
+    return `<div style="margin-bottom:12px"><div style="font-size:.62rem;font-weight:700;color:var(--pl,#c4b5fd);text-transform:uppercase;letter-spacing:.5px;margin:2px 0 5px 2px;border-bottom:1px solid rgba(139,92,246,0.2);padding-bottom:3px">${title} <span style="color:var(--text3);font-weight:400">(${items.length})</span></div>${items.map(card).join('')}</div>`;
+  }).join('');
 }
 
 function renderRankPlayers() {

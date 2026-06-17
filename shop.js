@@ -151,10 +151,17 @@ function shopItemNew() {
   document.getElementById('shop-modal-error').value = '';
   document.getElementById('shop-modal-preis-u').value = '';
   document.getElementById('shop-modal-preis-nostrip').value = '';
-  document.getElementById('shop-modal-reqgroup').value = '';
-  document.getElementById('shop-modal-reqlevel').value = '0';
+  _shopFillRankSelect('');
+  document.getElementById('shop-modal-reqgroup-only').checked = false;
   document.getElementById('shop-modal-overlay').style.display = 'flex';
   _shopNostripHint(); // FIX: nostrip
+}
+
+function _shopFillRankSelect(sel){
+  const el=document.getElementById('shop-modal-reqrank'); if(!el) return;
+  const defs=(typeof _rankData!=='undefined'&&_rankData&&_rankData.defs)?_rankData.defs.slice():[];
+  defs.sort((a,b)=>((a.group||'').localeCompare(b.group||''))||((a.level||0)-(b.level||0)));
+  el.innerHTML='<option value="">– keiner (für alle) –</option>'+defs.map(r=>`<option value="${r.id}" ${sel===r.id?'selected':''}>${escHtml((r.icon||'')+' '+r.name)}${r.group?' ['+escHtml(r.group)+']':''} (Lv.${r.level})</option>`).join('');
 }
 
 function shopItemEdit(id) {
@@ -172,8 +179,8 @@ function shopItemEdit(id) {
   document.getElementById('shop-modal-error').value = item.errorMsg||'';
   document.getElementById('shop-modal-preis-u').value = item.preisU != null ? item.preisU : '';
   document.getElementById('shop-modal-preis-nostrip').value = item.preisNostrip != null ? item.preisNostrip : '';
-  document.getElementById('shop-modal-reqgroup').value = item.reqGroup || '';
-  document.getElementById('shop-modal-reqlevel').value = item.reqLevel != null ? item.reqLevel : 0;
+  _shopFillRankSelect(item.reqRankId || '');
+  document.getElementById('shop-modal-reqgroup-only').checked = !!item.reqGroupOnly;
   document.getElementById('shop-modal-overlay').style.display = 'flex';
   _shopNostripHint(); // FIX: nostrip
 }
@@ -196,8 +203,8 @@ function shopModalSave() {
     errorMsg: document.getElementById('shop-modal-error').value.trim(),
     preisU: document.getElementById('shop-modal-preis-u').value.trim()!=='' ? parseInt(document.getElementById('shop-modal-preis-u').value)||0 : null,
     preisNostrip: document.getElementById('shop-modal-preis-nostrip').value.trim()!=='' ? parseInt(document.getElementById('shop-modal-preis-nostrip').value)||0 : null,
-    reqGroup: (document.getElementById('shop-modal-reqgroup').value||'').trim().toLowerCase(),
-    reqLevel: parseInt(document.getElementById('shop-modal-reqlevel').value)||0,
+    reqRankId: document.getElementById('shop-modal-reqrank').value || '',
+    reqGroupOnly: document.getElementById('shop-modal-reqgroup-only').checked,
   };
   if (id) {
     const item = _shopById(id); if (item) Object.assign(item, data);

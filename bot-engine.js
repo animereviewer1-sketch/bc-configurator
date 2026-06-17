@@ -1296,16 +1296,21 @@ function _handleShopCmd(rohText,buyerC){
   const shopItem=_shopCfg.items.find(i=>i.name.toLowerCase()===itemName);
   if(!shopItem){ _log('🛒 Kein Artikel "'+args[0]+'"'); return; }
 
-  // Freischaltung nach Ranggruppe/Level (Käufer muss berechtigt sein)
-  if(shopItem.reqGroup||shopItem.reqLevel){
+  // Freischaltung nach Mindest-Rang (Käufer muss berechtigt sein)
+  if(shopItem.reqRankId||shopItem.reqGroup||shopItem.reqLevel){
+    let _reqGroup=shopItem.reqGroup||'', _reqLevel=shopItem.reqLevel||0, _reqName='';
+    if(shopItem.reqRankId){
+      const _rd=(_cfg.rankDefs||[]).find(r=>r.id===shopItem.reqRankId);
+      if(_rd){ _reqLevel=_rd.level||0; _reqName=_rd.name||''; if(shopItem.reqGroupOnly) _reqGroup=_rd.group||''; }
+    }
     const _bRankId=_rangState[buyerC.MemberNumber]??null;
     const _bDef=(_cfg.rankDefs||[]).find(r=>r.id===_bRankId);
     const _bGroup=_bDef?(_bDef.group||''):'';
     const _bLevel=_bDef?(_bDef.level||0):0;
-    const _okGroup=!shopItem.reqGroup || _bGroup===shopItem.reqGroup;
-    const _okLevel=!shopItem.reqLevel || _bLevel>=shopItem.reqLevel;
+    const _okGroup=!_reqGroup || _bGroup===_reqGroup;
+    const _okLevel=!_reqLevel || _bLevel>=_reqLevel;
     if(!(_okGroup&&_okLevel)){
-      const _need=(shopItem.reqGroup?'Gruppe '+shopItem.reqGroup:'')+(shopItem.reqLevel?(shopItem.reqGroup?' ':'')+'ab Lv.'+shopItem.reqLevel:'');
+      const _need=_reqName?('Rang '+_reqName+(_reqGroup?' (Gruppe '+_reqGroup+')':'')) : ((_reqGroup?'Gruppe '+_reqGroup:'')+(_reqLevel?(_reqGroup?' ':'')+'ab Lv.'+_reqLevel:''));
       ServerSend('ChatRoomChat',{Content:'🔒 „'+shopItem.name+'" ist für dich nicht freigeschaltet ('+_need+').',Type:'Whisper',Target:buyerC.MemberNumber});
       _log('🔒 Shop gesperrt: '+buyerC.Name+' → "'+shopItem.name+'" (braucht '+(shopItem.reqGroup||'-')+'/Lv.'+(shopItem.reqLevel||0)+', hat '+(_bGroup||'-')+'/Lv.'+_bLevel+')');
       return;
