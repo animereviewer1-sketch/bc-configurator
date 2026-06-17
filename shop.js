@@ -152,12 +152,39 @@ function shopItemNew() {
   document.getElementById('shop-modal-preis-u').value = '';
   document.getElementById('shop-modal-preis-nostrip').value = '';
   _shopFillRankSelect('');
-  { const _g=document.getElementById('shop-modal-reqgroup-only'); if(_g)_g.checked=false; }
+  _shopFillGroupSelect('');
   { const _h=document.getElementById('shop-modal-hidelocked'); if(_h)_h.checked=false; }
+  _shopKaufItem=null; _shopKaufItemLabel(); { const _ka=document.getElementById('shop-modal-kaufitem-aktiv'); if(_ka)_ka.checked=false; }
   document.getElementById('shop-modal-overlay').style.display = 'flex';
   _shopNostripHint(); // FIX: nostrip
 }
 
+let _shopKaufItem=null;
+function _shopKaufItemLabel(){
+  const el=document.getElementById('shop-modal-kaufitem-label'); if(!el) return;
+  const k=_shopKaufItem;
+  el.textContent = !k ? '– nichts gewählt –'
+    : k.itemConfig ? ('📦 '+k.itemConfig.group+'/'+k.itemConfig.asset)
+    : k.profilName ? ('👗 '+k.profilName)
+    : k.curseName  ? ('🔮 '+k.curseName)
+    : k.item       ? ('📦 '+(k.gruppe||'?')+'/'+k.item) : '– nichts gewählt –';
+}
+function shopPickKaufItem(){
+  ipickerOpen('item', v=>{
+    if(v.type==='item') _shopKaufItem = v.itemConfig ? {itemConfig:v.itemConfig,item:v.itemConfig.asset,gruppe:v.itemConfig.group} : {item:v.name,gruppe:v.group,farbe:'#ffffff'};
+    else if(v.type==='curse') _shopKaufItem={curseKey:v.key,curseName:v.name,curseEntry:v.entry};
+    else if(v.type==='profil') _shopKaufItem={profilName:v.name,profilItems:(typeof PROFILES!=='undefined'&&PROFILES[v.name]&&PROFILES[v.name].items)||[]};
+    _shopKaufItemLabel();
+    const a=document.getElementById('shop-modal-kaufitem-aktiv'); if(a)a.checked=true;
+  });
+}
+function shopClearKaufItem(){ _shopKaufItem=null; _shopKaufItemLabel(); const a=document.getElementById('shop-modal-kaufitem-aktiv'); if(a)a.checked=false; }
+function _shopFillGroupSelect(sel){
+  const el=document.getElementById('shop-modal-reqgroup'); if(!el) return;
+  const defs=(typeof _rankData!=='undefined'&&_rankData&&_rankData.defs)?_rankData.defs:[];
+  const groups=[...new Set(defs.map(r=>r.group).filter(Boolean))].sort();
+  el.innerHTML='<option value="">– alle Gruppen –</option>'+groups.map(g=>`<option value="${escHtml(g)}" ${sel===g?'selected':''}>${escHtml(g)}</option>`).join('');
+}
 function _shopFillRankSelect(sel){
   const el=document.getElementById('shop-modal-reqrank'); if(!el) return;
   const defs=(typeof _rankData!=='undefined'&&_rankData&&_rankData.defs)?_rankData.defs.slice():[];
@@ -181,8 +208,9 @@ function shopItemEdit(id) {
   document.getElementById('shop-modal-preis-u').value = item.preisU != null ? item.preisU : '';
   document.getElementById('shop-modal-preis-nostrip').value = item.preisNostrip != null ? item.preisNostrip : '';
   _shopFillRankSelect(item.reqRankId || '');
-  { const _g=document.getElementById('shop-modal-reqgroup-only'); if(_g)_g.checked=!!item.reqGroupOnly; }
+  _shopFillGroupSelect(item.reqGroup||'');
   { const _h=document.getElementById('shop-modal-hidelocked'); if(_h)_h.checked=!!item.shopHideLocked; }
+  _shopKaufItem=item.kaufItem||null; _shopKaufItemLabel(); { const _ka=document.getElementById('shop-modal-kaufitem-aktiv'); if(_ka)_ka.checked=!!item.kaufItemAktiv; }
   document.getElementById('shop-modal-overlay').style.display = 'flex';
   _shopNostripHint(); // FIX: nostrip
 }
@@ -206,8 +234,10 @@ function shopModalSave() {
     preisU: document.getElementById('shop-modal-preis-u').value.trim()!=='' ? parseInt(document.getElementById('shop-modal-preis-u').value)||0 : null,
     preisNostrip: document.getElementById('shop-modal-preis-nostrip').value.trim()!=='' ? parseInt(document.getElementById('shop-modal-preis-nostrip').value)||0 : null,
     reqRankId: (document.getElementById('shop-modal-reqrank')||{}).value || '',
-    reqGroupOnly: !!(document.getElementById('shop-modal-reqgroup-only')||{}).checked,
+    reqGroup: ((document.getElementById('shop-modal-reqgroup')||{}).value||'').toLowerCase(),
     shopHideLocked: !!(document.getElementById('shop-modal-hidelocked')||{}).checked,
+    kaufItem: _shopKaufItem||null,
+    kaufItemAktiv: !!(document.getElementById('shop-modal-kaufitem-aktiv')||{}).checked,
   };
   if (id) {
     const item = _shopById(id); if (item) Object.assign(item, data);

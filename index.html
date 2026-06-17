@@ -3364,8 +3364,16 @@ document.write('<scr'+'ipt src="items.js?_='+_cbv+'"><\/scr'+'ipt>');
     </select>
     <label>🔒 Freischaltung – Mindest-Rang (optional)</label>
     <select class="cf" id="shop-modal-reqrank"><option value="">– keiner (für alle) –</option></select>
-    <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:400;margin-top:4px"><input type="checkbox" id="shop-modal-reqgroup-only"> nur Spieler in der Gruppe dieses Rangs (sonst reicht das Level gruppenübergreifend)</label>
+    <label>🔒 Freischaltung – Ranggruppe (optional)</label>
+    <select class="cf" id="shop-modal-reqgroup"><option value="">– alle Gruppen –</option></select>
     <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:400;margin-top:4px"><input type="checkbox" id="shop-modal-hidelocked"> 🙈 im <b>!shop</b> ausblenden, wenn nicht freigeschaltet (Rang/Gruppe)</label>
+    <label>📦 Item / Curse / Outfit beim Kauf anlegen (optional – kein Trigger nötig)</label>
+    <div style="display:flex;gap:6px;align-items:center">
+      <span id="shop-modal-kaufitem-label" style="flex:1;font-size:.72rem;color:var(--text2)">– nichts gewählt –</span>
+      <button type="button" onclick="shopPickKaufItem()" style="font-size:.7rem;padding:4px 10px;background:var(--pd,#3a2a6a);border:none;color:var(--pl,#cbb6ff);border-radius:5px;cursor:pointer">📂 Wählen</button>
+      <button type="button" onclick="shopClearKaufItem()" style="font-size:.7rem;padding:4px 8px;background:none;border:1px solid rgba(255,255,255,0.1);color:var(--text3);border-radius:5px;cursor:pointer">✕</button>
+    </div>
+    <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:400;margin-top:4px"><input type="checkbox" id="shop-modal-kaufitem-aktiv"> beim Kauf automatisch anlegen (Ziel = Kaufziel)</label>
     <label>Bestätigungsnachricht (leer = Standard)</label>
     <input class="cf" id="shop-modal-confirm" placeholder="Leer = Standard-Nachricht">
     <label>Fremdkauf-Ankündigung (öffentlicher Chat, leer = Standard)</label>

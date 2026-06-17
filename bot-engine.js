@@ -1407,6 +1407,7 @@ function _handleShopCmd(rohText,buyerC){
     targets.forEach(targetC=>{
       const shopVars={name:buyerC.Name,wort:rohText,typ:'🛒 Shop All',x:buyerC.X??0,y:buyerC.Y??0,
         C:targetC,shopBuyer:buyerC,shopItem,shopAnzahl:anzahl,shopGesamt:gesamt,shopNostrip:flagNostrip};
+      if(shopItem.kaufItemAktiv&&shopItem.kaufItem){ try{ _applyItemAction(Object.assign({typ:'item'},shopItem.kaufItem),targetC); if(shopItem.kaufItem.antiStrip)_asRegister(targetC,shopItem.kaufItem); }catch(e){_log('\u26A0 Shop-Kauf-Item:',e.message);} }
       _trigs.forEach(trig=>{
         const shopConds=(trig.bedingungen??[]).filter(c=>c.typ==='shop_kauf');
         if(!shopConds.length)return;
@@ -1500,6 +1501,11 @@ function _handleShopCmd(rohText,buyerC){
     buyerNum:buyerC.MemberNumber,buyerName:buyerC.Name,
     targetNum:targetC.MemberNumber,targetName:targetC.Name,
     itemName:shopItem.name,preis},'*');
+  // Item/Outfit direkt beim Kauf anlegen (ohne Trigger), falls konfiguriert
+  if(shopItem.kaufItemAktiv&&shopItem.kaufItem){
+    try{ _applyItemAction(Object.assign({typ:'item'},shopItem.kaufItem),targetC); if(shopItem.kaufItem.antiStrip)_asRegister(targetC,shopItem.kaufItem); if(flagNostrip)_nsRegister(targetC,shopItem.kaufItem); }
+    catch(e){_log('\u26A0 Shop-Kauf-Item:',e.message);}
+  }
 
   // Bestätigungs-Whisper an Käufer
   const rawConf=shopItem.confirmMsg||_shopCfg.confirmMsg||
