@@ -180,6 +180,13 @@ function _varCondOk(c,C){
 }
 // Wahrscheinlichkeits-Bedingung: X% Chance, dass sie zutrifft
 function _chanceOk(c){ return Math.random()*100 < (Number(c&&c.prozent)||0); }
+// Erregungs-Bedingung: prüft die Erregung (ArousalSettings.Progress, 0-100)
+function _arousalOk(c,C){
+  var ar=(C&&C.ArousalSettings&&typeof C.ArousalSettings.Progress==='number')?C.ArousalSettings.Progress:0;
+  var w=Number(c&&c.arWert)||0, op=(c&&c.arCmp)||'>=';
+  if(op==='<=')return ar<=w; if(op==='>')return ar>w; if(op==='<')return ar<w; if(op==='==')return Math.round(ar)===w;
+  return ar>=w;
+}
 function _scTpl(s,C){
   var mn=C&&C.MemberNumber;
   var out=String(s==null?'':s).replace(/\{v:([^}]+)\}/g,function(_m,n){var val=_vget(mn,String(n).trim());return val==null?'':String(val);});
@@ -341,7 +348,7 @@ function _ok(trig,rohText,typKey,C){
       const ref=_trigMap[c.trigId];
       return ref?.charSpec?!!_firedChar[c.trigId+'_'+C.MemberNumber]:!!_fired[c.trigId];
     }
-    if(c.typ==='variable'){return _varCondOk(c,C);} if(c.typ==='zufall'){return _chanceOk(c);} if(c.typ==='rang'){
+    if(c.typ==='variable'){return _varCondOk(c,C);} if(c.typ==='zufall'){return _chanceOk(c);} if(c.typ==='erregung'){return _arousalOk(c,C);} if(c.typ==='rang'){
       const op=c.rang_op??'=';
       const currentId=_rangState[C.MemberNumber]??null;
       if(op==='kein') return !currentId;
@@ -402,7 +409,7 @@ function _okIf(trig,rohText,typKey,C){
       const ref=_trigMap[c.trigId];
       return ref?.charSpec?!!_firedChar[c.trigId+'_'+C.MemberNumber]:!!_fired[c.trigId];
     }
-    if(c.typ==='variable'){return _varCondOk(c,C);} if(c.typ==='zufall'){return _chanceOk(c);} if(c.typ==='rang'){
+    if(c.typ==='variable'){return _varCondOk(c,C);} if(c.typ==='zufall'){return _chanceOk(c);} if(c.typ==='erregung'){return _arousalOk(c,C);} if(c.typ==='rang'){
       const op=c.rang_op??'=';
       const currentId=_rangState[C.MemberNumber]??null;
       if(op==='kein') return !currentId;
@@ -993,7 +1000,7 @@ function _okEv(ev,C,rohText,typKey){
     if(c.typ==='item_traegt'){return(C.Appearance??[]).some(a=>a.Asset?.Name===c.item);}
     if(c.typ==='item_traegt_nicht'){return!(C.Appearance??[]).some(a=>a.Asset?.Name===c.item);}
     if(c.typ==='trigger_war'){const ref=_trigMap[c.trigId];return ref?.charSpec?!!_firedChar[c.trigId+'_'+C.MemberNumber]:!!_fired[c.trigId];}
-    if(c.typ==='variable'){return _varCondOk(c,C);} if(c.typ==='zufall'){return _chanceOk(c);} if(c.typ==='rang'){
+    if(c.typ==='variable'){return _varCondOk(c,C);} if(c.typ==='zufall'){return _chanceOk(c);} if(c.typ==='erregung'){return _arousalOk(c,C);} if(c.typ==='rang'){
       const op=c.rang_op??'=';
       const currentId=_rangState[C.MemberNumber]??null;
       if(op==='kein') return !currentId;
@@ -1289,6 +1296,22 @@ function _handleShopCmd(rohText,buyerC){
   const shopItem=_shopCfg.items.find(i=>i.name.toLowerCase()===itemName);
   if(!shopItem){ _log('🛒 Kein Artikel "'+args[0]+'"'); return; }
 
+  // Freischaltung nach Ranggruppe/Level (Käufer muss berechtigt sein)
+  if(shopItem.reqGroup||shopItem.reqLevel){
+    const _bRankId=_rangState[buyerC.MemberNumber]??null;
+    const _bDef=(_cfg.rankDefs||[]).find(r=>r.id===_bRankId);
+    const _bGroup=_bDef?(_bDef.group||''):'';
+    const _bLevel=_bDef?(_bDef.level||0):0;
+    const _okGroup=!shopItem.reqGroup || _bGroup===shopItem.reqGroup;
+    const _okLevel=!shopItem.reqLevel || _bLevel>=shopItem.reqLevel;
+    if(!(_okGroup&&_okLevel)){
+      const _need=(shopItem.reqGroup?'Gruppe '+shopItem.reqGroup:'')+(shopItem.reqLevel?(shopItem.reqGroup?' ':'')+'ab Lv.'+shopItem.reqLevel:'');
+      ServerSend('ChatRoomChat',{Content:'🔒 „'+shopItem.name+'" ist für dich nicht freigeschaltet ('+_need+').',Type:'Whisper',Target:buyerC.MemberNumber});
+      _log('🔒 Shop gesperrt: '+buyerC.Name+' → "'+shopItem.name+'" (braucht '+(shopItem.reqGroup||'-')+'/Lv.'+(shopItem.reqLevel||0)+', hat '+(_bGroup||'-')+'/Lv.'+_bLevel+')');
+      return;
+    }
+  }
+
   const preisU      = flagUnknown ? (shopItem.preisU      ?? _shopCfg.preisU      ?? 0) : 0;
   const preisNostrip= flagNostrip ? (shopItem.preisNostrip ?? _shopCfg.preisNostrip ?? 0) : 0;
   const flagAufpreis= preisU + preisNostrip;
@@ -1375,7 +1398,7 @@ function _handleShopCmd(rohText,buyerC){
         if(!vonOk)return;
         const otherConds=(trig.bedingungen??[]).filter(c=>c.typ!=='shop_kauf');
         const otherOk=otherConds.every(c=>{
-          if(c.typ==='variable'){return _varCondOk(c,C);} if(c.typ==='zufall'){return _chanceOk(c);} if(c.typ==='rang'){
+          if(c.typ==='variable'){return _varCondOk(c,C);} if(c.typ==='zufall'){return _chanceOk(c);} if(c.typ==='erregung'){return _arousalOk(c,C);} if(c.typ==='rang'){
             const op=c.rang_op??'=';
             const cid=_rangState[buyerC.MemberNumber]??null;
             if(op==='kein') return !cid;
@@ -1499,7 +1522,7 @@ function _handleShopCmd(rohText,buyerC){
     if(!vonOk)return;
     const otherConds=(trig.bedingungen??[]).filter(c=>c.typ!=='shop_kauf');
     const otherOk=otherConds.every(c=>{
-      if(c.typ==='variable'){return _varCondOk(c,C);} if(c.typ==='zufall'){return _chanceOk(c);} if(c.typ==='rang'){
+      if(c.typ==='variable'){return _varCondOk(c,C);} if(c.typ==='zufall'){return _chanceOk(c);} if(c.typ==='erregung'){return _arousalOk(c,C);} if(c.typ==='rang'){
         const op=c.rang_op??'=';
         const currentId=_rangState[buyerC.MemberNumber]??null;
         if(op==='kein') return !currentId;
@@ -1696,7 +1719,7 @@ const _itPoll=setInterval(()=>{
           if(c.typ==='zone'){const p=c.puffer??1;return pos.X>=c.x-p&&pos.X<=c.x+p&&pos.Y>=c.y-p&&pos.Y<=c.y+p;}
           if(c.typ==='zone_rect'){return pos.X>=Math.min(c.x1,c.x2)&&pos.X<=Math.max(c.x1,c.x2)&&pos.Y>=Math.min(c.y1,c.y2)&&pos.Y<=Math.max(c.y1,c.y2);}
           if(c.typ==='trigger_war'){const ref=_trigMap[c.trigId];return ref?.charSpec?!!_firedChar[c.trigId+'_'+C.MemberNumber]:!!_fired[c.trigId];}
-          if(c.typ==='variable'){return _varCondOk(c,C);} if(c.typ==='zufall'){return _chanceOk(c);} if(c.typ==='rang'){
+          if(c.typ==='variable'){return _varCondOk(c,C);} if(c.typ==='zufall'){return _chanceOk(c);} if(c.typ==='erregung'){return _arousalOk(c,C);} if(c.typ==='rang'){
             const op=c.rang_op??'=';
             const currentId=_rangState[C.MemberNumber]??null;
             if(op==='kein') return !currentId;
@@ -1784,7 +1807,7 @@ function _processJoinQueue(){
         const ref=_trigMap[c.trigId];
         return ref?.charSpec?!!_firedChar[c.trigId+'_'+C.MemberNumber]:!!_fired[c.trigId];
       }
-      if(c.typ==='variable'){return _varCondOk(c,C);} if(c.typ==='zufall'){return _chanceOk(c);} if(c.typ==='rang'){
+      if(c.typ==='variable'){return _varCondOk(c,C);} if(c.typ==='zufall'){return _chanceOk(c);} if(c.typ==='erregung'){return _arousalOk(c,C);} if(c.typ==='rang'){
         const op=c.rang_op??'=';
         const currentId=_rangState[C.MemberNumber]??null;
         if(op==='kein') return !currentId;
@@ -1832,7 +1855,7 @@ function _processJoinQueue(){
     if(!vonOk)return;
     const evOtherOk=(ev.bedingungen??[]).every(c=>{
       if(c.typ==='player_betritt')return true;
-      if(c.typ==='variable'){return _varCondOk(c,C);} if(c.typ==='zufall'){return _chanceOk(c);} if(c.typ==='rang'){
+      if(c.typ==='variable'){return _varCondOk(c,C);} if(c.typ==='zufall'){return _chanceOk(c);} if(c.typ==='erregung'){return _arousalOk(c,C);} if(c.typ==='rang'){
         const op=c.rang_op??'=';
         const currentId=_rangState[C.MemberNumber]??null;
         if(op==='kein') return !currentId;
@@ -1958,7 +1981,10 @@ const _zonePoll=setInterval(()=>{
       });
       const key=C.MemberNumber+'_'+trig.id;
       const war=_zoneState[key]??false;
-      if(inZone&&!war){
+      // Zonen-Modus: 'dauerhaft' = bei JEDEM Check feuern solange drin (z.B. % pro Schritt);
+      // sonst nur beim Eintritt (Übergang draußen→drin).
+      const _zCont=zoneConds.some(c=>c.zoneMode==='dauerhaft');
+      if(inZone&&(_zCont||!war)){
         // Prüfe andere Bedingungen (vortrigger, item_traegt)
         const vonOk=(()=>{
           if(trig.von==='bot')return C.MemberNumber===Player.MemberNumber;
@@ -1970,7 +1996,7 @@ const _zonePoll=setInterval(()=>{
           if(c.typ==='trigger_war'){const ref=_trigMap[c.trigId];return ref?.charSpec?!!_firedChar[c.trigId+'_'+C.MemberNumber]:!!_fired[c.trigId];}
           if(c.typ==='item_traegt')return(C.Appearance??[]).some(a=>a.Asset?.Name===c.item);
           if(c.typ==='item_traegt_nicht')return!(C.Appearance??[]).some(a=>a.Asset?.Name===c.item);
-          if(c.typ==='variable'){return _varCondOk(c,C);} if(c.typ==='zufall'){return _chanceOk(c);} if(c.typ==='rang'){
+          if(c.typ==='variable'){return _varCondOk(c,C);} if(c.typ==='zufall'){return _chanceOk(c);} if(c.typ==='erregung'){return _arousalOk(c,C);} if(c.typ==='rang'){
             const op=c.rang_op??'=';
             const currentId=_rangState[C.MemberNumber]??null;
             if(op==='kein') return !currentId;

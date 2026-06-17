@@ -636,6 +636,7 @@ function _btCondPhrase(bot, c) {
     case 'ev_interval': return 'alle '+(c.sek_min??30)+'–'+(c.sek_max??180)+'s';
     case 'variable': return e(c.varName||'var')+' '+(c.varCmp||'==')+' '+e(c.varWert??'');
     case 'zufall': return (c.prozent??50)+'% Chance';
+    case 'erregung': return 'Erregung '+(c.arCmp||'>=')+' '+(c.arWert??99)+'%';
     default: return e(c?.typ||'?');
   }
 }
@@ -749,6 +750,7 @@ function renderTrigCard(bot, t, i) {
           <button onclick="trigAddCond('${t.id}','ev_interval')" title="Wiederholt alle X–Y Sekunden feuern">🔁 Intervall</button>
           <button onclick="trigAddCond('${t.id}','variable')" title="Prüft eine Spieler-Variable/Punkte (z.B. punkte ≥ 100)">🔢 Variable</button>
           <button onclick="trigAddCond('${t.id}','zufall')" title="X% Wahrscheinlichkeit, dass der Trigger zutrifft">🎲 Zufall</button>
+          <button onclick="trigAddCond('${t.id}','erregung')" title="Prüft die Erregung (z.B. ≥ 99 % → Edging)">💗 Erregung</button>
         </div>
         <div id="conds-${t.id}">${(t.bedingungen||[]).map((c,ci)=>renderCond(bot,t.id,c,ci)).join('')}</div>
       </div>
@@ -845,7 +847,11 @@ function renderCond(bot, tid, c, ci) {
       X<input class="cf" style="width:46px" type="number" value="${c.x??0}" oninput="condField('${tid}',${ci},'x',+this.value)">
       Y<input class="cf" style="width:46px" type="number" value="${c.y??0}" oninput="condField('${tid}',${ci},'y',+this.value)">
       ±<input class="cf" style="width:38px" type="number" value="${c.puffer??1}" oninput="condField('${tid}',${ci},'puffer',+this.value)" title="Puffer">
-      <button onclick="condSetZone('${tid}',${ci})" style="font-size:.62rem;padding:2px 8px;background:var(--pd);border:none;color:var(--pl);border-radius:4px;cursor:pointer" title="Aktuelle Spielerposition übernehmen">📍 Set</button>`;
+      <button onclick="condSetZone('${tid}',${ci})" style="font-size:.62rem;padding:2px 8px;background:var(--pd);border:none;color:var(--pl);border-radius:4px;cursor:pointer" title="Aktuelle Spielerposition übernehmen">📍 Set</button>
+      <select class="cf" style="width:150px" onchange="condField('${tid}',${ci},'zoneMode',this.value)" title="Bei Eintritt: einmal beim Betreten. Dauerhaft: bei jedem Check (~0,5s) solange drin – z.B. für %-Chance pro Schritt.">
+        <option value="eintritt" ${(!c.zoneMode||c.zoneMode==='eintritt')?'selected':''}>↘️ bei Eintritt</option>
+        <option value="dauerhaft" ${c.zoneMode==='dauerhaft'?'selected':''}>🔁 dauerhaft (jeder Check)</option>
+      </select>`;
   } else if (c.typ === 'item_traegt' || c.typ === 'item_traegt_nicht') {
     const negLabel = c.typ === 'item_traegt_nicht' ? '<span style="color:#e55;font-size:.65rem;font-weight:600;margin-right:4px">🚫 NICHT</span>' : '';
     inner = `
@@ -862,7 +868,11 @@ function renderCond(bot, tid, c, ci) {
       X<input class="cf" style="width:44px" type="number" value="${c.x2??2}" oninput="condField('${tid}',${ci},'x2',+this.value)" title="X-Ende">
       Y<input class="cf" style="width:44px" type="number" value="${c.y2??2}" oninput="condField('${tid}',${ci},'y2',+this.value)" title="Y-Ende">
       <button onclick="condSetZone('${tid}',${ci},'A')" style="font-size:.62rem;padding:2px 8px;background:var(--pd);border:none;color:var(--pl);border-radius:4px;cursor:pointer" title="Von-Ecke = aktuelle Position">📍 Set A</button>
-      <button onclick="condSetZone('${tid}',${ci},'B')" style="font-size:.62rem;padding:2px 8px;background:var(--pd);border:none;color:var(--pl);border-radius:4px;cursor:pointer" title="Bis-Ecke = aktuelle Position">📍 Set B</button>`;
+      <button onclick="condSetZone('${tid}',${ci},'B')" style="font-size:.62rem;padding:2px 8px;background:var(--pd);border:none;color:var(--pl);border-radius:4px;cursor:pointer" title="Bis-Ecke = aktuelle Position">📍 Set B</button>
+      <select class="cf" style="width:150px" onchange="condField('${tid}',${ci},'zoneMode',this.value)" title="Bei Eintritt: einmal beim Betreten. Dauerhaft: bei jedem Check (~0,5s) solange drin – z.B. für %-Chance pro Schritt.">
+        <option value="eintritt" ${(!c.zoneMode||c.zoneMode==='eintritt')?'selected':''}>↘️ bei Eintritt</option>
+        <option value="dauerhaft" ${c.zoneMode==='dauerhaft'?'selected':''}>🔁 dauerhaft (jeder Check)</option>
+      </select>`;
   } else if (c.typ === 'trigger_war') {
     const trigs = bot?.triggers ?? [];
     const opts = trigs.filter(t=>t.id!==tid).map(t=>`<option value="${t.id}" ${c.trigId===t.id?'selected':''}>${escHtml(t.name||t.id)}</option>`).join('');
@@ -934,8 +944,16 @@ function renderCond(bot, tid, c, ci) {
       <span style="font-size:.65rem;color:var(--text3)">Chance</span>
       <input class="cf cf-w70" type="number" min="0" max="100" value="${c.prozent??50}" oninput="condField('${tid}',${ci},'prozent',+this.value)"> %
       <span style="font-size:.62rem;color:var(--text3)">dass die Bedingung zutrifft</span>`;
+  } else if (c.typ === 'erregung') {
+    inner = `
+      <span style="font-size:.65rem;color:var(--text3)">Erregung</span>
+      <select class="cf" style="width:70px" onchange="condField('${tid}',${ci},'arCmp',this.value)">
+        ${['>=','<=','>','<','=='].map(o=>`<option value="${o}" ${(c.arCmp||'>=')===o?'selected':''}>${o}</option>`).join('')}
+      </select>
+      <input class="cf cf-w70" type="number" min="0" max="100" value="${c.arWert??99}" oninput="condField('${tid}',${ci},'arWert',+this.value)"> %
+      <span style="font-size:.6rem;color:var(--text3)">(eigene Erregung am zuverlässigsten)</span>`;
   }
-  const icons = {wort:'💬',zone:'🗺️',zone_rect:'📐',item_traegt:'👗',item_traegt_nicht:'🚫',trigger_war:'🔗',player_betritt:'👋',ev_timer:'⏱',ev_interval:'🔁',rang:'🏆',shop_kauf:'🛒',variable:'🔢',zufall:'🎲'};
+  const icons = {wort:'💬',zone:'🗺️',zone_rect:'📐',item_traegt:'👗',item_traegt_nicht:'🚫',trigger_war:'🔗',player_betritt:'👋',ev_timer:'⏱',ev_interval:'🔁',rang:'🏆',shop_kauf:'🛒',variable:'🔢',zufall:'🎲',erregung:'💗'};
   // Logik-Operator: verbindet diese Bedingung mit der vorherigen
   const logik = c.logik ?? 'und';
   const logikBadge = ci === 0

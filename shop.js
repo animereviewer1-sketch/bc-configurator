@@ -151,6 +151,8 @@ function shopItemNew() {
   document.getElementById('shop-modal-error').value = '';
   document.getElementById('shop-modal-preis-u').value = '';
   document.getElementById('shop-modal-preis-nostrip').value = '';
+  document.getElementById('shop-modal-reqgroup').value = '';
+  document.getElementById('shop-modal-reqlevel').value = '0';
   document.getElementById('shop-modal-overlay').style.display = 'flex';
   _shopNostripHint(); // FIX: nostrip
 }
@@ -170,6 +172,8 @@ function shopItemEdit(id) {
   document.getElementById('shop-modal-error').value = item.errorMsg||'';
   document.getElementById('shop-modal-preis-u').value = item.preisU != null ? item.preisU : '';
   document.getElementById('shop-modal-preis-nostrip').value = item.preisNostrip != null ? item.preisNostrip : '';
+  document.getElementById('shop-modal-reqgroup').value = item.reqGroup || '';
+  document.getElementById('shop-modal-reqlevel').value = item.reqLevel != null ? item.reqLevel : 0;
   document.getElementById('shop-modal-overlay').style.display = 'flex';
   _shopNostripHint(); // FIX: nostrip
 }
@@ -192,6 +196,8 @@ function shopModalSave() {
     errorMsg: document.getElementById('shop-modal-error').value.trim(),
     preisU: document.getElementById('shop-modal-preis-u').value.trim()!=='' ? parseInt(document.getElementById('shop-modal-preis-u').value)||0 : null,
     preisNostrip: document.getElementById('shop-modal-preis-nostrip').value.trim()!=='' ? parseInt(document.getElementById('shop-modal-preis-nostrip').value)||0 : null,
+    reqGroup: (document.getElementById('shop-modal-reqgroup').value||'').trim().toLowerCase(),
+    reqLevel: parseInt(document.getElementById('shop-modal-reqlevel').value)||0,
   };
   if (id) {
     const item = _shopById(id); if (item) Object.assign(item, data);

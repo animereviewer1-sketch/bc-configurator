@@ -3238,8 +3238,10 @@ document.write('<scr'+'ipt src="items.js?_='+_cbv+'"><\/scr'+'ipt>');
       <input type="color" id="rank-modal-color" value="oklch(82% 0.1 62)" style="width:40px;height:28px;padding:1px;border:none;background:none;cursor:pointer">
       <input class="cf" id="rank-modal-color-hex" placeholder="oklch(82% 0.1 62)" style="width:90px" oninput="document.getElementById('rank-modal-color').value=this.value">
     </div>
-    <label>Level (Reihenfolge)</label>
+    <label>Level (Reihenfolge / Stufe in der Gruppe)</label>
     <input class="cf" id="rank-modal-level" type="number" min="1" value="1" placeholder="1">
+    <label>Ranggruppe (optional)</label>
+    <input class="cf" id="rank-modal-group" placeholder="leer = ohne Gruppe (z.B. Neuling) · sonst z.B. pet / drohne">
     <div class="rank-modal-btns">
       <button onclick="rankModalClose()" style="padding:7px 16px;border:1px solid rgba(255,255,255,0.1);background:none;color:var(--text3);border-radius:8px;cursor:pointer;font-family:var(--font-ui);font-size:.78rem">Abbrechen</button>
       <button onclick="rankModalSave()" class="btn btn-primary" style="font-size:.78rem;padding:7px 18px">✓ Speichern</button>
@@ -3360,6 +3362,10 @@ document.write('<scr'+'ipt src="items.js?_='+_cbv+'"><\/scr'+'ipt>');
       <option value="true">✅ Aktiv</option>
       <option value="false">❌ Deaktiviert</option>
     </select>
+    <label>🔒 Freischaltung – Ranggruppe (optional)</label>
+    <input class="cf" id="shop-modal-reqgroup" placeholder="leer = für alle · z.B. pet / drohne">
+    <label>🔒 Freischaltung – min. Level in der Gruppe (0 = egal)</label>
+    <input class="cf" id="shop-modal-reqlevel" type="number" min="0" value="0">
     <label>Bestätigungsnachricht (leer = Standard)</label>
     <input class="cf" id="shop-modal-confirm" placeholder="Leer = Standard-Nachricht">
     <label>Fremdkauf-Ankündigung (öffentlicher Chat, leer = Standard)</label>

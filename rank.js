@@ -53,6 +53,7 @@ function renderRankDefs() {
       </span>
       <span class="rank-def-badge" style="background:${r.farbe}22;color:${r.farbe};border-color:${r.farbe}55">${escHtml(r.icon||'\uD83C\uDFC5')} ${escHtml(r.name)}</span>
       <span class="rank-def-level">Lv.${r.level}</span>
+      ${r.group?`<span style="font-size:.6rem;background:rgba(139,92,246,0.15);color:var(--pl,#c4b5fd);border-radius:8px;padding:1px 7px">👥 ${escHtml(r.group)}</span>`:''}
       <span style="flex:1"></span>
       <button onclick="rankDefEdit('${r.id}')" style="background:none;border:1px solid rgba(255,255,255,0.1);border-radius:5px;color:var(--text3);font-size:.62rem;padding:2px 7px;cursor:pointer">&#9999;&#65039;</button>
       <button onclick="rankDefDelete('${r.id}')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.75rem;padding:2px 5px">&#x2715;</button>
@@ -113,6 +114,7 @@ function _rankOpenModal(id) {
   document.getElementById('rank-modal-color').value = r?.farbe||'#c4b5fd';
   document.getElementById('rank-modal-color-hex').value = r?.farbe||'#c4b5fd';
   document.getElementById('rank-modal-level').value = r?.level??maxLevel;
+  document.getElementById('rank-modal-group').value = r?.group||'';
   document.getElementById('rank-modal-overlay').style.display='flex';
   setTimeout(()=>document.getElementById('rank-modal-name')?.focus(),50);
 }
@@ -130,9 +132,10 @@ function rankModalSave() {
   const icon = document.getElementById('rank-modal-icon').value.trim()||'\uD83C\uDFC5';
   const farbe = document.getElementById('rank-modal-color').value||'#c4b5fd';
   const level = parseInt(document.getElementById('rank-modal-level').value)||1;
+  const group = (document.getElementById('rank-modal-group').value||'').trim().toLowerCase();
   if(!name) { alert('Bitte gib einen Namen fuer den Rang ein.'); return; }
-  if(id) { const r=_rankById(id); if(!r) return; r.name=name; r.icon=icon; r.farbe=farbe; r.level=level; }
-  else { _rankData.defs.push({id:'r'+Date.now(), name, icon, farbe, level}); }
+  if(id) { const r=_rankById(id); if(!r) return; r.name=name; r.icon=icon; r.farbe=farbe; r.level=level; r.group=group; }
+  else { _rankData.defs.push({id:'r'+Date.now(), name, icon, farbe, level, group}); }
   _saveRank(); rankModalClose(); renderRankDefs(); _rankUpdateFilterSelect(); renderRankPlayers();
 }
 
