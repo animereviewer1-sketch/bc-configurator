@@ -665,6 +665,23 @@ function _btActPhrase(bot, a) {
 }
 
 // ── Spieler-Tab: alle bekannten Spieler mit Rang, Money, Map-Keys ──
+let _spielerRoomMembers = [];   // [{num,name}] – aktuell im Raum (inkl. Player)
+let _spielerTimer = null;
+function _spielerRefreshRequest(){
+  try { if (typeof _connected!=='undefined' && _connected && typeof bcSend==='function') bcSend({ type:'GET_PLAYER' }); } catch(e){}
+}
+function _startSpielerTimer(){ _stopSpielerTimer(); _spielerTimer = setInterval(_spielerRefreshRequest, 10000); }
+function _stopSpielerTimer(){ if (_spielerTimer){ clearInterval(_spielerTimer); _spielerTimer = null; } }
+// Aufgerufen aus dem PLAYER_DATA-Handler
+function _spielerSetRoom(data){
+  const list = [];
+  if (data && data.memberNumber != null) list.push({ num: String(data.memberNumber), name: data.name || ('#'+data.memberNumber) });
+  (data && data.members || []).forEach(m => { if (m && m.num != null) list.push({ num: String(m.num), name: m.name || ('#'+m.num) }); });
+  // dedupe nach num
+  const seen = {}; _spielerRoomMembers = list.filter(m => seen[m.num] ? false : (seen[m.num]=true));
+  if (document.getElementById('tab-spieler')?.classList.contains('active')) renderSpielerTab();
+}
+
 function renderSpielerTab(){
   const host = document.getElementById('spieler-list'); if(!host) return;
   const rankData = (typeof _rankData!=='undefined'&&_rankData)?_rankData:{players:{},defs:[],settings:{}};
@@ -673,30 +690,48 @@ function renderSpielerTab(){
   const cur      = (money.settings&&money.settings.name) || 'Gold';
   const defById  = {}; (rankData.defs||[]).forEach(d=>defById[d.id]=d);
 
+  // Aktuell im Raum
+  const roomNums = new Set(_spielerRoomMembers.map(m=>m.num));
+  const roomName = {}; _spielerRoomMembers.forEach(m=>roomName[m.num]=m.name);
+
   const nums = new Set();
   Object.keys(rankData.players||{}).forEach(k=>nums.add(String(k)));
   Object.keys(money.balances||{}).forEach(k=>nums.add(String(k)));
   Object.keys(pkeys||{}).forEach(k=>nums.add(String(k)));
+  roomNums.forEach(k=>nums.add(k));
   const arr = [...nums];
 
   const cntEl = document.getElementById('spieler-count');
-  if (cntEl) cntEl.textContent = arr.length + ' Spieler';
+  if (cntEl) cntEl.textContent = arr.length + ' Spieler · ' + roomNums.size + ' im Raum';
   if(!arr.length){ host.innerHTML = '<div style="font-size:.75rem;color:var(--text3);text-align:center;padding:24px 0">Noch keine Spieler bekannt. Sie erscheinen, sobald sie den Raum betreten (Bot läuft).</div>'; return; }
 
-  const nameOf = n => (rankData.players?.[n]?.name) || (money.balances?.[n]?.name) || (pkeys?.[n]?.name) || ('#'+n);
-  arr.sort((a,b)=>nameOf(a).localeCompare(nameOf(b)));
+  const nameOf = n => roomName[n] || (rankData.players?.[n]?.name) || (money.balances?.[n]?.name) || (pkeys?.[n]?.name) || ('#'+n);
+  // Sortierung: im Raum zuerst, dann nach Name
+  arr.sort((a,b)=>{
+    const ra=roomNums.has(a), rb=roomNums.has(b);
+    if (ra!==rb) return ra?-1:1;
+    return nameOf(a).localeCompare(nameOf(b));
+  });
 
   const keyBadge = (on,icon,lbl)=>`<span style="font-size:.62rem;padding:2px 7px;border-radius:5px;border:1px solid ${on?'rgba(251,191,36,0.5)':'rgba(255,255,255,0.08)'};background:${on?'rgba(251,191,36,0.12)':'transparent'};color:${on?'#fbbf24':'var(--text3)'}">${icon} ${lbl}${on?' ✓':''}</span>`;
 
+  let lastInRoom = null;
   host.innerHTML = arr.map(n=>{
+    const inRoom = roomNums.has(n);
+    // Trenner zwischen "im Raum" und Rest
+    let sep = '';
+    if (lastInRoom===true && inRoom===false) sep = '<div style="font-size:.6rem;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);margin:10px 2px 6px">Nicht im Raum</div>';
+    if (lastInRoom===null && inRoom===true) sep = '<div style="font-size:.6rem;text-transform:uppercase;letter-spacing:.06em;color:var(--green);margin:0 2px 6px">Aktuell im Raum</div>';
+    lastInRoom = inRoom;
     const nm = nameOf(n);
     const rp = rankData.players?.[n];
     const rdef = rp?.rankId ? defById[rp.rankId] : null;
     const rankStr = rdef ? `${escHtml((rdef.icon||'')+' '+rdef.name)}${rdef.group?` <span style="color:var(--text3)">[${escHtml(rdef.group)}]</span>`:''}` : '<span style="color:var(--text3)">– kein Rang –</span>';
     const bal = money.balances?.[n]?.balance ?? 0;
     const pk = pkeys?.[n]||{};
-    return `<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:10px;padding:10px 14px;margin-bottom:8px">
-      <span style="font-size:.85rem;font-weight:700;color:var(--text1);min-width:150px">${escHtml(nm)} <span style="font-size:.66rem;color:var(--text3);font-weight:400">#${escHtml(n)}</span></span>
+    const dot = inRoom ? '<span title="im Raum" style="color:var(--green);font-size:.7rem">●</span> ' : '';
+    return sep + `<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:${inRoom?'rgba(52,211,153,0.06)':'rgba(255,255,255,0.03)'};border:1px solid ${inRoom?'rgba(52,211,153,0.22)':'rgba(255,255,255,0.07)'};border-radius:10px;padding:10px 14px;margin-bottom:8px">
+      <span style="font-size:.85rem;font-weight:700;color:var(--text1);min-width:150px">${dot}${escHtml(nm)} <span style="font-size:.66rem;color:var(--text3);font-weight:400">#${escHtml(n)}</span></span>
       <span style="font-size:.72rem;color:var(--text2)">🏆 ${rankStr}</span>
       <span style="font-size:.72rem;color:var(--text2)">💰 ${bal} ${escHtml(cur)}</span>
       <span style="display:flex;gap:5px;margin-left:auto">${keyBadge(!!pk.bronze,'🥉','Bronze')}${keyBadge(!!pk.silver,'🥈','Silver')}${keyBadge(!!pk.gold,'🥇','Gold')}</span>

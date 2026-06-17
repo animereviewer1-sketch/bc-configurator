@@ -4146,8 +4146,9 @@ function switchTab(tab) {
     document.getElementById('tab-'+t)?.classList.toggle('active', t===tab);
     document.getElementById('tab-'+t+'-btn')?.classList.toggle('active', t===tab);
   });
-  if (tab === 'outfit')        { renderOutfitList(); renderOutfitMemberChips(); renderProfileList(); _autoOutfitCode(); }
-  if (tab === 'curse')         { renderCurseTab(); _updateCurseDefaultOutfitBtn(); }
+  // Schwere Render-Funktionen erst nach dem Paint ausführen → Tab schaltet sofort um, kein Lag beim Klick
+  if (tab === 'outfit')        { setTimeout(()=>{ renderOutfitList(); renderOutfitMemberChips(); renderProfileList(); _autoOutfitCode(); }, 0); }
+  if (tab === 'curse')         { setTimeout(()=>{ renderCurseTab(); _updateCurseDefaultOutfitBtn(); }, 0); }
   if (tab === 'bot')           { renderBotTab(); }
   if (tab === 'log')           { renderLogTab(); }
   if (tab === 'money')         { renderMoneyTab(); }
@@ -4157,7 +4158,8 @@ function switchTab(tab) {
   if (tab === 'outfit-scan')   { renderOutfitScanTab(); }
   if (tab === 'locks')         { renderLocksTab(); _startLocksTimer(); }
   if (tab !== 'locks')         { _stopLocksTimer(); }
-  if (tab === 'spieler')       { if (typeof renderSpielerTab==='function') renderSpielerTab(); }
+  if (tab === 'spieler')       { if (typeof renderSpielerTab==='function') renderSpielerTab(); if (typeof _spielerRefreshRequest==='function') _spielerRefreshRequest(); if (typeof _startSpielerTimer==='function') _startSpielerTimer(); }
+  if (tab !== 'spieler')       { if (typeof _stopSpielerTimer==='function') _stopSpielerTimer(); }
 
 }
 // Initiale Obertab-Sichtbarkeit: nur Items-Gruppe zeigen
@@ -5758,6 +5760,7 @@ window.addEventListener('message', function(ev) {
         const _pi = document.getElementById('playerInfo');
         if (_pi) { _pi.textContent = '\U0001f464 ' + ev.data.name + ' #' + ev.data.memberNumber; _pi.style.display = ''; }
         renderRoomMembers(ev.data);
+        if (typeof _spielerSetRoom === 'function') _spielerSetRoom(ev.data);
       } else {
         console.warn('[BCK-Popup] PLAYER_DATA Fehler:', ev.data.err);
       }
