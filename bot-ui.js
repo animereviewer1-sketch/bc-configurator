@@ -663,6 +663,47 @@ function _btActPhrase(bot, a) {
     default: return e(a?.typ||'?');
   }
 }
+
+// ── Spieler-Tab: alle bekannten Spieler mit Rang, Money, Map-Keys ──
+function renderSpielerTab(){
+  const host = document.getElementById('spieler-list'); if(!host) return;
+  const rankData = (typeof _rankData!=='undefined'&&_rankData)?_rankData:{players:{},defs:[],settings:{}};
+  const money    = (typeof _money!=='undefined'&&_money)?_money:{balances:{},settings:{}};
+  const pkeys    = (typeof _playerKeys!=='undefined'&&_playerKeys)?_playerKeys:{};
+  const cur      = (money.settings&&money.settings.name) || 'Gold';
+  const defById  = {}; (rankData.defs||[]).forEach(d=>defById[d.id]=d);
+
+  const nums = new Set();
+  Object.keys(rankData.players||{}).forEach(k=>nums.add(String(k)));
+  Object.keys(money.balances||{}).forEach(k=>nums.add(String(k)));
+  Object.keys(pkeys||{}).forEach(k=>nums.add(String(k)));
+  const arr = [...nums];
+
+  const cntEl = document.getElementById('spieler-count');
+  if (cntEl) cntEl.textContent = arr.length + ' Spieler';
+  if(!arr.length){ host.innerHTML = '<div style="font-size:.75rem;color:var(--text3);text-align:center;padding:24px 0">Noch keine Spieler bekannt. Sie erscheinen, sobald sie den Raum betreten (Bot läuft).</div>'; return; }
+
+  const nameOf = n => (rankData.players?.[n]?.name) || (money.balances?.[n]?.name) || (pkeys?.[n]?.name) || ('#'+n);
+  arr.sort((a,b)=>nameOf(a).localeCompare(nameOf(b)));
+
+  const keyBadge = (on,icon,lbl)=>`<span style="font-size:.62rem;padding:2px 7px;border-radius:5px;border:1px solid ${on?'rgba(251,191,36,0.5)':'rgba(255,255,255,0.08)'};background:${on?'rgba(251,191,36,0.12)':'transparent'};color:${on?'#fbbf24':'var(--text3)'}">${icon} ${lbl}${on?' ✓':''}</span>`;
+
+  host.innerHTML = arr.map(n=>{
+    const nm = nameOf(n);
+    const rp = rankData.players?.[n];
+    const rdef = rp?.rankId ? defById[rp.rankId] : null;
+    const rankStr = rdef ? `${escHtml((rdef.icon||'')+' '+rdef.name)}${rdef.group?` <span style="color:var(--text3)">[${escHtml(rdef.group)}]</span>`:''}` : '<span style="color:var(--text3)">– kein Rang –</span>';
+    const bal = money.balances?.[n]?.balance ?? 0;
+    const pk = pkeys?.[n]||{};
+    return `<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:10px;padding:10px 14px;margin-bottom:8px">
+      <span style="font-size:.85rem;font-weight:700;color:var(--text1);min-width:150px">${escHtml(nm)} <span style="font-size:.66rem;color:var(--text3);font-weight:400">#${escHtml(n)}</span></span>
+      <span style="font-size:.72rem;color:var(--text2)">🏆 ${rankStr}</span>
+      <span style="font-size:.72rem;color:var(--text2)">💰 ${bal} ${escHtml(cur)}</span>
+      <span style="display:flex;gap:5px;margin-left:auto">${keyBadge(!!pk.bronze,'🥉','Bronze')}${keyBadge(!!pk.silver,'🥈','Silver')}${keyBadge(!!pk.gold,'🥇','Gold')}</span>
+    </div>`;
+  }).join('');
+}
+
 function _btTrigSummary(bot, t) {
   const conds = t.bedingungen || [];
   const acts  = t.aktionen || [];

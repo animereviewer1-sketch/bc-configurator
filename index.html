@@ -766,11 +766,24 @@ textarea.outfit-code { width: 100%; min-height: 210px; background: rgba(0,0,0,0.
 /* ═══════════════════════════════════════════════
    TABS
 ═══════════════════════════════════════════════ */
+.nav-sticky { position: sticky; top: 49px; z-index: 100; }
+.obertab-nav {
+  display: flex; gap: 8px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  padding: 8px 16px;
+}
+.obertab-btn {
+  padding: 7px 18px; font-size: 0.82rem; font-weight: 800; font-family: var(--font-ui);
+  border: 1px solid var(--border); background: var(--bg2); color: var(--text2);
+  border-radius: 9px; cursor: pointer; transition: all 0.18s ease; white-space: nowrap;
+}
+.obertab-btn:hover { color: var(--text1); border-color: var(--purple); }
+.obertab-btn.active { background: var(--purple); color: #fff; border-color: var(--purple); }
 .tab-nav {
   display: flex; gap: 0;
   background: var(--bg2);
   border-bottom: 1px solid var(--border);
-  position: sticky; top: 49px; z-index: 99;
   overflow-x: auto; scrollbar-width: none; padding: 0 16px;
 }
 .tab-nav::-webkit-scrollbar { display: none; }
@@ -2447,20 +2460,27 @@ button { cursor: pointer; }
 </div>
 
 
-<!-- TAB NAVIGATION -->
+<!-- OBERTAB + TAB NAVIGATION -->
+<div class="nav-sticky">
+<div class="obertab-nav">
+  <button class="obertab-btn active" id="ot-items-btn"    onclick="switchGroup('items')">🧩 Items</button>
+  <button class="obertab-btn"        id="ot-bots-btn"     onclick="switchGroup('bots')">🤖 Bots</button>
+  <button class="obertab-btn"        id="ot-settings-btn" onclick="toggleTweaksPanel()">⚙️ Einstellungen</button>
+</div>
 <div class="tab-nav">
   <button class="tab-btn active" id="tab-items-btn"  onclick="switchTab('items')">🔧 Item Manager</button>
   <button class="tab-btn"        id="tab-outfit-btn" onclick="switchTab('outfit')">👗 Outfit &amp; Profile</button>
   <button class="tab-btn"        id="tab-curse-btn"  onclick="switchTab('curse')">🔮 Craft &amp; Curse</button>
-  <button class="tab-btn"        id="tab-bot-btn"    onclick="switchTab('bot')">🤖 Bot</button>
-  <button class="tab-btn"        id="tab-log-btn"    onclick="switchTab('log')">📋 Logs</button>
-  <button class="tab-btn"        id="tab-money-btn"  onclick="switchTab('money')">💰 Money</button>
-  <button class="tab-btn"        id="tab-rank-btn"          onclick="switchTab('rank')">🏆 Rang</button>
-  <button class="tab-btn"        id="tab-shop-btn"          onclick="switchTab('shop')">🛒 Shop</button>
-  <button class="tab-btn"        id="tab-outfit-import-btn" onclick="switchTab('outfit-import')">📥 Outfit Import</button>
   <button class="tab-btn"        id="tab-outfit-scan-btn"   onclick="switchTab('outfit-scan')">🧬 LSCG Outfits</button>
+  <button class="tab-btn"        id="tab-outfit-import-btn" onclick="switchTab('outfit-import')">📥 Outfit Import</button>
   <button class="tab-btn"        id="tab-locks-btn"         onclick="switchTab('locks')">🔒 Locks</button>
-  <button class="tab-btn"        id="tab-settings-btn"      onclick="switchTab('settings')">⚙️ Einstellungen</button>
+  <button class="tab-btn"        id="tab-bot-btn"    onclick="switchTab('bot')">🤖 Bot</button>
+  <button class="tab-btn"        id="tab-shop-btn"          onclick="switchTab('shop')">🛒 Shop</button>
+  <button class="tab-btn"        id="tab-rank-btn"          onclick="switchTab('rank')">🏆 Rang</button>
+  <button class="tab-btn"        id="tab-money-btn"  onclick="switchTab('money')">💰 Money</button>
+  <button class="tab-btn"        id="tab-log-btn"    onclick="switchTab('log')">📋 Logs</button>
+  <button class="tab-btn"        id="tab-spieler-btn"       onclick="switchTab('spieler')">👤 Spieler</button>
+</div>
 </div>
 
 <!-- TAB 1: ITEM MANAGER -->
@@ -3643,6 +3663,21 @@ document.write('<scr'+'ipt src="outfit-import.js?_='+_cbv+'"><\/scr'+'ipt>');
   </div>
 </div>
 <!-- /tab-locks -->
+
+<!-- Spieler-Tab (Bot-Übersicht) -->
+<div id="tab-spieler" class="tab-pane">
+  <div style="padding:16px 18px">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+      <span style="font-size:.95rem;font-weight:800;color:var(--text1)">👤 Spieler – Bot-Übersicht</span>
+      <span id="spieler-count" style="font-size:.7rem;color:var(--text3)"></span>
+      <button onclick="renderSpielerTab()" style="margin-left:auto;background:none;border:1px solid rgba(255,255,255,0.12);border-radius:6px;color:var(--text2);font-size:.66rem;padding:4px 10px;cursor:pointer">⟳ Aktualisieren</button>
+    </div>
+    <div style="font-size:.65rem;color:var(--text3);margin-bottom:14px;line-height:1.5">
+      Alle bekannten Spieler mit Rang, Money und Map-Keys (🥉🥈🥇). Keys werden pro Spieler gespeichert und beim <b>Rejoin automatisch neu vergeben</b> (Bot muss laufen).
+    </div>
+    <div id="spieler-list"></div>
+  </div>
+</div>
 
 <style>
 /* ── Lock / Timer Dashboard ── */

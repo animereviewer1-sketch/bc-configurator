@@ -4111,9 +4111,36 @@ function deleteProfileByIdx(idx) {
 //  TABS
 // ══════════════════════════════════════════════════════
 let _activeTab = 'items';
+// Obertab-Gruppen: welche Untertabs gehören zu welchem Obertab
+const TAB_GROUPS = {
+  items: ['items','outfit','curse','outfit-scan','outfit-import','locks'],
+  bots:  ['bot','shop','rank','money','log','spieler'],
+};
+let _activeGroup = 'items';
+function _tabGroupOf(tab){
+  for (const g in TAB_GROUPS) if (TAB_GROUPS[g].includes(tab)) return g;
+  return 'items';
+}
+function _applyGroupUI(group){
+  _activeGroup = group;
+  // Obertab-Buttons markieren
+  ['items','bots'].forEach(g => document.getElementById('ot-'+g+'-btn')?.classList.toggle('active', g===group));
+  // Untertab-Buttons der jeweiligen Gruppe ein-/ausblenden
+  for (const g in TAB_GROUPS) {
+    TAB_GROUPS[g].forEach(t => { const b=document.getElementById('tab-'+t+'-btn'); if (b) b.style.display = (g===group)?'':'none'; });
+  }
+}
+function switchGroup(group){
+  if (!TAB_GROUPS[group]) return;
+  _applyGroupUI(group);
+  // Wenn der aktuelle Tab nicht zur Gruppe gehört → ersten Tab der Gruppe öffnen
+  if (!TAB_GROUPS[group].includes(_activeTab)) switchTab(TAB_GROUPS[group][0]);
+}
+
 function switchTab(tab) {
   _activeTab = tab;
-  ['items','outfit','curse','bot','log','money','events','rank','shop','outfit-import','outfit-scan','locks'].forEach(t => {
+  _applyGroupUI(_tabGroupOf(tab));
+  ['items','outfit','curse','bot','log','money','events','rank','shop','outfit-import','outfit-scan','locks','spieler'].forEach(t => {
     document.getElementById('tab-'+t)?.classList.toggle('active', t===tab);
     document.getElementById('tab-'+t+'-btn')?.classList.toggle('active', t===tab);
   });
@@ -4128,8 +4155,11 @@ function switchTab(tab) {
   if (tab === 'outfit-scan')   { renderOutfitScanTab(); }
   if (tab === 'locks')         { renderLocksTab(); _startLocksTimer(); }
   if (tab !== 'locks')         { _stopLocksTimer(); }
+  if (tab === 'spieler')       { if (typeof renderSpielerTab==='function') renderSpielerTab(); }
 
 }
+// Initiale Obertab-Sichtbarkeit: nur Items-Gruppe zeigen
+try { if (document.readyState!=='loading') _applyGroupUI('items'); else document.addEventListener('DOMContentLoaded', ()=>_applyGroupUI('items')); } catch(e){}
 
 // ── addToOutfit: auto-switch tab + auto-generate code after adding ──
 
@@ -5757,6 +5787,10 @@ window.addEventListener('message', function(ev) {
 
     case 'BOT_VAR':
       _botVarApply(ev.data.memberNum, ev.data.name, ev.data.value);
+      break;
+
+    case 'BOT_MAPKEY':
+      if (typeof _playerKeyApply === 'function') _playerKeyApply(ev.data.memberNum, ev.data.name, ev.data.key, ev.data.has);
       break;
 
     case 'RANG_INIT': {

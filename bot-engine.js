@@ -34,7 +34,7 @@ function _buildBotCode(bot) {
   const safeName = bot.name.replace(/\\/g,'\\\\').replace(/`/g,'\\`');
 
   // Alle User-Daten als Base64 kodieren → kein Zeichen kann das Template-Literal brechen
-  const _cfgRaw = JSON.stringify({hearChat:s.hearChat,hearEmote:s.hearEmote,hearWhisper:s.hearWhisper,nurEigene:s.nurEigene,logAktiv:s.logAktiv??true,modus:s.modus,moneyQueryCmd:_money?.settings?.queryCmd??'',moneyQueryTyp:_money?.settings?.queryTyp??'whisper',moneyName:_money?.settings?.name??'Gold',rankQueryCmd:_rankData?.settings?.queryCmd??'',rankQueryTyp:_rankData?.settings?.queryCmdTyp??'whisper',rankQueryText:_rankData?.settings?.queryCmdText??'{name} hat Rang: {rang_icon} {rang}',rankDefs:_rankData?.defs??[],rankPlayers:Object.fromEntries(Object.entries(_rankData?.players??{}).map(([k,v])=>[k,v.rankId??null])),shopCmd:_shop?.settings?.cmd??'!pay',shopListCmd:_shop?.settings?.listCmd??'!shop',shopAnnounceNostripMsg:_shop?.settings?.announceNostripMsg??'',shopConfirmMsg:_shop?.settings?.confirmMsg??'',shopAnnounceMsg:_shop?.settings?.announceMsg??'',shopAnnounceAllMsg:_shop?.settings?.announceAllMsg??'',shopErrorMsg:_shop?.settings?.errorMsg??'',shopPreisU:_shop?.settings?.preisU??0,shopPreisNostrip:_shop?.settings?.preisNostrip??0,shopItems:(_shop?.items??[]).filter(i=>i.aktiv!==false),moneyBalances:Object.fromEntries(Object.entries(_money?.balances??{}).map(([k,v])=>[k,{balance:v.balance??0,name:v.name??''}])),botVars:(typeof _botVars!=='undefined'&&_botVars)?_botVars:{}});
+  const _cfgRaw = JSON.stringify({hearChat:s.hearChat,hearEmote:s.hearEmote,hearWhisper:s.hearWhisper,nurEigene:s.nurEigene,logAktiv:s.logAktiv??true,modus:s.modus,moneyQueryCmd:_money?.settings?.queryCmd??'',moneyQueryTyp:_money?.settings?.queryTyp??'whisper',moneyName:_money?.settings?.name??'Gold',rankQueryCmd:_rankData?.settings?.queryCmd??'',rankQueryTyp:_rankData?.settings?.queryCmdTyp??'whisper',rankQueryText:_rankData?.settings?.queryCmdText??'{name} hat Rang: {rang_icon} {rang}',rankDefs:_rankData?.defs??[],rankPlayers:Object.fromEntries(Object.entries(_rankData?.players??{}).map(([k,v])=>[k,v.rankId??null])),shopCmd:_shop?.settings?.cmd??'!pay',shopListCmd:_shop?.settings?.listCmd??'!shop',shopAnnounceNostripMsg:_shop?.settings?.announceNostripMsg??'',shopConfirmMsg:_shop?.settings?.confirmMsg??'',shopAnnounceMsg:_shop?.settings?.announceMsg??'',shopAnnounceAllMsg:_shop?.settings?.announceAllMsg??'',shopErrorMsg:_shop?.settings?.errorMsg??'',shopPreisU:_shop?.settings?.preisU??0,shopPreisNostrip:_shop?.settings?.preisNostrip??0,shopItems:(_shop?.items??[]).filter(i=>i.aktiv!==false),moneyBalances:Object.fromEntries(Object.entries(_money?.balances??{}).map(([k,v])=>[k,{balance:v.balance??0,name:v.name??''}])),botVars:(typeof _botVars!=='undefined'&&_botVars)?_botVars:{},playerKeys:(typeof _playerKeys!=='undefined'&&_playerKeys)?_playerKeys:{}});
   const cfgJson  = btoa(unescape(encodeURIComponent(_cfgRaw)));
   const trigsJson = btoa(unescape(encodeURIComponent(JSON.stringify(triggers))));
   const events = (bot.events||[]).filter(e=>e.aktiv).map(e => ({
@@ -892,6 +892,9 @@ function _execAct(a,C,vars){
         var _mk=(a.mapKey||'bronze').toLowerCase();
         var _has=(a.mapKeyOp||'geben')==='geben';
         ServerSend('ChatRoomChat',{Content:'ChatRoomMapViewChangeKey',Type:'Hidden',Dictionary:[{Tag:'MapViewChangeKey',Key:_mk,Bool:_has}],Target:C.MemberNumber});
+        // Persistent merken (für Rejoin-Neuvergabe) – lokal + an Popup
+        try{ _cfg.playerKeys=_cfg.playerKeys||{}; var _pk=_cfg.playerKeys[C.MemberNumber]||{name:'',bronze:false,silver:false,gold:false}; _pk.name=C.Name; _pk[_mk]=_has; _cfg.playerKeys[C.MemberNumber]=_pk; }catch(e){}
+        window.__BCK_popupRef?.postMessage({app:'BCKonfigurator',type:'BOT_MAPKEY',memberNum:C.MemberNumber,name:C.Name,key:_mk,has:_has},'*');
         _log('\u{1F511} Map-Key '+_mk+' '+(_has?'gegeben':'entfernt')+' ('+C.Name+')');
         ok=true;
       }catch(e){_log('\u26A0 Map-Key Fehler:',e.message); ok=false;}
@@ -1807,6 +1810,21 @@ function _processJoinQueue(){
     window.__BCK_popupRef?.postMessage({app:'BCKonfigurator',type:'MONEY_INIT_NEW',memberNum:C.MemberNumber,name:C.Name},'*');
   }
   window.__BCK_popupRef?.postMessage({app:'BCKonfigurator',type:'RANG_INIT',memberNum:C.MemberNumber,name:C.Name},'*');
+  // Map-Keys automatisch neu vergeben (persistent gespeichert) – auch bei Startup/Rejoin
+  try{
+    var _sk=(_cfg.playerKeys||{})[C.MemberNumber];
+    if(_sk){
+      var _ks=['bronze','silver','gold'].filter(function(k){return _sk[k];});
+      if(_ks.length){
+        setTimeout(function(){
+          _ks.forEach(function(k){
+            ServerSend('ChatRoomChat',{Content:'ChatRoomMapViewChangeKey',Type:'Hidden',Dictionary:[{Tag:'MapViewChangeKey',Key:k,Bool:true}],Target:C.MemberNumber});
+          });
+          _log('\u{1F511} Keys neu vergeben an '+C.Name+': '+_ks.join(', '));
+        },1500);
+      }
+    }
+  }catch(e){}
   _roomEver.add(C.MemberNumber);
   _syncRoomEver();
   // Skip trigger firing during startup grace period (avoids blasting all triggers on room load)

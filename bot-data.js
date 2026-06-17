@@ -24,6 +24,21 @@ function _botVarApply(memberNum, name, value){
   _saveBotVars();
 }
 idbGet(BOT_VARS_KEY).then(d => { if (d && typeof d === 'object' && !Array.isArray(d)) _botVars = d; });
+
+// ── Persistente Map-Keys pro Spieler (Bronze/Silver/Gold), über Sessions ──
+const PLAYER_KEYS_KEY = 'BC_PlayerKeys_v1';
+let _playerKeys = {};         // { memberNum: { name, bronze:bool, silver:bool, gold:bool } }
+function _savePlayerKeys(){ idbSet(PLAYER_KEYS_KEY, _playerKeys); }
+function _playerKeyApply(memberNum, name, key, has){
+  if(memberNum==null) return;
+  const k = String(memberNum);
+  const rec = (_playerKeys[k] = _playerKeys[k] || { name:'', bronze:false, silver:false, gold:false });
+  if(name) rec.name = name;
+  if(['bronze','silver','gold'].includes(key)) rec[key] = !!has;
+  _savePlayerKeys();
+  if (document.getElementById('tab-spieler')?.classList.contains('active') && typeof renderSpielerTab==='function') renderSpielerTab();
+}
+idbGet(PLAYER_KEYS_KEY).then(d => { if (d && typeof d === 'object' && !Array.isArray(d)) _playerKeys = d; });
 function _loadBots()      {} // no-op: async init
 function _loadBotGroups() {} // no-op: async init
 function _selBot() { return _bots.find(b => b.id === _selBotId) ?? null; }
