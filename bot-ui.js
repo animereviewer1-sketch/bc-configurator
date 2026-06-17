@@ -659,6 +659,7 @@ function _btActPhrase(bot, a) {
     case 'szene': { const sz=(bot?.szenen||[]).find(x=>x.id===a.szeneId); return '📖 Szene „'+e(sz?.name||'?')+'" starten'; }
     case 'variable': { const op=({set:'=',add:'+',sub:'−',toggle:'⇄'})[a.varOp||'set']; return '🔢 '+e(a.varName||'var')+' '+op+(a.varOp==='toggle'?'':' '+e(a.varWert??'')); }
     case 'erregung': { const op=({set:'Erregung =',add:'Erregung +',sub:'Erregung −',orgasm:'Orgasmus 💥',stop:'Orgasmus-Stop'})[a.erregOp||'set']; return '💗 '+op+((a.erregOp==='orgasm'||a.erregOp==='stop')?'':' '+(a.erregVal??50)+'%')+z; }
+    case 'mapkey': { const k=({bronze:'🥉 Bronze',silver:'🥈 Silver',gold:'🥇 Gold'})[a.mapKey||'bronze']; return '🔑 '+k+' '+((a.mapKeyOp||'geben')==='geben'?'geben':'wegnehmen')+z; }
     default: return e(a?.typ||'?');
   }
 }
@@ -999,6 +1000,7 @@ function renderAct(tid, a, ai, branch) {
     ['money','💰 Money ändern'],
     ['rang','🏆 Rang setzen'],
     ['szene','📖 Szene starten'],['variable','🔢 Variable setzen'],['erregung','💗 Erregung/Orgasmus'],
+    ['mapkey','🔑 Map-Key geben/wegnehmen'],
   ];
   const typeOpts = types.map(([v,l])=>`<option value="${v}" ${a.typ===v?'selected':''}>${l}</option>`).join('');
   const branchArg = branch ? `,'${branch}'` : '';
@@ -1222,6 +1224,21 @@ function renderAct(tid, a, ai, branch) {
       </select>
       ${(eop==='set'||eop==='add'||eop==='sub')?`<input class="cf cf-w70" type="number" min="0" max="100" value="${a.erregVal??50}" oninput="actField('${tid}',${ai},'erregVal',+this.value${branchArg})"> %`:''}
       <span style="font-size:.6rem;color:var(--text3)">wirkt zuverlässig auf dich selbst (BC synct nur eigene Erregung)</span>
+    </div>`;
+  } else if (a.typ === 'mapkey') {
+    const mop = a.mapKeyOp||'geben';
+    const mk  = a.mapKey||'bronze';
+    extra = `<div style="display:flex;gap:6px;align-items:center;margin-top:5px;flex-wrap:wrap">
+      <select class="cf" style="width:150px" onchange="actField('${tid}',${ai},'mapKeyOp',this.value${branchArg})">
+        <option value="geben" ${mop==='geben'?'selected':''}>🔑 Key geben</option>
+        <option value="wegnehmen" ${mop==='wegnehmen'?'selected':''}>🔒 Key wegnehmen</option>
+      </select>
+      <select class="cf" style="width:130px" onchange="actField('${tid}',${ai},'mapKey',this.value${branchArg})">
+        <option value="bronze" ${mk==='bronze'?'selected':''}>🥉 Bronze</option>
+        <option value="silver" ${mk==='silver'?'selected':''}>🥈 Silver</option>
+        <option value="gold" ${mk==='gold'?'selected':''}>🥇 Gold</option>
+      </select>
+      <span style="font-size:.6rem;color:var(--text3)">Map-Schlüssel (Ziel = Aktions-Ziel) · benötigt Raum-Admin · keine Raum-Meldung</span>
     </div>`;
   }
 

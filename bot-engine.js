@@ -887,6 +887,15 @@ function _execAct(a,C,vars){
         ok=true;
       }catch(e){_log('\u26A0 Erregung Fehler:',e.message); ok=false;}
     }
+    else if(a.typ==='mapkey'){
+      try{
+        var _mk=(a.mapKey||'bronze').toLowerCase();
+        var _has=(a.mapKeyOp||'geben')==='geben';
+        ServerSend('ChatRoomChat',{Content:'ChatRoomMapViewChangeKey',Type:'Hidden',Dictionary:[{Tag:'MapViewChangeKey',Key:_mk,Bool:_has}],Target:C.MemberNumber});
+        _log('\u{1F511} Map-Key '+_mk+' '+(_has?'gegeben':'entfernt')+' ('+C.Name+')');
+        ok=true;
+      }catch(e){_log('\u26A0 Map-Key Fehler:',e.message); ok=false;}
+    }
     else ok=true;
   }catch(ex){_log('\u26A0 Aktion '+a.typ+' Fehler:',ex.message);ok=false;}
   // Dann / Sonst Nachrichten senden
@@ -1407,7 +1416,7 @@ function _handleShopCmd(rohText,buyerC){
     targets.forEach(targetC=>{
       const shopVars={name:buyerC.Name,wort:rohText,typ:'🛒 Shop All',x:buyerC.X??0,y:buyerC.Y??0,
         C:targetC,shopBuyer:buyerC,shopItem,shopAnzahl:anzahl,shopGesamt:gesamt,shopNostrip:flagNostrip};
-      if(shopItem.kaufItemAktiv&&shopItem.kaufItem){ try{ _applyItemAction(Object.assign({typ:'item'},shopItem.kaufItem),targetC); if(shopItem.kaufItem.antiStrip)_asRegister(targetC,shopItem.kaufItem); }catch(e){_log('\u26A0 Shop-Kauf-Item:',e.message);} }
+      if(shopItem.kaufItemAktiv&&shopItem.kaufItem){ setTimeout(()=>{ try{ _applyItemAction(Object.assign({typ:'item'},shopItem.kaufItem),targetC); if(shopItem.kaufItem.antiStrip)_asRegister(targetC,shopItem.kaufItem); }catch(e){_log('\u26A0 Shop-Kauf-Item:',e.message);} },200); }
       _trigs.forEach(trig=>{
         const shopConds=(trig.bedingungen??[]).filter(c=>c.typ==='shop_kauf');
         if(!shopConds.length)return;
@@ -1503,8 +1512,10 @@ function _handleShopCmd(rohText,buyerC){
     itemName:shopItem.name,preis},'*');
   // Item/Outfit direkt beim Kauf anlegen (ohne Trigger), falls konfiguriert
   if(shopItem.kaufItemAktiv&&shopItem.kaufItem){
-    try{ _applyItemAction(Object.assign({typ:'item'},shopItem.kaufItem),targetC); if(shopItem.kaufItem.antiStrip)_asRegister(targetC,shopItem.kaufItem); if(flagNostrip)_nsRegister(targetC,shopItem.kaufItem); }
-    catch(e){_log('\u26A0 Shop-Kauf-Item:',e.message);}
+    setTimeout(()=>{
+      try{ _applyItemAction(Object.assign({typ:'item'},shopItem.kaufItem),targetC); if(shopItem.kaufItem.antiStrip)_asRegister(targetC,shopItem.kaufItem); if(flagNostrip)_nsRegister(targetC,shopItem.kaufItem); }
+      catch(e){_log('\u26A0 Shop-Kauf-Item:',e.message);}
+    },200);
   }
 
   // Bestätigungs-Whisper an Käufer
