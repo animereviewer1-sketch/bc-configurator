@@ -313,6 +313,52 @@ function shopResetAll() {
   _shop.items = []; _shop.log = []; _saveShop(); renderShopTab();
 }
 
+// ── Shop-Artikel per JSON zusammenführen (einzeln/Array); Konflikt pro Eintrag fragen ──
+function _shopNormalizeItem(raw){
+  return {
+    id: raw.id || '',
+    name: (raw.name||'').toString(),
+    beschreibung: raw.beschreibung || raw.desc || '',
+    icon: raw.icon || '🛒',
+    preis: parseInt(raw.preis) || 0,
+    aktiv: raw.aktiv !== false,
+    confirmMsg: raw.confirmMsg || '',
+    announceMsg: raw.announceMsg || '',
+    announceAllMsg: raw.announceAllMsg || '',
+    errorMsg: raw.errorMsg || '',
+    preisU: (raw.preisU!=null && raw.preisU!=='') ? (parseInt(raw.preisU)||0) : null,
+    preisNostrip: (raw.preisNostrip!=null && raw.preisNostrip!=='') ? (parseInt(raw.preisNostrip)||0) : null,
+    reqRankId: raw.reqRankId || '',
+    reqGroup: (raw.reqGroup||'').toString().toLowerCase(),
+    shopHideLocked: !!raw.shopHideLocked,
+    kaufItem: raw.kaufItem || null,
+    kaufItemAktiv: !!raw.kaufItemAktiv
+  };
+}
+function _importShopJSON(data){
+  const arr = Array.isArray(data) ? data : (Array.isArray(data.items) ? data.items : [data]);
+  _shop.items = _shop.items || [];
+  let added=0, updated=0, skipped=0;
+  arr.forEach(raw=>{
+    if(!raw || typeof raw!=='object' || !(raw.name||raw.id)){ skipped++; return; }
+    const item = _shopNormalizeItem(raw);
+    let idx = -1;
+    if(item.id) idx = _shop.items.findIndex(x=>x.id===item.id);
+    if(idx<0)   idx = _shop.items.findIndex(x=>(x.name||'').toLowerCase()===(item.name||'').toLowerCase());
+    if(idx>=0){
+      if(confirm('Shop-Artikel „'+(_shop.items[idx].name||item.name)+'" existiert bereits.\nÜberschreiben?  (Abbrechen = behalten)')){
+        item.id = _shop.items[idx].id;
+        _shop.items[idx] = Object.assign({}, _shop.items[idx], item); updated++;
+      } else skipped++;
+    } else {
+      item.id = item.id || ('shop'+Date.now()+Math.floor(Math.random()*9999));
+      _shop.items.push(item); added++;
+    }
+  });
+  _saveShop(); renderShopTab();
+  showStatus('✅ Shop: '+added+' neu, '+updated+' aktualisiert, '+skipped+' übersprungen','success');
+}
+
 function shopExport() {
   const blob = new Blob([JSON.stringify({items:_shop.items,settings:_shop.settings},null,2)],{type:'application/json'});
   const a = document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='shop_export.json'; a.click();

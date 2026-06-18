@@ -3195,8 +3195,9 @@ document.write('<scr'+'ipt src="items.js?_='+_cbv+'"><\/scr'+'ipt>');
     <!-- LEFT: Rang Definitionen -->
     <div class="rank-cfg">
       <div class="rank-cfg-title">🏆 Rang-Definitionen
-        <button onclick="rankExport()" title="Exportieren" style="margin-left:auto;background:none;border:1px solid rgba(255,255,255,0.1);border-radius:5px;color:var(--text3);font-size:.62rem;padding:2px 8px;cursor:pointer">⬇️</button>
-        <button onclick="rankImport()" title="Importieren" style="background:none;border:1px solid rgba(255,255,255,0.1);border-radius:5px;color:var(--text3);font-size:.62rem;padding:2px 8px;cursor:pointer">⬆️</button>
+        <button onclick="rankExport()" title="Exportieren (Datei)" style="margin-left:auto;background:none;border:1px solid rgba(255,255,255,0.1);border-radius:5px;color:var(--text3);font-size:.62rem;padding:2px 8px;cursor:pointer">⬇️</button>
+        <button onclick="rankImport()" title="Importieren (Datei, ersetzt)" style="background:none;border:1px solid rgba(255,255,255,0.1);border-radius:5px;color:var(--text3);font-size:.62rem;padding:2px 8px;cursor:pointer">⬆️</button>
+        <button onclick="jsonImportOpen('rank')" title="Ränge per JSON einfügen/zusammenführen" style="background:none;border:1px solid rgba(255,255,255,0.1);border-radius:5px;color:var(--text3);font-size:.62rem;padding:2px 8px;cursor:pointer">{ }📥</button>
       </div>
       <div style="font-size:.65rem;color:var(--text3);margin-bottom:10px;line-height:1.55">
         Definiere Ränge mit Namen, Icon und Farbe. Level 1 = niedrigster Rang.<br>
@@ -3281,8 +3282,9 @@ document.write('<scr'+'ipt src="items.js?_='+_cbv+'"><\/scr'+'ipt>');
     <!-- LEFT: Shop-Artikel Definitionen -->
     <div class="shop-cfg">
       <div class="shop-cfg-title">🛒 Shop-Artikel
-        <button onclick="shopExport()" title="Exportieren" style="margin-left:auto;background:none;border:1px solid rgba(255,255,255,0.1);border-radius:5px;color:var(--text3);font-size:.62rem;padding:2px 8px;cursor:pointer">⬇️</button>
-        <button onclick="shopImport()" title="Importieren" style="background:none;border:1px solid rgba(255,255,255,0.1);border-radius:5px;color:var(--text3);font-size:.62rem;padding:2px 8px;cursor:pointer">⬆️</button>
+        <button onclick="shopExport()" title="Exportieren (Datei)" style="margin-left:auto;background:none;border:1px solid rgba(255,255,255,0.1);border-radius:5px;color:var(--text3);font-size:.62rem;padding:2px 8px;cursor:pointer">⬇️</button>
+        <button onclick="shopImport()" title="Importieren (Datei, ersetzt)" style="background:none;border:1px solid rgba(255,255,255,0.1);border-radius:5px;color:var(--text3);font-size:.62rem;padding:2px 8px;cursor:pointer">⬆️</button>
+        <button onclick="jsonImportOpen('shop')" title="Shop-Artikel per JSON einfügen/zusammenführen" style="background:none;border:1px solid rgba(255,255,255,0.1);border-radius:5px;color:var(--text3);font-size:.62rem;padding:2px 8px;cursor:pointer">{ }📥</button>
       </div>
       <div style="font-size:.65rem;color:var(--text3);margin-bottom:10px;line-height:1.5">
         Definiere kaufbare Artikel. Jeder Artikel löst Trigger mit der Bedingung <b>🛒 Shop-Kauf</b> aus.<br>
@@ -3425,6 +3427,21 @@ document.write('<scr'+'ipt src="items.js?_='+_cbv+'"><\/scr'+'ipt>');
     <div class="shop-modal-btns">
       <button onclick="shopModalClose()" style="padding:7px 16px;border:1px solid rgba(255,255,255,0.1);background:none;color:var(--text3);border-radius:8px;cursor:pointer;font-family:var(--font-ui);font-size:.78rem">Abbrechen</button>
       <button onclick="shopModalSave()" style="padding:7px 18px;background:var(--green);border:none;color:#000;border-radius:8px;cursor:pointer;font-family:var(--font-ui);font-size:.78rem;font-weight:700">✓ Speichern</button>
+    </div>
+  </div>
+</div>
+
+<!-- Gemeinsames JSON-Import-Overlay (Bot-Trigger / Shop / Rang) -->
+<div id="json-import-overlay" class="shop-modal-overlay" style="display:none" onclick="if(event.target===this)jsonImportClose()">
+  <div class="shop-modal" style="max-width:680px;width:100%">
+    <h3 id="json-import-title">📥 JSON Import</h3>
+    <div id="json-import-hint" style="font-size:.66rem;color:var(--text3);margin-bottom:8px;line-height:1.5"></div>
+    <textarea id="json-import-text" spellcheck="false" style="width:100%;min-height:260px;font-family:monospace;font-size:.72rem;background:var(--bg);color:var(--text1);border:1px solid var(--border);border-radius:8px;padding:10px;resize:vertical" placeholder='[ { ... }, { ... } ]  oder  { ... }'></textarea>
+    <div id="json-import-err" style="display:none;font-size:.66rem;color:#f87171;margin-top:6px"></div>
+    <div class="shop-modal-btns">
+      <button onclick="jsonImportClose()" style="padding:7px 16px;border:1px solid rgba(255,255,255,0.1);background:none;color:var(--text3);border-radius:8px;cursor:pointer;font-family:var(--font-ui);font-size:.78rem">Abbrechen</button>
+      <button onclick="jsonImportFile()" style="padding:7px 14px;border:1px solid rgba(255,255,255,0.12);background:none;color:var(--text2);border-radius:8px;cursor:pointer;font-family:var(--font-ui);font-size:.78rem">📂 Aus Datei…</button>
+      <button onclick="jsonImportRun()" style="padding:7px 18px;background:var(--green);border:none;color:#000;border-radius:8px;cursor:pointer;font-family:var(--font-ui);font-size:.78rem;font-weight:700">✓ Importieren</button>
     </div>
   </div>
 </div>

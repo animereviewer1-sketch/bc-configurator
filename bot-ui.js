@@ -216,6 +216,8 @@ function renderBotEditor() {
       <button class="btn btn-primary" onclick="botDashboard()" title="Spieler-Profile: Punkte, Rang, Money, Besuche, letzter Besuch" style="font-size:.65rem;padding:4px 8px">📊</button>
       <button class="btn btn-primary" onclick="botExportConfig()" title="Export" style="font-size:.65rem;padding:4px 8px">⬇️</button>
       <button class="btn btn-primary" onclick="botImportConfig()" title="Import" style="font-size:.65rem;padding:4px 8px">⬆️</button>
+      <button class="btn btn-primary" onclick="jsonImportOpen('bot')" title="Trigger per JSON importieren (zum aktuellen Bot hinzufügen)" style="font-size:.65rem;padding:4px 8px">{ }📥</button>
+      <button class="btn btn-primary" onclick="botExportTriggersJSON()" title="Trigger dieses Bots als JSON exportieren" style="font-size:.65rem;padding:4px 8px">{ }📤</button>
     </div>
     <div class="bot-status ${statusCls}" id="bot-status-bar">${statusTxt}</div>
     <div class="be-body">
@@ -2009,6 +2011,33 @@ function _cancelTrigPending() {
 }
 
 // ── Config Export / Import ────────────────────────────────────
+// ── Trigger per JSON importieren (einzeln oder Array) → zum gewählten Bot hinzufügen ──
+function _importTriggersJSON(data){
+  const b = _selBot(); if(!b){ showStatus('❌ Kein Bot ausgewählt','error'); return; }
+  const arr = Array.isArray(data) ? data : (Array.isArray(data.triggers) ? data.triggers : [data]);
+  b.triggers = b.triggers || [];
+  let n = 0;
+  arr.forEach((t,i)=>{
+    if(!t || typeof t!=='object') return;
+    const trig = Object.assign({ name:'Importierter Trigger', aktiv:true, delay:0, bedingungen:[], aktionen:[] }, t);
+    trig.id = 't'+Date.now()+Math.floor(Math.random()*99999)+'_'+i;
+    trig.bedingungen = Array.isArray(trig.bedingungen) ? trig.bedingungen : [];
+    trig.aktionen    = Array.isArray(trig.aktionen)    ? trig.aktionen    : [];
+    b.triggers.push(trig); n++;
+  });
+  _saveBots(); renderBotList(); renderBotEditor();
+  showStatus('✅ '+n+' Trigger importiert (Item/Curse/Outfit ggf. im Tool wählen)','success');
+}
+function botExportTriggersJSON(){
+  const b = _selBot(); if(!b){ showStatus('❌ Kein Bot ausgewählt','error'); return; }
+  // Trigger ohne interne IDs exportieren (sauberer zum Wiederverwenden/Schreiben)
+  const triggers = (b.triggers||[]).map(t=>{ const c=JSON.parse(JSON.stringify(t)); delete c.id; return c; });
+  const blob = new Blob([JSON.stringify(triggers,null,2)],{type:'application/json'});
+  const a = document.createElement('a'); a.href=URL.createObjectURL(blob);
+  a.download = 'Trigger_'+(b.name||'bot').replace(/\W+/g,'_')+'.json'; a.click(); URL.revokeObjectURL(a.href);
+  showStatus('✅ '+triggers.length+' Trigger als JSON exportiert','success');
+}
+
 function botExportConfig() {
   const b = _selBot(); if (!b) { showStatus('❌ Kein Bot ausgewählt','error'); return; }
   // Include logs for this bot + system events

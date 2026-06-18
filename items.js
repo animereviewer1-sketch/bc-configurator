@@ -4165,6 +4165,42 @@ function switchTab(tab) {
 // Initiale Obertab-Sichtbarkeit: nur Items-Gruppe zeigen
 try { if (document.readyState!=='loading') _applyGroupUI('items'); else document.addEventListener('DOMContentLoaded', ()=>_applyGroupUI('items')); } catch(e){}
 
+// ════════════════════ JSON IMPORT (Bot-Trigger / Shop / Rang) ════════════════════
+let _jsonImportTarget = null;
+const _JSON_IMPORT_HINTS = {
+  bot:  'Einzelner Trigger oder Array von Triggern. Wird zum aktuell gewählten Bot HINZUGEFÜGT. Item/Curse/Outfit-Aktionen brauchen keine Config – die stellst du danach im Tool ein.',
+  shop: 'Einzelner Artikel oder Array. Wird zusammengeführt – bei gleichem Namen/ID wird pro Eintrag gefragt, ob überschrieben wird.',
+  rank: 'Einzelner Rang oder Array. Wird zusammengeführt – bei gleichem Namen/ID wird pro Eintrag gefragt, ob überschrieben wird.'
+};
+const _JSON_IMPORT_TITLES = { bot:'📥 Trigger-JSON importieren', shop:'📥 Shop-JSON importieren', rank:'📥 Rang-JSON importieren' };
+function jsonImportOpen(target){
+  _jsonImportTarget = target;
+  if (target === 'bot' && typeof _selBot === 'function' && !_selBot()) { showStatus('❌ Erst einen Bot auswählen','error'); return; }
+  const t=document.getElementById('json-import-title'); if(t) t.textContent=_JSON_IMPORT_TITLES[target]||'📥 JSON Import';
+  const h=document.getElementById('json-import-hint'); if(h) h.textContent=_JSON_IMPORT_HINTS[target]||'';
+  const ta=document.getElementById('json-import-text'); if(ta) ta.value='';
+  const er=document.getElementById('json-import-err'); if(er){ er.style.display='none'; er.textContent=''; }
+  const ov=document.getElementById('json-import-overlay'); if(ov) ov.style.display='flex';
+}
+function jsonImportClose(){ const ov=document.getElementById('json-import-overlay'); if(ov) ov.style.display='none'; }
+function jsonImportFile(){
+  const inp=document.createElement('input'); inp.type='file'; inp.accept='.json,application/json';
+  inp.onchange=e=>{ const r=new FileReader(); r.onload=ev=>{ const ta=document.getElementById('json-import-text'); if(ta) ta.value=ev.target.result; }; r.readAsText(e.target.files[0]); };
+  inp.click();
+}
+function jsonImportRun(){
+  const ta=document.getElementById('json-import-text'); const er=document.getElementById('json-import-err');
+  let data;
+  try { data=JSON.parse(((ta&&ta.value)||'').trim()); }
+  catch(ex){ if(er){ er.style.display=''; er.textContent='❌ Ungültiges JSON: '+ex.message; } return; }
+  try {
+    if(_jsonImportTarget==='bot')       _importTriggersJSON(data);
+    else if(_jsonImportTarget==='shop') _importShopJSON(data);
+    else if(_jsonImportTarget==='rank') _importRankJSON(data);
+    jsonImportClose();
+  } catch(ex){ if(er){ er.style.display=''; er.textContent='❌ '+ex.message; } }
+}
+
 // ── addToOutfit: auto-switch tab + auto-generate code after adding ──
 
 // ══════════════════════════════════════════════════════

@@ -232,6 +232,41 @@ function rankResetAllPlayers() {
   _saveRank(); renderRankPlayers();
 }
 
+// ── Ränge per JSON zusammenführen (einzeln/Array); Konflikt pro Eintrag fragen ──
+function _rankNormalizeDef(raw){
+  return {
+    id: raw.id || '',
+    name: (raw.name||'').toString(),
+    icon: raw.icon || '🏅',
+    farbe: raw.farbe || raw.color || '#c4b5fd',
+    level: parseInt(raw.level) || 1,
+    group: (raw.group||'').toString().toLowerCase()
+  };
+}
+function _importRankJSON(data){
+  const arr = Array.isArray(data) ? data : (Array.isArray(data.defs) ? data.defs : [data]);
+  _rankData.defs = _rankData.defs || [];
+  let added=0, updated=0, skipped=0;
+  arr.forEach(raw=>{
+    if(!raw || typeof raw!=='object' || !(raw.name||raw.id)){ skipped++; return; }
+    const def = _rankNormalizeDef(raw);
+    let idx = -1;
+    if(def.id) idx = _rankData.defs.findIndex(x=>x.id===def.id);
+    if(idx<0)  idx = _rankData.defs.findIndex(x=>(x.name||'').toLowerCase()===(def.name||'').toLowerCase());
+    if(idx>=0){
+      if(confirm('Rang „'+(_rankData.defs[idx].name||def.name)+'" existiert bereits.\nÜberschreiben?  (Abbrechen = behalten)')){
+        def.id = _rankData.defs[idx].id;
+        _rankData.defs[idx] = Object.assign({}, _rankData.defs[idx], def); updated++;
+      } else skipped++;
+    } else {
+      def.id = def.id || ('r'+Date.now()+Math.floor(Math.random()*9999));
+      _rankData.defs.push(def); added++;
+    }
+  });
+  _saveRank(); renderRankTab();
+  showStatus('✅ Ränge: '+added+' neu, '+updated+' aktualisiert, '+skipped+' übersprungen','success');
+}
+
 function rankExport() {
   const blob=new Blob([JSON.stringify({defs:_rankData.defs,settings:_rankData.settings},null,2)],{type:'application/json'});
   const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='rang-system.json'; a.click();
