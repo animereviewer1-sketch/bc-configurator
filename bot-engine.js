@@ -1297,14 +1297,23 @@ function _shopTpl(raw, buyerC, targetC, shopItem, preis, newBal, anzahl, gesamt)
 
 // Prüft, ob ein Spieler einen Shop-Artikel freigeschaltet hat (Rang/Gruppe/Level)
 function _shopItemAllowed(item,C){
-  if(!(item.reqRankId||item.reqGroup||item.reqLevel)) return true;
-  let rg=item.reqGroup||'', rl=item.reqLevel||0;
-  if(item.reqRankId){ const rd=(_cfg.rankDefs||[]).find(r=>r.id===item.reqRankId); if(rd){ rl=rd.level||0; if(item.reqGroupOnly) rg=rd.group||''; } }
-  const bId=_rangState[C.MemberNumber]??null;
-  const bDef=(_cfg.rankDefs||[]).find(r=>r.id===bId);
-  const bG=bDef?(bDef.group||''):'';
-  const bL=bDef?(bDef.level||0):0;
-  return (!rg||bG===rg) && (!rl||bL>=rl);
+  // Rang/Gruppe
+  let okRank=true;
+  if(item.reqRankId||item.reqGroup||item.reqLevel){
+    let rg=item.reqGroup||'', rl=item.reqLevel||0;
+    if(item.reqRankId){ const rd=(_cfg.rankDefs||[]).find(r=>r.id===item.reqRankId); if(rd){ rl=rd.level||0; if(item.reqGroupOnly) rg=rd.group||''; } }
+    const bId=_rangState[C.MemberNumber]??null;
+    const bDef=(_cfg.rankDefs||[]).find(r=>r.id===bId);
+    const bG=bDef?(bDef.group||''):'';
+    const bL=bDef?(bDef.level||0):0;
+    okRank=(!rg||bG===rg) && (!rl||bL>=rl);
+  }
+  // Variable (Voraussetzung ODER Bezahlung – in beiden Fällen muss der Wert reichen)
+  let okVar=true;
+  if(item.varName && (Number(item.varWert)||0)>0){
+    okVar=(Number(_vget(C.MemberNumber,item.varName))||0) >= (Number(item.varWert)||0);
+  }
+  return okRank && okVar;
 }
 function _handleShopCmd(rohText,buyerC){
   const cmd=_shopCfg.cmd.trim();
@@ -1655,16 +1664,40 @@ function _proc(rohText,typKey,C){
   const shopListCmd=(_shopCfg.listCmd||'').trim().toLowerCase();
   if(shopListCmd&&rohText.trim().toLowerCase()===shopListCmd){
     const cur=_shopCfg.moneyName||'Gold';
-    const aktive=_shopCfg.items.filter(i=>i.aktiv!==false && !(i.shopHideLocked && !_shopItemAllowed(i,C)));
-    if(!aktive.length){ServerSend('ChatRoomChat',{Content:'🛒 Noch keine Artikel.',Type:'Whisper',Target:C.MemberNumber});return;}
-    const hdr='🛒 Shop ('+aktive.length+' Artikel):';
+    // Sichtbar = aktiv UND (nicht ausblenden ODER erfüllt). Gesperrte mit „ausblenden" werden versteckt.
+    const visible=_shopCfg.items.filter(i=>i.aktiv!==false && !(i.shopHideLocked && !_shopItemAllowed(i,C)));
+    if(!visible.length){ServerSend('ChatRoomChat',{Content:'🛒 Noch keine Artikel.',Type:'Whisper',Target:C.MemberNumber});return;}
+    const hdr='🛒 Shop ('+visible.length+' Artikel):';
+    const usedVars=[]; // Reihenfolge erhalten, einmalig
     const chunks=[];let buf=hdr;
-    aktive.forEach(item=>{
+    visible.forEach(item=>{
       const ns=item.preisNostrip??_shopCfg.preisNostrip??0;
       const nsHint=ns>0?' (/nostrip +'+ns+')'  :'';
-      const line='\\n• '+(item.icon||'🛒')+' '+item.name+' – '+(Number(item.preis)||0)+' '+cur+nsHint;
+      // Variablen, die für den Footer relevant sind (nur kaufbare/genutzte)
+      if(item.varName && (Number(item.varWert)||0)>0 && usedVars.indexOf(item.varName)<0) usedVars.push(item.varName);
+      // Sperr-Hinweis, falls sichtbar aber (noch) nicht erfüllt
+      let lockHint='';
+      if(!_shopItemAllowed(item,C)){
+        const reqs=[];
+        if(item.reqRankId||item.reqGroup||item.reqLevel){
+          let _rg=item.reqGroup||'',_rl=item.reqLevel||0,_rn='';
+          if(item.reqRankId){const _rd=(_cfg.rankDefs||[]).find(r=>r.id===item.reqRankId);if(_rd){_rl=_rd.level||0;_rn=_rd.name||'';if(item.reqGroupOnly)_rg=_rd.group||'';}}
+          if(_rn)reqs.push('Rang '+_rn); else { if(_rg)reqs.push('Gruppe '+_rg); if(_rl)reqs.push('Lv.'+_rl); }
+        }
+        if(item.varName && (Number(item.varWert)||0)>0){
+          const _h=Number(_vget(C.MemberNumber,item.varName))||0;
+          reqs.push((Number(item.varWert)||0)+' '+item.varName+' (hast '+_h+')');
+        }
+        if(reqs.length) lockHint=' 🔒 '+reqs.join(', ')+' benötigt';
+      }
+      const line='\\n• '+(item.icon||'🛒')+' '+item.name+' – '+(Number(item.preis)||0)+' '+cur+nsHint+lockHint;
       if((buf+line).length>480){chunks.push(buf);buf=line.slice(1);}else buf+=line;
     });
+    // Footer: aktuelle Stände – Money + nur die Variablen, die im Shop genutzt werden
+    const _bal=(_moneyBalances[C.MemberNumber]?.balance)??0;
+    let footer='\\n— Aktuell —\\n'+_bal+' '+cur;
+    usedVars.forEach(v=>{ footer+='\\n'+(Number(_vget(C.MemberNumber,v))||0)+' '+v; });
+    if((buf+footer).length>480){chunks.push(buf);buf=footer.slice(1);}else buf+=footer;
     chunks.push(buf);
     chunks.forEach((ch,i)=>setTimeout(()=>ServerSend('ChatRoomChat',{Content:ch,Type:'Whisper',Target:C.MemberNumber}),i*130));
     return;

@@ -157,7 +157,7 @@ Einzeln oder als Array. `name` ist Pflicht, alles andere optional.
 | `aktiv` | `true`/`false` (Standard `true`) |
 | `reqRankId` / `reqRankName` | Mindest-Rang zum Freischalten – per ID **oder** per Name `reqRankName` (leer = alle) |
 | `reqGroup` | Ranggruppe (z. B. `"pet"`), leer = alle Gruppen |
-| `shopHideLocked` | `true` = bei `!shop` ausblenden, wenn nicht freigeschaltet |
+| `shopHideLocked` | `true` = **unsichtbar**, solange nicht freigeschaltet (Rang/Gruppe **und** Variable). `false` = sichtbar mit Hinweis „… benötigt". |
 | `varName` / `varWert` / `varModus` | Freischaltung/Bezahlung per Variable: `varName` = Variablenname, `varWert` = Mindestwert, `varModus` = `"voraussetzung"` (bleibt) oder `"abziehen"` (wird beim Kauf abgezogen) |
 | `preisU` / `preisNostrip` | Aufpreis für `/u` bzw. `/nostrip` (leer = globale Einstellung) |
 | `confirmMsg`, `announceMsg`, `announceAllMsg`, `errorMsg` | optionale Texte (leer = Standard) |
