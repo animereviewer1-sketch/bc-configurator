@@ -106,7 +106,7 @@ Jede Bedingung hat ein `typ`-Feld und optional `logik` (`"und"` Standard / `"ode
 | `ev_interval` | `sek_min`, `sek_max` | wiederholt alle X–Y s |
 | `variable` | `varName`, `varCmp` (`==` `!=` `>` `<` `>=` `<=` `gesetzt` `leer`), `varWert` | Variable vergleichen |
 | `zufall` | `prozent` | X % Wahrscheinlichkeit |
-| `erregung` | `arCmp` (`>=` `<=` `>` `<` `==`), `arWert` | Erregung (0–100) |
+| `erregung` | `arCmp` (`>=` `<=` `>` `<` `==`), `arWert` | Erregung (0–100) des auslösenden Spielers. **Funktioniert auch als alleinige Bedingung** – wird dann alle 2 s für alle Raumspieler geprüft und feuert beim Überschreiten. Setzt voraus, dass der Spieler seine Erregung teilt (BC-Sichtbarkeit „Everyone/Access"). |
 
 ### Aktionen (`aktionen[]`)
 
@@ -138,9 +138,13 @@ Einzeln oder als Array. `name` ist Pflicht, alles andere optional.
 ```json
 [
   { "name": "Gag", "preis": 50, "icon": "🤐", "beschreibung": "Ein einfacher Knebel" },
-  { "name": "VIP-Zugang", "preis": 500, "reqRankId": "", "reqGroup": "pet", "shopHideLocked": true }
+  { "name": "VIP-Zugang", "preis": 500, "reqGroup": "pet", "shopHideLocked": true },
+  { "name": "Belohnung", "preis": 0, "varName": "gehorsamkeit", "varWert": 100, "varModus": "voraussetzung" },
+  { "name": "Freikauf", "preis": 0, "varName": "verstoesse", "varWert": 3, "varModus": "abziehen" }
 ]
 ```
+
+> „Belohnung" ist nur kaufbar, wenn der Käufer ≥ 100 `gehorsamkeit` hat (bleibt erhalten). „Freikauf" zieht beim Kauf 3 `verstoesse` ab (Variable als Währung).
 
 ### Felder
 
@@ -188,6 +192,109 @@ Einzeln oder als Array. `name` ist Pflicht.
 | `farbe` | Hex-Farbe (Standard `#c4b5fd`) |
 
 > Ränge derselben `group` bauen über `level` aufeinander auf. Bei gleichem Namen/ID fragt der Import pro Rang, ob überschrieben wird.
+
+---
+
+## 4) Platzhalter in Texten
+
+In `chat`/`emote`/`whisper`-Texten kannst du Platzhalter nutzen:
+
+| Platzhalter | Wert |
+|---|---|
+| `{name}` | Name des Spielers |
+| `{wort}` | die auslösende Nachricht |
+| `{x}` / `{y}` | Position des Spielers |
+| `{v:NAME}` | Wert einer Variable, z. B. `{v:gehorsamkeit}` |
+
+Im Shop zusätzlich (Bestätigungs-/Fehlertexte): `{ziel} {item} {preis} {waehrung} {kontostand}` · bei All-Kauf `{anzahl} {gesamt}`.
+
+---
+
+## 5) Rezepte (Komplett-Beispiele zum Kopieren)
+
+### Auto-Uprank bei 100 Gehorsamkeit
+Prüft regelmäßig und steigt auf, sobald die Variable den Wert erreicht. (Den aktuellen Stand siehst du im **🔢 Variablen-Tab**.)
+
+```json
+{
+  "name": "Auto-Uprank Gehorsamkeit",
+  "cooldown": 10,
+  "bedingungen": [
+    { "typ": "ev_interval", "sek_min": 15, "sek_max": 15 },
+    { "typ": "variable", "varName": "gehorsamkeit", "varCmp": ">=", "varWert": "100", "logik": "und" }
+  ],
+  "aktionen": [
+    { "typ": "rang", "rang_op": "naechster" },
+    { "typ": "variable", "varOp": "set", "varName": "gehorsamkeit", "varWert": "0" },
+    { "typ": "whisper", "text": "🏆 Aufgestiegen! Gehorsamkeit zurückgesetzt." }
+  ]
+}
+```
+
+### Gehorsamkeit per Stichwort sammeln
+
+```json
+{
+  "name": "Brav sein",
+  "cooldown": 30,
+  "bedingungen": [ { "typ": "wort", "wort": "ja master" } ],
+  "aktionen": [
+    { "typ": "variable", "varOp": "add", "varName": "gehorsamkeit", "varWert": "10" },
+    { "typ": "whisper", "text": "Brav. Gehorsamkeit: {v:gehorsamkeit}" }
+  ]
+}
+```
+
+### Pflichtwort mit Eskalation (zwei Trigger, Vortrigger per Name)
+
+```json
+[
+  {
+    "name": "Verstoss zaehlen",
+    "bedingungen": [ { "typ": "wort", "wort": "master", "modus": "fehlt" } ],
+    "aktionen": [
+      { "typ": "variable", "varOp": "add", "varName": "verstoesse", "varWert": "1" },
+      { "typ": "whisper", "text": "⚠️ Sag „Master"! ({v:verstoesse}/3)" }
+    ]
+  },
+  {
+    "name": "Strafe ab 3 Verstoessen",
+    "bedingungen": [
+      { "typ": "trigger_war", "trigger": "Verstoss zaehlen" },
+      { "typ": "variable", "varName": "verstoesse", "varCmp": ">=", "varWert": "3", "logik": "und" }
+    ],
+    "aktionen": [
+      { "typ": "item" },
+      { "typ": "variable", "varOp": "set", "varName": "verstoesse", "varWert": "0" }
+    ]
+  }
+]
+```
+
+### Map-Key als Belohnung bei Stichwort
+
+```json
+{
+  "name": "Bronze-Key Belohnung",
+  "cooldown": 3600,
+  "bedingungen": [ { "typ": "wort", "wort": "!schluessel" } ],
+  "aktionen": [
+    { "typ": "mapkey", "mapKey": "bronze", "mapKeyOp": "geben" },
+    { "typ": "whisper", "text": "🔑 Du hast den Bronze-Schlüssel erhalten." }
+  ]
+}
+```
+
+### Reaktion ab Erregung 80 (eigenständig, ohne weiteren Auslöser)
+
+```json
+{
+  "name": "Edging-Ansage",
+  "cooldown": 60,
+  "bedingungen": [ { "typ": "erregung", "arCmp": ">=", "arWert": 80 } ],
+  "aktionen": [ { "typ": "whisper", "text": "Nicht kommen ohne Erlaubnis~" } ]
+}
+```
 
 ---
 
