@@ -741,6 +741,86 @@ function renderSpielerTab(){
   }).join('');
 }
 
+// ── Variablen-Tab: Bot-Variablen pro Spieler ansehen + bearbeiten ──
+let _variablenTimer = null;
+function _startVariablenTimer(){ _stopVariablenTimer(); _variablenTimer = setInterval(()=>{ if(typeof _spielerRefreshRequest==='function') _spielerRefreshRequest(); renderVariablenTab(); }, 10000); }
+function _stopVariablenTimer(){ if(_variablenTimer){ clearInterval(_variablenTimer); _variablenTimer=null; } }
+
+// Wert an alle laufenden Bots schicken (Live-Übernahme)
+function _varPushToBots(num,name,val){
+  try{
+    if(typeof _connected==='undefined' || !_connected || typeof bcSend!=='function') return;
+    (typeof _bots!=='undefined'?_bots:[]).filter(b=>b.laufend).forEach(b=>{
+      const sid=b.id.replace(/\W/g,'_');
+      bcSend({type:'EXEC', code:"window['_BCBot_"+sid+"']&&window['_BCBot_"+sid+"'].setVar("+JSON.stringify(num)+","+JSON.stringify(name)+","+JSON.stringify(val)+")"});
+    });
+  }catch(e){}
+}
+function _varSet(num,name,raw){
+  name=String(name).trim(); if(!name) return;
+  let val=raw; const s=String(raw).trim();
+  if(s!=='' && /^-?\d+(\.\d+)?$/.test(s)) val=Number(s);
+  if(typeof _botVarApply==='function') _botVarApply(num,name,val);
+  _varPushToBots(num,name,val);
+}
+function _varAdd(num){
+  const nameEl=document.getElementById('varadd-name-'+num), valEl=document.getElementById('varadd-val-'+num);
+  if(!nameEl) return;
+  const nm=(nameEl.value||'').trim(); if(!nm){ if(typeof showStatus==='function')showStatus('❌ Variablenname fehlt','error'); return; }
+  _varSet(num,nm,valEl?valEl.value:'');
+  renderVariablenTab();
+}
+function _varDelete(num,name){
+  const k=String(num);
+  if(typeof _botVars!=='undefined' && _botVars[k]){ delete _botVars[k][name]; if(typeof _saveBotVars==='function') _saveBotVars(); }
+  _varPushToBots(num,name,'');
+  renderVariablenTab();
+}
+function renderVariablenTab(){
+  const host=document.getElementById('variablen-list'); if(!host) return;
+  const bv=(typeof _botVars!=='undefined'&&_botVars)?_botVars:{};
+  const rankData=(typeof _rankData!=='undefined'&&_rankData)?_rankData:{players:{}};
+  const money=(typeof _money!=='undefined'&&_money)?_money:{balances:{}};
+  const roomList=(typeof _spielerRoomMembers!=='undefined')?_spielerRoomMembers:[];
+  const roomNums=new Set(roomList.map(m=>m.num));
+  const roomName={}; roomList.forEach(m=>roomName[m.num]=m.name);
+  const nums=new Set();
+  Object.keys(bv).forEach(k=>nums.add(String(k)));
+  roomNums.forEach(k=>nums.add(k));
+  const arr=[...nums];
+  const cntEl=document.getElementById('variablen-count'); if(cntEl) cntEl.textContent=arr.length+' Spieler · '+roomNums.size+' im Raum';
+  if(!arr.length){ host.innerHTML='<div style="font-size:.75rem;color:var(--text3);text-align:center;padding:24px 0">Noch keine Variablen. Sie entstehen durch Trigger-Aktionen (z.B. Variable +1) oder kannst du hier pro Spieler anlegen.</div>'; return; }
+  const nameOf=n=>roomName[n]||(rankData.players?.[n]?.name)||(money.balances?.[n]?.name)||('#'+n);
+  arr.sort((a,b)=>{ const ra=roomNums.has(a),rb=roomNums.has(b); if(ra!==rb)return ra?-1:1; return nameOf(a).localeCompare(nameOf(b)); });
+  host.innerHTML=arr.map(n=>{
+    const inRoom=roomNums.has(n);
+    const vars=bv[n]||{};
+    const keys=Object.keys(vars).sort();
+    const rows=keys.map(k=>{
+      const ek=k.replace(/['"\\]/g,'');
+      const v=vars[k];
+      if(k==='letzterBesuch'){
+        const disp=v?new Date(v).toLocaleString('de-DE'):'';
+        return '<div style="display:flex;align-items:center;gap:6px"><span style="font-size:.7rem;color:var(--text3);min-width:120px">'+escHtml(k)+'</span><span style="font-size:.7rem;color:var(--text3)">'+escHtml(disp)+'</span></div>';
+      }
+      return '<div style="display:flex;align-items:center;gap:6px">'
+        +'<span style="font-size:.7rem;color:var(--text2);min-width:120px">'+escHtml(k)+'</span>'
+        +'<input class="cf" style="width:90px;font-size:.7rem" value="'+escHtml(String(v??''))+'" onchange="_varSet(\''+n+'\',\''+ek+'\',this.value)">'
+        +'<button onclick="_varDelete(\''+n+'\',\''+ek+'\')" title="Variable löschen" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.72rem">✕</button>'
+        +'</div>';
+    }).join('');
+    return '<div style="background:'+(inRoom?'rgba(52,211,153,0.06)':'rgba(255,255,255,0.03)')+';border:1px solid '+(inRoom?'rgba(52,211,153,0.22)':'rgba(255,255,255,0.07)')+';border-radius:10px;padding:10px 14px;margin-bottom:8px">'
+      +'<div style="font-size:.82rem;font-weight:700;color:var(--text1);margin-bottom:6px">'+(inRoom?'<span style="color:var(--green)">●</span> ':'')+escHtml(nameOf(n))+' <span style="font-size:.66rem;color:var(--text3);font-weight:400">#'+escHtml(n)+'</span></div>'
+      +'<div style="display:flex;flex-direction:column;gap:4px">'+(rows||'<span style="font-size:.66rem;color:var(--text3)">– keine Variablen –</span>')+'</div>'
+      +'<div style="display:flex;align-items:center;gap:6px;margin-top:8px">'
+        +'<input id="varadd-name-'+escHtml(n)+'" class="cf" style="width:120px;font-size:.66rem" placeholder="neue Variable">'
+        +'<input id="varadd-val-'+escHtml(n)+'" class="cf" style="width:80px;font-size:.66rem" placeholder="Wert">'
+        +'<button onclick="_varAdd(\''+n+'\')" style="font-size:.64rem;padding:3px 8px;background:var(--pd,#3a2a6a);border:none;color:var(--pl,#cbb6ff);border-radius:5px;cursor:pointer">+ setzen</button>'
+      +'</div>'
+    +'</div>';
+  }).join('');
+}
+
 function _btTrigSummary(bot, t) {
   const conds = t.bedingungen || [];
   const acts  = t.aktionen || [];
@@ -1030,7 +1110,7 @@ function renderCond(bot, tid, c, ci) {
         ${['>=','<=','>','<','=='].map(o=>`<option value="${o}" ${(c.arCmp||'>=')===o?'selected':''}>${o}</option>`).join('')}
       </select>
       <input class="cf cf-w70" type="number" min="0" max="100" value="${c.arWert??99}" oninput="condField('${tid}',${ci},'arWert',+this.value)"> %
-      <span style="font-size:.6rem;color:var(--text3)">(eigene Erregung am zuverlässigsten)</span>`;
+      <span style="font-size:.6rem;color:var(--text3)">prüft die Erregung des auslösenden Spielers · funktioniert auch allein (wird alle 2s geprüft, feuert beim Überschreiten) · setzt voraus, dass der Spieler seine Erregung teilt (BC-Sichtbarkeit „Everyone/Access")</span>`;
   }
   const icons = {wort:'💬',zone:'🗺️',zone_rect:'📐',item_traegt:'👗',item_traegt_nicht:'🚫',trigger_war:'🔗',player_betritt:'👋',ev_timer:'⏱',ev_interval:'🔁',rang:'🏆',shop_kauf:'🛒',variable:'🔢',zufall:'🎲',erregung:'💗'};
   // Logik-Operator: verbindet diese Bedingung mit der vorherigen
@@ -2016,17 +2096,53 @@ function _importTriggersJSON(data){
   const b = _selBot(); if(!b){ showStatus('❌ Kein Bot ausgewählt','error'); return; }
   const arr = Array.isArray(data) ? data : (Array.isArray(data.triggers) ? data.triggers : [data]);
   b.triggers = b.triggers || [];
-  let n = 0;
+  const _rid = (typeof _resolveRankIdByName==='function') ? _resolveRankIdByName : (()=>'');
+  let n = 0, rangWarn = 0;
+  const imported = [];
+  // Rang per Name auflösen (rang-Aktion mit rang_op:setzen ODER rang-Bedingung)
+  const resolveRang = o => {
+    if(o && o.typ==='rang' && !o.rang_id){
+      const nm = o.rang || o.rang_name || o.rangName;
+      if(nm){ const id=_rid(nm); if(id) o.rang_id=id; else rangWarn++; }
+    }
+  };
   arr.forEach((t,i)=>{
     if(!t || typeof t!=='object') return;
     const trig = Object.assign({ name:'Importierter Trigger', aktiv:true, delay:0, bedingungen:[], aktionen:[] }, t);
     trig.id = 't'+Date.now()+Math.floor(Math.random()*99999)+'_'+i;
     trig.bedingungen = Array.isArray(trig.bedingungen) ? trig.bedingungen : [];
     trig.aktionen    = Array.isArray(trig.aktionen)    ? trig.aktionen    : [];
-    b.triggers.push(trig); n++;
+    if(!Array.isArray(trig.aktionen_sonst)) trig.aktionen_sonst = [];
+    // Freundliche Aliase für Kopf-Felder (Delay/Wiederholung/Cooldown/Global-Pro-Spieler)
+    if(trig.cooldown!=null && trig.cooldownSek==null) trig.cooldownSek = trig.cooldown;
+    if(trig.delayMs!=null && trig.delay==null) trig.delay = trig.delayMs;
+    if(typeof trig.global==='boolean')     trig.charSpec = !trig.global;        // global:true  -> charSpec false
+    if(typeof trig.proSpieler==='boolean') trig.charSpec = trig.proSpieler;     // proSpieler:true -> charSpec true
+    if(typeof trig.perPlayer==='boolean')  trig.charSpec = trig.perPlayer;
+    if(typeof trig.vorbedingung==='string') trig.charSpec = /pro|spieler|player|each|selbst/i.test(trig.vorbedingung);
+    if(trig.wiederholung!=null){
+      const _w = String(trig.wiederholung).toLowerCase();
+      if(/unbegrenzt|immer|infinite|∞|loop/.test(_w)) trig.wiederholung='immer';
+      else if(/einmal|once/.test(_w)) trig.wiederholung='einmal';
+      else { const _num=parseInt(_w); if(!isNaN(_num)){ if(_num<=1) trig.wiederholung='einmal'; else { trig.wiederholung='n_mal'; if(trig.maxMal==null) trig.maxMal=_num; } } }
+    }
+    delete trig.cooldown; delete trig.delayMs; delete trig.global; delete trig.proSpieler; delete trig.perPlayer; delete trig.vorbedingung;
+    trig.aktionen.forEach(resolveRang);
+    trig.aktionen_sonst.forEach(resolveRang);
+    trig.bedingungen.forEach(resolveRang);
+    b.triggers.push(trig); imported.push(trig); n++;
+  });
+  // Vortrigger (trigger_war) per Name auflösen – nach dem Import, damit Querverweise im Batch greifen
+  imported.forEach(trig=>{
+    (trig.bedingungen||[]).forEach(c=>{
+      if(c && c.typ==='trigger_war' && !c.trigId){
+        const nm = c.trigger || c.trig_name || c.trigName;
+        if(nm){ const ref=b.triggers.find(x=>(x.name||'').toLowerCase()===String(nm).toLowerCase()); if(ref) c.trigId=ref.id; }
+      }
+    });
   });
   _saveBots(); renderBotList(); renderBotEditor();
-  showStatus('✅ '+n+' Trigger importiert (Item/Curse/Outfit ggf. im Tool wählen)','success');
+  showStatus('✅ '+n+' Trigger importiert'+(rangWarn?(' · ⚠ '+rangWarn+'× Rang-Name nicht gefunden'):'')+' (Item/Curse/Outfit ggf. im Tool wählen)','success');
 }
 function botExportTriggersJSON(){
   const b = _selBot(); if(!b){ showStatus('❌ Kein Bot ausgewählt','error'); return; }

@@ -166,6 +166,9 @@ function shopItemNew() {
   _shopFillRankSelect('');
   _shopFillGroupSelect('');
   { const _h=document.getElementById('shop-modal-hidelocked'); if(_h)_h.checked=false; }
+  { const _vn=document.getElementById('shop-modal-varname'); if(_vn)_vn.value=''; }
+  { const _vw=document.getElementById('shop-modal-varwert'); if(_vw)_vw.value=''; }
+  { const _vm=document.getElementById('shop-modal-varmodus'); if(_vm)_vm.value='voraussetzung'; }
   _shopKaufItem=null; _shopKaufItemLabel(); { const _ka=document.getElementById('shop-modal-kaufitem-aktiv'); if(_ka)_ka.checked=false; }
   _shopMountEditor();
   document.getElementById('shop-modal-overlay').style.display = 'block';
@@ -192,7 +195,9 @@ function _shopSaveFormState(){
     confirm:g('shop-modal-confirm').value, announce:g('shop-modal-announce').value, announceAll:g('shop-modal-announce-all').value,
     error:g('shop-modal-error').value, preisU:g('shop-modal-preis-u').value, preisNostrip:g('shop-modal-preis-nostrip').value,
     reqrank:(g('shop-modal-reqrank')||{}).value||'', reqgroup:(g('shop-modal-reqgroup')||{}).value||'',
-    hidelocked:!!(g('shop-modal-hidelocked')||{}).checked, kaufItem:_shopKaufItem
+    hidelocked:!!(g('shop-modal-hidelocked')||{}).checked,
+    varname:(g('shop-modal-varname')||{}).value||'', varwert:(g('shop-modal-varwert')||{}).value||'', varmodus:(g('shop-modal-varmodus')||{}).value||'voraussetzung',
+    kaufItem:_shopKaufItem
   };
 }
 function _shopRestoreFormState(){
@@ -205,6 +210,9 @@ function _shopRestoreFormState(){
   g('shop-modal-error').value=s.error; g('shop-modal-preis-u').value=s.preisU; g('shop-modal-preis-nostrip').value=s.preisNostrip;
   _shopFillRankSelect(s.reqrank); _shopFillGroupSelect(s.reqgroup);
   { const h=g('shop-modal-hidelocked'); if(h)h.checked=s.hidelocked; }
+  { const vn=g('shop-modal-varname'); if(vn)vn.value=s.varname||''; }
+  { const vw=g('shop-modal-varwert'); if(vw)vw.value=s.varwert||''; }
+  { const vm=g('shop-modal-varmodus'); if(vm)vm.value=s.varmodus||'voraussetzung'; }
   _shopKaufItemLabel();
   { const a=g('shop-modal-kaufitem-aktiv'); if(a)a.checked=true; }
   _shopMountEditor();
@@ -256,6 +264,9 @@ function shopItemEdit(id) {
   _shopFillRankSelect(item.reqRankId || '');
   _shopFillGroupSelect(item.reqGroup||'');
   { const _h=document.getElementById('shop-modal-hidelocked'); if(_h)_h.checked=!!item.shopHideLocked; }
+  { const _vn=document.getElementById('shop-modal-varname'); if(_vn)_vn.value=item.varName||''; }
+  { const _vw=document.getElementById('shop-modal-varwert'); if(_vw)_vw.value=item.varWert||''; }
+  { const _vm=document.getElementById('shop-modal-varmodus'); if(_vm)_vm.value=item.varModus==='abziehen'?'abziehen':'voraussetzung'; }
   _shopKaufItem=item.kaufItem||null; _shopKaufItemLabel(); { const _ka=document.getElementById('shop-modal-kaufitem-aktiv'); if(_ka)_ka.checked=!!item.kaufItemAktiv; }
   _shopMountEditor();
   document.getElementById('shop-modal-overlay').style.display = 'block';
@@ -284,6 +295,9 @@ function shopModalSave() {
     reqRankId: (document.getElementById('shop-modal-reqrank')||{}).value || '',
     reqGroup: ((document.getElementById('shop-modal-reqgroup')||{}).value||'').toLowerCase(),
     shopHideLocked: !!(document.getElementById('shop-modal-hidelocked')||{}).checked,
+    varName: ((document.getElementById('shop-modal-varname')||{}).value||'').trim(),
+    varWert: parseInt((document.getElementById('shop-modal-varwert')||{}).value)||0,
+    varModus: ((document.getElementById('shop-modal-varmodus')||{}).value==='abziehen')?'abziehen':'voraussetzung',
     kaufItem: _shopKaufItem||null,
     kaufItemAktiv: !!(document.getElementById('shop-modal-kaufitem-aktiv')||{}).checked,
   };
@@ -328,9 +342,12 @@ function _shopNormalizeItem(raw){
     errorMsg: raw.errorMsg || '',
     preisU: (raw.preisU!=null && raw.preisU!=='') ? (parseInt(raw.preisU)||0) : null,
     preisNostrip: (raw.preisNostrip!=null && raw.preisNostrip!=='') ? (parseInt(raw.preisNostrip)||0) : null,
-    reqRankId: raw.reqRankId || '',
+    reqRankId: raw.reqRankId || (raw.reqRankName && typeof _resolveRankIdByName==='function' ? _resolveRankIdByName(raw.reqRankName) : '') || '',
     reqGroup: (raw.reqGroup||'').toString().toLowerCase(),
     shopHideLocked: !!raw.shopHideLocked,
+    varName: (raw.varName||'').toString().trim(),
+    varWert: parseInt(raw.varWert) || 0,
+    varModus: (raw.varModus==='abziehen') ? 'abziehen' : 'voraussetzung',
     kaufItem: raw.kaufItem || null,
     kaufItemAktiv: !!raw.kaufItemAktiv
   };

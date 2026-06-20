@@ -232,6 +232,14 @@ function rankResetAllPlayers() {
   _saveRank(); renderRankPlayers();
 }
 
+// Rang-ID anhand des Namens finden (für JSON-Import per Name)
+function _resolveRankIdByName(name){
+  if(!name) return '';
+  const defs=(typeof _rankData!=='undefined'&&_rankData&&_rankData.defs)?_rankData.defs:[];
+  const hit=defs.find(d=>(d.name||'').toLowerCase()===String(name).toLowerCase());
+  return hit?hit.id:'';
+}
+
 // ── Ränge per JSON zusammenführen (einzeln/Array); Konflikt pro Eintrag fragen ──
 function _rankNormalizeDef(raw){
   return {

@@ -4114,7 +4114,7 @@ let _activeTab = 'items';
 // Obertab-Gruppen: welche Untertabs gehören zu welchem Obertab
 const TAB_GROUPS = {
   items: ['items','outfit','curse','outfit-scan','outfit-import','locks'],
-  bots:  ['bot','shop','rank','money','log','spieler'],
+  bots:  ['bot','shop','rank','money','log','spieler','variablen'],
 };
 let _activeGroup = 'items';
 function _tabGroupOf(tab){
@@ -4142,7 +4142,7 @@ function switchTab(tab) {
   // Sichtbarkeits-Schleife nur, wenn sich der Obertab wirklich ändert (verhindert Lag bei Tab-Wechsel innerhalb einer Gruppe)
   const _grp = _tabGroupOf(tab);
   if (_grp !== _activeGroup) _applyGroupUI(_grp);
-  ['items','outfit','curse','bot','log','money','events','rank','shop','outfit-import','outfit-scan','locks','spieler'].forEach(t => {
+  ['items','outfit','curse','bot','log','money','events','rank','shop','outfit-import','outfit-scan','locks','spieler','variablen'].forEach(t => {
     document.getElementById('tab-'+t)?.classList.toggle('active', t===tab);
     document.getElementById('tab-'+t+'-btn')?.classList.toggle('active', t===tab);
   });
@@ -4160,6 +4160,8 @@ function switchTab(tab) {
   if (tab !== 'locks')         { _stopLocksTimer(); }
   if (tab === 'spieler')       { if (typeof renderSpielerTab==='function') renderSpielerTab(); if (typeof _spielerRefreshRequest==='function') _spielerRefreshRequest(); if (typeof _startSpielerTimer==='function') _startSpielerTimer(); }
   if (tab !== 'spieler')       { if (typeof _stopSpielerTimer==='function') _stopSpielerTimer(); }
+  if (tab === 'variablen')     { if (typeof renderVariablenTab==='function') renderVariablenTab(); if (typeof _spielerRefreshRequest==='function') _spielerRefreshRequest(); if (typeof _startVariablenTimer==='function') _startVariablenTimer(); }
+  if (tab !== 'variablen')     { if (typeof _stopVariablenTimer==='function') _stopVariablenTimer(); }
 
 }
 // Initiale Obertab-Sichtbarkeit: nur Items-Gruppe zeigen

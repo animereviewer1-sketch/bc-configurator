@@ -2483,6 +2483,7 @@ button { cursor: pointer; }
   <button class="tab-btn"        id="tab-money-btn"  onclick="switchTab('money')">💰 Money</button>
   <button class="tab-btn"        id="tab-log-btn"    onclick="switchTab('log')">📋 Logs</button>
   <button class="tab-btn"        id="tab-spieler-btn"       onclick="switchTab('spieler')">👤 Spieler</button>
+  <button class="tab-btn"        id="tab-variablen-btn"     onclick="switchTab('variablen')">🔢 Variablen</button>
 </div>
 </div>
 
@@ -3397,6 +3398,17 @@ document.write('<scr'+'ipt src="items.js?_='+_cbv+'"><\/scr'+'ipt>');
     <label>🔒 Freischaltung – Ranggruppe (optional)</label>
     <select class="cf" id="shop-modal-reqgroup"><option value="">– alle Gruppen –</option></select>
     <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:400;margin-top:4px"><input type="checkbox" id="shop-modal-hidelocked"> 🙈 im <b>!shop</b> ausblenden, wenn nicht freigeschaltet (Rang/Gruppe)</label>
+    <label>🔢 Freischaltung/Bezahlung per Variable (optional)</label>
+    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+      <input class="cf" id="shop-modal-varname" placeholder="Variable (z.B. gehorsamkeit)" style="flex:1;min-width:150px">
+      <span style="font-size:.66rem;color:var(--text3)">mind.</span>
+      <input class="cf" id="shop-modal-varwert" type="number" min="0" placeholder="0" style="width:80px">
+      <select class="cf" id="shop-modal-varmodus" style="width:160px">
+        <option value="voraussetzung">Voraussetzung (bleibt)</option>
+        <option value="abziehen">Bezahlen (wird abgezogen)</option>
+      </select>
+    </div>
+    <div style="font-size:.59rem;color:var(--text3);margin-top:2px">Leer = aus. „Voraussetzung" prüft nur; „Bezahlen" zieht den Wert beim Kauf ab.</div>
     <label>📦 Item / Curse / Outfit beim Kauf anlegen (optional – kein Trigger nötig)</label>
     <div style="display:flex;gap:6px;align-items:center">
       <span id="shop-modal-kaufitem-label" style="flex:1;font-size:.72rem;color:var(--text2)">– nichts gewählt –</span>
@@ -3696,6 +3708,21 @@ document.write('<scr'+'ipt src="outfit-import.js?_='+_cbv+'"><\/scr'+'ipt>');
       Alle bekannten Spieler mit Rang, Money und Map-Keys (🥉🥈🥇). Keys werden pro Spieler gespeichert und beim <b>Rejoin automatisch neu vergeben</b> (Bot muss laufen).
     </div>
     <div id="spieler-list"></div>
+  </div>
+</div>
+
+<!-- Variablen-Tab (Bot-Variablen pro Spieler) -->
+<div id="tab-variablen" class="tab-pane">
+  <div style="padding:16px 18px">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+      <span style="font-size:.95rem;font-weight:800;color:var(--text1)">🔢 Variablen pro Spieler</span>
+      <span id="variablen-count" style="font-size:.7rem;color:var(--text3)"></span>
+      <button onclick="renderVariablenTab()" style="margin-left:auto;background:none;border:1px solid rgba(255,255,255,0.12);border-radius:6px;color:var(--text2);font-size:.66rem;padding:4px 10px;cursor:pointer">⟳ Aktualisieren</button>
+    </div>
+    <div style="font-size:.65rem;color:var(--text3);margin-bottom:14px;line-height:1.5">
+      Werte wie <code>punkte</code>, <code>gehorsamkeit</code>, <code>verstoesse</code> … pro Spieler. Werte sind <b>editierbar</b> – Änderungen werden gespeichert und (bei laufendem Bot) sofort übernommen. Auto-getrackt: <code>besuche</code>, <code>letzterBesuch</code>.
+    </div>
+    <div id="variablen-list"></div>
   </div>
 </div>
 

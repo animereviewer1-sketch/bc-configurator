@@ -24,7 +24,8 @@ Der Bot läuft **im BC-Browser-Tab** (über den Loader/das Bookmarklet). Der **C
 - **Log** – Aktivitäts-Log mitschreiben.
 - **Modus:** Nur Chat / Nur Zone / Chat + Zone.
 - **📊 Dashboard** – Spieler-Profile (Punkte, Rang, Money, Besuche, letzter Besuch).
-- **⬇️/⬆️** – Bot-Konfiguration exportieren/importieren.
+- **⬇️/⬆️** – ganze Bot-Konfiguration als Datei exportieren/importieren.
+- **{ }📥 / { }📤** – einzelne **Trigger per JSON** importieren (zum Bot hinzufügen) bzw. die Trigger des Bots als JSON exportieren (siehe Abschnitt 15).
 
 ## 4. Trigger – Aufbau
 
@@ -51,8 +52,9 @@ Jeder Trigger hat:
 | 🛒 **Shop-Kauf** | Beim Kauf eines Shop-Artikels. |
 | ⏱ **Timer** | Einmalig nach X Sekunden. |
 | 🔁 **Intervall** | Wiederholt alle X–Y Sekunden. |
-| 🔢 **Variable** | Spieler-Variable/Punkte vergleichen (`== != > < >= <= gesetzt leer`). |
-| 🎲 **Zufall** | Trifft mit X % Wahrscheinlichkeit zu. |
+| 🔢 **Variable** | Spieler-Variable/Punkte vergleichen (`== != > < >= <= gesetzt leer`). Wofür: Punkte-/Verstoß-Systeme, Zustände wie „gefangen". |
+| 🎲 **Zufall** | Trifft mit X % Wahrscheinlichkeit zu. Wofür: Glücksspiele, zufällige Reaktionen. |
+| 💗 **Erregung** | Vergleicht die Erregung (0–100 %, z.B. `≥ 99`). Wofür: Edging/Reaktionen ab Schwelle. |
 
 ## 6. Aktionen
 
@@ -66,9 +68,10 @@ Jeder Trigger hat:
 | 🏆 **Rang** | setzen / entfernen / nächster / vorheriger. |
 | 🔢 **Variable** | setzen / + / − / umschalten. |
 | 💗 **Erregung/Orgasmus** | Erregung setzen/±, Orgasmus erzwingen/stoppen. *Zuverlässig auf dich selbst.* |
+| 🔑 **Map-Key geben/wegnehmen** | Vergibt/entzieht einen Karten-Schlüssel (🥉 Bronze / 🥈 Silver / 🥇 Gold) an das Aktions-Ziel. Wofür: Türen/Bereiche auf der Karte für bestimmte Spieler freischalten. *Benötigt Raum-Admin; erzeugt keine Raum-Meldung.* Vergebene Keys werden gespeichert und beim Rejoin automatisch neu vergeben. |
 | 📖 **Szene starten** | Startet eine Story-Szene. |
 
-**Aktions-Ziel:** Auslöser / Käufer (Shop) / Alle im Raum / Whitelist.
+**Aktions-Ziel:** Auslöser / Käufer (Shop) / Alle im Raum / Whitelist. Bestimmt, **wen** die Aktion betrifft.
 
 ## 7. Szenen-/Story-Modus (📖)
 
@@ -84,11 +87,12 @@ Reihenfolge per ▲▼, Sprungziele aus Dropdown. **▶ Test** spielt die Szene 
 
 ## 8. Systeme
 
-- **💰 Money** – Währung pro Spieler (Verdienen via Aktionen, Ausgeben im Shop).
-- **🏆 Ränge** – Stufen/Level; als Bedingung und Aktion nutzbar.
-- **🛒 Shop** – Spieler kaufen Items/Outfits per Befehl mit Money.
-- **🔢 Variablen / Profile** – beliebige Werte pro Spieler (`punkte`, `verstoesse`, `leben`, `gefangen` …), **persistent über Sessions**. Auto-getrackt: `besuche`, `letzterBesuch`.
-- **📊 Dashboard** – Übersicht aller gespeicherten Profile.
+- **💰 Money** – Währung pro Spieler (Verdienen via Aktionen, Ausgeben im Shop). Wofür: Belohnungs-/Wirtschaftssystem.
+- **🏆 Ränge** – Stufen/Level pro Spieler; als Bedingung und Aktion nutzbar. **Ranggruppen** (z.B. „Pet", „Drohne") bündeln Ränge, die über `level` aufeinander aufbauen; im Rang-Tab seitlich gruppiert dargestellt. Wofür: Rollen/Progression.
+- **🛒 Shop** – Spieler kaufen Items/Outfits per Befehl (`!pay "Name"`) mit Money. Artikel können **direkt im Shop** ein Item/Outfit beim Kauf anlegen (kein Trigger nötig) und per **Mindest-Rang / Ranggruppe** freigeschaltet werden (gesperrte werden bei `!shop` optional ausgeblendet). Zusätzlich **Freischaltung/Bezahlung per Variable**: „Voraussetzung" (z.B. ≥100 Gehorsamkeit, bleibt erhalten) oder „Bezahlen" (Wert wird beim Kauf abgezogen – Variable als zweite Währung). Wofür: kaufbare Belohnungen/Strafen, gestaffelte Freischaltung.
+- **🔢 Variablen / Profile** – beliebige Werte pro Spieler (`punkte`, `verstoesse`, `leben`, `gefangen` …), **persistent über Sessions**. Auto-getrackt: `besuche`, `letzterBesuch`. Wofür: Zustände, Punkte, Story-Fortschritt.
+- **📊 Dashboard** – Übersicht aller gespeicherten Profile (Punkte, Rang, Money, Besuche).
+- **👤 Spieler-Tab** – siehe Abschnitt 13.
 
 ## 9. Admin-Befehle & Voraussetzungen
 
@@ -109,4 +113,49 @@ Fertige Trigger-Sets per Klick einfügen, danach Felder anpassen:
 - Nach jeder Änderung **🔄 Sync** (oder Bot neu starten).
 - Viele Aktionen kurz hintereinander: BC drosselt Chat/Updates → der Bot hält automatisch kleine Abstände ein; bei sehr großen Outfits wird gewartet, bis alles sitzt.
 - Zonen-Trigger, die teleportieren, können sich selbst neu auslösen (Position ändert sich) – ggf. Cooldown/Wiederholung setzen.
-- In-game-abhängige Effekte (Teleport, Erregung) am besten mit offener Browser-Konsole (F12) testen; die `[Bot:…]`-Logzeilen zeigen, was passiert.
+- In-game-abhängige Effekte (Teleport, Erregung, Map-Keys) am besten mit offener Browser-Konsole (F12) testen; die `[Bot:…]`-Logzeilen zeigen, was passiert.
+
+## 12. Oberfläche & Navigation (Obertabs)
+
+Die Tabs sind in **drei Obertabs** gruppiert – damit die vielen Funktionen übersichtlich bleiben:
+
+- **🧩 Items** – alles rund ums Anziehen/Fesseln: *Item Manager, Outfit & Profile, Craft & Curse, LSCG Outfits, Outfit Import, Locks.* Wofür: Items/Outfits bauen und verwalten, die du dann in Trigger/Shop einsetzt.
+- **🤖 Bots** – alles Bot-bezogene: *Bot, Shop, Rang, Money, Logs, Spieler, Variablen.* Wofür: Automatik, Wirtschaft, Progression und die Spieler-/Variablen-Übersicht an einem Ort.
+- **⚙️ Einstellungen** – öffnet das Einstellungs-Panel (Theme, Akzentfarbe, Eck-Radius, Im-/Export von Curse- und Profildaten).
+
+Beim Wechsel des Obertabs werden nur die passenden Untertabs angezeigt.
+
+## 13. Spieler-Tab (Bot-Übersicht)
+
+Zentrale Übersicht **aller bekannten Spieler** mit ihren Bot-Daten: **Name #Nummer**, **🏆 Rang** (inkl. Gruppe), **💰 Money** und den **Map-Keys** (🥉🥈🥇).
+
+- **Wofür:** auf einen Blick sehen, wer welchen Rang/Money/Schlüssel hat – ohne einzeln nachzusehen.
+- **Aktuell im Raum** stehen oben (grüner Punkt, hervorgehoben), darunter „Nicht im Raum".
+- Die Liste **aktualisiert sich alle 10 Sekunden** automatisch (solange der Tab offen ist und eine Verbindung zum BC-Tab besteht).
+
+## 14. Map-Keys (🥉 Bronze / 🥈 Silver / 🥇 Gold)
+
+Karten-Schlüssel, mit denen BC verschlossene Bereiche/Türen auf der Map freigibt.
+
+- **Vergeben/Entziehen** über die Aktion **🔑 Map-Key geben/wegnehmen** (Ziel = Aktions-Ziel, also auch andere Spieler).
+- **Voraussetzung:** Du bist **Raum-Admin**. Es entsteht **keine** „updated the room"-Meldung (anders als beim Verändern der Karte selbst).
+- **Persistenz & Rejoin:** Wer welchen Key hat, wird gespeichert. Betritt der Spieler den Raum erneut, vergibt der Bot die gespeicherten Keys automatisch neu (auch nach Neustart des Bots) – im Spieler-Tab sichtbar.
+
+## 15. JSON-Import (Trigger / Shop / Ränge)
+
+Du kannst Inhalte per JSON schreiben und importieren – pro Tab über den **`{ }📥`**-Button (Bot/Shop/Rang). Details und Feldreferenz: **`JSON-IMPORT.md`**.
+
+- **Bot:** einzelne Trigger (oder mehrere) → werden zum **gewählten Bot hinzugefügt**. Ränge/Vortrigger lassen sich **per Name** referenzieren (z.B. `"rang":"Bunny"`, `"trigger":"Anmeldung"`). Kopf-Felder wie `cooldown`, `wiederholung`, `global` werden mit übernommen.
+- **Shop & Rang:** ein oder mehrere Einträge → werden **zusammengeführt**; bei gleichem Namen/ID wird **pro Eintrag** gefragt, ob überschrieben wird.
+- **Items/Curse/Outfits** müssen **nicht** in der JSON stehen – die stellst du danach im Tool ein (z.B. Item-Aktion `{"typ":"item"}` → konkretes Item über „📂 Wählen").
+- **Export:** Trigger (`{ }📤`) bzw. Shop/Rang (`⬇️`) lassen sich als JSON exportieren – ideal als Vorlage.
+
+## 16. Variablen-Tab (🔢)
+
+Übersicht **aller Variablen pro Spieler** (z.B. `punkte`, `gehorsamkeit`, `verstoesse`, auto-getrackt `besuche`/`letzterBesuch`).
+
+- **Wofür:** sehen, wie viel jemand von einer Variable hat – und Werte bei Bedarf **manuell bearbeiten** (setzen/ändern/löschen) oder neue Variablen anlegen.
+- Änderungen werden gespeichert und bei **laufendem Bot sofort übernommen** (live).
+- **Aktuell im Raum** stehen oben; die Liste aktualisiert sich alle 10 s.
+
+**Uprank über Variablen** (z.B. „bei 100 Gehorsamkeit → nächster Rang") läuft über einen **Trigger**: Bedingung 🔢 *Variable* `gehorsamkeit ≥ 100` → Aktion 🏆 *Rang* `nächster`/`setzen`. Als Auslöser eignet sich z.B. ein 🔁 *Intervall* oder die Aktion, die die Variable erhöht. Den aktuellen Stand prüfst du im Variablen-Tab.

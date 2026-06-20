@@ -60,15 +60,32 @@ Ein Trigger folgt dem Schema **WENN _Bedingungen_ → DANN _Aktionen_**.
 |---|---|---|
 | `name` | empfohlen | Anzeigename |
 | `aktiv` | – | `true`/`false` (Standard `true`) |
-| `delay` | – | ms Verzögerung vor Start (Standard `0`) |
-| `cooldownSek` | – | Mindestabstand pro Spieler in Sekunden |
-| `wiederholung` | – | `"immer"` / `"einmal"` / `"n_mal"` |
+| `delay` | – | ms Verzögerung vor Start (Standard `0`). Alias: `delayMs` |
+| `cooldownSek` | – | Mindestabstand pro Spieler in Sekunden. Alias: `cooldown` |
+| `wiederholung` | – | `"immer"` (= unbegrenzt) / `"einmal"` / `"n_mal"`. Akzeptiert auch `"unbegrenzt"` oder eine **Zahl** (z. B. `3` → 3×, setzt `maxMal`) |
 | `maxMal` | – | bei `n_mal`: wie oft |
+| `global` | – | **Als Vorbedingung-Modus** (einfach): `true` = 🌐 Global (einmal gilt für alle), `false` = 👤 Pro Spieler. Alternativen: `proSpieler:true` oder Feld `charSpec` (`true`=pro Spieler) |
+| `resetOnLeave` | – | bei Pro-Spieler: State beim Verlassen zurücksetzen (`true`/`false`) |
 | `von` | – | wer auslösen darf: `"alle"` / `"bot"` / `"whitelist"` |
 | `vonNummern` | – | bei `whitelist`: `[12345, 67890]` |
 | `bedingungen` | ✓ | Array von Bedingungen (siehe unten) |
 | `aktionen` | ✓ | Array von Aktionen (siehe unten) |
 | `aktionen_sonst` | – | Aktionen für den SONST-Zweig (IF/ELSE) |
+
+> **Kopf-Felder gehören auf die oberste Ebene des Triggers** (neben `name`), nicht in `bedingungen`/`aktionen`. Beispiel mit allen Einstellungen:
+>
+> ```json
+> {
+>   "name": "!pet Anmeldung",
+>   "delay": 0,
+>   "cooldown": 10,
+>   "wiederholung": "unbegrenzt",
+>   "global": false,
+>   "resetOnLeave": true,
+>   "bedingungen": [ { "typ": "wort", "wort": "!pet" } ],
+>   "aktionen": [ { "typ": "rang", "rang_op": "setzen", "rang": "Bunny" } ]
+> }
+> ```
 
 ### Bedingungen (`bedingungen[]`)
 
@@ -81,9 +98,9 @@ Jede Bedingung hat ein `typ`-Feld und optional `logik` (`"und"` Standard / `"ode
 | `zone_rect` | `x1`,`y1`,`x2`,`y2`, `name`, `zoneMode` | Spieler im Rechteck |
 | `item_traegt` | `item` | trägt Item/Gruppe |
 | `item_traegt_nicht` | `item` | trägt Item/Gruppe NICHT |
-| `trigger_war` | `trigId` | Vortrigger erfüllt |
+| `trigger_war` | `trigId` **oder** `trigger` (Name) | Vortrigger erfüllt – am einfachsten per Name des anderen Triggers |
 | `player_betritt` | `betritt_typ` (`"alle"`/`"neu"`/`"rejoin"`) | Spieler betritt Raum |
-| `rang` | `rang_op` (`"="`/`"min"`/`"max"`/`"kein"`), `rang_id` | Rang-Vergleich |
+| `rang` | `rang_op` (`"="`/`"min"`/`"max"`/`"kein"`), `rang_id` **oder** `rang` (Name) | Rang-Vergleich |
 | `shop_kauf` | `shop_id` | bestimmter Shop-Kauf |
 | `ev_timer` | `sek` | einmalig nach X s |
 | `ev_interval` | `sek_min`, `sek_max` | wiederholt alle X–Y s |
@@ -102,7 +119,7 @@ Jede Aktion hat ein `typ`-Feld und optional `aktZiel` (`"ausloeser"` Standard / 
 | `item_entf` | `gruppen` (Array, z. B. `["ItemArms","ItemMouth"]`) | Items entfernen |
 | `teleport` | *(im Tool wählen)* | Teleport (Punkte/Bereich im Tool setzen) |
 | `money` | `money_op` (`"add"`/`"sub"`/`"set"`/`"reset"`), `money_val` | Money ändern |
-| `rang` | `rang_op` (`"setzen"`/`"entfernen"`/`"naechster"`/`"vorheriger"`), `rang_id` | Rang ändern |
+| `rang` | `rang_op` (`"setzen"`/`"entfernen"`/`"naechster"`/`"vorheriger"`), bei `setzen`: `rang_id` **oder** `rang` (Name) | Rang ändern. **Empfohlen: Rang per Name**, z. B. `{"typ":"rang","rang_op":"setzen","rang":"Bunny"}` |
 | `variable` | `varOp` (`"set"`/`"add"`/`"sub"`/`"toggle"`), `varName`, `varWert` | Variable setzen |
 | `erregung` | `erregOp` (`"set"`/`"add"`/`"sub"`/`"orgasm"`/`"stop"`), `erregVal` | Erregung/Orgasmus (zuverlässig nur bei dir selbst) |
 | `mapkey` | `mapKey` (`"bronze"`/`"silver"`/`"gold"`), `mapKeyOp` (`"geben"`/`"wegnehmen"`) | Map-Schlüssel vergeben/entziehen (Raum-Admin) |
@@ -134,9 +151,10 @@ Einzeln oder als Array. `name` ist Pflicht, alles andere optional.
 | `icon` | Emoji (Standard `🛒`) |
 | `beschreibung` | optionaler Text |
 | `aktiv` | `true`/`false` (Standard `true`) |
-| `reqRankId` | Mindest-Rang-ID zum Freischalten (leer = alle) |
+| `reqRankId` / `reqRankName` | Mindest-Rang zum Freischalten – per ID **oder** per Name `reqRankName` (leer = alle) |
 | `reqGroup` | Ranggruppe (z. B. `"pet"`), leer = alle Gruppen |
 | `shopHideLocked` | `true` = bei `!shop` ausblenden, wenn nicht freigeschaltet |
+| `varName` / `varWert` / `varModus` | Freischaltung/Bezahlung per Variable: `varName` = Variablenname, `varWert` = Mindestwert, `varModus` = `"voraussetzung"` (bleibt) oder `"abziehen"` (wird beim Kauf abgezogen) |
 | `preisU` / `preisNostrip` | Aufpreis für `/u` bzw. `/nostrip` (leer = globale Einstellung) |
 | `confirmMsg`, `announceMsg`, `announceAllMsg`, `errorMsg` | optionale Texte (leer = Standard) |
 | `kaufItem`, `kaufItemAktiv` | Item/Outfit beim Kauf anlegen – **am besten im Tool** über „📂 Wählen" setzen |

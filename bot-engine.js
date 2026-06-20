@@ -159,6 +159,8 @@ const _trigMap=Object.fromEntries(_trigs.map(t=>[t.id,t]));
 const _itTrigs=_trigs.filter(t=>(t.bedingungen??[]).some(c=>c.typ==='item_traegt'||c.typ==='item_traegt_nicht')&&!(t.bedingungen??[]).some(c=>c.typ==='wort'));
 const _zoneTrigs=_trigs.filter(t=>(t.bedingungen??[]).some(c=>c.typ==='zone'||c.typ==='zone_rect')&&!(t.bedingungen??[]).some(c=>c.typ==='wort'||c.typ==='player_betritt'));
 const _joinTrigs=_trigs.filter(t=>(t.bedingungen??[]).some(c=>c.typ==='player_betritt'));
+// Erregung als primärer Auslöser (gepollt) – nur wenn kein anderes Auslöse-Event vorhanden ist
+const _arTrigs=_trigs.filter(t=>(t.bedingungen??[]).some(c=>c.typ==='erregung')&&!(t.bedingungen??[]).some(c=>['wort','zone','zone_rect','item_traegt','item_traegt_nicht','player_betritt','ev_timer','ev_interval'].includes(c.typ)));
 // Rejoin-Fenster: memberNum → true – schließt wenn Nicht-Rejoin-Trigger feuert
 const _rejoinWindow=new Map(); // memberNum → timestamp when opened
 const _REJOIN_GRACE=1000; // ms window stays open regardless of other triggers
@@ -1346,6 +1348,17 @@ function _handleShopCmd(rohText,buyerC){
     }
   }
 
+  // Freischaltung/Bezahlung per Variable (Voraussetzung ODER abziehen)
+  if(shopItem.varName && (Number(shopItem.varWert)||0) > 0){
+    const _vneed=Number(shopItem.varWert)||0;
+    const _vhave=Number(_vget(buyerC.MemberNumber, shopItem.varName))||0;
+    if(_vhave < _vneed){
+      ServerSend('ChatRoomChat',{Content:'🔒 „'+shopItem.name+'" benötigt '+_vneed+' '+shopItem.varName+' (du hast '+_vhave+').',Type:'Whisper',Target:buyerC.MemberNumber});
+      _log('🔒 Shop var-gesperrt: '+buyerC.Name+' → "'+shopItem.name+'" ('+_vhave+'/'+_vneed+' '+shopItem.varName+')');
+      return;
+    }
+  }
+
   const preisU      = flagUnknown ? (shopItem.preisU      ?? _shopCfg.preisU      ?? 0) : 0;
   const preisNostrip= flagNostrip ? (shopItem.preisNostrip ?? _shopCfg.preisNostrip ?? 0) : 0;
   const flagAufpreis= preisU + preisNostrip;
@@ -1504,6 +1517,14 @@ function _handleShopCmd(rohText,buyerC){
   _moneyBalances[buyerC.MemberNumber].balance-=preisEffektiv;
   window.__BCK_popupRef?.postMessage({app:'BCKonfigurator',type:'BOT_MONEY',
     memberNum:buyerC.MemberNumber,name:buyerC.Name,delta:-preisEffektiv},'*');
+
+  // Variable als Bezahlung abziehen (Modus 'abziehen')
+  if(shopItem.varName && (Number(shopItem.varWert)||0) > 0 && shopItem.varModus==='abziehen'){
+    const _vhave=Number(_vget(buyerC.MemberNumber, shopItem.varName))||0;
+    const _vnew=_vhave-(Number(shopItem.varWert)||0);
+    _vset(buyerC.MemberNumber, shopItem.varName, _vnew);
+    _log('🔢 '+shopItem.varName+' -'+(Number(shopItem.varWert)||0)+' ('+buyerC.Name+' → '+_vnew+')');
+  }
 
   const newBal=_moneyBalances[buyerC.MemberNumber].balance;
   const isFremdkauf=targetC.MemberNumber!==buyerC.MemberNumber;
@@ -1790,6 +1811,54 @@ const _itPoll=setInterval(()=>{
     });
   });
 },500);
+
+// ── Erregungs-Polling (edge-triggered: feuert 1x wenn Erregungs-Bedingung wahr wird) ──
+const _arState={}; // 'memberNum_trigId' -> bool
+const _arPoll=setInterval(()=>{
+  if(!_arTrigs.length)return;
+  const chars=[Player,...(ChatRoomCharacter||[])];
+  _arTrigs.forEach(trig=>{
+    chars.forEach(C=>{
+      const pos={X:C.X??0,Y:C.Y??0};
+      const vonOk=(()=>{
+        if(trig.von==='bot')return C.MemberNumber===Player.MemberNumber;
+        if(trig.von==='whitelist')return(trig.vonNummern||[]).map(Number).includes(Number(C.MemberNumber));
+        return true;
+      })();
+      const condMet=vonOk&&(trig.bedingungen??[]).every(c=>{
+        if(c.typ==='erregung'){return _arousalOk(c,C);}
+        if(c.typ==='variable'){return _varCondOk(c,C);}
+        if(c.typ==='zufall'){return _chanceOk(c);}
+        if(c.typ==='trigger_war'){const ref=_trigMap[c.trigId];return ref?.charSpec?!!_firedChar[c.trigId+'_'+C.MemberNumber]:!!_fired[c.trigId];}
+        if(c.typ==='rang'){
+          const op=c.rang_op??'=';
+          const currentId=_rangState[C.MemberNumber]??null;
+          if(op==='kein') return !currentId;
+          if(!c.rang_id) return false;
+          const defs=_rankDefs;
+          const targetDef=defs.find(r=>r.id===c.rang_id);
+          const currentDef=defs.find(r=>r.id===currentId);
+          if(!targetDef||!currentDef) return false;
+          const tl=targetDef.level, cl=currentDef.level;
+          if(op==='=')   return cl===tl;
+          if(op==='min') return cl>=tl;
+          if(op==='max') return cl<=tl;
+          return false;
+        }
+        return true;
+      });
+      const key=C.MemberNumber+'_'+trig.id;
+      const was=_arState[key]??false;
+      if(condMet&&!was){
+        const ifBeds=trig.ifBedingungen??[];
+        const ifOk=!trig.ifElse||!ifBeds.length||_okIf(trig,'','erregung',C);
+        if(ifOk) _run(trig,{name:C.Name,wort:'',typ:'Erregung',x:pos.X,y:pos.Y,zone:'',C});
+        else if((trig.aktionen_sonst??[]).length) _runSonst(trig,{name:C.Name,wort:'',typ:'Erregung',x:pos.X,y:pos.Y,zone:'',C});
+      }
+      _arState[key]=condMet;
+    });
+  });
+},2000);
 
 // ── Spieler-Betritt Polling (feuert 1x beim Betreten) ──
 const _roomPrev=new Set((ChatRoomCharacter||[]).map(c=>c.MemberNumber));
@@ -2275,11 +2344,13 @@ ServerSocket.on('ChatRoomMessage',_msgH);
 
 window['_BCBot_'+_BID]={
   playScene(sid){try{_playScene(sid,Player,{},null);}catch(e){console.warn(e);}},
+  setVar(mn,name,val){try{_vset(mn,String(name),val);}catch(e){console.warn(e);}},
   stop(){
     clearInterval(_itPoll);
     clearInterval(_joinPoll);
     clearInterval(_zonePoll);
     clearInterval(_nsPoll);
+    clearInterval(_arPoll);
     try{ if(_mod) _mod.removePatches(); } catch(e){}
     // Restore ServerSend if we patched it as fallback
     if(window.__BCBot_origSend_${safeId}) {
