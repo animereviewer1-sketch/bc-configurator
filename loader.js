@@ -1056,18 +1056,36 @@ window.CurseScanner = (() => {
 
         case 'GET_MBS_WHEEL': {
           try {
-            const _chars = [Player, ...(ChatRoomCharacter ?? [])];
+            const _seen = new Set();
+            const _chars = [Player, ...(ChatRoomCharacter ?? [])].filter(c => {
+              if (!c?.MemberNumber || _seen.has(c.MemberNumber)) return false;
+              _seen.add(c.MemberNumber);
+              return true;
+            });
             const _results = [];
             for (const C of _chars) {
-              if (!C?.MemberNumber) continue;
-              const _mbs = C.MBSSettings ?? null;
-              if (!_mbs) continue;
-              const _sets = _mbs.FortuneWheelItemSets;
-              if (!Array.isArray(_sets)) continue;
+              // MBSSettings: lokal direkt, andere via OnlineSharedSettings.MBS (LZString-komprimiert)
+              let _mbsSets = null;
+              if (C === Player && Player.MBSSettings?.FortuneWheelItemSets) {
+                _mbsSets = Player.MBSSettings.FortuneWheelItemSets;
+              } else {
+                const _raw = C.OnlineSharedSettings?.MBS ?? null;
+                if (_raw && typeof LZString !== 'undefined') {
+                  try {
+                    const _dec = LZString.decompressFromUTF16(_raw)
+                              ?? LZString.decompress(_raw)
+                              ?? LZString.decompressFromBase64(_raw);
+                    if (_dec) {
+                      const _parsed = JSON.parse(_dec);
+                      _mbsSets = _parsed?.FortuneWheelItemSets ?? null;
+                    }
+                  } catch(_e) {}
+                }
+              }
+              if (!Array.isArray(_mbsSets)) continue;
               const _outfits = [];
-              for (const s of _sets) {
+              for (const s of _mbsSets) {
                 if (!s?.name || !Array.isArray(s.itemList)) continue;
-                // Konvertiere MBS-Items in Tool-Format
                 const _items = s.itemList.map(i => ({
                   asset:    i.Name,
                   group:    i.Group,
