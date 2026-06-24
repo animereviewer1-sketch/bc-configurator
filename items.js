@@ -8406,9 +8406,12 @@ function _handleLscgOutfitsData(data) {
 
 // ── MBS Wheel of Fortune ─────────────────────────────────────────────────────
 let _mbsWheelData = []; // cache für aktuellen Scan
+let _mbsWheelPending = false;
 
 function scanWheelOutfits() {
   if (!_connected) { showStatus('❌ Nicht verbunden', 'error'); return; }
+  if (_mbsWheelPending) return;
+  _mbsWheelPending = true;
   const st = document.getElementById('wheelScanStatus');
   if (st) st.textContent = '⏳ Scanne…';
   bcSend({ type: 'GET_MBS_WHEEL' }, true);
@@ -8420,11 +8423,13 @@ function _handleMbsWheelData(data) {
   if (!body) return;
 
   if (data.err) {
+    _mbsWheelPending = false;
     if (st) st.textContent = '❌ ' + data.err;
     body.innerHTML = '<span style="font-size:.7rem;color:var(--red)">Fehler: ' + escHtml(data.err) + '</span>';
     return;
   }
 
+  _mbsWheelPending = false;
   _mbsWheelData = data.results ?? [];
 
   if (!_mbsWheelData.length) {
