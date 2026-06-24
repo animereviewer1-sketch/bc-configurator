@@ -3686,12 +3686,18 @@ document.write('<scr'+'ipt src="outfit-import.js?_='+_cbv+'"><\/scr'+'ipt>');
 <!-- /tab-outfit-scan -->
 
 <div id="tab-lscg-wheel" class="tab-pane">
-  <div style="display:flex;align-items:center;gap:8px;padding:8px 0 10px">
-    <span style="font-size:.75rem;font-weight:700;color:var(--yellow)">🎡 MBS Wheel im Raum</span>
-    <span id="wheelScanStatus" style="font-size:.68rem;color:var(--text3)"></span>
-    <button onclick="_mbsWheelPending=false;scanWheelOutfits()" class="btn" style="font-size:.65rem;padding:2px 8px;margin-left:auto;flex-shrink:0">🔄 Erneut scannen</button>
+  <div style="display:flex;align-items:center;gap:8px;padding:8px 0 6px;flex-wrap:wrap">
+    <span style="font-size:.75rem;font-weight:700;color:var(--yellow)">🎡 MBS Wheel</span>
+    <span id="wheelScanStatus" style="font-size:.68rem;color:var(--text3);flex:1;min-width:0"></span>
+    <button onclick="_mbsWheelPending=false;scanWheelOutfits()" class="btn" style="font-size:.65rem;padding:2px 8px;flex-shrink:0">🔄 Scannen</button>
+    <button onclick="mbsWheelClearAll()" class="btn" style="font-size:.65rem;padding:2px 8px;flex-shrink:0;opacity:.7">🗑 Alle</button>
   </div>
-  <div id="wheelOutfitBody" style="display:flex;flex-direction:column;gap:8px">
+  <div style="padding-bottom:8px">
+    <input id="wheelSearchInput" type="text" placeholder="🔍 Spieler oder Outfit suchen…"
+      oninput="mbsWheelSearch(this.value)"
+      style="width:100%;box-sizing:border-box;font-size:.72rem;padding:5px 8px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r-sm);color:var(--text1);outline:none">
+  </div>
+  <div id="wheelOutfitBody" style="display:flex;flex-direction:column;gap:4px">
     <span style="font-size:.7rem;color:var(--text3);font-style:italic">Wird geladen…</span>
   </div>
 </div>
