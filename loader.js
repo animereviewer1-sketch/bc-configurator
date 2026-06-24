@@ -1102,7 +1102,7 @@ window.CurseScanner = (() => {
                 _results.push({ memberNumber: C.MemberNumber, name: C.Nickname || C.Name, outfits: _outfits });
               }
             }
-            src.postMessage({ app: APP, type: 'MBS_WHEEL_DATA', results: _results }, ALLOWED_ORIGIN);
+            src.postMessage({ app: APP, type: 'MBS_WHEEL_DATA', results: _results, total: _chars.length }, ALLOWED_ORIGIN);
           } catch(ex) {
             src.postMessage({ app: APP, type: 'MBS_WHEEL_DATA', err: ex.message }, ALLOWED_ORIGIN);
           }

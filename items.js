@@ -4156,7 +4156,7 @@ function switchTab(tab) {
   if (tab === 'shop')          { renderShopTab(); }
   if (tab === 'outfit-import') { renderOutfitImportTab(); }
   if (tab === 'outfit-scan')   { renderOutfitScanTab(); }
-  if (tab === 'lscg-wheel')   { scanWheelOutfits(); }
+  if (tab === 'lscg-wheel')   { if (_mbsWheelData.length) _renderMbsWheelTab(); scanWheelOutfits(); }
   if (tab === 'locks')         { renderLocksTab(); _startLocksTimer(); }
   if (tab !== 'locks')         { _stopLocksTimer(); }
   if (tab === 'spieler')       { if (typeof renderSpielerTab==='function') renderSpielerTab(); if (typeof _spielerRefreshRequest==='function') _spielerRefreshRequest(); if (typeof _startSpielerTimer==='function') _startSpielerTimer(); }
@@ -6097,6 +6097,8 @@ function _triggerLscgScan(reason) {
   console.log('[BCU] LSCG-Scan:', reason);
   bcSend({ type: 'GET_OUTFIT_SCAN', _auto: true }, true);
   bcSend({ type: 'GET_LSCG_OUTFITS' }, true);
+  _mbsWheelPending = false;
+  bcSend({ type: 'GET_MBS_WHEEL', _auto: true }, true);
 }
 
 function _triggerCurseScan(reason) {
@@ -8414,7 +8416,7 @@ function scanWheelOutfits() {
   _mbsWheelPending = true;
   const st = document.getElementById('wheelScanStatus');
   if (st) st.textContent = '⏳ Scanne…';
-  bcSend({ type: 'GET_MBS_WHEEL' }, true);
+  bcSend({ type: 'GET_MBS_WHEEL', _auto: false }, true);
 }
 
 function _handleMbsWheelData(data) {
@@ -8430,11 +8432,25 @@ function _handleMbsWheelData(data) {
   }
 
   _mbsWheelPending = false;
-  _mbsWheelData = data.results ?? [];
+
+  // Merge: neue/aktualisierte Spieler einfügen, bekannte überschreiben — niemand wird gelöscht
+  for (const r of (data.results ?? [])) {
+    const idx = _mbsWheelData.findIndex(x => x.memberNumber === r.memberNumber);
+    if (idx >= 0) _mbsWheelData[idx] = r;
+    else _mbsWheelData.push(r);
+  }
+
+  if (_activeTab === 'lscg-wheel') _renderMbsWheelTab();
+}
+
+function _renderMbsWheelTab() {
+  const st   = document.getElementById('wheelScanStatus');
+  const body = document.getElementById('wheelOutfitBody');
+  if (!body) return;
 
   if (!_mbsWheelData.length) {
-    if (st) st.textContent = 'Niemand im Raum hat MBS Wheel-Outfits.';
-    body.innerHTML = '<span style="font-size:.7rem;color:var(--text3);font-style:italic">Niemand im Raum hat MBS Wheel-Outfits.</span>';
+    if (st) st.textContent = 'Noch keine MBS Wheel-Outfits gesehen.';
+    body.innerHTML = '<span style="font-size:.7rem;color:var(--text3);font-style:italic">Noch keine MBS Wheel-Outfits gesehen.</span>';
     return;
   }
 
