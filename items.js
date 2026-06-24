@@ -8448,7 +8448,11 @@ function _handleMbsWheelData(data) {
     return;
   }
   // Merge: neue/aktualisierte Spieler einfügen, bekannte überschreiben, niemand wird gelöscht
+  const _room = data.room || null;
+  const _ts   = data.ts   || Date.now();
   for (const r of (data.results ?? [])) {
+    r.room = _room;
+    r.ts   = _ts;
     const idx = _mbsWheelData.findIndex(x => x.memberNumber === r.memberNumber);
     if (idx >= 0) _mbsWheelData[idx] = r;
     else _mbsWheelData.push(r);
@@ -8542,7 +8546,13 @@ function _renderMbsWheelTab() {
     return '<div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--r-md);padding:10px 12px;margin-bottom:6px">'
       + '<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">'
       + '<button onclick="mbsWheelToggleFav(' + mn + ')" style="background:none;border:none;cursor:pointer;font-size:.9rem;padding:0;line-height:1" title="Favorit">' + (isFav ? '⭐' : '☆') + '</button>'
-      + '<span style="font-size:.75rem;font-weight:700;color:var(--yellow);flex:1">🎡 ' + escHtml(r.name) + ' <span style="color:var(--text3);font-weight:400;font-size:.65rem">#' + mn + '</span></span>'
+      + '<span style="font-size:.75rem;font-weight:700;color:var(--yellow);flex:1">🎡 ' + escHtml(r.name) + ' <span style="color:var(--text3);font-weight:400;font-size:.65rem">#' + mn + '</span>'
+      + (r.room || r.ts ? '<span style="display:block;font-size:.6rem;font-weight:400;color:var(--text3);margin-top:1px">'
+          + (r.room ? '📍 ' + escHtml(r.room) : '')
+          + (r.room && r.ts ? ' · ' : '')
+          + (r.ts ? '🕐 ' + new Date(r.ts).toLocaleString('de-DE', {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '')
+          + '</span>' : '')
+      + '</span>'
       + '<button onclick="mbsWheelDeletePlayer(' + mn + ')" class="btn" style="font-size:.6rem;padding:1px 6px;flex-shrink:0;opacity:.6" title="Spieler entfernen">🗑</button>'
       + '</div>'
       + rows

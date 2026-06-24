@@ -1102,7 +1102,9 @@ window.CurseScanner = (() => {
                 _results.push({ memberNumber: C.MemberNumber, name: C.Nickname || C.Name, outfits: _outfits });
               }
             }
-            src.postMessage({ app: APP, type: 'MBS_WHEEL_DATA', results: _results, total: _chars.length }, ALLOWED_ORIGIN);
+            const _room = (typeof ChatRoomData !== 'undefined' && ChatRoomData?.Name) ? ChatRoomData.Name : null;
+            const _ts   = Date.now();
+            src.postMessage({ app: APP, type: 'MBS_WHEEL_DATA', results: _results, total: _chars.length, room: _room, ts: _ts }, ALLOWED_ORIGIN);
           } catch(ex) {
             src.postMessage({ app: APP, type: 'MBS_WHEEL_DATA', err: ex.message }, ALLOWED_ORIGIN);
           }
