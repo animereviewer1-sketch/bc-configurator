@@ -8505,8 +8505,19 @@ function mbsWheelApply(ri, oi) {
   if (!_connected) { showStatus('❌ Nicht verbunden', 'error'); return; }
   const o = _mbsWheelData[ri]?.outfits[oi];
   if (!o) return;
-  bcSend({ type: 'EXEC', code: _mbsBuildApplyCode(o.items) });
-  showStatus('▶ MBS Outfit "' + o.name + '" wird angewendet…', 'info');
+
+  if (CURSE_DEFAULT_OUTFIT_CODE) {
+    // Erst Standard-Outfit anlegen, dann nach 600ms das Wheel-Outfit drüber
+    bcSend({ type: 'EXEC', code: _applyBundleWithSync(CURSE_DEFAULT_OUTFIT_CODE) });
+    setTimeout(function() {
+      if (!_connected) return;
+      bcSend({ type: 'EXEC', code: _mbsBuildApplyCode(o.items) });
+    }, 600);
+    showStatus('🏠→▶ Standard-Outfit + "' + o.name + '" wird angewendet…', 'info');
+  } else {
+    bcSend({ type: 'EXEC', code: _mbsBuildApplyCode(o.items) });
+    showStatus('▶ MBS Outfit "' + o.name + '" wird angewendet…', 'info');
+  }
 }
 
 function mbsWheelSaveProfile(ri, oi) {
