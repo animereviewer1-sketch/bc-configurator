@@ -1054,45 +1054,39 @@ window.CurseScanner = (() => {
           break;
         }
 
-        case 'GET_LSCG_WHEEL_OUTFITS': {
-          // Liest Wheel-Outfit-Codes aus anderen Charakteren im Raum
+        case 'GET_MBS_WHEEL': {
           try {
             const _chars = [Player, ...(ChatRoomCharacter ?? [])];
             const _results = [];
             for (const C of _chars) {
               if (!C?.MemberNumber) continue;
-              // LSCG Wheel-Daten: versuche verschiedene mögliche Pfade
-              const _lscg = C.LSCG ?? C.ExtensionSettings?.LSCG ?? null;
-              if (!_lscg) continue;
-
-              // Mögliche Pfade für Wheel-Outfits in LSCG
-              const _wheel = _lscg.WheelFortune ?? _lscg.WheelModule ?? _lscg.Wheel ?? null;
-              if (!_wheel) continue;
-
-              const _options = _wheel.Options ?? _wheel.Outfits ?? _wheel.options ?? [];
-              if (!Array.isArray(_options) || !_options.length) continue;
-
+              const _mbs = C.MBSSettings ?? null;
+              if (!_mbs) continue;
+              const _sets = _mbs.FortuneWheelItemSets;
+              if (!Array.isArray(_sets)) continue;
               const _outfits = [];
-              for (const opt of _options) {
-                if (!opt) continue;
-                // Outfit-Code kann unter verschiedenen Feldern liegen
-                const _code = opt.OutfitCode ?? opt.outfit_code ?? opt.Code ?? opt.code ?? null;
-                const _label = opt.Label ?? opt.Name ?? opt.label ?? opt.name ?? ('Option ' + (_outfits.length + 1));
-                const _type  = opt.Type ?? opt.type ?? null;
-                if (_code) _outfits.push({ label: _label, code: _code, type: _type });
+              for (const s of _sets) {
+                if (!s?.name || !Array.isArray(s.itemList)) continue;
+                // Konvertiere MBS-Items in Tool-Format
+                const _items = s.itemList.map(i => ({
+                  asset:    i.Name,
+                  group:    i.Group,
+                  colors:   i.Color ?? '#ffffff',
+                  craft:    i.Craft ?? null,
+                  property: Object.keys(i.Property ?? {}).length ? i.Property : null,
+                  tr:       i.TypeRecord ?? {},
+                  lock:     null,
+                  lockMember: null,
+                }));
+                _outfits.push({ name: s.name, weight: s.weight ?? 1, items: _items });
               }
-
               if (_outfits.length) {
-                _results.push({
-                  memberNumber: C.MemberNumber,
-                  name: C.Nickname || C.Name,
-                  outfits: _outfits,
-                });
+                _results.push({ memberNumber: C.MemberNumber, name: C.Nickname || C.Name, outfits: _outfits });
               }
             }
-            src.postMessage({ app: APP, type: 'LSCG_WHEEL_OUTFITS_DATA', results: _results }, ALLOWED_ORIGIN);
+            src.postMessage({ app: APP, type: 'MBS_WHEEL_DATA', results: _results }, ALLOWED_ORIGIN);
           } catch(ex) {
-            src.postMessage({ app: APP, type: 'LSCG_WHEEL_OUTFITS_DATA', err: ex.message }, ALLOWED_ORIGIN);
+            src.postMessage({ app: APP, type: 'MBS_WHEEL_DATA', err: ex.message }, ALLOWED_ORIGIN);
           }
           break;
         }

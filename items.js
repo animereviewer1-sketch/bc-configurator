@@ -4156,6 +4156,7 @@ function switchTab(tab) {
   if (tab === 'shop')          { renderShopTab(); }
   if (tab === 'outfit-import') { renderOutfitImportTab(); }
   if (tab === 'outfit-scan')   { renderOutfitScanTab(); }
+  if (tab === 'lscg-wheel')   { scanWheelOutfits(); }
   if (tab === 'locks')         { renderLocksTab(); _startLocksTimer(); }
   if (tab !== 'locks')         { _stopLocksTimer(); }
   if (tab === 'spieler')       { if (typeof renderSpielerTab==='function') renderSpielerTab(); if (typeof _spielerRefreshRequest==='function') _spielerRefreshRequest(); if (typeof _startSpielerTimer==='function') _startSpielerTimer(); }
@@ -5989,8 +5990,8 @@ window.addEventListener('message', function(ev) {
       _handleLscgOutfitsData(ev.data);
       break;
 
-    case 'LSCG_WHEEL_OUTFITS_DATA':
-      _handleLscgWheelOutfitsData(ev.data);
+    case 'MBS_WHEEL_DATA':
+      _handleMbsWheelData(ev.data);
       break;
 
     case 'LOCKS_DATA':
@@ -8403,68 +8404,106 @@ function _handleLscgOutfitsData(data) {
   if (_activeTab === 'outfit-scan') renderOutfitScanTab();
 }
 
-// ── LSCG Wheel Outfits ───────────────────────────────────────────────────────
+// ── MBS Wheel of Fortune ─────────────────────────────────────────────────────
+let _mbsWheelData = []; // cache für aktuellen Scan
+
 function scanWheelOutfits() {
   if (!_connected) { showStatus('❌ Nicht verbunden', 'error'); return; }
   const st = document.getElementById('wheelScanStatus');
   if (st) st.textContent = '⏳ Scanne…';
-  bcSend({ type: 'GET_LSCG_WHEEL_OUTFITS' }, true);
+  bcSend({ type: 'GET_MBS_WHEEL' }, true);
 }
 
-function _handleLscgWheelOutfitsData(data) {
-  const st  = document.getElementById('wheelScanStatus');
+function _handleMbsWheelData(data) {
+  const st   = document.getElementById('wheelScanStatus');
   const body = document.getElementById('wheelOutfitBody');
   if (!body) return;
 
   if (data.err) {
     if (st) st.textContent = '❌ ' + data.err;
+    body.innerHTML = '<span style="font-size:.7rem;color:var(--red)">Fehler: ' + escHtml(data.err) + '</span>';
     return;
   }
 
-  const results = data.results ?? [];
-  if (!results.length) {
-    if (st) st.textContent = 'Keine Wheel-Outfits gefunden.';
-    body.innerHTML = '<span style="font-size:.7rem;color:var(--text3);font-style:italic">Kein Spieler im Raum hat Wheel-Outfits mit Outfit-Codes.</span>';
+  _mbsWheelData = data.results ?? [];
+
+  if (!_mbsWheelData.length) {
+    if (st) st.textContent = 'Niemand im Raum hat MBS Wheel-Outfits.';
+    body.innerHTML = '<span style="font-size:.7rem;color:var(--text3);font-style:italic">Niemand im Raum hat MBS Wheel-Outfits.</span>';
     return;
   }
 
-  if (st) st.textContent = results.length + ' Spieler gefunden';
+  if (st) st.textContent = _mbsWheelData.length + ' Spieler · ' + _mbsWheelData.reduce((s,r)=>s+r.outfits.length,0) + ' Outfits';
 
-  body.innerHTML = results.map(r => {
-    const outfits = r.outfits.map((o, i) => {
-      const eid = 'whl_' + r.memberNumber + '_' + i;
-      return '<div style="display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid var(--border)">'
-        + '<span style="font-size:.72rem;color:var(--text2);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + escHtml(o.label) + '">' + escHtml(o.label) + (o.type ? ' <span style="color:var(--text3);font-size:.65rem">(' + escHtml(o.type) + ')</span>' : '') + '</span>'
-        + '<button onclick="wheelOutfitApply(' + JSON.stringify(o.code) + ')" class="btn btn-primary" style="font-size:.65rem;padding:2px 7px;flex-shrink:0">▶</button>'
-        + '<button onclick="wheelOutfitSaveToLscg(' + JSON.stringify(o.code) + ',' + JSON.stringify(r.memberNumber) + ',' + JSON.stringify(o.label) + ')" class="btn" style="font-size:.65rem;padding:2px 7px;flex-shrink:0">💾 LSCG</button>'
-        + '<button onclick="navigator.clipboard.writeText(' + JSON.stringify(o.code) + ').then(()=>showStatus(\'📋 Code kopiert!\',\'success\'))" class="btn" style="font-size:.65rem;padding:2px 7px;flex-shrink:0">📋</button>'
-        + '</div>';
-    }).join('');
+  body.innerHTML = _mbsWheelData.map((r, ri) => {
+    const rows = r.outfits.map((o, oi) =>
+      '<div style="display:flex;align-items:center;gap:6px;padding:5px 0;border-bottom:1px solid var(--border)">'
+      + '<span style="font-size:.72rem;color:var(--text2);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + escHtml(o.name) + '">'
+      + escHtml(o.name)
+      + '<span style="color:var(--text3);font-size:.62rem;margin-left:4px">(' + o.items.length + ' Items)</span>'
+      + '</span>'
+      + '<button onclick="mbsWheelApply(' + ri + ',' + oi + ')" class="btn btn-primary" style="font-size:.65rem;padding:2px 8px;flex-shrink:0" title="Auf mich anwenden">▶</button>'
+      + '<button onclick="mbsWheelSaveProfile(' + ri + ',' + oi + ')" class="btn" style="font-size:.65rem;padding:2px 8px;flex-shrink:0" title="Als Profil speichern">💾 Profil</button>'
+      + '</div>'
+    ).join('');
 
-    return '<div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--r-md);padding:10px 12px">'
-      + '<div style="font-size:.75rem;font-weight:700;color:var(--text);margin-bottom:6px">🎡 ' + escHtml(r.name) + ' <span style="color:var(--text3);font-weight:400;font-size:.68rem">#' + r.memberNumber + '</span> <span style="color:var(--text3);font-size:.65rem">(' + r.outfits.length + ' Outfits)</span></div>'
-      + outfits
+    return '<div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--r-md);padding:10px 12px;margin-bottom:6px">'
+      + '<div style="font-size:.75rem;font-weight:700;color:var(--yellow);margin-bottom:6px">🎡 '
+      + escHtml(r.name) + ' <span style="color:var(--text3);font-weight:400;font-size:.65rem">#' + r.memberNumber + '</span>'
+      + '</div>'
+      + rows
       + '</div>';
   }).join('');
 }
 
-function wheelOutfitApply(code) {
-  if (!_connected) { showStatus('❌ Nicht verbunden', 'error'); return; }
-  bcSend({ type: 'EXEC', code: _oiBuildExecCode(code) });
-  showStatus('▶ Wheel-Outfit wird angewendet…', 'info');
+// Baut InventoryWear-Code aus MBS-Items (gleiche Methode wie Profil-Ausführung)
+function _mbsBuildApplyCode(items) {
+  return '(function(){try{'
+    + 'var _items=' + JSON.stringify(items) + ';'
+    + '_items.forEach(function(it){'
+    + '  try{'
+    + '    var _a=AssetGet(Player.AssetFamily,it.group,it.asset);'
+    + '    if(!_a)return;'
+    + '    var _c=it.craft&&it.craft.Name?it.craft:null;'
+    + '    InventoryWear(Player,it.asset,it.group,it.colors,0,Player.MemberNumber,_c?{...it.property??{},..._c}:it.property??null,false);'
+    + '    if(it.tr&&Object.keys(it.tr).length){'
+    + '      var _w=Player.Appearance.find(function(a){return a.Asset&&a.Asset.Group&&a.Asset.Group.Name===it.group;});'
+    + '      if(_w)_w.Property=Object.assign(_w.Property??{},{TypeRecord:it.tr});'
+    + '    }'
+    + '  }catch(_e){console.warn("[BCU-MBS]",it.asset,_e.message);}'
+    + '});'
+    + 'CharacterRefresh(Player,false,false);'
+    + 'setTimeout(function(){'
+    + '  if(typeof ServerPlayerAppearanceSync==="function")ServerPlayerAppearanceSync();'
+    + '  else ServerSend("AccountUpdate",{Appearance:Player.Appearance});'
+    + '},300);'
+    + '}catch(e){console.error("[BCU-MBS]",e);}})();';
 }
 
-function wheelOutfitSaveToLscg(code, memberNumber, label) {
-  const safeName = String(memberNumber) + '_' + label.replace(/[^a-zA-Z0-9_\-]/g, '_').substring(0, 20);
-  bcSend({
-    type: 'EXEC',
-    code: '(function(){try{'
-      + 'if(typeof LSCG_OUTFITS==="undefined"){alert("LSCG nicht geladen!");return;}'
-      + 'var _r=LSCG_OUTFITS.SetOutfitCode(' + JSON.stringify(safeName) + ',' + JSON.stringify(code) + ');'
-      + 'console.log("[BCU] Wheel LSCG Save:", ' + JSON.stringify(safeName) + ', _r===0?"✅":"❌ "+_r);'
-      + '}catch(e){console.error("[BCU]",e.message);}})();'
-  }, true);
-  showStatus('💾 "' + safeName + '" in LSCG gespeichert', 'success');
+function mbsWheelApply(ri, oi) {
+  if (!_connected) { showStatus('❌ Nicht verbunden', 'error'); return; }
+  const o = _mbsWheelData[ri]?.outfits[oi];
+  if (!o) return;
+  bcSend({ type: 'EXEC', code: _mbsBuildApplyCode(o.items) });
+  showStatus('▶ MBS Outfit "' + o.name + '" wird angewendet…', 'info');
+}
+
+function mbsWheelSaveProfile(ri, oi) {
+  const r = _mbsWheelData[ri];
+  const o = r?.outfits[oi];
+  if (!o) return;
+  const defaultName = escHtml(r.name) + ' – ' + o.name;
+  const name = prompt('Profil-Name:', defaultName);
+  if (!name?.trim()) return;
+  const trimmed = name.trim();
+  if (PROFILES[trimmed] && !confirm('Profil "' + trimmed + '" existiert bereits. Überschreiben?')) return;
+  PROFILES[trimmed] = {
+    name: trimmed,
+    date: new Date().toLocaleDateString('de-DE'),
+    items: o.items,
+  };
+  _saveProfiles();
+  showStatus('✅ Profil "' + trimmed + '" gespeichert (' + o.items.length + ' Items)', 'success');
 }
 
 function _handleOutfitScanData(data) {
