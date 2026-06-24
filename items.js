@@ -5989,6 +5989,10 @@ window.addEventListener('message', function(ev) {
       _handleLscgOutfitsData(ev.data);
       break;
 
+    case 'LSCG_WHEEL_OUTFITS_DATA':
+      _handleLscgWheelOutfitsData(ev.data);
+      break;
+
     case 'LOCKS_DATA':
       _handleLocksData(ev.data);
       break;
@@ -8397,6 +8401,70 @@ function _handleLscgOutfitsData(data) {
   // Fingerprint-Map aus gespeicherten Slots neu aufbauen (non-blocking, da Slots schon gecacht)
   _rebuildFpMapFromSlots();
   if (_activeTab === 'outfit-scan') renderOutfitScanTab();
+}
+
+// ── LSCG Wheel Outfits ───────────────────────────────────────────────────────
+function scanWheelOutfits() {
+  if (!_connected) { showStatus('❌ Nicht verbunden', 'error'); return; }
+  const st = document.getElementById('wheelScanStatus');
+  if (st) st.textContent = '⏳ Scanne…';
+  bcSend({ type: 'GET_LSCG_WHEEL_OUTFITS' }, true);
+}
+
+function _handleLscgWheelOutfitsData(data) {
+  const st  = document.getElementById('wheelScanStatus');
+  const body = document.getElementById('wheelOutfitBody');
+  if (!body) return;
+
+  if (data.err) {
+    if (st) st.textContent = '❌ ' + data.err;
+    return;
+  }
+
+  const results = data.results ?? [];
+  if (!results.length) {
+    if (st) st.textContent = 'Keine Wheel-Outfits gefunden.';
+    body.innerHTML = '<span style="font-size:.7rem;color:var(--text3);font-style:italic">Kein Spieler im Raum hat Wheel-Outfits mit Outfit-Codes.</span>';
+    return;
+  }
+
+  if (st) st.textContent = results.length + ' Spieler gefunden';
+
+  body.innerHTML = results.map(r => {
+    const outfits = r.outfits.map((o, i) => {
+      const eid = 'whl_' + r.memberNumber + '_' + i;
+      return '<div style="display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid var(--border)">'
+        + '<span style="font-size:.72rem;color:var(--text2);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + escHtml(o.label) + '">' + escHtml(o.label) + (o.type ? ' <span style="color:var(--text3);font-size:.65rem">(' + escHtml(o.type) + ')</span>' : '') + '</span>'
+        + '<button onclick="wheelOutfitApply(' + JSON.stringify(o.code) + ')" class="btn btn-primary" style="font-size:.65rem;padding:2px 7px;flex-shrink:0">▶</button>'
+        + '<button onclick="wheelOutfitSaveToLscg(' + JSON.stringify(o.code) + ',' + JSON.stringify(r.memberNumber) + ',' + JSON.stringify(o.label) + ')" class="btn" style="font-size:.65rem;padding:2px 7px;flex-shrink:0">💾 LSCG</button>'
+        + '<button onclick="navigator.clipboard.writeText(' + JSON.stringify(o.code) + ').then(()=>showStatus(\'📋 Code kopiert!\',\'success\'))" class="btn" style="font-size:.65rem;padding:2px 7px;flex-shrink:0">📋</button>'
+        + '</div>';
+    }).join('');
+
+    return '<div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--r-md);padding:10px 12px">'
+      + '<div style="font-size:.75rem;font-weight:700;color:var(--text);margin-bottom:6px">🎡 ' + escHtml(r.name) + ' <span style="color:var(--text3);font-weight:400;font-size:.68rem">#' + r.memberNumber + '</span> <span style="color:var(--text3);font-size:.65rem">(' + r.outfits.length + ' Outfits)</span></div>'
+      + outfits
+      + '</div>';
+  }).join('');
+}
+
+function wheelOutfitApply(code) {
+  if (!_connected) { showStatus('❌ Nicht verbunden', 'error'); return; }
+  bcSend({ type: 'EXEC', code: _oiBuildExecCode(code) });
+  showStatus('▶ Wheel-Outfit wird angewendet…', 'info');
+}
+
+function wheelOutfitSaveToLscg(code, memberNumber, label) {
+  const safeName = String(memberNumber) + '_' + label.replace(/[^a-zA-Z0-9_\-]/g, '_').substring(0, 20);
+  bcSend({
+    type: 'EXEC',
+    code: '(function(){try{'
+      + 'if(typeof LSCG_OUTFITS==="undefined"){alert("LSCG nicht geladen!");return;}'
+      + 'var _r=LSCG_OUTFITS.SetOutfitCode(' + JSON.stringify(safeName) + ',' + JSON.stringify(code) + ');'
+      + 'console.log("[BCU] Wheel LSCG Save:", ' + JSON.stringify(safeName) + ', _r===0?"✅":"❌ "+_r);'
+      + '}catch(e){console.error("[BCU]",e.message);}})();'
+  }, true);
+  showStatus('💾 "' + safeName + '" in LSCG gespeichert', 'success');
 }
 
 function _handleOutfitScanData(data) {
