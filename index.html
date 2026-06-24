@@ -2475,6 +2475,7 @@ button { cursor: pointer; }
   <button class="tab-btn"        id="tab-outfit-btn" onclick="switchTab('outfit')">👗 Outfit &amp; Profile</button>
   <button class="tab-btn"        id="tab-curse-btn"  onclick="switchTab('curse')">🔮 Craft &amp; Curse</button>
   <button class="tab-btn"        id="tab-outfit-scan-btn"   onclick="switchTab('outfit-scan')">🧬 LSCG Outfits</button>
+  <button class="tab-btn"        id="tab-lscg-wheel-btn"    onclick="switchTab('lscg-wheel')">🎡 LSCG Wheel</button>
   <button class="tab-btn"        id="tab-outfit-import-btn" onclick="switchTab('outfit-import')">📥 Outfit Import</button>
   <button class="tab-btn"        id="tab-locks-btn"         onclick="switchTab('locks')">🔒 Locks</button>
   <button class="tab-btn"        id="tab-bot-btn"    onclick="switchTab('bot')">🤖 Bot</button>
@@ -3681,20 +3682,19 @@ document.write('<scr'+'ipt src="outfit-import.js?_='+_cbv+'"><\/scr'+'ipt>');
     </div>
   </div>
   <div id="outfitScanBody" class="os-body"></div>
-
-  <!-- LSCG Wheel Outfits -->
-  <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">
-    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
-      <span style="font-size:.75rem;font-weight:700;color:var(--yellow)">🎡 Wheel-Outfits (andere Spieler)</span>
-      <button class="btn btn-primary" onclick="scanWheelOutfits()" style="font-size:.68rem;padding:4px 10px">▶ Scannen</button>
-      <span id="wheelScanStatus" style="font-size:.68rem;color:var(--text3)"></span>
-    </div>
-    <div id="wheelOutfitBody" style="display:flex;flex-direction:column;gap:8px">
-      <span style="font-size:.7rem;color:var(--text3);font-style:italic">Noch kein Scan – Klicke ▶ Scannen.</span>
-    </div>
-  </div>
 </div>
 <!-- /tab-outfit-scan -->
+
+<div id="tab-lscg-wheel" class="tab-pane" style="display:none">
+  <div class="os-header">
+    <button class="btn btn-primary" onclick="scanWheelOutfits()">▶ Scannen</button>
+    <span id="wheelScanStatus" style="font-size:.68rem;color:var(--text3)"></span>
+  </div>
+  <div id="wheelOutfitBody" style="display:flex;flex-direction:column;gap:8px;padding:10px 0">
+    <span style="font-size:.7rem;color:var(--text3);font-style:italic">Noch kein Scan – Klicke ▶ Scannen.</span>
+  </div>
+</div>
+<!-- /tab-lscg-wheel -->
 
 <!-- TAB: LOCKS / TIMER DASHBOARD -->
 <div id="tab-locks" class="tab-pane">

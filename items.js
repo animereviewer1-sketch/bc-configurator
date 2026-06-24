@@ -4113,7 +4113,7 @@ function deleteProfileByIdx(idx) {
 let _activeTab = 'items';
 // Obertab-Gruppen: welche Untertabs gehören zu welchem Obertab
 const TAB_GROUPS = {
-  items: ['items','outfit','curse','outfit-scan','outfit-import','locks'],
+  items: ['items','outfit','curse','outfit-scan','lscg-wheel','outfit-import','locks'],
   bots:  ['bot','shop','rank','money','log','spieler','variablen'],
 };
 let _activeGroup = 'items';
@@ -4142,7 +4142,7 @@ function switchTab(tab) {
   // Sichtbarkeits-Schleife nur, wenn sich der Obertab wirklich ändert (verhindert Lag bei Tab-Wechsel innerhalb einer Gruppe)
   const _grp = _tabGroupOf(tab);
   if (_grp !== _activeGroup) _applyGroupUI(_grp);
-  ['items','outfit','curse','bot','log','money','events','rank','shop','outfit-import','outfit-scan','locks','spieler','variablen'].forEach(t => {
+  ['items','outfit','curse','bot','log','money','events','rank','shop','outfit-import','outfit-scan','lscg-wheel','locks','spieler','variablen'].forEach(t => {
     document.getElementById('tab-'+t)?.classList.toggle('active', t===tab);
     document.getElementById('tab-'+t+'-btn')?.classList.toggle('active', t===tab);
   });
