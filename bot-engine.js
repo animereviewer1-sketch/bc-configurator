@@ -1,4 +1,4 @@
-const BOT_ENGINE_VERSION = '1.2.1';
+const BOT_ENGINE_VERSION = '1.3.0';
 window.BOT_ENGINE_VERSION = BOT_ENGINE_VERSION;
 
 function _buildBotCode(bot) {

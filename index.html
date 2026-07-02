@@ -3695,10 +3695,15 @@ document.write('<scr'+'ipt src="outfit-import.js?_='+_cbv+'"><\/scr'+'ipt>');
     <button onclick="_mbsWheelPending=false;scanWheelOutfits()" class="btn" style="font-size:.65rem;padding:2px 8px;flex-shrink:0">🔄 Scannen</button>
     <button onclick="mbsWheelClearAll()" class="btn" style="font-size:.65rem;padding:2px 8px;flex-shrink:0;opacity:.7">🗑 Alle</button>
   </div>
-  <div style="padding-bottom:8px">
+  <div style="padding-bottom:6px">
     <input id="wheelSearchInput" type="text" placeholder="🔍 Spieler oder Outfit suchen…"
       oninput="mbsWheelSearch(this.value)"
       style="width:100%;box-sizing:border-box;font-size:.72rem;padding:5px 8px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r-sm);color:var(--text1);outline:none">
+  </div>
+  <div style="display:flex;gap:6px;padding-bottom:8px">
+    <button id="wheelFilterAll" onclick="mbsWheelSetFilter('all')" class="btn" style="font-size:.65rem;padding:2px 10px">Alle</button>
+    <button id="wheelFilterFav" onclick="mbsWheelSetFilter('fav')" class="btn" style="font-size:.65rem;padding:2px 10px">⭐ Favoriten</button>
+    <button id="wheelFilterNew" onclick="mbsWheelSetFilter('new')" class="btn" style="font-size:.65rem;padding:2px 10px">🆕 Neu</button>
   </div>
   <div id="wheelOutfitBody" style="display:flex;flex-direction:column;gap:4px">
     <span style="font-size:.7rem;color:var(--text3);font-style:italic">Wird geladen…</span>

@@ -6714,6 +6714,7 @@ function exportAllData() {
       profileFavs:        [...PROFILE_FAVS],
       mbsWheel:           _mbsWheelData,
       mbsWheelFavs:       [..._mbsWheelFavs],
+      mbsWheelOutfitFavs: [..._mbsWheelOutfitFavs],
       mbsWheelShots:      _mbsWheelShots,
       defaultOutfit:      CURSE_DEFAULT_OUTFIT_CODE ? { code: CURSE_DEFAULT_OUTFIT_CODE, date: CURSE_DEFAULT_OUTFIT_DATE } : null,
     };
@@ -6791,7 +6792,8 @@ function importAllData() {
           _saveMbsWheelData();
           _updateWheelTabBadge();
         }
-        if (d.mbsWheelFavs)  { d.mbsWheelFavs.forEach(k => _mbsWheelFavs.add(k)); _saveMbsWheelFavs(); }
+        if (d.mbsWheelFavs)       { d.mbsWheelFavs.forEach(k => _mbsWheelFavs.add(k)); _saveMbsWheelFavs(); }
+        if (d.mbsWheelOutfitFavs) { d.mbsWheelOutfitFavs.forEach(k => _mbsWheelOutfitFavs.add(k)); _saveMbsWheelOutfitFavs(); }
         if (d.mbsWheelShots) { Object.assign(_mbsWheelShots, d.mbsWheelShots); _saveMbsWheelShots(); }
         if (d.defaultOutfit?.code && !CURSE_DEFAULT_OUTFIT_CODE) {
           CURSE_DEFAULT_OUTFIT_CODE = d.defaultOutfit.code;
@@ -8546,8 +8548,18 @@ function _handleMbsWheelData(data) {
     r.room = _room;
     r.ts   = _ts;
     const idx = _mbsWheelData.findIndex(x => x.memberNumber === r.memberNumber);
-    if (idx >= 0) _mbsWheelData[idx] = r;
-    else _mbsWheelData.push(r);
+    if (idx >= 0) {
+      // firstSeen pro Outfit übernehmen: bekannte behalten ihr Datum, neue = jetzt
+      const old = _mbsWheelData[idx];
+      for (const o of r.outfits) {
+        const prev = old.outfits.find(x => x.name === o.name);
+        o.firstSeen = prev?.firstSeen ?? _ts;
+      }
+      _mbsWheelData[idx] = r;
+    } else {
+      r.outfits.forEach(o => { o.firstSeen = _ts; });
+      _mbsWheelData.push(r);
+    }
   }
   _saveMbsWheelData();
   _updateWheelTabBadge();
@@ -8592,11 +8604,44 @@ function mbsWheelToggleFav(mn) {
   _renderMbsWheelTab();
 }
 
+// ── Einzelne Outfits als Favorit (Key: mn|OutfitName) ────────────────────────
+const _MBS_WHEEL_OFAVS_KEY = 'BC_MBS_WHEEL_OFAVS_v1';
+let _mbsWheelOutfitFavs = new Set();
+try { _mbsWheelOutfitFavs = new Set(JSON.parse(localStorage.getItem(_MBS_WHEEL_OFAVS_KEY) || '[]')); } catch {}
+function _saveMbsWheelOutfitFavs() {
+  try { localStorage.setItem(_MBS_WHEEL_OFAVS_KEY, JSON.stringify([..._mbsWheelOutfitFavs])); } catch {}
+}
+function mbsWheelToggleOutfitFav(mn, oi) {
+  const r = _mbsWheelData.find(x => x.memberNumber === mn);
+  const o = r?.outfits[oi];
+  if (!o) return;
+  const key = mn + '|' + o.name;
+  if (_mbsWheelOutfitFavs.has(key)) _mbsWheelOutfitFavs.delete(key);
+  else _mbsWheelOutfitFavs.add(key);
+  _saveMbsWheelOutfitFavs();
+  _renderMbsWheelTab();
+}
+
+// ── Filter: 'all' | 'fav' (Outfit- oder Spieler-Favoriten) | 'new' (< 48h) ───
+const _MBS_WHEEL_NEW_MS = 48 * 60 * 60 * 1000;
+let _mbsWheelFilter = 'all';
+function mbsWheelSetFilter(f) {
+  _mbsWheelFilter = f;
+  _renderMbsWheelTab();
+}
+function _mbsOutfitIsNew(o) {
+  return !!o.firstSeen && (Date.now() - o.firstSeen) < _MBS_WHEEL_NEW_MS;
+}
+
 function mbsWheelDeletePlayer(mn) {
   _mbsWheelData = _mbsWheelData.filter(x => x.memberNumber !== mn);
   _mbsWheelFavs.delete(mn);
+  for (const k of [..._mbsWheelOutfitFavs]) {
+    if (k.startsWith(mn + '|')) _mbsWheelOutfitFavs.delete(k);
+  }
   _saveMbsWheelData();
   _saveMbsWheelFavs();
+  _saveMbsWheelOutfitFavs();
   _renderMbsWheelTab();
 }
 
@@ -8604,8 +8649,10 @@ function mbsWheelClearAll() {
   if (!confirm('Alle gespeicherten MBS Wheel-Outfits löschen?')) return;
   _mbsWheelData = [];
   _mbsWheelFavs.clear();
+  _mbsWheelOutfitFavs.clear();
   _saveMbsWheelData();
   _saveMbsWheelFavs();
+  _saveMbsWheelOutfitFavs();
   _renderMbsWheelTab();
 }
 
@@ -8625,7 +8672,7 @@ function _renderMbsWheelTab() {
     return;
   }
 
-  // Filtern
+  // Suche
   let visible = _mbsWheelData;
   if (_mbsWheelSearch) {
     visible = _mbsWheelData.filter(function(r) {
@@ -8634,23 +8681,56 @@ function _renderMbsWheelTab() {
     });
   }
 
-  // Sortieren: Favoriten zuerst, dann nach gewähltem Modus
-  visible = [...visible].sort(function(a, b) {
-    const fa = _mbsWheelFavs.has(a.memberNumber), fb = _mbsWheelFavs.has(b.memberNumber);
+  // Filter (Fav/Neu) auf Outfit-Ebene: pro Spieler Paare [Outfit, Original-Index]
+  // — der Original-Index muss erhalten bleiben, weil alle onclick-Handler ihn nutzen
+  const entries = visible.map(function(r) {
+    let pairs = r.outfits.map((o, oi) => [o, oi]);
+    if (_mbsWheelFilter === 'fav') {
+      const playerFav = _mbsWheelFavs.has(r.memberNumber);
+      pairs = pairs.filter(([o]) => playerFav || _mbsWheelOutfitFavs.has(r.memberNumber + '|' + o.name));
+    } else if (_mbsWheelFilter === 'new') {
+      pairs = pairs.filter(([o]) => _mbsOutfitIsNew(o));
+    }
+    // Favorisierte Outfits innerhalb des Spielers nach oben
+    pairs.sort(function(a, b) {
+      const fa = _mbsWheelOutfitFavs.has(r.memberNumber + '|' + a[0].name);
+      const fb = _mbsWheelOutfitFavs.has(r.memberNumber + '|' + b[0].name);
+      if (fa !== fb) return fa ? -1 : 1;
+      return 0;
+    });
+    return { r, pairs };
+  }).filter(e => e.pairs.length > 0);
+
+  // Sortieren: Spieler-Favoriten zuerst, dann nach gewähltem Modus
+  entries.sort(function(a, b) {
+    const fa = _mbsWheelFavs.has(a.r.memberNumber), fb = _mbsWheelFavs.has(b.r.memberNumber);
     if (fa !== fb) return fa ? -1 : 1;
-    if (_mbsWheelSort === 'ts') return (b.ts || 0) - (a.ts || 0);
-    return (a.name || '').localeCompare(b.name || '');
+    if (_mbsWheelSort === 'ts') return (b.r.ts || 0) - (a.r.ts || 0);
+    return (a.r.name || '').localeCompare(b.r.name || '');
   });
 
-  const totalOutfits = _mbsWheelData.reduce((s,r)=>s+r.outfits.length,0);
-  if (st) st.textContent = _mbsWheelData.length + ' Spieler · ' + totalOutfits + ' Outfits' + (_mbsWheelSearch ? ' (gefiltert: ' + visible.length + ')' : '');
+  const totalOutfits   = _mbsWheelData.reduce((s,r)=>s+r.outfits.length,0);
+  const visibleOutfits = entries.reduce((s,e)=>s+e.pairs.length,0);
+  const filtered = _mbsWheelSearch || _mbsWheelFilter !== 'all';
+  if (st) st.textContent = _mbsWheelData.length + ' Spieler · ' + totalOutfits + ' Outfits' + (filtered ? ' (Filter: ' + visibleOutfits + ')' : '');
   _updateWheelTabBadge();
 
   const sortBtn = document.getElementById('wheelSortBtn');
   if (sortBtn) sortBtn.textContent = _mbsWheelSort === 'name' ? '🔤 Name' : '🕐 Zuletzt';
 
-  if (!visible.length) {
-    body.innerHTML = '<span style="font-size:.7rem;color:var(--text3);font-style:italic">Keine Ergebnisse für „' + escHtml(_mbsWheelSearch) + '"</span>';
+  // Filter-Chips markieren
+  [['wheelFilterAll','all'],['wheelFilterFav','fav'],['wheelFilterNew','new']].forEach(function([id, f]) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const on = _mbsWheelFilter === f;
+    el.style.background  = on ? 'var(--accent, var(--yellow))' : '';
+    el.style.color       = on ? '#000' : '';
+    el.style.fontWeight  = on ? '700' : '';
+  });
+
+  if (!entries.length) {
+    const why = _mbsWheelFilter === 'fav' ? 'Keine Favoriten' : _mbsWheelFilter === 'new' ? 'Nichts Neues (48h)' : 'Keine Ergebnisse für „' + escHtml(_mbsWheelSearch) + '"';
+    body.innerHTML = '<span style="font-size:.7rem;color:var(--text3);font-style:italic">' + why + '</span>';
     return;
   }
 
@@ -8663,33 +8743,40 @@ function _renderMbsWheelTab() {
     });
   }
 
-  body.innerHTML = visible.map(function(r) {
+  body.innerHTML = entries.map(function(e) {
+    const r    = e.r;
     const mn   = r.memberNumber;
     const isFav = _mbsWheelFavs.has(mn);
-    const rows = r.outfits.map(function(o, oi) {
+    const rows = e.pairs.map(function([o, oi]) {
       const fp     = _mbsOutfitFp(o);
       const shot   = _mbsWheelShots[fp] || null;
+      const oFav   = _mbsWheelOutfitFavs.has(mn + '|' + o.name);
       const others = (fpMap[fp] || []).filter(x => x.mn !== mn);
       const dupBadge = others.length
         ? '<span style="font-size:.55rem;background:var(--bg2);border:1px solid var(--border);border-radius:3px;padding:0 4px;margin-left:4px;color:var(--text3)" title="Identisches Outfit auch bei: '
           + escHtml(others.map(x => x.name + ' #' + x.mn).join(', ')) + '">⧉ ' + others.length + '</span>'
+        : '';
+      const newBadge = _mbsOutfitIsNew(o)
+        ? '<span style="font-size:.55rem;background:var(--green,#4ade80);color:#000;border-radius:3px;padding:0 4px;margin-left:4px;font-weight:700">NEU</span>'
         : '';
       const thumb = shot
         ? '<img src="' + shot + '" onclick="mbsWheelOpenShot(0,' + mn + ',' + oi + ')" style="width:30px;height:40px;object-fit:cover;border-radius:3px;cursor:zoom-in;flex-shrink:0" alt="">'
         : '<button onclick="mbsWheelCaptureShot(' + mn + ',' + oi + ')" class="btn" style="width:30px;height:40px;font-size:.7rem;padding:0;flex-shrink:0;opacity:.5" title="Screenshot vom aktuellen Aussehen aufnehmen">📸</button>';
       return '<div style="border-bottom:1px solid var(--border)">'
         + '<div style="display:flex;align-items:center;gap:6px;padding:4px 0">'
+        + '<button onclick="mbsWheelToggleOutfitFav(' + mn + ',' + oi + ')" style="background:none;border:none;cursor:pointer;font-size:.8rem;padding:0;line-height:1;flex-shrink:0" title="Outfit-Favorit">' + (oFav ? '⭐' : '☆') + '</button>'
         + thumb
         + '<span style="font-size:.72rem;color:var(--text2);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer" title="Items anzeigen" onclick="mbsWheelToggleItems(' + mn + ',' + oi + ')">'
         + escHtml(o.name)
         + '<span style="color:var(--text3);font-size:.62rem;margin-left:4px">(' + o.items.length + ' Items)</span>'
+        + newBadge
         + dupBadge
         + '</span>'
         + '<button onclick="mbsWheelApply(' + mn + ',' + oi + ')" class="btn btn-primary" style="font-size:.65rem;padding:2px 8px;flex-shrink:0" title="Auf mich anwenden">▶</button>'
         + '<button onclick="mbsWheelSaveProfile(' + mn + ',' + oi + ')" class="btn" style="font-size:.65rem;padding:2px 8px;flex-shrink:0" title="Als Profil speichern">💾</button>'
         + '<button onclick="mbsWheelExport(' + mn + ',' + oi + ')" class="btn" style="font-size:.65rem;padding:2px 6px;flex-shrink:0;opacity:.7" title="Als JSON in Zwischenablage kopieren">📤</button>'
         + '</div>'
-        + '<div id="wheelItems_' + mn + '_' + oi + '" style="display:none;padding:2px 0 6px 36px;font-size:.62rem;color:var(--text3);line-height:1.6"></div>'
+        + '<div id="wheelItems_' + mn + '_' + oi + '" style="display:none;padding:2px 0 6px 56px;font-size:.62rem;color:var(--text3);line-height:1.6"></div>'
         + '</div>';
     }).join('');
 
