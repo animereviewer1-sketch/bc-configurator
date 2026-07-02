@@ -5672,10 +5672,34 @@ function startPingRetry() {
   }, 3000);
 }
 
+// ── Heartbeat-Watchdog ────────────────────────────────────────────────────────
+// Der Room-Scan liefert alle 5s PLAYER_DATA. Kommt 15s lang GAR keine Nachricht
+// mehr (BC-Tab neu geladen / Loader weg), gilt die Verbindung als tot →
+// Status rot + Ping-Retry neu starten (verbindet automatisch sobald der Loader
+// im BC-Tab wieder aktiv ist).
+let _lastMsgTs = Date.now();
+setInterval(function() {
+  if (!_connected) return;
+  if (Date.now() - _lastMsgTs > 15000) {
+    console.warn('[BCK-Popup] Heartbeat verloren – Verbindung als tot markiert');
+    _connected = false;
+    _playerChecked = false;
+    stopRoomScan();
+    const cs = document.getElementById('connStatus');
+    if (cs) { cs.textContent = '🔴 Verbindung verloren'; cs.style.color = 'var(--red)'; }
+    startPingRetry();
+  }
+}, 5000);
+
+// ── Spieler-Check: nur mit dem zuletzt bekannten Account verbinden ────────────
+const _LAST_MEMBER_KEY = 'BC_LAST_MEMBER_v1';
+let _playerChecked = false;
+
 function manualReconnect() {
   _connected = false;
+  _playerChecked = false;
   stopRoomScan();
-  document.getElementById('connStatus').textContent = '\U0001f534 Nicht verbunden';
+  document.getElementById('connStatus').textContent = '🔴 Nicht verbunden';
   document.getElementById('connStatus').style.color = 'var(--red)';
   console.log('[BCK-Popup] manualReconnect()');
   bcSend({ type: 'PING' });
@@ -5711,6 +5735,7 @@ window.addEventListener('message', function(ev) {
   }
   // BC-Origin lernen/aktuell halten (BC l\u00e4uft auf mehreren Domains)
   if (ev.origin && ev.origin !== 'null') _bcOrigin = ev.origin;
+  _lastMsgTs = Date.now();
   console.log('[BCK-Popup] \u2190 message:', ev.data.type);
 
   switch (ev.data.type) {
@@ -5723,7 +5748,7 @@ window.addEventListener('message', function(ev) {
         // geladen worden sein und hat dann andere/mehr Eintr\u00e4ge (craftCache aus IDB).
         _curseFullReceived = false;
         if (_pingInterval) { clearInterval(_pingInterval); _pingInterval = null; }
-        document.getElementById('connStatus').textContent = '\U0001f7e2 Verbunden';
+        document.getElementById('connStatus').textContent = '🟢 Verbunden';
         document.getElementById('connStatus').style.color = 'var(--green)';
         document.getElementById('connectHint')?.classList.add('hidden');
         // Curse-DB an Loader pushen → Wear nach Browserwechsel/Neustart möglich
@@ -5783,7 +5808,7 @@ window.addEventListener('message', function(ev) {
       if (ev.data.assetFamily) { BC_ASSET_FAMILY = ev.data.assetFamily; try { localStorage.setItem('BC_ASSET_FAMILY_v1', BC_ASSET_FAMILY); } catch {} }
       try { localStorage.setItem('BC_CACHE_v12', JSON.stringify(_data)); } catch {}
       const _mc = Object.values(_data).flatMap(g => Object.values(g)).filter(i => i.archetype === 'modular').length;
-      document.getElementById('cacheInfo').textContent = '\u2705 ' + _items + ' Items \u00b7 ' + Object.keys(_data).length + ' Gruppen \u00b7 \U0001f9e9 ' + _mc + ' modular';
+      document.getElementById('cacheInfo').textContent = '\u2705 ' + _items + ' Items \u00b7 ' + Object.keys(_data).length + ' Gruppen \u00b7 \ud83e\udde9 ' + _mc + ' modular';
       document.getElementById('clearBtn').classList.remove('hidden');
       document.getElementById('outfitBtn')?.classList.remove('hidden');
       document.getElementById('profileBtn')?.classList.remove('hidden');
@@ -5801,8 +5826,26 @@ window.addEventListener('message', function(ev) {
 
     case 'PLAYER_DATA':
       if (!ev.data.err) {
+        // Spieler-Check: anderer BC-Account als beim letzten Mal → nachfragen
+        if (!_playerChecked && ev.data.memberNumber) {
+          _playerChecked = true;
+          const last = localStorage.getItem(_LAST_MEMBER_KEY);
+          if (last && Number(last) !== ev.data.memberNumber) {
+            if (!confirm('⚠️ Anderer Spieler erkannt!\n\nJetzt: ' + ev.data.name + ' #' + ev.data.memberNumber
+                + '\nZuletzt: #' + last + '\n\nTrotzdem verbinden?')) {
+              _connected = false;
+              _playerChecked = false;
+              stopRoomScan();
+              const cs = document.getElementById('connStatus');
+              if (cs) { cs.textContent = '🔴 Falscher Spieler – nicht verbunden'; cs.style.color = 'var(--red)'; }
+              showStatus('❌ Verbindung abgelehnt: anderer Spieler (#' + ev.data.memberNumber + ')', 'error');
+              break;
+            }
+          }
+          try { localStorage.setItem(_LAST_MEMBER_KEY, String(ev.data.memberNumber)); } catch {}
+        }
         const _pi = document.getElementById('playerInfo');
-        if (_pi) { _pi.textContent = '\U0001f464 ' + ev.data.name + ' #' + ev.data.memberNumber; _pi.style.display = ''; }
+        if (_pi) { _pi.textContent = '👤 ' + ev.data.name + ' #' + ev.data.memberNumber; _pi.style.display = ''; }
         renderRoomMembers(ev.data);
         if (typeof _spielerSetRoom === 'function') _spielerSetRoom(ev.data);
       } else {
@@ -6454,7 +6497,7 @@ function renderLeiste() {
       const items = Object.values(CACHE).reduce((n,g) => n + Object.keys(g).length, 0);
       if (items > 0) {
         const mc = Object.values(CACHE).flatMap(g => Object.values(g)).filter(i => i.archetype === 'modular').length;
-        document.getElementById('cacheInfo').textContent = '\u2705 ' + items + ' Items (lokal gecacht) \u00b7 \U0001f9e9 ' + mc + ' modular';
+        document.getElementById('cacheInfo').textContent = '\u2705 ' + items + ' Items (lokal gecacht) \u00b7 \ud83e\udde9 ' + mc + ' modular';
         document.getElementById('clearBtn').classList.remove('hidden');
         document.getElementById('outfitBtn')?.classList.remove('hidden');
         document.getElementById('profileBtn')?.classList.remove('hidden');
@@ -8578,6 +8621,7 @@ function _renderMbsWheelTab() {
   if (!_mbsWheelData.length) {
     if (st) st.textContent = 'Noch keine MBS Wheel-Outfits gesehen.';
     body.innerHTML = '<span style="font-size:.7rem;color:var(--text3);font-style:italic">Noch keine MBS Wheel-Outfits gesehen. Automatischer Scan beim Raum-Beitritt.</span>';
+    _updateWheelTabBadge();
     return;
   }
 
