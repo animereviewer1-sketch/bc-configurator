@@ -2549,6 +2549,11 @@ function _stopProfileSlideshow() {
 
 // Called from postMessage handler when BC responds with SCREENSHOT_DATA
 function _handleScreenshotData(data) {
+  // Wheel-Screenshots haben eigenen Pending-Store (reqId-Präfix 'wss_')
+  if (typeof data.reqId === 'string' && data.reqId.startsWith('wss_')) {
+    _handleWheelShotData(data);
+    return;
+  }
   const name = _pendingScreenshot[data.reqId];
   delete _pendingScreenshot[data.reqId];
   if (!name) return;
@@ -6634,14 +6639,16 @@ function exportAllData() {
   try {
     const profileCount = Object.keys(PROFILES).length;
     const curseCount   = Object.keys(CURSE_DB).length;
-    if (!profileCount && !curseCount) {
-      showStatus('⚠️ Keine Daten zum Exportieren (Profile & Curse-DB leer)', 'info');
+    const wheelCount   = _mbsWheelData.length;
+    const lscgCount    = Object.keys(LSCG_DB).length;
+    if (!profileCount && !curseCount && !wheelCount && !lscgCount) {
+      showStatus('⚠️ Keine Daten zum Exportieren', 'info');
       return;
     }
     const payload = {
       _meta: {
         exportedAt: new Date().toISOString(),
-        version:    1,
+        version:    2,
         tool:       'BC Konfigurator',
         counts: {
           profiles:  profileCount,
@@ -6656,6 +6663,16 @@ function exportAllData() {
       curseComments:    CURSE_COMMENTS,
       curseOutfitFlags: CURSE_OUTFIT_FLAGS,
       curseFavourites:  [...CURSE_FAVOURITES],
+      // v2: LSCG-Outfit-DB, Wheel-DB, Screenshots, Favoriten, Standard-Outfit
+      lscgDB:             LSCG_DB,
+      lscgSlots:          _lscgSlots,
+      lscgScreenshots:    LSCG_SCREENSHOTS,
+      profileScreenshots: PROFILE_SCREENSHOTS,
+      profileFavs:        [...PROFILE_FAVS],
+      mbsWheel:           _mbsWheelData,
+      mbsWheelFavs:       [..._mbsWheelFavs],
+      mbsWheelShots:      _mbsWheelShots,
+      defaultOutfit:      CURSE_DEFAULT_OUTFIT_CODE ? { code: CURSE_DEFAULT_OUTFIT_CODE, date: CURSE_DEFAULT_OUTFIT_DATE } : null,
     };
     // Kein pretty-print — bei 27k Einträgen deutlich schneller
     const json = JSON.stringify(payload);
@@ -6711,8 +6728,39 @@ function importAllData() {
 
         if (d.curseDatabase) _saveCurseDB();
 
+        // v2-Felder: LSCG-DB, Wheel-DB, Screenshots, Favoriten, Standard-Outfit
+        if (d.lscgDB) {
+          for (const [mk, entry] of Object.entries(d.lscgDB)) {
+            if (!LSCG_DB[mk]) LSCG_DB[mk] = entry;
+          }
+          _saveLscgDB();
+        }
+        if (d.lscgSlots)          { Object.assign(_lscgSlots, d.lscgSlots); _saveLscgSlots(); }
+        if (d.lscgScreenshots)    { Object.assign(LSCG_SCREENSHOTS, d.lscgScreenshots); _saveLscgScreenshots(); }
+        if (d.profileScreenshots) { Object.assign(PROFILE_SCREENSHOTS, d.profileScreenshots); _saveProfileScreenshots(); }
+        if (d.profileFavs)        { d.profileFavs.forEach(k => PROFILE_FAVS.add(k)); try { localStorage.setItem('BC_PROFILE_FAVS_v1', JSON.stringify([...PROFILE_FAVS])); } catch {} }
+        if (Array.isArray(d.mbsWheel)) {
+          for (const r of d.mbsWheel) {
+            const idx = _mbsWheelData.findIndex(x => x.memberNumber === r.memberNumber);
+            if (idx >= 0) { if ((r.ts || 0) > (_mbsWheelData[idx].ts || 0)) _mbsWheelData[idx] = r; }
+            else _mbsWheelData.push(r);
+          }
+          _saveMbsWheelData();
+          _updateWheelTabBadge();
+        }
+        if (d.mbsWheelFavs)  { d.mbsWheelFavs.forEach(k => _mbsWheelFavs.add(k)); _saveMbsWheelFavs(); }
+        if (d.mbsWheelShots) { Object.assign(_mbsWheelShots, d.mbsWheelShots); _saveMbsWheelShots(); }
+        if (d.defaultOutfit?.code && !CURSE_DEFAULT_OUTFIT_CODE) {
+          CURSE_DEFAULT_OUTFIT_CODE = d.defaultOutfit.code;
+          CURSE_DEFAULT_OUTFIT_DATE = d.defaultOutfit.date || null;
+          _saveCurseDefaultOutfit();
+          _updateCurseDefaultOutfitBtn();
+        }
+
         renderProfileList();
         if (_activeTab === 'curse') renderCurseTab();
+        if (_activeTab === 'outfit-scan') renderOutfitScanTab();
+        if (_activeTab === 'lscg-wheel') _renderMbsWheelTab();
 
         showStatus('✅ Backup eingespielt: '
           + Object.keys(PROFILES).length + ' Profile, '
@@ -8419,6 +8467,7 @@ let _mbsWheelFavs    = new Set();
 idbGet(_MBS_WHEEL_IDB_KEY).then(function(d) {
   if (Array.isArray(d) && d.length) {
     _mbsWheelData = d;
+    _updateWheelTabBadge();
     if (_activeTab === 'lscg-wheel') _renderMbsWheelTab();
   }
 });
@@ -8458,13 +8507,40 @@ function _handleMbsWheelData(data) {
     else _mbsWheelData.push(r);
   }
   _saveMbsWheelData();
+  _updateWheelTabBadge();
   if (_activeTab === 'lscg-wheel') _renderMbsWheelTab();
 }
 
+let _mbsWheelSearchTimer = null;
 function mbsWheelSearch(val) {
-  _mbsWheelSearch = (val || '').toLowerCase().trim();
+  clearTimeout(_mbsWheelSearchTimer);
+  _mbsWheelSearchTimer = setTimeout(function() {
+    _mbsWheelSearch = (val || '').toLowerCase().trim();
+    _renderMbsWheelTab();
+  }, 200);
+}
+
+// Sortierung: 'name' (alphabetisch) oder 'ts' (zuletzt gescannt zuerst)
+let _mbsWheelSort = localStorage.getItem('BC_MBS_WHEEL_SORT_v1') || 'name';
+function mbsWheelToggleSort() {
+  _mbsWheelSort = _mbsWheelSort === 'name' ? 'ts' : 'name';
+  try { localStorage.setItem('BC_MBS_WHEEL_SORT_v1', _mbsWheelSort); } catch {}
   _renderMbsWheelTab();
 }
+
+// Fingerprint eines Outfits: sortierte group:asset-Liste → erkennt identische Sets
+function _mbsOutfitFp(o) {
+  return (o.items || []).map(i => i.group + ':' + i.asset).sort().join('|');
+}
+
+// Screenshots pro Outfit-Fingerprint (identische Outfits teilen sich das Bild)
+const _MBS_WHEEL_SS_KEY = 'BC_MBS_WHEEL_SS_v1';
+let _mbsWheelShots = {};   // fp → dataUrl
+const _pendingWheelShot = {}; // reqId → fp
+idbGet(_MBS_WHEEL_SS_KEY).then(function(d) {
+  if (d && typeof d === 'object') { _mbsWheelShots = d; if (_activeTab === 'lscg-wheel') _renderMbsWheelTab(); }
+});
+function _saveMbsWheelShots() { idbSet(_MBS_WHEEL_SS_KEY, _mbsWheelShots); }
 
 function mbsWheelToggleFav(mn) {
   if (_mbsWheelFavs.has(mn)) _mbsWheelFavs.delete(mn);
@@ -8514,32 +8590,62 @@ function _renderMbsWheelTab() {
     });
   }
 
-  // Sortieren: Favoriten zuerst, dann alphabetisch
+  // Sortieren: Favoriten zuerst, dann nach gewähltem Modus
   visible = [...visible].sort(function(a, b) {
     const fa = _mbsWheelFavs.has(a.memberNumber), fb = _mbsWheelFavs.has(b.memberNumber);
     if (fa !== fb) return fa ? -1 : 1;
+    if (_mbsWheelSort === 'ts') return (b.ts || 0) - (a.ts || 0);
     return (a.name || '').localeCompare(b.name || '');
   });
 
   const totalOutfits = _mbsWheelData.reduce((s,r)=>s+r.outfits.length,0);
   if (st) st.textContent = _mbsWheelData.length + ' Spieler · ' + totalOutfits + ' Outfits' + (_mbsWheelSearch ? ' (gefiltert: ' + visible.length + ')' : '');
+  _updateWheelTabBadge();
+
+  const sortBtn = document.getElementById('wheelSortBtn');
+  if (sortBtn) sortBtn.textContent = _mbsWheelSort === 'name' ? '🔤 Name' : '🕐 Zuletzt';
 
   if (!visible.length) {
     body.innerHTML = '<span style="font-size:.7rem;color:var(--text3);font-style:italic">Keine Ergebnisse für „' + escHtml(_mbsWheelSearch) + '"</span>';
     return;
   }
 
+  // Duplikat-Map über ALLE Daten: fp → [{mn, name}]
+  const fpMap = {};
+  for (const r of _mbsWheelData) {
+    r.outfits.forEach(function(o) {
+      const fp = _mbsOutfitFp(o);
+      (fpMap[fp] = fpMap[fp] || []).push({ mn: r.memberNumber, name: r.name });
+    });
+  }
+
   body.innerHTML = visible.map(function(r) {
     const mn   = r.memberNumber;
     const isFav = _mbsWheelFavs.has(mn);
     const rows = r.outfits.map(function(o, oi) {
-      return '<div style="display:flex;align-items:center;gap:6px;padding:5px 0;border-bottom:1px solid var(--border)">'
-        + '<span style="font-size:.72rem;color:var(--text2);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + escHtml(o.name) + '">'
+      const fp     = _mbsOutfitFp(o);
+      const shot   = _mbsWheelShots[fp] || null;
+      const others = (fpMap[fp] || []).filter(x => x.mn !== mn);
+      const dupBadge = others.length
+        ? '<span style="font-size:.55rem;background:var(--bg2);border:1px solid var(--border);border-radius:3px;padding:0 4px;margin-left:4px;color:var(--text3)" title="Identisches Outfit auch bei: '
+          + escHtml(others.map(x => x.name + ' #' + x.mn).join(', ')) + '">⧉ ' + others.length + '</span>'
+        : '';
+      const thumb = shot
+        ? '<img src="' + shot + '" onclick="mbsWheelOpenShot(0,' + mn + ',' + oi + ')" style="width:30px;height:40px;object-fit:cover;border-radius:3px;cursor:zoom-in;flex-shrink:0" alt="">'
+        : '<button onclick="mbsWheelCaptureShot(' + mn + ',' + oi + ')" class="btn" style="width:30px;height:40px;font-size:.7rem;padding:0;flex-shrink:0;opacity:.5" title="Screenshot vom aktuellen Aussehen aufnehmen">📸</button>';
+      return '<div style="border-bottom:1px solid var(--border)">'
+        + '<div style="display:flex;align-items:center;gap:6px;padding:4px 0">'
+        + thumb
+        + '<span style="font-size:.72rem;color:var(--text2);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer" title="Items anzeigen" onclick="mbsWheelToggleItems(' + mn + ',' + oi + ')">'
         + escHtml(o.name)
         + '<span style="color:var(--text3);font-size:.62rem;margin-left:4px">(' + o.items.length + ' Items)</span>'
+        + dupBadge
         + '</span>'
         + '<button onclick="mbsWheelApply(' + mn + ',' + oi + ')" class="btn btn-primary" style="font-size:.65rem;padding:2px 8px;flex-shrink:0" title="Auf mich anwenden">▶</button>'
         + '<button onclick="mbsWheelSaveProfile(' + mn + ',' + oi + ')" class="btn" style="font-size:.65rem;padding:2px 8px;flex-shrink:0" title="Als Profil speichern">💾</button>'
+        + '<button onclick="mbsWheelExport(' + mn + ',' + oi + ')" class="btn" style="font-size:.65rem;padding:2px 6px;flex-shrink:0;opacity:.7" title="Als JSON in Zwischenablage kopieren">📤</button>'
+        + '</div>'
+        + '<div id="wheelItems_' + mn + '_' + oi + '" style="display:none;padding:2px 0 6px 36px;font-size:.62rem;color:var(--text3);line-height:1.6"></div>'
         + '</div>';
     }).join('');
 
@@ -8558,6 +8664,162 @@ function _renderMbsWheelTab() {
       + rows
       + '</div>';
   }).join('');
+}
+
+function _updateWheelTabBadge() {
+  const btn = document.getElementById('tab-lscg-wheel-btn');
+  if (!btn) return;
+  const n = _mbsWheelData.reduce((s,r)=>s+r.outfits.length,0);
+  btn.textContent = '🎡 MBS Wheel' + (n ? ' (' + n + ')' : '');
+}
+
+// Item-Liste eines Outfits ein-/ausklappen (lazy befüllt)
+function mbsWheelToggleItems(mn, oi) {
+  const el = document.getElementById('wheelItems_' + mn + '_' + oi);
+  if (!el) return;
+  if (el.style.display !== 'none') { el.style.display = 'none'; return; }
+  const r = _mbsWheelData.find(x => x.memberNumber === mn);
+  const o = r?.outfits[oi];
+  if (!o) return;
+  el.innerHTML = o.items.map(function(i) {
+    const craftName = i.craft?.Name ? ' <span style="color:var(--yellow);opacity:.8">„' + escHtml(i.craft.Name) + '"</span>' : '';
+    return '<span style="color:var(--text2)">' + escHtml(i.group) + '</span> · ' + escHtml(i.asset) + craftName;
+  }).join('<br>');
+  el.style.display = '';
+}
+
+// ── Export / Import ──────────────────────────────────────────────────────────
+function mbsWheelExport(mn, oi) {
+  const r = _mbsWheelData.find(x => x.memberNumber === mn);
+  const o = r?.outfits[oi];
+  if (!o) return;
+  const payload = JSON.stringify({
+    type: 'BCU_WHEEL_OUTFIT', v: 1,
+    player: r.name, memberNumber: r.memberNumber,
+    outfit: { name: o.name, weight: o.weight ?? 1, items: o.items },
+  });
+  navigator.clipboard.writeText(payload).then(
+    () => showStatus('📤 Outfit "' + o.name + '" als JSON kopiert', 'success'),
+    () => { prompt('Kopieren mit Strg+C:', payload); }
+  );
+}
+
+function mbsWheelImport() {
+  const raw = prompt('Wheel-Outfit JSON einfügen:');
+  if (!raw?.trim()) return;
+  try {
+    const d = JSON.parse(raw.trim());
+    if (d.type !== 'BCU_WHEEL_OUTFIT' || !d.outfit?.name || !Array.isArray(d.outfit.items)) {
+      showStatus('❌ Kein gültiges Wheel-Outfit-JSON', 'error');
+      return;
+    }
+    const mn   = d.memberNumber ?? -1;
+    const name = d.player ?? '📥 Importiert';
+    let entry = _mbsWheelData.find(x => x.memberNumber === mn);
+    if (!entry) {
+      entry = { memberNumber: mn, name: name, outfits: [], room: '📥 Import', ts: Date.now() };
+      _mbsWheelData.push(entry);
+    }
+    // Gleichnamiges Outfit ersetzen, sonst anhängen
+    const idx = entry.outfits.findIndex(o => o.name === d.outfit.name);
+    if (idx >= 0) entry.outfits[idx] = d.outfit;
+    else entry.outfits.push(d.outfit);
+    _saveMbsWheelData();
+    _renderMbsWheelTab();
+    showStatus('📥 Outfit "' + d.outfit.name + '" importiert (' + name + ')', 'success');
+  } catch(e) {
+    showStatus('❌ Import fehlgeschlagen: ' + e.message, 'error');
+  }
+}
+
+// ── Screenshots ──────────────────────────────────────────────────────────────
+// Nimmt das AKTUELLE Aussehen als Bild für dieses Outfit auf (fp-basiert:
+// identische Outfits bei anderen Spielern teilen sich das Bild automatisch).
+function mbsWheelCaptureShot(mn, oi) {
+  if (!_connected) { showStatus('❌ Nicht verbunden', 'error'); return; }
+  const r = _mbsWheelData.find(x => x.memberNumber === mn);
+  const o = r?.outfits[oi];
+  if (!o) return;
+  const fp = _mbsOutfitFp(o);
+  const reqId = 'wss_' + Date.now();
+  _pendingWheelShot[reqId] = fp;
+  bcSend({ type: 'EXEC', code: _buildCanvasShotCode(reqId) }, true);
+  showStatus('📸 Screenshot wird aufgenommen…', 'info');
+}
+
+// Gemeinsamer Canvas-Capture-Code (wie captureProfileScreenshot, aber wiederverwendbar)
+function _buildCanvasShotCode(reqId) {
+  const J = JSON.stringify(reqId);
+  return '(function(){'
+    + 'CharacterRefresh(Player,false,false);'
+    + 'CharacterLoadCanvas(Player);'
+    + 'setTimeout(function(){'
+    + '  try{'
+    + '    var src=Player.Canvas;'
+    + '    if(!src||!src.width)throw new Error("Canvas leer");'
+    + '    var oc=document.createElement("canvas");oc.width=src.width;oc.height=src.height;'
+    + '    oc.getContext("2d").drawImage(src,0,0);'
+    + '    var id=oc.getContext("2d").getImageData(0,0,oc.width,oc.height);'
+    + '    var px=id.data,W=oc.width,H=oc.height;'
+    + '    var x0=W,x1=0,y0=H,y1=0;'
+    + '    for(var r=0;r<H;r++){for(var c=0;c<W;c++){'
+    + '      var ii=(r*W+c)*4;'
+    + '      if(px[ii]>5||px[ii+1]>5||px[ii+2]>5){'
+    + '        if(c<x0)x0=c;if(c>x1)x1=c;if(r<y0)y0=r;if(r>y1)y1=r;'
+    + '      }'
+    + '    }}'
+    + '    if(x1<x0){x0=0;y0=0;x1=W-1;y1=H-1;}'
+    + '    var pad=20;'
+    + '    x0=Math.max(0,x0-pad);y0=Math.max(0,y0-pad);'
+    + '    x1=Math.min(W-1,x1+pad);y1=Math.min(H-1,y1+pad);'
+    + '    var cw=x1-x0+1,ch=y1-y0+1;'
+    + '    var cc=document.createElement("canvas");cc.width=cw;cc.height=ch;'
+    + '    var ctx2=cc.getContext("2d");'
+    + '    ctx2.fillStyle="#000";ctx2.fillRect(0,0,cw,ch);'
+    + '    ctx2.drawImage(oc,x0,y0,cw,ch,0,0,cw,ch);'
+    + '    window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"SCREENSHOT_DATA",reqId:' + J + ',data:cc.toDataURL("image/jpeg",0.88)},"*");'
+    + '  }catch(e){'
+    + '    window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"SCREENSHOT_DATA",reqId:' + J + ',err:e.message},"*");'
+    + '  }'
+    + '},250);'
+    + '})();';
+}
+
+function _handleWheelShotData(data) {
+  const fp = _pendingWheelShot[data.reqId];
+  delete _pendingWheelShot[data.reqId];
+  if (fp === undefined) return;
+  if (data.err || !data.data) { showStatus('❌ Screenshot: ' + (data.err || 'Keine Daten'), 'error'); return; }
+  const imgEl = new Image();
+  imgEl.onload = () => {
+    const MAX_W = 260, MAX_H = 520;
+    let w = imgEl.naturalWidth, h = imgEl.naturalHeight;
+    const scale = Math.min(1, MAX_W / w, MAX_H / h);
+    w = Math.round(w * scale); h = Math.round(h * scale);
+    const canvas = document.createElement('canvas');
+    canvas.width = w; canvas.height = h;
+    canvas.getContext('2d').drawImage(imgEl, 0, 0, w, h);
+    _mbsWheelShots[fp] = canvas.toDataURL('image/jpeg', 0.85);
+    _saveMbsWheelShots();
+    if (_activeTab === 'lscg-wheel') _renderMbsWheelTab();
+    showStatus('✅ Wheel-Screenshot gespeichert', 'success');
+  };
+  imgEl.src = data.data;
+}
+
+// Lightbox (nutzt die LSCG-Lightbox-Elemente)
+function mbsWheelOpenShot(_unused, mn, oi) {
+  const r = _mbsWheelData.find(x => x.memberNumber === mn);
+  const o = r?.outfits[oi];
+  if (!o) return;
+  const img = _mbsWheelShots[_mbsOutfitFp(o)];
+  if (!img) return;
+  _osLightboxMk  = null;
+  _osLightboxKey = null;
+  document.getElementById('osLbImg').src = img;
+  document.getElementById('osLbName').textContent = o.name;
+  document.getElementById('osLbSub').textContent  = '🎡 ' + (r.name || '') + ' #' + mn;
+  document.getElementById('osLightbox').classList.add('open');
 }
 
 // Baut InventoryWear-Code aus MBS-Items (gleiche Methode wie Profil-Ausführung)
@@ -8584,11 +8846,39 @@ function _mbsBuildApplyCode(items) {
     + '}catch(e){console.error("[BCU-MBS]",e);}})();';
 }
 
+// ── Undo: Appearance-Snapshot im BC-Tab (max 5 Schritte) ─────────────────────
+function _bcuSnapshotCode() {
+  return '(function(){try{'
+    + 'window.__BCU_UNDO=window.__BCU_UNDO||[];'
+    + 'window.__BCU_UNDO.push(CharacterAppearanceBundle(Player));'
+    + 'if(window.__BCU_UNDO.length>5)window.__BCU_UNDO.shift();'
+    + '}catch(e){console.warn("[BCU-Undo]",e.message);}})();';
+}
+
+function bcuUndoAppearance() {
+  if (!_connected) { showStatus('❌ Nicht verbunden', 'error'); return; }
+  bcSend({ type: 'EXEC', code: '(function(){try{'
+    + 'var s=window.__BCU_UNDO;'
+    + 'if(!s||!s.length){console.warn("[BCU-Undo] Stack leer");return;}'
+    + 'var b=s.pop();'
+    + 'ServerAppearanceLoadFromBundle(Player,Player.AssetFamily,b);'
+    + 'CharacterRefresh(Player,false,false);'
+    + 'setTimeout(function(){'
+    + '  if(typeof ServerPlayerAppearanceSync==="function")ServerPlayerAppearanceSync();'
+    + '  else ServerSend("AccountUpdate",{Appearance:Player.Appearance});'
+    + '},300);'
+    + '}catch(e){console.error("[BCU-Undo]",e);}})();' });
+  showStatus('↩ Vorheriges Aussehen wird wiederhergestellt…', 'info');
+}
+
 function mbsWheelApply(mn, oi) {
   if (!_connected) { showStatus('❌ Nicht verbunden', 'error'); return; }
   const r = _mbsWheelData.find(x => x.memberNumber === mn);
   const o = r?.outfits[oi];
   if (!o) return;
+
+  // Aktuelles Aussehen für Undo sichern
+  bcSend({ type: 'EXEC', code: _bcuSnapshotCode() }, true);
 
   if (CURSE_DEFAULT_OUTFIT_CODE) {
     bcSend({ type: 'EXEC', code: _applyBundleWithSync(CURSE_DEFAULT_OUTFIT_CODE) });
@@ -8600,6 +8890,17 @@ function mbsWheelApply(mn, oi) {
   } else {
     bcSend({ type: 'EXEC', code: _mbsBuildApplyCode(o.items) });
     showStatus('▶ MBS Outfit "' + o.name + '" wird angewendet…', 'info');
+  }
+
+  // Auto-Screenshot 3s nach Apply, falls für dieses Outfit noch keins existiert
+  const fp = _mbsOutfitFp(o);
+  if (!_mbsWheelShots[fp]) {
+    setTimeout(function() {
+      if (!_connected || _mbsWheelShots[fp]) return;
+      const reqId = 'wss_' + Date.now();
+      _pendingWheelShot[reqId] = fp;
+      bcSend({ type: 'EXEC', code: _buildCanvasShotCode(reqId) }, true);
+    }, 3000);
   }
 }
 

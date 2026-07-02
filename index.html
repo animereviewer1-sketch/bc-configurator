@@ -3689,6 +3689,9 @@ document.write('<scr'+'ipt src="outfit-import.js?_='+_cbv+'"><\/scr'+'ipt>');
   <div style="display:flex;align-items:center;gap:8px;padding:8px 0 6px;flex-wrap:wrap">
     <span style="font-size:.75rem;font-weight:700;color:var(--yellow)">🎡 MBS Wheel</span>
     <span id="wheelScanStatus" style="font-size:.68rem;color:var(--text3);flex:1;min-width:0"></span>
+    <button onclick="bcuUndoAppearance()" class="btn" style="font-size:.65rem;padding:2px 8px;flex-shrink:0" title="Vorheriges Aussehen wiederherstellen">↩ Undo</button>
+    <button id="wheelSortBtn" onclick="mbsWheelToggleSort()" class="btn" style="font-size:.65rem;padding:2px 8px;flex-shrink:0" title="Sortierung umschalten">🔤 Name</button>
+    <button onclick="mbsWheelImport()" class="btn" style="font-size:.65rem;padding:2px 8px;flex-shrink:0" title="Outfit-JSON importieren">📥 Import</button>
     <button onclick="_mbsWheelPending=false;scanWheelOutfits()" class="btn" style="font-size:.65rem;padding:2px 8px;flex-shrink:0">🔄 Scannen</button>
     <button onclick="mbsWheelClearAll()" class="btn" style="font-size:.65rem;padding:2px 8px;flex-shrink:0;opacity:.7">🗑 Alle</button>
   </div>
