@@ -8869,8 +8869,11 @@ function mbsWheelGenerateAll() {
   if (!_wheelGenQueue.length) { showStatus('✅ Alle Outfits haben bereits Bilder', 'info'); return; }
   if (!confirm(_wheelGenQueue.length + ' Outfit-Bilder werden erstellt.\n\n'
     + 'Jedes Outfit wird kurz LOKAL angezogen und fotografiert (andere Spieler sehen davon nichts). '
-    + 'Am Ende wird dein Aussehen wiederhergestellt.\n\n'
-    + 'Dauer: ca. ' + Math.ceil(_wheelGenQueue.length * 4 / 60) + ' Min. Starten?')) { _wheelGenQueue = []; return; }
+    + 'Am Ende wird dein Aussehen wiederhergestellt.\n'
+    + (CURSE_DEFAULT_OUTFIT_CODE
+        ? 'Vor jedem Outfit wird das Standard-Outfit als Basis angelegt.\n'
+        : '⚠️ Kein Standard-Outfit gesetzt (Craft & Curse) – Items können sich zwischen Outfits stapeln!\n')
+    + '\nDauer: ca. ' + Math.ceil(_wheelGenQueue.length * (CURSE_DEFAULT_OUTFIT_CODE ? 4.5 : 4) / 60) + ' Min. Starten?')) { _wheelGenQueue = []; return; }
 
   _wheelGenTotal   = _wheelGenQueue.length;
   _wheelGenRunning = true;
@@ -8894,15 +8897,25 @@ function _wheelGenStep() {
   const st = document.getElementById('wheelScanStatus');
   if (st) st.textContent = '🖼 Erstelle ' + done + '/' + _wheelGenTotal + ': ' + o.name;
 
-  // 1. Outfit lokal anziehen (kein Sync)  2. nach 2.5s Foto  3. nach weiteren 1.2s nächstes
-  bcSend({ type: 'EXEC', code: _mbsBuildApplyCode(o.items, true) }, true);
-  setTimeout(function() {
+  // 1. Standard-Outfit lokal anlegen (Reset — sonst bleiben Items vom vorherigen Outfit)
+  // 2. Wheel-Outfit lokal drüber  3. Foto  4. nächstes  — alles ohne Server-Sync
+  const _applyOutfit = function() {
     if (!_wheelGenRunning) return;
-    const reqId = 'wss_' + Date.now();
-    _pendingWheelShot[reqId] = fp;
-    bcSend({ type: 'EXEC', code: _buildCanvasShotCode(reqId) }, true);
-    setTimeout(_wheelGenStep, 1200);
-  }, 2500);
+    bcSend({ type: 'EXEC', code: _mbsBuildApplyCode(o.items, true) }, true);
+    setTimeout(function() {
+      if (!_wheelGenRunning) return;
+      const reqId = 'wss_' + Date.now();
+      _pendingWheelShot[reqId] = fp;
+      bcSend({ type: 'EXEC', code: _buildCanvasShotCode(reqId) }, true);
+      setTimeout(_wheelGenStep, 1200);
+    }, 2500);
+  };
+  if (CURSE_DEFAULT_OUTFIT_CODE) {
+    bcSend({ type: 'EXEC', code: '(function(){try{' + _buildApplyCode(CURSE_DEFAULT_OUTFIT_CODE) + '}catch(e){console.warn("[BCU-WheelGen] Reset:",e.message);}})();' }, true);
+    setTimeout(_applyOutfit, 800);
+  } else {
+    _applyOutfit();
+  }
 }
 
 function _wheelGenFinish() {
