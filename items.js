@@ -8646,13 +8646,16 @@ function mbsWheelDeletePlayer(mn) {
 }
 
 function mbsWheelClearAll() {
-  if (!confirm('Alle gespeicherten MBS Wheel-Outfits löschen?')) return;
+  if (!confirm('Alle gespeicherten MBS Wheel-Outfits + Bilder löschen?')) return;
   _mbsWheelData = [];
   _mbsWheelFavs.clear();
   _mbsWheelOutfitFavs.clear();
+  _mbsWheelShots = {};
   _saveMbsWheelData();
   _saveMbsWheelFavs();
   _saveMbsWheelOutfitFavs();
+  _saveMbsWheelShots();
+  _updateWheelTabBadge();
   _renderMbsWheelTab();
 }
 
@@ -8924,6 +8927,84 @@ function _updateWheelGenBtn() {
   if (btn) btn.textContent = _wheelGenRunning ? '⏹ Stop' : '🖼 Alle erstellen';
 }
 
+// ── Alle Bilder löschen (Outfits bleiben erhalten) ────────────────────────────
+function mbsWheelClearAllShots() {
+  const n = Object.keys(_mbsWheelShots).length;
+  if (!n) { showStatus('Keine Wheel-Bilder vorhanden', 'info'); return; }
+  if (!confirm(n + ' Wheel-Bilder löschen?\n(Die Outfits selbst bleiben erhalten)')) return;
+  _mbsWheelShots = {};
+  _saveMbsWheelShots();
+  _renderMbsWheelTab();
+  showStatus('🖼️ ' + n + ' Bilder gelöscht', 'success');
+}
+
+// ── Komplette Wheel-DB als Datei exportieren / importieren (wie LSCG) ─────────
+function mbsWheelExportDB() {
+  if (!_mbsWheelData.length) { showStatus('❌ Nichts zum Exportieren', 'error'); return; }
+  try {
+    const payload = {
+      type: 'BCU_WHEEL_DB', v: 1,
+      exportedAt: new Date().toISOString(),
+      data:       _mbsWheelData,
+      favs:       [..._mbsWheelFavs],
+      outfitFavs: [..._mbsWheelOutfitFavs],
+      shots:      _mbsWheelShots,
+    };
+    const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'MBS_Wheel_' + new Date().toISOString().slice(0, 10) + '.json';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(a.href);
+    const outfits = _mbsWheelData.reduce((s,r)=>s+r.outfits.length,0);
+    showStatus('📤 Export: ' + _mbsWheelData.length + ' Spieler, ' + outfits + ' Outfits, ' + Object.keys(_mbsWheelShots).length + ' Bilder', 'success');
+  } catch(e) { showStatus('❌ Export fehlgeschlagen: ' + e.message, 'error'); }
+}
+
+function mbsWheelImportDB() {
+  const inp = document.createElement('input');
+  inp.type = 'file'; inp.accept = '.json';
+  inp.onchange = e => {
+    const rd = new FileReader();
+    rd.onload = ev => {
+      try {
+        const d = JSON.parse(ev.target.result);
+        if (d.type === 'BCU_WHEEL_OUTFIT') { _mbsImportOutfitObj(d); return; }
+        if (d.type !== 'BCU_WHEEL_DB' || !Array.isArray(d.data)) {
+          showStatus('❌ Keine gültige Wheel-Export-Datei', 'error');
+          return;
+        }
+        // Spieler mergen: neuerer ts gewinnt, unbekannte werden angehängt
+        let added = 0, updated = 0;
+        for (const r of d.data) {
+          const idx = _mbsWheelData.findIndex(x => x.memberNumber === r.memberNumber);
+          if (idx >= 0) {
+            if ((r.ts || 0) > (_mbsWheelData[idx].ts || 0)) { _mbsWheelData[idx] = r; updated++; }
+          } else { _mbsWheelData.push(r); added++; }
+        }
+        if (d.favs)       d.favs.forEach(k => _mbsWheelFavs.add(k));
+        if (d.outfitFavs) d.outfitFavs.forEach(k => _mbsWheelOutfitFavs.add(k));
+        if (d.shots) {
+          for (const [fp, img] of Object.entries(d.shots)) {
+            if (!_mbsWheelShots[fp]) _mbsWheelShots[fp] = img;
+          }
+        }
+        _saveMbsWheelData();
+        _saveMbsWheelFavs();
+        _saveMbsWheelOutfitFavs();
+        _saveMbsWheelShots();
+        _updateWheelTabBadge();
+        _renderMbsWheelTab();
+        showStatus('📥 Import: ' + added + ' neue Spieler, ' + updated + ' aktualisiert', 'success');
+      } catch(err) { showStatus('❌ Import fehlgeschlagen: ' + err.message, 'error'); }
+    };
+    rd.readAsText(e.target.files[0]);
+  };
+  inp.click();
+}
+
 function _updateWheelTabBadge() {
   const btn = document.getElementById('tab-lscg-wheel-btn');
   if (!btn) return;
@@ -8962,29 +9043,34 @@ function mbsWheelExport(mn, oi) {
   );
 }
 
+function _mbsImportOutfitObj(d) {
+  if (d.type !== 'BCU_WHEEL_OUTFIT' || !d.outfit?.name || !Array.isArray(d.outfit.items)) {
+    showStatus('❌ Kein gültiges Wheel-Outfit-JSON', 'error');
+    return;
+  }
+  const mn   = d.memberNumber ?? -1;
+  const name = d.player ?? '📥 Importiert';
+  let entry = _mbsWheelData.find(x => x.memberNumber === mn);
+  if (!entry) {
+    entry = { memberNumber: mn, name: name, outfits: [], room: '📥 Import', ts: Date.now() };
+    _mbsWheelData.push(entry);
+  }
+  // Gleichnamiges Outfit ersetzen, sonst anhängen
+  d.outfit.firstSeen = d.outfit.firstSeen ?? Date.now();
+  const idx = entry.outfits.findIndex(o => o.name === d.outfit.name);
+  if (idx >= 0) entry.outfits[idx] = d.outfit;
+  else entry.outfits.push(d.outfit);
+  _saveMbsWheelData();
+  _updateWheelTabBadge();
+  _renderMbsWheelTab();
+  showStatus('📥 Outfit "' + d.outfit.name + '" importiert (' + name + ')', 'success');
+}
+
 function mbsWheelImport() {
   const raw = prompt('Wheel-Outfit JSON einfügen:');
   if (!raw?.trim()) return;
   try {
-    const d = JSON.parse(raw.trim());
-    if (d.type !== 'BCU_WHEEL_OUTFIT' || !d.outfit?.name || !Array.isArray(d.outfit.items)) {
-      showStatus('❌ Kein gültiges Wheel-Outfit-JSON', 'error');
-      return;
-    }
-    const mn   = d.memberNumber ?? -1;
-    const name = d.player ?? '📥 Importiert';
-    let entry = _mbsWheelData.find(x => x.memberNumber === mn);
-    if (!entry) {
-      entry = { memberNumber: mn, name: name, outfits: [], room: '📥 Import', ts: Date.now() };
-      _mbsWheelData.push(entry);
-    }
-    // Gleichnamiges Outfit ersetzen, sonst anhängen
-    const idx = entry.outfits.findIndex(o => o.name === d.outfit.name);
-    if (idx >= 0) entry.outfits[idx] = d.outfit;
-    else entry.outfits.push(d.outfit);
-    _saveMbsWheelData();
-    _renderMbsWheelTab();
-    showStatus('📥 Outfit "' + d.outfit.name + '" importiert (' + name + ')', 'success');
+    _mbsImportOutfitObj(JSON.parse(raw.trim()));
   } catch(e) {
     showStatus('❌ Import fehlgeschlagen: ' + e.message, 'error');
   }
