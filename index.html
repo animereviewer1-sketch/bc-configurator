@@ -3691,10 +3691,13 @@ document.write('<scr'+'ipt src="outfit-import.js?_='+_cbv+'"><\/scr'+'ipt>');
     <span id="wheelScanStatus" style="font-size:.68rem;color:var(--text3);flex:1;min-width:0"></span>
     <button onclick="bcuUndoAppearance()" class="btn" style="font-size:.65rem;padding:2px 8px;flex-shrink:0" title="Vorheriges Aussehen wiederherstellen">↩ Undo</button>
     <button id="wheelSortBtn" onclick="mbsWheelToggleSort()" class="btn" style="font-size:.65rem;padding:2px 8px;flex-shrink:0" title="Sortierung umschalten">🔤 Name</button>
-    <button onclick="mbsWheelImport()" class="btn" style="font-size:.65rem;padding:2px 8px;flex-shrink:0" title="Outfit-JSON importieren">📥 Import</button>
+    <button onclick="mbsWheelImport()" class="btn" style="font-size:.65rem;padding:2px 8px;flex-shrink:0" title="Einzelnes Outfit-JSON aus Zwischenablage einfügen">📋 JSON</button>
+    <button onclick="mbsWheelExportDB()" class="btn" style="font-size:.65rem;padding:2px 8px;flex-shrink:0" title="Alle Wheel-Outfits + Bilder als JSON-Datei sichern">📤 Export</button>
+    <button onclick="mbsWheelImportDB()" class="btn" style="font-size:.65rem;padding:2px 8px;flex-shrink:0" title="Wheel-Export-Datei importieren (Merge)">📥 Import</button>
     <button id="wheelGenBtn" onclick="mbsWheelGenerateAll()" class="btn" style="font-size:.65rem;padding:2px 8px;flex-shrink:0" title="Fehlende Outfit-Bilder automatisch erstellen (Outfits werden nacheinander lokal angezogen + fotografiert)">🖼 Alle erstellen</button>
+    <button onclick="mbsWheelClearAllShots()" class="btn" style="font-size:.65rem;padding:2px 8px;flex-shrink:0;color:#fb7185;border-color:rgba(251,113,133,0.3)" title="Alle Bilder löschen (Outfits bleiben)">🖼️ Bilder löschen</button>
     <button onclick="_mbsWheelPending=false;scanWheelOutfits()" class="btn" style="font-size:.65rem;padding:2px 8px;flex-shrink:0">🔄 Scannen</button>
-    <button onclick="mbsWheelClearAll()" class="btn" style="font-size:.65rem;padding:2px 8px;flex-shrink:0;opacity:.7">🗑 Alle</button>
+    <button onclick="mbsWheelClearAll()" class="btn btn-red" style="font-size:.65rem;padding:2px 8px;flex-shrink:0" title="Alle Outfits + Bilder löschen">🗑️</button>
   </div>
   <div style="padding-bottom:6px">
     <input id="wheelSearchInput" type="text" placeholder="🔍 Spieler, Outfit oder Datum (z.B. 02.07.) suchen…"
