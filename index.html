@@ -3692,11 +3692,12 @@ document.write('<scr'+'ipt src="outfit-import.js?_='+_cbv+'"><\/scr'+'ipt>');
     <button onclick="bcuUndoAppearance()" class="btn" style="font-size:.65rem;padding:2px 8px;flex-shrink:0" title="Vorheriges Aussehen wiederherstellen">↩ Undo</button>
     <button id="wheelSortBtn" onclick="mbsWheelToggleSort()" class="btn" style="font-size:.65rem;padding:2px 8px;flex-shrink:0" title="Sortierung umschalten">🔤 Name</button>
     <button onclick="mbsWheelImport()" class="btn" style="font-size:.65rem;padding:2px 8px;flex-shrink:0" title="Outfit-JSON importieren">📥 Import</button>
+    <button id="wheelGenBtn" onclick="mbsWheelGenerateAll()" class="btn" style="font-size:.65rem;padding:2px 8px;flex-shrink:0" title="Fehlende Outfit-Bilder automatisch erstellen (Outfits werden nacheinander lokal angezogen + fotografiert)">🖼 Alle erstellen</button>
     <button onclick="_mbsWheelPending=false;scanWheelOutfits()" class="btn" style="font-size:.65rem;padding:2px 8px;flex-shrink:0">🔄 Scannen</button>
     <button onclick="mbsWheelClearAll()" class="btn" style="font-size:.65rem;padding:2px 8px;flex-shrink:0;opacity:.7">🗑 Alle</button>
   </div>
   <div style="padding-bottom:6px">
-    <input id="wheelSearchInput" type="text" placeholder="🔍 Spieler oder Outfit suchen…"
+    <input id="wheelSearchInput" type="text" placeholder="🔍 Spieler, Outfit oder Datum (z.B. 02.07.) suchen…"
       oninput="mbsWheelSearch(this.value)"
       style="width:100%;box-sizing:border-box;font-size:.72rem;padding:5px 8px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r-sm);color:var(--text1);outline:none">
   </div>

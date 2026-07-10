@@ -8672,11 +8672,15 @@ function _renderMbsWheelTab() {
     return;
   }
 
-  // Suche
+  // Suche (auch nach Datum: "02.07" oder "02.07.2026" findet Scans/neue Outfits von dem Tag)
   let visible = _mbsWheelData;
   if (_mbsWheelSearch) {
     visible = _mbsWheelData.filter(function(r) {
-      const haystack = (r.name + ' ' + r.memberNumber + ' ' + r.outfits.map(o=>o.name).join(' ')).toLowerCase();
+      const dates = [r.ts, ...r.outfits.map(o => o.firstSeen)]
+        .filter(Boolean)
+        .map(t => new Date(t).toLocaleDateString('de-DE', {day:'2-digit',month:'2-digit',year:'numeric'}))
+        .join(' ');
+      const haystack = (r.name + ' ' + r.memberNumber + ' ' + r.outfits.map(o=>o.name).join(' ') + ' ' + dates).toLowerCase();
       return haystack.includes(_mbsWheelSearch);
     });
   }
@@ -8743,58 +8747,181 @@ function _renderMbsWheelTab() {
     });
   }
 
-  body.innerHTML = entries.map(function(e) {
-    const r    = e.r;
-    const mn   = r.memberNumber;
+  // Kartenlayout wie LSCG Outfits (os-member-block / os-strip / os-card)
+  function _buildWheelMemberHtml(e) {
+    const r     = e.r;
+    const mn    = r.memberNumber;
     const isFav = _mbsWheelFavs.has(mn);
-    const rows = e.pairs.map(function([o, oi]) {
+
+    const cards = e.pairs.map(function([o, oi]) {
       const fp     = _mbsOutfitFp(o);
       const shot   = _mbsWheelShots[fp] || null;
       const oFav   = _mbsWheelOutfitFavs.has(mn + '|' + o.name);
+      const isNew  = _mbsOutfitIsNew(o);
       const others = (fpMap[fp] || []).filter(x => x.mn !== mn);
-      const dupBadge = others.length
-        ? '<span style="font-size:.55rem;background:var(--bg2);border:1px solid var(--border);border-radius:3px;padding:0 4px;margin-left:4px;color:var(--text3)" title="Identisches Outfit auch bei: '
-          + escHtml(others.map(x => x.name + ' #' + x.mn).join(', ')) + '">⧉ ' + others.length + '</span>'
+      const letter = escHtml((o.name[0] || '?').toUpperCase());
+      const seenStr = o.firstSeen
+        ? new Date(o.firstSeen).toLocaleDateString('de-DE', {day:'2-digit',month:'2-digit',year:'2-digit'})
+        : '–';
+
+      const tagHtml = isNew
+        ? '<span class="os-card-tag saved" style="background:var(--green,#4ade80);color:#000">NEU</span>'
+        : (others.length ? '<span class="os-card-tag" title="Identisches Outfit auch bei: ' + escHtml(others.map(x => x.name + ' #' + x.mn).join(', ')) + '">⧉ ' + others.length + '</span>' : '');
+      const thumbContent = shot
+        ? '<img src="' + shot + '" alt="">'
+        : '<div class="os-card-placeholder">' + letter + '</div>';
+      const hintIcon = shot ? '<span class="os-card-hint">🔍</span>' : '<span class="os-card-hint">📸</span>';
+      const thumbClick = shot
+        ? 'mbsWheelOpenShot(0,' + mn + ',' + oi + ')'
+        : 'mbsWheelCaptureShot(' + mn + ',' + oi + ')';
+      const delBtn = shot
+        ? '<button class="os-card-del" onclick="event.stopPropagation();mbsWheelDeleteShot(' + mn + ',' + oi + ')" title="Bild löschen">🗑</button>'
         : '';
-      const newBadge = _mbsOutfitIsNew(o)
-        ? '<span style="font-size:.55rem;background:var(--green,#4ade80);color:#000;border-radius:3px;padding:0 4px;margin-left:4px;font-weight:700">NEU</span>'
-        : '';
-      const thumb = shot
-        ? '<img src="' + shot + '" onclick="mbsWheelOpenShot(0,' + mn + ',' + oi + ')" style="width:30px;height:40px;object-fit:cover;border-radius:3px;cursor:zoom-in;flex-shrink:0" alt="">'
-        : '<button onclick="mbsWheelCaptureShot(' + mn + ',' + oi + ')" class="btn" style="width:30px;height:40px;font-size:.7rem;padding:0;flex-shrink:0;opacity:.5" title="Screenshot vom aktuellen Aussehen aufnehmen">📸</button>';
-      return '<div style="border-bottom:1px solid var(--border)">'
-        + '<div style="display:flex;align-items:center;gap:6px;padding:4px 0">'
-        + '<button onclick="mbsWheelToggleOutfitFav(' + mn + ',' + oi + ')" style="background:none;border:none;cursor:pointer;font-size:.8rem;padding:0;line-height:1;flex-shrink:0" title="Outfit-Favorit">' + (oFav ? '⭐' : '☆') + '</button>'
-        + thumb
-        + '<span style="font-size:.72rem;color:var(--text2);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer" title="Items anzeigen" onclick="mbsWheelToggleItems(' + mn + ',' + oi + ')">'
-        + escHtml(o.name)
-        + '<span style="color:var(--text3);font-size:.62rem;margin-left:4px">(' + o.items.length + ' Items)</span>'
-        + newBadge
-        + dupBadge
-        + '</span>'
-        + '<button onclick="mbsWheelApply(' + mn + ',' + oi + ')" class="btn btn-primary" style="font-size:.65rem;padding:2px 8px;flex-shrink:0" title="Auf mich anwenden">▶</button>'
-        + '<button onclick="mbsWheelSaveProfile(' + mn + ',' + oi + ')" class="btn" style="font-size:.65rem;padding:2px 8px;flex-shrink:0" title="Als Profil speichern">💾</button>'
-        + '<button onclick="mbsWheelExport(' + mn + ',' + oi + ')" class="btn" style="font-size:.65rem;padding:2px 6px;flex-shrink:0;opacity:.7" title="Als JSON in Zwischenablage kopieren">📤</button>'
+
+      return '<div class="os-card">'
+        + '<div class="os-card-thumb" onclick="' + thumbClick + '">'
+        + thumbContent + tagHtml
+        + '<button class="os-card-fav' + (oFav ? ' on' : '') + '" onclick="event.stopPropagation();mbsWheelToggleOutfitFav(' + mn + ',' + oi + ')">' + (oFav ? '⭐' : '☆') + '</button>'
+        + delBtn + hintIcon
         + '</div>'
-        + '<div id="wheelItems_' + mn + '_' + oi + '" style="display:none;padding:2px 0 6px 56px;font-size:.62rem;color:var(--text3);line-height:1.6"></div>'
+        + '<div class="os-card-name" title="' + escHtml(o.name) + '">' + escHtml(o.name) + '</div>'
+        + '<div class="os-card-meta">' + o.items.length + ' Items · ' + seenStr + '</div>'
+        + '<div class="os-card-actions">'
+        + '<button class="os-card-btn primary" onclick="mbsWheelApply(' + mn + ',' + oi + ')" title="Auf mich anwenden">▶ Run</button>'
+        + '<button class="os-card-btn' + (oFav ? ' fav-on' : '') + '" onclick="mbsWheelToggleOutfitFav(' + mn + ',' + oi + ')">' + (oFav ? '⭐' : '☆') + '</button>'
+        + '<button class="os-card-btn" onclick="mbsWheelSaveProfile(' + mn + ',' + oi + ')" title="Als Profil speichern">💾</button>'
+        + '<button class="os-card-btn" onclick="mbsWheelExport(' + mn + ',' + oi + ')" title="Als JSON kopieren">📤</button>'
+        + '</div>'
         + '</div>';
     }).join('');
 
-    return '<div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--r-md);padding:10px 12px;margin-bottom:6px">'
-      + '<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">'
-      + '<button onclick="mbsWheelToggleFav(' + mn + ')" style="background:none;border:none;cursor:pointer;font-size:.9rem;padding:0;line-height:1" title="Favorit">' + (isFav ? '⭐' : '☆') + '</button>'
-      + '<span style="font-size:.75rem;font-weight:700;color:var(--yellow);flex:1">🎡 ' + escHtml(r.name) + ' <span style="color:var(--text3);font-weight:400;font-size:.65rem">#' + mn + '</span>'
-      + (r.room || r.ts ? '<span style="display:block;font-size:.6rem;font-weight:400;color:var(--text3);margin-top:1px">'
-          + (r.room ? '📍 ' + escHtml(r.room) : '')
-          + (r.room && r.ts ? ' · ' : '')
-          + (r.ts ? '🕐 ' + new Date(r.ts).toLocaleString('de-DE', {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '')
-          + '</span>' : '')
+    const metaStr = (r.room ? '📍 ' + escHtml(r.room) + ' · ' : '')
+      + (r.ts ? '🕐 ' + new Date(r.ts).toLocaleString('de-DE', {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '');
+
+    return '<div class="os-member-block open' + (isFav ? ' os-fav' : '') + '" id="wm_' + mn + '">'
+      + '<div class="os-member-hdr" onclick="mbsWheelToggleMember(' + mn + ')">'
+      + '<span class="os-member-name">🎡 ' + escHtml(r.name)
+      + (metaStr ? ' <span class="os-member-nick">' + metaStr + '</span>' : '')
       + '</span>'
-      + '<button onclick="mbsWheelDeletePlayer(' + mn + ')" class="btn" style="font-size:.6rem;padding:1px 6px;flex-shrink:0;opacity:.6" title="Spieler entfernen">🗑</button>'
+      + '<span class="os-member-num">#' + mn + '</span>'
+      + '<span class="os-member-vcnt">' + e.pairs.length + 'x</span>'
+      + '<button class="os-member-fav' + (isFav ? ' on' : '') + '" onclick="event.stopPropagation();mbsWheelToggleFav(' + mn + ')">' + (isFav ? '⭐' : '☆') + '</button>'
+      + '<button class="os-member-fav" style="font-size:.7rem" onclick="event.stopPropagation();mbsWheelDeletePlayer(' + mn + ')" title="Spieler entfernen">🗑</button>'
+      + '<span class="os-member-chevron">▶</span>'
       + '</div>'
-      + rows
+      + '<div class="os-member-rows"><div class="os-strip">' + cards + '</div></div>'
       + '</div>';
-  }).join('');
+  }
+
+  // Chunk-Rendering wie bei LSCG: erste 30 sofort, Rest nachladen (kein UI-Freeze)
+  const CHUNK = 30;
+  body.innerHTML = entries.slice(0, CHUNK).map(_buildWheelMemberHtml).join('');
+  if (entries.length > CHUNK) {
+    const rest = entries.slice(CHUNK);
+    setTimeout(function _more() {
+      if (_activeTab !== 'lscg-wheel') return;
+      const slice = rest.splice(0, CHUNK);
+      if (!slice.length) return;
+      body.insertAdjacentHTML('beforeend', slice.map(_buildWheelMemberHtml).join(''));
+      if (rest.length) setTimeout(_more, 30);
+    }, 30);
+  }
+}
+
+function mbsWheelToggleMember(mn) {
+  document.getElementById('wm_' + mn)?.classList.toggle('open');
+}
+
+function mbsWheelDeleteShot(mn, oi) {
+  const r = _mbsWheelData.find(x => x.memberNumber === mn);
+  const o = r?.outfits[oi];
+  if (!o) return;
+  delete _mbsWheelShots[_mbsOutfitFp(o)];
+  _saveMbsWheelShots();
+  _renderMbsWheelTab();
+}
+
+// ── Batch-Generierung: alle fehlenden Outfit-Bilder auf Knopfdruck ────────────
+// Zieht jedes Outfit NUR LOKAL an (kein Server-Sync), fotografiert es, nächstes.
+// Am Ende wird das ursprüngliche Aussehen wiederhergestellt (ein einziger Sync).
+let _wheelGenQueue   = [];
+let _wheelGenTotal   = 0;
+let _wheelGenRunning = false;
+
+function mbsWheelGenerateAll() {
+  if (_wheelGenRunning) { mbsWheelGenerateStop(); return; }
+  if (!_connected) { showStatus('❌ Nicht verbunden', 'error'); return; }
+
+  // Queue: alle Outfits ohne Bild, per Fingerprint dedupliziert
+  const seen = new Set();
+  _wheelGenQueue = [];
+  for (const r of _mbsWheelData) {
+    r.outfits.forEach(function(o, oi) {
+      const fp = _mbsOutfitFp(o);
+      if (_mbsWheelShots[fp] || seen.has(fp)) return;
+      seen.add(fp);
+      _wheelGenQueue.push({ mn: r.memberNumber, oi });
+    });
+  }
+  if (!_wheelGenQueue.length) { showStatus('✅ Alle Outfits haben bereits Bilder', 'info'); return; }
+  if (!confirm(_wheelGenQueue.length + ' Outfit-Bilder werden erstellt.\n\n'
+    + 'Jedes Outfit wird kurz LOKAL angezogen und fotografiert (andere Spieler sehen davon nichts). '
+    + 'Am Ende wird dein Aussehen wiederhergestellt.\n\n'
+    + 'Dauer: ca. ' + Math.ceil(_wheelGenQueue.length * 4 / 60) + ' Min. Starten?')) { _wheelGenQueue = []; return; }
+
+  _wheelGenTotal   = _wheelGenQueue.length;
+  _wheelGenRunning = true;
+  bcSend({ type: 'EXEC', code: _bcuSnapshotCode() }, true); // Aussehen fürs Ende sichern
+  _updateWheelGenBtn();
+  setTimeout(_wheelGenStep, 500);
+}
+
+function _wheelGenStep() {
+  if (!_wheelGenRunning) return;
+  if (!_wheelGenQueue.length || !_connected) { _wheelGenFinish(); return; }
+
+  const job = _wheelGenQueue.shift();
+  const r = _mbsWheelData.find(x => x.memberNumber === job.mn);
+  const o = r?.outfits[job.oi];
+  if (!o) { _wheelGenStep(); return; }
+  const fp = _mbsOutfitFp(o);
+  if (_mbsWheelShots[fp]) { _wheelGenStep(); return; } // inzwischen vorhanden
+
+  const done = _wheelGenTotal - _wheelGenQueue.length;
+  const st = document.getElementById('wheelScanStatus');
+  if (st) st.textContent = '🖼 Erstelle ' + done + '/' + _wheelGenTotal + ': ' + o.name;
+
+  // 1. Outfit lokal anziehen (kein Sync)  2. nach 2.5s Foto  3. nach weiteren 1.2s nächstes
+  bcSend({ type: 'EXEC', code: _mbsBuildApplyCode(o.items, true) }, true);
+  setTimeout(function() {
+    if (!_wheelGenRunning) return;
+    const reqId = 'wss_' + Date.now();
+    _pendingWheelShot[reqId] = fp;
+    bcSend({ type: 'EXEC', code: _buildCanvasShotCode(reqId) }, true);
+    setTimeout(_wheelGenStep, 1200);
+  }, 2500);
+}
+
+function _wheelGenFinish() {
+  const was = _wheelGenTotal - _wheelGenQueue.length;
+  _wheelGenRunning = false;
+  _wheelGenQueue   = [];
+  _updateWheelGenBtn();
+  // Ursprüngliches Aussehen wiederherstellen (einziger Server-Sync des Durchlaufs)
+  bcuUndoAppearance();
+  showStatus('🖼 Fertig: ' + was + ' Outfit-Bilder erstellt', 'success');
+  _renderMbsWheelTab();
+}
+
+function mbsWheelGenerateStop() {
+  if (!_wheelGenRunning) return;
+  _wheelGenFinish();
+  showStatus('⏹ Bild-Erstellung gestoppt', 'info');
+}
+
+function _updateWheelGenBtn() {
+  const btn = document.getElementById('wheelGenBtn');
+  if (btn) btn.textContent = _wheelGenRunning ? '⏹ Stop' : '🖼 Alle erstellen';
 }
 
 function _updateWheelTabBadge() {
@@ -8954,7 +9081,8 @@ function mbsWheelOpenShot(_unused, mn, oi) {
 }
 
 // Baut InventoryWear-Code aus MBS-Items (gleiche Methode wie Profil-Ausführung)
-function _mbsBuildApplyCode(items) {
+// noSync = true: nur lokal anziehen (für Batch-Screenshots), kein ServerSync
+function _mbsBuildApplyCode(items, noSync) {
   return '(function(){try{'
     + 'var _items=' + JSON.stringify(items) + ';'
     + '_items.forEach(function(it){'
@@ -8970,10 +9098,11 @@ function _mbsBuildApplyCode(items) {
     + '  }catch(_e){console.warn("[BCU-MBS]",it.asset,_e.message);}'
     + '});'
     + 'CharacterRefresh(Player,false,false);'
-    + 'setTimeout(function(){'
-    + '  if(typeof ServerPlayerAppearanceSync==="function")ServerPlayerAppearanceSync();'
-    + '  else ServerSend("AccountUpdate",{Appearance:Player.Appearance});'
-    + '},300);'
+    + (noSync ? '' :
+      'setTimeout(function(){'
+      + '  if(typeof ServerPlayerAppearanceSync==="function")ServerPlayerAppearanceSync();'
+      + '  else ServerSend("AccountUpdate",{Appearance:Player.Appearance});'
+      + '},300);')
     + '}catch(e){console.error("[BCU-MBS]",e);}})();';
 }
 
@@ -9023,16 +9152,6 @@ function mbsWheelApply(mn, oi) {
     showStatus('▶ MBS Outfit "' + o.name + '" wird angewendet…', 'info');
   }
 
-  // Auto-Screenshot 3s nach Apply, falls für dieses Outfit noch keins existiert
-  const fp = _mbsOutfitFp(o);
-  if (!_mbsWheelShots[fp]) {
-    setTimeout(function() {
-      if (!_connected || _mbsWheelShots[fp]) return;
-      const reqId = 'wss_' + Date.now();
-      _pendingWheelShot[reqId] = fp;
-      bcSend({ type: 'EXEC', code: _buildCanvasShotCode(reqId) }, true);
-    }, 3000);
-  }
 }
 
 function mbsWheelSaveProfile(mn, oi) {
