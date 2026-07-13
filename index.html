@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="de" data-theme="dark" data-radius="default">
+<html lang="de" data-theme="dark" data-radius="default" data-design="neu">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -2327,6 +2327,84 @@ button { cursor: pointer; }
 .user-theme-del { background: none; border: none; color: var(--red); cursor: pointer; font-size: .7rem; padding: 0 2px; opacity: .7; }
 .user-theme-del:hover { opacity: 1; }
 
+/* ═══════════════════════════════════════════════
+   REDESIGN — "Modernist" flaches Design (data-design="neu")
+   + Farbkombinationen (Paletten) + Design-Umschalter
+   Quelle: Konfigurator Redesign.dc.html (claude.ai/design)
+═══════════════════════════════════════════════ */
+
+/* Flaches, kantiges Design: radius 0, 2px-Trennlinien, flache Buttons */
+[data-design="neu"] {
+  --r-xs: 0; --r-sm: 0; --r-md: 0; --r-lg: 0; --r-xl: 0; --r-full: 0;
+}
+/* Literale border-radius der Kern-Komponenten platt ziehen */
+[data-design="neu"] :where(
+  .btn, .btn-copy, .btn-sync, .sidebar-search, .tbadge, .tweaks-btn,
+  .input, .field input, .field select, textarea, .code-out, .outfit-code-live,
+  .group-hdr, .brand-mark, .profile-row-exec, .dir-opt-btn
+) { border-radius: 0 !important; }
+/* Flache Buttons — Verläufe & Glow raus, Grundfarbe bleibt (Semantik) */
+[data-design="neu"] .btn:active { transform: none; }
+[data-design="neu"] :where(.btn-green,.btn-yellow,.btn-red,.btn-orange,.btn-sync) {
+  box-shadow: none !important; filter: none !important;
+}
+[data-design="neu"] .btn-green  { background: #059669; }
+[data-design="neu"] .btn-yellow { background: #d97706; }
+[data-design="neu"] .btn-red    { background: #dc2626; }
+[data-design="neu"] .btn-orange { background: #ea580c; }
+[data-design="neu"] .btn-sync   { background: #3b82f6; }
+[data-design="neu"] .btn-green:hover  { background: #10b981; box-shadow: none !important; }
+[data-design="neu"] .btn-yellow:hover { background: #f59e0b; box-shadow: none !important; }
+[data-design="neu"] .btn-red:hover    { background: #ef4444; box-shadow: none !important; }
+[data-design="neu"] .btn-orange:hover { background: #f97316; box-shadow: none !important; }
+[data-design="neu"] .btn-sync:hover   { background: #60a5fa; box-shadow: none !important; }
+/* Kräftige, klare Trennlinien statt Haarlinien */
+[data-design="neu"] .topbar { border-bottom-width: 2px; }
+[data-design="neu"] .tab-nav,
+[data-design="neu"] .obertab-nav { border-bottom-width: 2px; }
+[data-design="neu"] .sidebar { border-right-width: 2px; }
+/* Eckige Accent-Swatches im Panel */
+[data-design="neu"] .accent-swatch { border-radius: 0 !important; }
+/* Felder & Code-Blöcke nehmen die Palettenfarben an */
+[data-design="neu"] :where(.input, .field input, .field select, .sidebar-search) {
+  background: var(--pal-field, var(--bg3));
+}
+[data-design="neu"] :where(.code-out, .outfit-code-live) {
+  background: var(--pal-n900, rgba(0,0,0,0.55));
+}
+
+/* ── Design-Umschalter (Topbar) ── */
+.design-toggle {
+  display: inline-flex; overflow: hidden; flex-shrink: 0;
+  border: 1px solid var(--border2); border-radius: var(--r-sm);
+}
+.dt-opt {
+  border: none; background: none; cursor: pointer;
+  font-family: var(--font-ui); font-weight: 700; font-size: 0.72rem;
+  padding: 5px 11px; color: var(--text3); transition: background .15s, color .15s;
+}
+.dt-opt + .dt-opt { border-left: 1px solid var(--border2); }
+.dt-opt:hover { color: var(--text2); }
+.dt-opt.on { background: var(--accent); color: #1a1611; }
+[data-theme="light"] .dt-opt.on { color: #fff; }
+
+/* ── Farbkombinations-Auswahl (Tweaks-Panel) ── */
+.pal-list { display: flex; flex-direction: column; gap: 2px; }
+.pal-row {
+  display: flex; align-items: center; gap: 9px; width: 100%;
+  border: none; cursor: pointer; padding: 8px 9px; text-align: left;
+  background: transparent; color: var(--text2);
+  font-family: var(--font-ui); font-size: 0.76rem; border-radius: var(--r-sm);
+  transition: background .12s;
+}
+.pal-row:hover { background: var(--bg-hover); }
+.pal-row.on { background: var(--accent-soft); color: var(--accent-text); font-weight: 700; }
+.pal-sw { display: flex; gap: 4px; flex-shrink: 0; }
+.pal-sw span { width: 15px; height: 15px; display: block; border: 1px solid var(--border2); }
+.pal-name { flex: 1; }
+.pal-check { color: var(--accent); font-weight: 800; opacity: 0; }
+.pal-row.on .pal-check { opacity: 1; }
+
 </style>
 </head>
 <body>
@@ -2346,6 +2424,10 @@ button { cursor: pointer; }
     <button class="btn btn-primary" id="reconnectBtn" onclick="manualReconnect()" title="Verbindung neu herstellen">🔄 Verbinden</button>
     <button class="btn btn-red hidden" id="clearBtn" onclick="clearCache()" title="Cache löschen">🗑</button>
     <div id="statusMsg" class="status-msg hidden"></div>
+    <div class="design-toggle" id="designToggle" title="Zwischen altem und neuem Design wechseln">
+      <button class="dt-opt" id="dt-alt" onclick="setDesign('alt')">Altes Design</button>
+      <button class="dt-opt on" id="dt-neu" onclick="setDesign('neu')">Neues Design</button>
+    </div>
     <button class="topbar-icon-btn" id="tweaksBtnToggle" onclick="toggleTweaksPanel()" title="Einstellungen">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
     </button>
@@ -2354,6 +2436,24 @@ button { cursor: pointer; }
 
 <!-- TWEAKS PANEL -->
 <div class="tweaks-panel" id="tweaksPanel">
+  <div>
+    <div class="tweaks-section-title">Design</div>
+    <div class="tweaks-btn-group">
+      <button class="tweaks-btn"    id="tw-d-alt" onclick="setDesign('alt')">Altes Design</button>
+      <button class="tweaks-btn on" id="tw-d-neu" onclick="setDesign('neu')">Neues Design</button>
+    </div>
+  </div>
+  <div>
+    <div class="tweaks-section-title">Farbkombination</div>
+    <div class="pal-list" id="palList">
+      <button class="pal-row on" data-pal="graphit"  onclick="setPalette('graphit')"><span class="pal-sw"><span style="background:#ec3013"></span><span style="background:#161616"></span></span><span class="pal-name">Graphit · Rot</span><span class="pal-check">✓</span></button>
+      <button class="pal-row"    data-pal="schiefer" onclick="setPalette('schiefer')"><span class="pal-sw"><span style="background:#4f8cf7"></span><span style="background:#13161c"></span></span><span class="pal-name">Schiefer · Blau</span><span class="pal-check">✓</span></button>
+      <button class="pal-row"    data-pal="anthrazit" onclick="setPalette('anthrazit')"><span class="pal-sw"><span style="background:#e0952a"></span><span style="background:#1a1613"></span></span><span class="pal-name">Anthrazit · Amber</span><span class="pal-check">✓</span></button>
+      <button class="pal-row"    data-pal="nacht"    onclick="setPalette('nacht')"><span class="pal-sw"><span style="background:#8b5cf6"></span><span style="background:#17141c"></span></span><span class="pal-name">Nacht · Violett</span><span class="pal-check">✓</span></button>
+      <button class="pal-row"    data-pal="petrol"   onclick="setPalette('petrol')"><span class="pal-sw"><span style="background:#17b3a3"></span><span style="background:#0f1719"></span></span><span class="pal-name">Petrol · Teal</span><span class="pal-check">✓</span></button>
+      <button class="pal-row"    data-pal="rose"     onclick="setPalette('rose')"><span class="pal-sw"><span style="background:#f43f7e"></span><span style="background:#1a1416"></span></span><span class="pal-name">Kohle · Rosé</span><span class="pal-check">✓</span></button>
+    </div>
+  </div>
   <div>
     <div class="tweaks-section-title">Theme</div>
     <div class="tweaks-btn-group">
@@ -3484,8 +3584,12 @@ document.write('<scr'+'ipt src="outfit-import.js?_='+_cbv+'"><\/scr'+'ipt>');
     try {
       const t = JSON.parse(localStorage.getItem(_tweaksKey) || '{}');
       if (t.theme)  setTheme(t.theme, true);
-      if (t.hue)    setAccentHue(t.hue, true);
       if (t.radius) setRadius(t.radius, true);
+      setDesign(t.design || 'neu', true);
+      // Accent: gespeicherte Palette bzw. eigener Hue, sonst Standard-Palette
+      if (t.palette && PALETTES[t.palette]) setPalette(t.palette, true);
+      else if (t.hue)                       setAccentHue(t.hue, true);
+      else                                  setPalette('graphit', true);
     } catch(e) {}
   }
 
@@ -3493,9 +3597,11 @@ document.write('<scr'+'ipt src="outfit-import.js?_='+_cbv+'"><\/scr'+'ipt>');
     const root = document.documentElement;
     try {
       localStorage.setItem(_tweaksKey, JSON.stringify({
-        theme:  root.dataset.theme  || 'dark',
-        hue:    parseInt(root.dataset.accentHue || '58'),
-        radius: root.dataset.radius || 'default'
+        theme:   root.dataset.theme  || 'dark',
+        hue:     root.dataset.accentHue ? parseInt(root.dataset.accentHue) : undefined,
+        radius:  root.dataset.radius || 'default',
+        design:  root.dataset.design || 'neu',
+        palette: root.dataset.palette || undefined
       }));
     } catch(e) {}
   }
@@ -3528,9 +3634,54 @@ document.write('<scr'+'ipt src="outfit-import.js?_='+_cbv+'"><\/scr'+'ipt>');
     root.style.setProperty('--accent-soft',  `oklch(${L} ${C} ${hue} / 0.14)`);
     root.style.setProperty('--accent-line',  `oklch(${L} ${C} ${hue} / 0.35)`);
     root.style.setProperty('--accent-text',  `oklch(${Ltext} 0.11 ${hue + 4})`);
+    // Eigener Hue schlägt eine aktive Farbkombination
+    delete root.dataset.palette;
+    document.querySelectorAll('.pal-row').forEach(r => r.classList.remove('on'));
     document.querySelectorAll('.accent-swatch').forEach(s => {
       s.classList.toggle('on', parseInt(s.dataset.hue) === parseInt(hue));
     });
+    if (!silent) _saveTweaks();
+  }
+
+  // ── Design-Umschalter (Altes / Neues Design) ──
+  function setDesign(d, silent) {
+    document.documentElement.dataset.design = d;
+    ['dt-alt','tw-d-alt'].forEach(id => document.getElementById(id)?.classList.toggle('on', d === 'alt'));
+    ['dt-neu','tw-d-neu'].forEach(id => document.getElementById(id)?.classList.toggle('on', d === 'neu'));
+    if (!silent) _saveTweaks();
+  }
+
+  // ── Farbkombinationen (Paletten) ──
+  const PALETTES = {
+    graphit:   { bg:'#161616', elev:'#1c1c1c', field:'#101010', surface:'#1f1f1f', n900:'#0d0d0d', div:'rgba(255,255,255,0.14)',   div2:'rgba(255,255,255,0.20)', accent:'#ec3013', a800:'#ff9d8a' },
+    schiefer:  { bg:'#13161c', elev:'#1a1e26', field:'#0e1116', surface:'#1c212a', n900:'#0b0d11', div:'rgba(200,214,240,0.15)',   div2:'rgba(200,214,240,0.22)', accent:'#4f8cf7', a800:'#a8c6ff' },
+    anthrazit: { bg:'#1a1613', elev:'#221d18', field:'#120f0c', surface:'#241f19', n900:'#0f0c0a', div:'rgba(255,236,214,0.14)',   div2:'rgba(255,236,214,0.20)', accent:'#e0952a', a800:'#f6c877' },
+    nacht:     { bg:'#17141c', elev:'#1e1a26', field:'#110f16', surface:'#201c2a', n900:'#0d0b11', div:'rgba(216,208,240,0.15)',   div2:'rgba(216,208,240,0.22)', accent:'#8b5cf6', a800:'#c9b3ff' },
+    petrol:    { bg:'#0f1719', elev:'#152023', field:'#0b1113', surface:'#182427', n900:'#080e0f', div:'rgba(200,235,235,0.14)',   div2:'rgba(200,235,235,0.20)', accent:'#17b3a3', a800:'#8ce4d9' },
+    rose:      { bg:'#1a1416', elev:'#221a1d', field:'#120e10', surface:'#241b1f', n900:'#0f0a0c', div:'rgba(255,214,226,0.14)',   div2:'rgba(255,214,226,0.20)', accent:'#f43f7e', a800:'#ffa8c4' },
+  };
+  function setPalette(key, silent) {
+    const p = PALETTES[key];
+    if (!p) return;
+    const root = document.documentElement;
+    const S = root.style;
+    root.dataset.palette = key;
+    delete root.dataset.accentHue; // Palette schlägt eigenen Hue
+    S.setProperty('--bg',      p.bg);
+    S.setProperty('--bg2',     p.elev);
+    S.setProperty('--bg3',     p.surface);
+    S.setProperty('--bg4',     p.surface);
+    S.setProperty('--border',  p.div);
+    S.setProperty('--border2', p.div2);
+    S.setProperty('--accent',       p.accent);
+    S.setProperty('--accent-hover', `color-mix(in srgb, ${p.accent}, #fff 14%)`);
+    S.setProperty('--accent-soft',  p.accent + '24');
+    S.setProperty('--accent-line',  p.accent + '59');
+    S.setProperty('--accent-text',  p.a800);
+    S.setProperty('--pal-field',    p.field);
+    S.setProperty('--pal-n900',     p.n900);
+    document.querySelectorAll('.pal-row').forEach(r => r.classList.toggle('on', r.dataset.pal === key));
+    document.querySelectorAll('.accent-swatch').forEach(s => s.classList.remove('on'));
     if (!silent) _saveTweaks();
   }
 
