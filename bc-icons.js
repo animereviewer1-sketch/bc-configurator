@@ -105,7 +105,9 @@
     '⚙': 'settings',   '🎭': 'playCircle'
   };
 
-  var EMOJI_RE = /(?:▶▶|[←-⇿⌀-➿⬀-⯿️\u{1F000}-\u{1FAFF}])+/gu;
+  // U+25A0–25FF (Geometric Shapes) muss mit rein, sonst greifen die Mappings
+  // für ▾ ▼ ◀ ■ nie — die stehen nicht im Dingbats-/Arrows-Bereich.
+  var EMOJI_RE = /(?:▶▶|[←-⇿⌀-➿■-◿⬀-⯿️\u{1F000}-\u{1FAFF}])+/gu;
 
   /** Selektoren, in denen Emojis automatisch ersetzt werden.
       bc-icons-ergaenzung.js hängt über BC_ICON_EXTRA_SELECTORS die Fundstellen
@@ -182,6 +184,15 @@
   var observer = null;
   var queued = false;
 
+  /** Ein Durchlauf: Icons setzen + die Ergänzungen (Options, Placeholders),
+      falls bc-icons-ergaenzung.js geladen ist. Auch dynamisch nachgerenderte
+      Selects und Suchfelder werden so erfasst. */
+  function sweep(scope) {
+    bcIconsApply(scope);
+    if (root.bcStripOptionEmojis) root.bcStripOptionEmojis(scope);
+    if (root.bcStripPlaceholderEmojis) root.bcStripPlaceholderEmojis(scope);
+  }
+
   /**
    * Hält dynamisch nachgerenderte Listen (Item-Grid, Bot-UI, Shop …) aktuell.
    * Der Observer wird während des eigenen Umbaus pausiert, damit die von
@@ -197,11 +208,11 @@
       setTimeout(function () {
         queued = false;
         observer.disconnect();
-        try { bcIconsApply(); }
+        try { sweep(); }
         finally { observer.observe(document.body, { childList: true, subtree: true }); }
       }, 16);
     });
-    bcIconsApply();
+    sweep();
     observer.observe(document.body, { childList: true, subtree: true });
     return observer;
   }
@@ -209,6 +220,7 @@
   root.bcIcon = bcIcon;
   root.bcIconsApply = bcIconsApply;
   root.bcIconsAuto = bcIconsAuto;
+  root.bcIconsSweep = sweep;
   root.BC_ICONS = P;
   root.BC_ICON_EMOJI_MAP = EMOJI;
 })(window);

@@ -49,6 +49,10 @@
     bulb:       '<path d="M9 18h6"/><path d="M10 21h4"/><path d="M12 3a6 6 0 0 1 3.5 10.9c-.5.4-.5 1.1-.5 1.6v.5H9v-.5c0-.5 0-1.2-.5-1.6A6 6 0 0 1 12 3z"/>',
     checkbox:   '<rect x="3" y="3" width="18" height="18" rx="3"/><polyline points="8 12.5 11 15.5 16.5 9"/>',
     caretDown:  '<polyline points="6 9 12 15 18 9"/>',
+    caretLeft:  '<polyline points="15 18 9 12 15 6"/>',
+    caretRight: '<polyline points="9 18 15 12 9 6"/>',
+    checkboxOff:'<rect x="3" y="3" width="18" height="18" rx="3"/>',
+    pennant:    '<line x1="5" y1="22" x2="5" y2="3"/><path d="M5 4h11l-2 3.5L16 11H5z"/>',
     xCircle:    '<circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>',
     party:      '<path d="M3 21l6.5-16 11.5 11.5z"/><line x1="14" y1="3" x2="14.01" y2="3"/><line x1="19" y1="6" x2="19.01" y2="6"/><line x1="21" y1="11" x2="21.01" y2="11"/>',
     rope:       '<path d="M12 21c-4 0-4-5 0-5s4-5 0-5-4-5 0-5"/><path d="M12 21c4 0 4-5 0-5s-4-5 0-5 4-5 0-5"/>'
@@ -66,7 +70,9 @@
     '🛡️': 'shield',   '🛡': 'shield',    '👑': 'crown',    '🎩': 'hat',
     '🌸': 'flower',   '😈': 'devil',     '🔐': 'lockPlus', '🔊': 'volume',
     '💻': 'code',     '💡': 'bulb',      '☑': 'checkbox',  '☑️': 'checkbox',
-    '▾': 'caretDown', '▼': 'caretDown',  '❌': 'xCircle',  '🎉': 'party'
+    '▾': 'caretDown', '▼': 'caretDown',  '❌': 'xCircle',  '🎉': 'party',
+    '◀': 'caretLeft', '⬅': 'caretLeft',  '▶️': 'play',     '➡': 'caretRight',
+    '☐': 'checkboxOff', '🚩': 'pennant'
   });
 
   /* Fundstellen außerhalb von Buttons: Sektions-Titel, Chips, Badges,
@@ -75,7 +81,18 @@
     '.sec-hdr h3', '.tweaks-section-title', '.te-section-title', '.filter-chip',
     '.arch-badge', '.info-box', '.warn', '.hint', '.room-label', '.fav-hdr',
     '.log-badge', '.cond-when-lbl', '.trig-label', '.be-empty-icon', '.outfit-target-label',
-    '.section-hdr2', '.oi-title', '.search-wrap'
+    '.section-hdr2', '.oi-title', '.search-wrap',
+    /* zusätzlich aus der Bestandsaufnahme im laufenden Tool: Statistik-Kacheln,
+       Konfig-Überschriften, Leer-Zustände und Formular-Labels */
+    '.curse-stat', '.cfp-row', '.rank-cfg-title', '.shop-cfg-title',
+    '.rank-empty', '.shop-empty', '.lk-empty', '.room-leiste-empty',
+    '.modal h3', '.modal h2', '.lock-cfg label', '.stats-card-title',
+    /* Formular-Labels und Überschriften tragen die Emojis führend – dort ist
+       der Austausch unkritisch, weil das Symbol vor dem Text steht */
+    'label', 'h2', 'h3', 'h4', '.sec-hdr span', '.bs-head span',
+    /* Leer-Zustände */
+    '.empty', '.curse-empty', '.oi-empty', '.oi-drop-hint', '.import-box',
+    '.outfit-empty-hint', '.pane-title'
   ].join(',');
 
   /* Select-Optionen behalten ihr Emoji nicht: <option> kann kein SVG enthalten.

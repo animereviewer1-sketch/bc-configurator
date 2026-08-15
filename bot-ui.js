@@ -715,7 +715,14 @@ function renderSpielerTab(){
     return nameOf(a).localeCompare(nameOf(b));
   });
 
-  const keyBadge = (on,icon,lbl)=>`<span style="font-size:.62rem;padding:2px 7px;border-radius:5px;border:1px solid ${on?'rgba(251,191,36,0.5)':'rgba(255,255,255,0.08)'};background:${on?'rgba(251,191,36,0.12)':'transparent'};color:${on?'#fbbf24':'var(--text3)'}">${icon} ${lbl}${on?' ✓':''}</span>`;
+  // Medaillen-Stufen unterscheiden sich nicht mehr über die Emoji-Farbe,
+  // sondern über ein Medaillen-Icon plus Textlabel und einen Farbrand je Stufe.
+  const KEY_TIER = { Bronze:'#b08d57', Silver:'#b9bcc2', Gold:'#d9b44a' };
+  const keyBadge = (on,lbl)=>{
+    const c = KEY_TIER[lbl] || '#b9bcc2';
+    const ico = typeof bcIcon==='function' ? bcIcon('medal',11) : '';
+    return `<span style="display:inline-flex;align-items:center;gap:4px;font-size:.62rem;padding:2px 7px;border-radius:5px;border:1px solid ${on?c:'rgba(255,255,255,0.08)'};background:${on?c+'1f':'transparent'};color:${on?c:'var(--text3)'}">${ico}${lbl}${on?' ✓':''}</span>`;
+  };
 
   let lastInRoom = null;
   host.innerHTML = arr.map(n=>{
@@ -736,7 +743,7 @@ function renderSpielerTab(){
       <span style="font-size:.85rem;font-weight:700;color:var(--text1);min-width:150px">${dot}${escHtml(nm)} <span style="font-size:.66rem;color:var(--text3);font-weight:400">#${escHtml(n)}</span></span>
       <span style="font-size:.72rem;color:var(--text2)">🏆 ${rankStr}</span>
       <span style="font-size:.72rem;color:var(--text2)">💰 ${bal} ${escHtml(cur)}</span>
-      <span style="display:flex;gap:5px;margin-left:auto">${keyBadge(!!pk.bronze,'🥉','Bronze')}${keyBadge(!!pk.silver,'🥈','Silver')}${keyBadge(!!pk.gold,'🥇','Gold')}</span>
+      <span style="display:flex;gap:5px;margin-left:auto">${keyBadge(!!pk.bronze,'Bronze')}${keyBadge(!!pk.silver,'Silver')}${keyBadge(!!pk.gold,'Gold')}</span>
     </div>`;
   }).join('');
 }

@@ -10,6 +10,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&family=Inter:wght@400;500&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js"></script>
   <script src="bc-icons.js"></script>
+  <script src="bc-icons-ergaenzung.js"></script>
   <style>
 
 :root {
@@ -255,12 +256,11 @@ select option:hover {
 .topbar-brand { display: flex; align-items: center; gap: 9px; flex-shrink: 0; }
 .brand-mark {
   width: 28px; height: 28px; border-radius: var(--r-sm);
-  background: var(--accent); color: #1a1611;
+  background: #14120e;
   display: grid; place-items: center;
-  font-size: 11px; font-weight: 800; letter-spacing: -0.01em;
-  flex-shrink: 0;
+  flex-shrink: 0; overflow: hidden;
 }
-[data-theme="light"] .brand-mark { color: #fff; }
+.brand-mark img { width: 100%; height: 100%; display: block; }
 .brand-name { font-size: 0.88rem; font-weight: 700; color: var(--text); letter-spacing: -0.01em; white-space: nowrap; }
 .brand-ver  { font-size: 0.68rem; font-weight: 400; color: var(--text3); margin-left: 5px; }
 /* Right side */
@@ -2391,7 +2391,7 @@ button { cursor: pointer; }
 <!-- TOPBAR -->
 <div class="topbar">
   <div class="topbar-brand">
-    <div class="brand-mark">BC</div>
+    <div class="brand-mark"><img src="bc-logo.svg" alt="BC Konfigurator" width="28" height="28"></div>
     <div class="brand-name">Konfigurator<span class="brand-ver" id="engineVer"></span></div>
   </div>
   <div class="topbar-right">
@@ -2570,7 +2570,7 @@ button { cursor: pointer; }
       <button class="btn btn-green" onclick="loadCacheFromBC()" style="font-size:.95rem;padding:11px 28px;border-radius:99px;min-width:220px">
         ⚡ Aus Spiel laden
       </button>
-      <div id="loadingSpinner" class="hidden" style="margin-top:14px;color:#64748b;font-size:.83rem">
+      <div id="loadingSpinner" class="hidden pane-title" style="margin-top:14px;color:#64748b;font-size:.83rem">
         ⏳ Lade Asset-Daten aus dem Spiel…
       </div>
     </div>
@@ -2847,7 +2847,7 @@ button { cursor: pointer; }
         <!-- Standard-Haar Panel -->
         <div id="defaultHairPanel" style="display:none;background:var(--bg3);border:1px solid var(--border2);border-radius:10px;padding:12px 14px;margin-bottom:10px;gap:10px;flex-direction:column">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
-            <span style="font-size:.8rem;font-weight:700;color:var(--text)">💇 Standard-Haare</span>
+            <span class="pane-title" style="font-size:.8rem;font-weight:700;color:var(--text)">💇 Standard-Haare</span>
             <div style="display:flex;gap:6px">
               <button class="btn btn-green" onclick="captureDefaultHair()" style="font-size:.68rem;padding:3px 9px" title="Aktuellen Charakter scannen und Haargruppen als Baseline speichern">📡 Jetzt scannen</button>
               <button class="btn btn-red" onclick="clearDefaultHair()" style="font-size:.68rem;padding:3px 9px" title="Alle Standard-Haare zurücksetzen">🗑️ Leeren</button>
@@ -2972,7 +2972,7 @@ button { cursor: pointer; }
   box-shadow:var(--shadow-lg);overflow:hidden;font-family:var(--font-ui)">
   <div id="curseTestDragBar" style="display:flex;align-items:center;gap:8px;padding:10px 14px;
     background:rgba(251,191,36,0.08);border-bottom:1px solid rgba(251,191,36,0.2);cursor:grab">
-    <span style="font-size:.75rem;font-weight:800;color:var(--yellow)">🎭 Curse-Test</span>
+    <span class="pane-title" style="font-size:.75rem;font-weight:800;color:var(--yellow)">🎭 Curse-Test</span>
     <span id="curseTestStatus" style="font-size:.68rem;color:var(--text3);flex:1"></span>
     <button onclick="curseTestToggle()" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:.85rem;padding:0 3px" title="Stoppen">✕</button>
   </div>
@@ -2989,18 +2989,18 @@ button { cursor: pointer; }
     <!-- Timeline: prev · current · next -->
     <div style="display:grid;grid-template-columns:1fr 1.3fr 1fr;gap:6px;margin-bottom:8px">
       <div id="ctPrev" style="padding:7px 8px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r-sm);opacity:.5">
-        <div style="font-size:.58rem;color:var(--text3);margin-bottom:3px">⬅ Vorher</div>
+        <div class="pane-title" style="font-size:.58rem;color:var(--text3);margin-bottom:3px">⬅ Vorher</div>
         <div id="ctPrevName" style="font-size:.7rem;font-weight:600;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">–</div>
         <div id="ctPrevGroup" style="font-size:.6rem;color:var(--text3);font-family:var(--font-mono)">–</div>
       </div>
       <div id="ctCur" style="padding:7px 8px;background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.35);border-radius:var(--r-sm)">
-        <div style="font-size:.58rem;color:var(--yellow);margin-bottom:3px;font-weight:700">▶ Aktuell</div>
+        <div class="pane-title" style="font-size:.58rem;color:var(--yellow);margin-bottom:3px;font-weight:700">▶ Aktuell</div>
         <div id="ctCurName" style="font-size:.74rem;font-weight:800;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">–</div>
         <div id="ctCurGroup" style="font-size:.6rem;color:var(--text3);font-family:var(--font-mono)">–</div>
         <div id="ctCurOwner" style="font-size:.6rem;color:var(--text3);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">–</div>
       </div>
       <div id="ctNext" style="padding:7px 8px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r-sm);opacity:.5">
-        <div style="font-size:.58rem;color:var(--text3);margin-bottom:3px">➡ Nächster</div>
+        <div class="pane-title" style="font-size:.58rem;color:var(--text3);margin-bottom:3px">➡ Nächster</div>
         <div id="ctNextName" style="font-size:.7rem;font-weight:600;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">–</div>
         <div id="ctNextGroup" style="font-size:.6rem;color:var(--text3);font-family:var(--font-mono)">–</div>
       </div>
@@ -3035,7 +3035,7 @@ button { cursor: pointer; }
     <!-- Gespeicherte Curses Verlauf -->
     <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border)">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
-        <span style="font-size:.62rem;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.05em">💾 Gespeichert</span>
+        <span class="pane-title" style="font-size:.62rem;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.05em">💾 Gespeichert</span>
         <button onclick="_ctClearLog()" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:.62rem;padding:0 2px" title="Verlauf leeren">✕</button>
       </div>
       <div id="curseTestLog" style="max-height:90px;overflow-y:auto;display:flex;flex-direction:column;gap:2px">
@@ -3045,7 +3045,7 @@ button { cursor: pointer; }
     <!-- Check-Liste (kein Unterschied zum Standard-Outfit) -->
     <div style="margin-top:6px">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
-        <span style="font-size:.62rem;color:var(--yellow);font-weight:700;text-transform:uppercase;letter-spacing:.05em">☑️ Check</span>
+        <span class="pane-title" style="font-size:.62rem;color:var(--yellow);font-weight:700;text-transform:uppercase;letter-spacing:.05em">☑️ Check</span>
         <span style="font-size:.58rem;color:var(--text3)">= kein Outfit-Unterschied</span>
         <button onclick="_ctClearCheckList()" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:.62rem;padding:0 2px" title="Check-Liste leeren">✕</button>
       </div>
@@ -3055,7 +3055,7 @@ button { cursor: pointer; }
     </div>
     <!-- Profil nach Curse-Ende -->
     <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border)">
-      <div style="font-size:.62rem;color:var(--text3);margin-bottom:4px">⚡ Nach Curse-Ende zusätzlich ausführen:</div>
+      <div class="pane-title" style="font-size:.62rem;color:var(--text3);margin-bottom:4px">⚡ Nach Curse-Ende zusätzlich ausführen:</div>
       <div style="display:flex;gap:5px;align-items:center">
         <select id="curseTestResetProfile" style="flex:1;background:var(--bg3);border:1px solid var(--border);
           border-radius:5px;color:var(--text);font-size:.7rem;padding:4px 7px;font-family:var(--font-ui)">
@@ -3066,7 +3066,7 @@ button { cursor: pointer; }
       </div>
     </div>
     <!-- Curse-State Anzeige -->
-    <div id="curseTestCurseState" style="display:none;margin-top:8px;font-size:.65rem;
+    <div id="curseTestCurseState" class="pane-title" style="display:none;margin-top:8px;font-size:.65rem;
       padding:5px 9px;border-radius:5px;background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.25);color:var(--yellow)">
       ⏳ Curse aktiv — warte auf Ende… (💾 Profil wird automatisch gespeichert)
     </div>
@@ -3175,7 +3175,7 @@ document.write('<scr'+'ipt src="items.js?_='+_cbv+'"><\/scr'+'ipt>');
     <!-- Sidebar: Bot list -->
     <div class="bot-sidebar">
       <div class="bs-head">
-        <span>🤖 Meine Bots</span>
+        <span class="pane-title">🤖 Meine Bots</span>
         <button class="btn btn-green" onclick="botNew()" style="font-size:.65rem;padding:3px 8px">+ Neu</button>
       </div>
       <!-- Groups area -->
@@ -3206,7 +3206,7 @@ document.write('<scr'+'ipt src="items.js?_='+_cbv+'"><\/scr'+'ipt>');
 
 <div id="tab-log" class="tab-pane">
   <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px 10px;border-bottom:1px solid var(--border)">
-    <span style="font-weight:600;font-size:.85rem;color:var(--text1)">📋 Bot-Logs</span>
+    <span class="pane-title" style="font-weight:600;font-size:.85rem;color:var(--text1)">📋 Bot-Logs</span>
     <div style="display:flex;gap:8px;align-items:center">
       <span id="log-count" style="font-size:.68rem;color:var(--text3)"></span>
       <button onclick="logFilter('')"             id="logf-all"    class="log-filter-btn active">Alle</button>
@@ -3228,7 +3228,7 @@ document.write('<scr'+'ipt src="items.js?_='+_cbv+'"><\/scr'+'ipt>');
 
 <div id="tab-money" class="tab-pane">
   <div style="display:flex;gap:18px;padding:14px 18px;border-bottom:1px solid var(--border);align-items:center;flex-wrap:wrap">
-    <span style="font-weight:600;font-size:.85rem">💰 Money System</span>
+    <span class="pane-title" style="font-weight:600;font-size:.85rem">💰 Money System</span>
     <label style="font-size:.7rem;color:var(--text3)">Währungsname:
       <input id="money-name-inp" class="cf" style="width:100px;margin-left:4px" placeholder="Gold"
         value="" oninput="moneySetName(this.value)">
@@ -3297,7 +3297,7 @@ document.write('<scr'+'ipt src="items.js?_='+_cbv+'"><\/scr'+'ipt>');
     <!-- RIGHT: Spieler-Ränge -->
     <div class="rank-players">
       <div class="rank-filter-bar">
-        <span style="font-weight:700;font-size:.82rem">👥 Spieler-Ränge</span>
+        <span class="pane-title" style="font-weight:700;font-size:.82rem">👥 Spieler-Ränge</span>
         <div class="search-wrap" data-icon="search"><input class="rank-search" id="rank-search" placeholder="🔍 Spieler suchen…" oninput="renderRankPlayers()"></div>
         <select id="rank-filter-sel" class="cf" style="width:150px" onchange="renderRankPlayers()">
           <option value="">Alle Ränge</option>
@@ -3347,7 +3347,7 @@ document.write('<scr'+'ipt src="items.js?_='+_cbv+'"><\/scr'+'ipt>');
         <button onclick="jsonImportOpen('shop')" title="Shop-Artikel per JSON einfügen/zusammenführen" style="background:none;border:1px solid rgba(255,255,255,0.1);border-radius:5px;color:var(--text3);font-size:.62rem;padding:2px 8px;cursor:pointer">{ }📥</button>
       </div>
       <div style="font-size:.65rem;color:var(--text3);margin-bottom:10px;line-height:1.5">
-        Definiere kaufbare Artikel. Jeder Artikel löst Trigger mit der Bedingung <b>🛒 Shop-Kauf</b> aus.<br>
+        Definiere kaufbare Artikel. Jeder Artikel löst Trigger mit der Bedingung <b class="pane-title">🛒 Shop-Kauf</b> aus.<br>
         Befehl: <code style="color:var(--green)">&lt;!pay&gt; "Artikelname"</code> · Für anderen: <code style="color:var(--green)">&lt;!pay&gt; "Artikel" "Spielername"</code> · Für alle: <code style="color:var(--yellow)">&lt;!pay&gt; "Artikel" All</code><br>
         Flags: <code style="color:oklch(78% 0.12 60)">/u</code> = anonym &nbsp;·&nbsp; <code style="color:#f87171">/nostrip</code> = Item kann nicht abgelegt werden &nbsp;·&nbsp; <code style="color:var(--text3)">/w</code> = Flüstern
       </div>
@@ -3424,7 +3424,7 @@ document.write('<scr'+'ipt src="items.js?_='+_cbv+'"><\/scr'+'ipt>');
     <!-- RIGHT: Kauf-Log -->
     <div class="shop-right">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid rgba(255,255,255,0.07)">
-        <span style="font-size:.85rem;font-weight:700;color:var(--text1)">📋 Kauf-Verlauf</span>
+        <span class="pane-title" style="font-size:.85rem;font-weight:700;color:var(--text1)">📋 Kauf-Verlauf</span>
         <span id="shop-log-count" style="font-size:.65rem;color:var(--text3)"></span>
       </div>
       <div id="shop-log-list">
@@ -3485,7 +3485,7 @@ document.write('<scr'+'ipt src="items.js?_='+_cbv+'"><\/scr'+'ipt>');
     <input class="cf" id="shop-modal-error" placeholder="Leer = Standard-Nachricht">
     <div style="font-size:.59rem;color:var(--text3);margin-top:4px">Variablen: {name} {ziel} {item} {preis} {waehrung} {kontostand} · All-Kauf: {anzahl} {gesamt}</div>
     <div style="margin-top:12px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.07)">
-      <div style="font-size:.66rem;font-weight:700;color:var(--purple);margin-bottom:6px">🚩 Flag-Aufpreis (Artikel-Override, leer = globale Einstellung)</div>
+      <div class="pane-title" style="font-size:.66rem;font-weight:700;color:var(--purple);margin-bottom:6px">🚩 Flag-Aufpreis (Artikel-Override, leer = globale Einstellung)</div>
       <div style="display:flex;gap:10px">
         <label style="font-size:.63rem;color:var(--text3);flex:1">/u Aufpreis:
           <input class="cf" id="shop-modal-preis-u" type="number" min="0" placeholder="leer = global" style="width:100%;margin-top:2px">
@@ -3745,7 +3745,7 @@ document.write('<scr'+'ipt src="outfit-import.js?_='+_cbv+'"><\/scr'+'ipt>');
 
 <div id="tab-lscg-wheel" class="tab-pane">
   <div style="display:flex;align-items:center;gap:8px;padding:8px 0 6px;flex-wrap:wrap">
-    <span style="font-size:.75rem;font-weight:700;color:var(--yellow)">🎡 MBS Wheel</span>
+    <span class="pane-title" style="font-size:.75rem;font-weight:700;color:var(--yellow)">🎡 MBS Wheel</span>
     <span id="wheelScanStatus" style="font-size:.68rem;color:var(--text3);flex:1;min-width:0"></span>
     <button onclick="bcuUndoAppearance()" class="btn" style="font-size:.65rem;padding:2px 8px;flex-shrink:0" title="Vorheriges Aussehen wiederherstellen">↩ Undo</button>
     <button id="wheelSortBtn" onclick="mbsWheelToggleSort()" class="btn" style="font-size:.65rem;padding:2px 8px;flex-shrink:0" title="Sortierung umschalten">🔤 Name</button>
@@ -3789,7 +3789,7 @@ document.write('<scr'+'ipt src="outfit-import.js?_='+_cbv+'"><\/scr'+'ipt>');
 <div id="tab-spieler" class="tab-pane">
   <div style="padding:16px 18px">
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
-      <span style="font-size:.95rem;font-weight:800;color:var(--text1)">👤 Spieler – Bot-Übersicht</span>
+      <span class="pane-title" style="font-size:.95rem;font-weight:800;color:var(--text1)">👤 Spieler – Bot-Übersicht</span>
       <span id="spieler-count" style="font-size:.7rem;color:var(--text3)"></span>
       <button onclick="renderSpielerTab()" style="margin-left:auto;background:none;border:1px solid rgba(255,255,255,0.12);border-radius:6px;color:var(--text2);font-size:.66rem;padding:4px 10px;cursor:pointer">⟳ Aktualisieren</button>
     </div>
@@ -3804,7 +3804,7 @@ document.write('<scr'+'ipt src="outfit-import.js?_='+_cbv+'"><\/scr'+'ipt>');
 <div id="tab-variablen" class="tab-pane">
   <div style="padding:16px 18px">
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
-      <span style="font-size:.95rem;font-weight:800;color:var(--text1)">🔢 Variablen pro Spieler</span>
+      <span class="pane-title" style="font-size:.95rem;font-weight:800;color:var(--text1)">🔢 Variablen pro Spieler</span>
       <span id="variablen-count" style="font-size:.7rem;color:var(--text3)"></span>
       <button onclick="renderVariablenTab()" style="margin-left:auto;background:none;border:1px solid rgba(255,255,255,0.12);border-radius:6px;color:var(--text2);font-size:.66rem;padding:4px 10px;cursor:pointer">⟳ Aktualisieren</button>
     </div>
@@ -4045,9 +4045,11 @@ document.write('<scr'+'ipt src="outfit-import.js?_='+_cbv+'"><\/scr'+'ipt>');
 <!-- ══════════════════════════════════════════ -->
 
 <script>
-  // Emojis in Buttons/Tabs/Chips durch die Stroke-Icons aus bc-icons.js ersetzen.
-  // bcIconsAuto() beobachtet das DOM, damit auch dynamisch gerenderte Listen
-  // (Item-Grid, Bot-UI, Shop, Rang …) Icons bekommen.
+  // Emojis durch die Stroke-Icons aus bc-icons.js ersetzen — Buttons, Tabs,
+  // Chips, Sektions-Titel, Badges, Info-Boxen, Suchfelder und <option>-Listen.
+  // bcIconsAuto() beobachtet das DOM, damit auch dynamisch gerenderte Bereiche
+  // (Bot-Editor, Trigger-Liste, Szenen, Logs, Item-Grid) erfasst werden; der
+  // Observer ruft denselben Sweep auf wie der Initiallauf.
   if (document.readyState === 'loading') {
     addEventListener('DOMContentLoaded', bcIconsAuto);
   } else {
