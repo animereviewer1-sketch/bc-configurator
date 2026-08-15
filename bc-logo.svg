@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128" fill="none">
+  <title>BC Konfigurator</title>
+  <defs>
+    <filter id="g-weiss-128" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="3" result="b"></feGaussianBlur>
+      <feMerge><feMergeNode in="b"></feMergeNode><feMergeNode in="b"></feMergeNode><feMergeNode in="SourceGraphic"></feMergeNode></feMerge>
+    </filter>
+    <mask id="w-weiss-128">
+      <rect width="128" height="128" fill="#fff"></rect>
+      <rect x="56" y="58" width="17" height="18" fill="#000"></rect>
+    </mask>
+  </defs>
+  <g filter="url(#g-weiss-128)">
+    <text x="63" y="76" text-anchor="middle" font-family="Inter Tight, sans-serif" font-size="40" font-weight="800" fill="none" stroke="#ffffff" stroke-width="2.4" opacity="0.7" letter-spacing="-1.5">BC</text>
+  </g>
+  <g transform="rotate(-34 64 64)">
+    <g mask="url(#w-weiss-128)">
+      <path d="M64 68C32 68 34 18 64 18C94 18 90 68 64 68C50 68 49 100 64 100C79 100 78 68 64 68Z" transform="translate(-2.9 0)" stroke="#f4f2ee" stroke-width="3.2" stroke-linejoin="round"></path>
+      <path d="M64 68C32 68 34 18 64 18C94 18 90 68 64 68C50 68 49 100 64 100C79 100 78 68 64 68Z" transform="translate(0 0)" stroke="#b8b5ad" stroke-width="3.2" stroke-linejoin="round"></path>
+      <path d="M64 68C32 68 34 18 64 18C94 18 90 68 64 68C50 68 49 100 64 100C79 100 78 68 64 68Z" transform="translate(2.9 0)" stroke="#e8e5dd" stroke-width="3.2" stroke-linejoin="round"></path>
+    </g>
+    <line x1="55" y1="60" x2="73" y2="60" stroke="#f4f2ee" stroke-width="3.2" stroke-linecap="round"></line>
+    <line x1="55" y1="64.5" x2="73" y2="64.5" stroke="#b8b5ad" stroke-width="3.2" stroke-linecap="round"></line>
+    <line x1="55" y1="69" x2="73" y2="69" stroke="#f4f2ee" stroke-width="3.2" stroke-linecap="round"></line>
+    <line x1="55" y1="73.5" x2="73" y2="73.5" stroke="#b8b5ad" stroke-width="3.2" stroke-linecap="round"></line>
+  </g>
+</svg>

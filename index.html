@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>BC Konfigurator</title>
+  <link rel="icon" type="image/svg+xml" href="bc-favicon.svg">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&family=Inter:wght@400;500&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -274,13 +275,20 @@ select option:hover {
 .topbar-icon-btn:hover { background: var(--bg-hover); color: var(--text); }
 .topbar-icon-btn.active { background: var(--accent-soft); color: var(--accent-text); }
 
+/* Status-Chips sind neutral – nur der farbige Punkt trägt die Information,
+   damit oben keine zweite laute Farbe neben dem Primär-Button steht. */
 .tbadge {
   font-family: var(--font-mono); font-size: 0.68rem; font-weight: 600;
   padding: 3px 10px; border-radius: 99px; border: 1px solid; letter-spacing: 0.02em;
-  background: oklch(72% 0.13 58 / 0.1); border-color: oklch(72% 0.13 58 / 0.3); color: var(--accent-text);
-  white-space: nowrap;
+  background: rgba(255,255,255,0.03); border-color: rgba(255,255,255,0.12); color: var(--text2);
+  white-space: nowrap; display: inline-flex; align-items: center; gap: 6px;
 }
-[data-theme="light"] .tbadge { background: oklch(58% 0.14 50 / 0.08); border-color: oklch(58% 0.14 50 / 0.3); }
+[data-theme="light"] .tbadge { background: rgba(0,0,0,0.03); border-color: rgba(0,0,0,0.12); }
+.tbadge[data-conn]::before {
+  content: ''; width: 7px; height: 7px; border-radius: 99px; flex-shrink: 0;
+  background: #fb7185;
+}
+.tbadge[data-conn="on"]::before { background: #34d399; }
 .tbadge.outfit {
   background: rgba(124,45,18,0.25); border-color: rgba(251,146,60,0.35); color: var(--orange);
 }
@@ -330,41 +338,78 @@ select option:hover {
 svg.bci { width: 1.15em; height: 1.15em; flex-shrink: 0; }
 .btn svg.bci { margin-right: 1px; }
 .btn.btn-icon-only { padding: 7px 9px; }
+/* Icons in Fließtext-Elementen (Titel, Info-Boxen, Badges) mittig zur Zeile */
+h3 svg.bci, .info-box svg.bci, .hint svg.bci, .warn svg.bci,
+.log-badge svg.bci, .arch-badge svg.bci, .section-hdr2 svg.bci {
+  vertical-align: -0.15em; margin-right: 6px;
+}
+
+/* Suchfeld: Lupe sitzt fest im Feld statt als Emoji im Placeholder */
+.search-wrap { position: relative; display: flex; align-items: center; }
+.search-wrap svg.bci {
+  position: absolute; left: 11px; width: 15px; height: 15px;
+  color: var(--text3); pointer-events: none;
+}
+.search-wrap input { padding-left: 33px; width: 100%; }
 .tab-btn, .obertab-btn, .stats-tab-btn {
   display: inline-flex; align-items: center; gap: 7px;
 }
 .tweaks-btn { display: inline-flex; align-items: center; justify-content: center; gap: 5px; }
 
-.btn-primary {
-  background: var(--accent);
-  color: #1a1611; box-shadow: none;
+/* ── Button-Farbsystem: eine Farbe führt ──
+   Genau ein Primär-Button pro Leiste, alles andere neutral,
+   Rot nur für unwiderrufliches Löschen. Die alten Klassennamen
+   (.btn-green, .btn-orange, .btn-yellow, .btn-red …) bleiben als
+   Alias erhalten, damit JS-generiertes Markup weiter funktioniert.
+   Tokens leiten sich von --accent ab, damit die Akzentwahl im
+   Tweaks-Panel weiter greift. */
+:root {
+  --btn-accent:       var(--accent);
+  --btn-accent-ink:   #1a1611;
+  --btn-accent-soft:  var(--accent-soft);
+  --btn-accent-edge:  var(--accent-line);
+  --btn-accent-text:  var(--accent-text);
+  --btn-neutral:      rgba(255,255,255,0.05);
+  --btn-neutral-edge: rgba(255,255,255,0.12);
+  --btn-neutral-text: #d9d6cf;
+  --btn-danger-soft:  rgba(220,38,38,0.10);
+  --btn-danger-edge:  rgba(220,38,38,0.40);
+  --btn-danger-text:  #f4a3a3;
 }
-.btn-primary:hover { background: var(--accent-hover); box-shadow: none; filter: none; }
 
-.btn-green {
-  background: linear-gradient(135deg, #065f46, #059669);
-  color: #fff; box-shadow: 0 2px 12px rgba(5,150,105,0.3);
+/* Primär – genau ein Button pro Leiste. Alt: .btn-green */
+.btn-primary, .btn-green {
+  background: var(--btn-accent); color: var(--btn-accent-ink);
+  border: none; box-shadow: none;
 }
-.btn-green:hover { box-shadow: 0 4px 20px rgba(5,150,105,0.5); filter: brightness(1.1); }
-.btn-green:disabled { opacity: 0.4; cursor: not-allowed; filter: none; box-shadow: none; }
-.btn-yellow {
-  background: linear-gradient(135deg, #78350f, #d97706);
-  color: #fff; box-shadow: 0 2px 12px rgba(217,119,6,0.3);
-}
-.btn-yellow:hover { box-shadow: 0 4px 20px rgba(217,119,6,0.5); filter: brightness(1.1); }
-.btn-yellow:disabled { opacity: 0.4; cursor: not-allowed; filter: none; box-shadow: none; }
+.btn-primary:hover, .btn-green:hover { background: var(--accent-hover); box-shadow: none; filter: none; }
 
-.btn-red {
-  background: linear-gradient(135deg, #7f1d1d, #dc2626);
-  color: #fff; box-shadow: 0 2px 10px rgba(220,38,38,0.25);
+/* Sekundär – verwandte Aktion daneben. Alt: .btn-orange */
+.btn-secondary, .btn-orange {
+  background: var(--btn-accent-soft); color: var(--btn-accent-text);
+  border: 1px solid var(--btn-accent-edge); box-shadow: none;
 }
-.btn-red:hover { box-shadow: 0 4px 18px rgba(220,38,38,0.45); filter: brightness(1.1); }
+.btn-secondary:hover, .btn-orange:hover { background: color-mix(in oklab, var(--accent) 18%, transparent); }
 
-.btn-orange {
-  background: linear-gradient(135deg, #7c2d12, #ea580c);
-  color: #fff; box-shadow: 0 2px 10px rgba(234,88,12,0.25);
+/* Neutral – der Normalfall. Alt: .btn-yellow, .btn-blue, .btn-purple, .btn-gray */
+.btn-neutral, .btn-yellow, .btn-blue, .btn-purple, .btn-gray {
+  background: var(--btn-neutral); color: var(--btn-neutral-text);
+  border: 1px solid var(--btn-neutral-edge); box-shadow: none;
 }
-.btn-orange:hover { box-shadow: 0 4px 18px rgba(234,88,12,0.45); filter: brightness(1.1); }
+.btn-neutral:hover, .btn-yellow:hover, .btn-blue:hover,
+.btn-purple:hover, .btn-gray:hover { background: rgba(255,255,255,0.09); filter: none; box-shadow: none; }
+
+/* Löschen – nur unwiderruflich. Alt: .btn-red */
+.btn-danger, .btn-red {
+  background: var(--btn-danger-soft); color: var(--btn-danger-text);
+  border: 1px solid var(--btn-danger-edge); box-shadow: none;
+}
+.btn-danger:hover, .btn-red:hover { background: rgba(220,38,38,0.18); filter: none; box-shadow: none; }
+
+.btn:disabled { opacity: 0.4; cursor: not-allowed; filter: none; box-shadow: none; }
+
+/* Dünner Trennstrich – gruppiert die Leiste, ersetzt Farbe als Gliederungsmittel */
+.btn-sep { width: 1px; height: 22px; background: rgba(255,255,255,.1); margin: 0 2px; flex-shrink: 0; }
 
 .btn-copy {
   font-family: var(--font-ui); width: 100%; margin-top: 10px; padding: 12px 16px;
@@ -374,18 +419,19 @@ svg.bci { width: 1.15em; height: 1.15em; flex-shrink: 0; }
   color: #1a1611; box-shadow: none; letter-spacing: 0.03em;
 }
 .btn-copy:hover { background: var(--accent-hover); box-shadow: none; filter: none; }
-.btn-copy.copied { background: linear-gradient(135deg, #065f46, #059669); box-shadow: none; }
+.btn-copy.copied { background: rgba(5,150,105,0.18); color: #6ee7b7; box-shadow: none; }
 
 .btn-row { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
 
 .btn-sync {
-  background: linear-gradient(135deg, #1e3a8a, #3b82f6);
-  color: #fff; border: none; border-radius: 99px; cursor: pointer;
+  background: var(--btn-neutral);
+  color: var(--btn-neutral-text); border: 1px solid var(--btn-neutral-edge);
+  border-radius: 99px; cursor: pointer;
   transition: all 0.18s ease; white-space: nowrap; font-weight: 700;
-  font-family: var(--font-ui); font-size: 0.79rem; padding: 7px 17px;
-  box-shadow: 0 2px 12px rgba(59,130,246,0.3);
+  font-family: var(--font-ui); font-size: 0.79rem; padding: 7px 15px;
+  display: inline-flex; align-items: center; gap: 6px; box-shadow: none;
 }
-.btn-sync:hover { filter: brightness(1.15); box-shadow: 0 4px 20px rgba(59,130,246,0.5); }
+.btn-sync:hover { background: rgba(255,255,255,0.09); filter: none; box-shadow: none; }
 .btn-sync:disabled { opacity: 0.45; cursor: not-allowed; filter: none; }
 
 #execBtn { font-weight: 800; letter-spacing: 0.02em; }
@@ -1263,7 +1309,7 @@ textarea.outfit-code { width: 100%; min-height: 210px; background: rgba(0,0,0,0.
 
 /* ── Topbar / Stats ─────────────────────────── */
 .curse-topbar { display: flex; align-items: center; gap: 10px; padding: 11px 18px; background: transparent; border-bottom: 1px solid rgba(255,255,255,0.07); flex-wrap: wrap; }
-.curse-stats { display: flex; gap: 6px; flex-wrap: wrap; flex: 1; }
+.curse-stats { display: flex; gap: 6px; flex-wrap: wrap; margin-left: auto; }
 .curse-stat {
   background: rgba(255,255,255,0.03);
   border: 1px solid rgba(255,255,255,0.08);
@@ -2349,12 +2395,12 @@ button { cursor: pointer; }
     <div class="brand-name">Konfigurator<span class="brand-ver" id="engineVer"></span></div>
   </div>
   <div class="topbar-right">
-    <span class="tbadge" id="connStatus" style="color:#fb7185" title="Verbindungsstatus mit dem Bondage Club">🔴 Nicht verbunden</span>
+    <span class="tbadge" id="connStatus" data-conn="off" title="Verbindungsstatus mit dem Bondage Club">Nicht verbunden</span>
     <span class="tbadge" id="playerInfo" style="display:none" title="Aktueller Spieler"></span>
     <span class="tbadge" id="cacheInfo" title="Geladene Item-Daten">Kein Cache</span>
     <button class="btn btn-green" id="loadCacheBtn" onclick="loadCacheFromBC()" title="Item-Daten aus dem laufenden Bondage Club Spiel laden">⚡ Laden</button>
-    <button class="btn btn-primary" id="reconnectBtn" onclick="manualReconnect()" title="Verbindung neu herstellen">🔄 Verbinden</button>
-    <button class="btn btn-red hidden" id="clearBtn" onclick="clearCache()" title="Cache löschen">🗑</button>
+    <button class="btn btn-secondary" id="reconnectBtn" onclick="manualReconnect()" title="Verbindung neu herstellen">🔄 Verbinden</button>
+    <button class="btn btn-danger hidden" id="clearBtn" onclick="clearCache()" title="Cache löschen">🗑</button>
     <div id="statusMsg" class="status-msg hidden"></div>
     <button class="topbar-icon-btn" id="tweaksBtnToggle" onclick="toggleTweaksPanel()" title="Einstellungen">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
@@ -2503,7 +2549,7 @@ button { cursor: pointer; }
 <!-- LAYOUT -->
 <div class="layout">
   <div class="sidebar">
-    <input class="sidebar-search" placeholder="🔍 Item suchen..." oninput="_debouncedRenderGroups(this.value)">
+    <div class="search-wrap" data-icon="search"><input class="sidebar-search" placeholder="🔍 Item suchen..." oninput="_debouncedRenderGroups(this.value)"></div>
     <div id="favSection" class="hidden">
       <div class="fav-hdr">⭐ Favoriten</div>
       <div id="favList" style="margin-bottom:10px"></div>
@@ -2762,7 +2808,7 @@ button { cursor: pointer; }
         </div>
       </div>
       <div class="outfit-search-row">
-        <input class="outfit-search" id="outfitItemSearch" placeholder="🔍 Item suchen..." oninput="_debouncedRenderOutfitList()">
+        <div class="search-wrap" data-icon="search"><input class="outfit-search" id="outfitItemSearch" placeholder="🔍 Item suchen..." oninput="_debouncedRenderOutfitList()"></div>
       </div>
       <!-- Outfit Filter-Bar -->
       <div class="outfit-filter-bar" id="outfitFilterBar">
@@ -2780,7 +2826,7 @@ button { cursor: pointer; }
         <div class="section-hdr2">
           <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
             <span>📁 Profile</span>
-            <input class="outfit-search" id="profileSearch" placeholder="🔍 Profil suchen..." oninput="_debouncedRenderProfileList()" style="width:140px;font-size:.69rem;padding:3px 8px">
+            <div class="search-wrap" data-icon="search"><input class="outfit-search" id="profileSearch" placeholder="🔍 Profil suchen..." oninput="_debouncedRenderProfileList()" style="width:140px;font-size:.69rem;padding:3px 8px"></div>
             <span class="filter-chip profile-fc on" data-filter="all" onclick="setProfileFilter('all')" style="font-size:.65rem;padding:3px 9px">Alle</span>
             <span class="filter-chip profile-fc" data-filter="fav" onclick="setProfileFilter('fav')" title="Nur Favoriten" style="font-size:.65rem;padding:3px 9px">⭐ Favs</span>
             <span class="filter-chip profile-fc" data-filter="withshot" onclick="setProfileFilter('withshot')" title="Nur Profile mit Screenshot" style="font-size:.65rem;padding:3px 9px">📷 Mit Bild</span>
@@ -3056,15 +3102,17 @@ document.write('<scr'+'ipt src="items.js?_='+_cbv+'"><\/scr'+'ipt>');
 <!-- ── TAB 3: CRAFT & CURSE ── -->
 <div id="tab-curse" class="tab-pane">
   <div class="curse-topbar">
-    <button class="btn btn-green" onclick="curseScan()">🔍 Scannen</button>
-    <button class="btn btn-green" onclick="curseClearAndScan()" title="Alte Einträge löschen und frisch scannen">🔄 Neu scannen</button>
-    <button class="btn btn-primary" id="csAutoScanBtn" onclick="toggleAutoCurseScan()" title="Automatisch alle 30s scannen">⏰ Auto-Scan</button>
-    <button class="btn btn-primary" onclick="curseAutoMarkOutfit()" title="Kommentare mit 'outfit' automatisch als Outfit markieren">📝 Auto-Mark</button>
-    <button class="btn btn-red" onclick="clearAllOutfitFlags()" title="Alle Outfit-Tags von allen Items entfernen – zum Neu-Anfangen">🗑️ Outfit-Tags leeren</button>
-    <button class="btn btn-red" onclick="curseClear()" title="Alle gespeicherten Einträge löschen">🗑️ Leeren</button>
-    <button class="btn btn-primary" id="curseDefaultOutfitBtn" onclick="captureAndSetCurseDefaultOutfit()" oncontextmenu="clearCurseDefaultOutfit(event)" title="Klicken → aktuelles Outfit merken und nach jedem 💾 Profil automatisch ausrüsten&#10;Rechtsklick → entfernen" style="white-space:nowrap">🏠 Standard-Outfit</button>
-    <button class="btn btn-primary" id="curseUrsprungBtn" onclick="curseRestoreUrsprung()" title="Alle Items ablegen und Ursprungs-Outfit wiederherstellen (gesichertes Outfit vor dem letzten Curse)" style="white-space:nowrap">🔄 Ursprung</button>
-    <button class="btn btn-yellow" id="curseTestBtn" onclick="curseTestToggle()" title="Alle gecurseden Items (ohne Outfit-Tag) der Reihe nach alle 10s anlegen">🎭 Curse-Test</button>
+    <button class="btn btn-primary" onclick="curseScan()">🔍 Scannen</button>
+    <button class="btn btn-secondary" onclick="curseClearAndScan()" title="Alte Einträge löschen und frisch scannen">🔄 Neu scannen</button>
+    <div class="btn-sep"></div>
+    <button class="btn btn-neutral" id="csAutoScanBtn" onclick="toggleAutoCurseScan()" title="Automatisch alle 30s scannen">⏰ Auto-Scan</button>
+    <button class="btn btn-neutral" onclick="curseAutoMarkOutfit()" title="Kommentare mit 'outfit' automatisch als Outfit markieren">📝 Auto-Mark</button>
+    <button class="btn btn-neutral" id="curseDefaultOutfitBtn" onclick="captureAndSetCurseDefaultOutfit()" oncontextmenu="clearCurseDefaultOutfit(event)" title="Klicken → aktuelles Outfit merken und nach jedem 💾 Profil automatisch ausrüsten&#10;Rechtsklick → entfernen" style="white-space:nowrap">🏠 Standard-Outfit</button>
+    <button class="btn btn-neutral" id="curseUrsprungBtn" onclick="curseRestoreUrsprung()" title="Alle Items ablegen und Ursprungs-Outfit wiederherstellen (gesichertes Outfit vor dem letzten Curse)" style="white-space:nowrap">🔄 Ursprung</button>
+    <button class="btn btn-neutral" id="curseTestBtn" onclick="curseTestToggle()" title="Alle gecurseden Items (ohne Outfit-Tag) der Reihe nach alle 10s anlegen">🎭 Curse-Test</button>
+    <div class="btn-sep"></div>
+    <button class="btn btn-danger" onclick="clearAllOutfitFlags()" title="Alle Outfit-Tags von allen Items entfernen – zum Neu-Anfangen">🗑️ Outfit-Tags leeren</button>
+    <button class="btn btn-danger" onclick="curseClear()" title="Alle gespeicherten Einträge löschen">🗑️ Leeren</button>
     <div class="curse-stats">
       <div class="curse-stat">Crafts: <span id="csStat-total">0</span></div>
       <div class="curse-stat">🔮 Cursed: <span id="csStat-cursed">0</span></div>
@@ -3078,7 +3126,7 @@ document.write('<scr'+'ipt src="items.js?_='+_cbv+'"><\/scr'+'ipt>');
   </div>
   <!-- Filter bar -->
   <div class="curse-filter-bar" id="curseFilterBar">
-    <input class="curse-search" id="curseSearch" placeholder="🔍 Name, Item, Gruppe, Kommentar, Raum..." oninput="_debouncedRenderCurseTab()">
+    <div class="search-wrap" data-icon="search"><input class="curse-search" id="curseSearch" placeholder="🔍 Name, Item, Gruppe, Kommentar, Raum..." oninput="_debouncedRenderCurseTab()"></div>
     <div class="filter-sep"></div>
     <!-- Filter dropdown -->
     <div class="cfp-wrap" id="cfpWrap">
@@ -3148,7 +3196,7 @@ document.write('<scr'+'ipt src="items.js?_='+_cbv+'"><\/scr'+'ipt>');
   <div class="ipicker-box">
     <div class="ipicker-head">
       <span style="font-size:.78rem;font-weight:600">Auswählen</span>
-      <input class="cf cf-flex" id="ipickerSearch" placeholder="🔍 Suchen..." oninput="ipickerRender()">
+      <div class="search-wrap" data-icon="search"><input class="cf cf-flex" id="ipickerSearch" placeholder="🔍 Suchen..." oninput="ipickerRender()"></div>
       <button class="btn btn-red" onclick="ipickerClose()" style="font-size:.65rem;padding:3px 8px">✕</button>
     </div>
     <div class="ipicker-tabs" id="ipickerTabs"></div>
@@ -3250,7 +3298,7 @@ document.write('<scr'+'ipt src="items.js?_='+_cbv+'"><\/scr'+'ipt>');
     <div class="rank-players">
       <div class="rank-filter-bar">
         <span style="font-weight:700;font-size:.82rem">👥 Spieler-Ränge</span>
-        <input class="rank-search" id="rank-search" placeholder="🔍 Spieler suchen…" oninput="renderRankPlayers()">
+        <div class="search-wrap" data-icon="search"><input class="rank-search" id="rank-search" placeholder="🔍 Spieler suchen…" oninput="renderRankPlayers()"></div>
         <select id="rank-filter-sel" class="cf" style="width:150px" onchange="renderRankPlayers()">
           <option value="">Alle Ränge</option>
         </select>
@@ -3628,8 +3676,8 @@ document.write('<scr'+'ipt src="outfit-import.js?_='+_cbv+'"><\/scr'+'ipt>');
     <div class="oi-toolbar">
       <span class="oi-title">📥 Outfit Import</span>
       <div class="oi-toolbar-actions">
-        <button class="btn btn-green" onclick="oiOpenFilePicker()" title=".txt Datei importieren">📂 .txt laden</button>
-        <button class="btn btn-primary" onclick="oiAddManual()" title="Code manuell einfügen">✏️ Manuell</button>
+        <button class="btn btn-primary" onclick="oiOpenFilePicker()" title=".txt Datei importieren">📂 .txt laden</button>
+        <button class="btn btn-secondary" onclick="oiAddManual()" title="Code manuell einfügen">✏️ Manuell</button>
         <div class="oi-delay-wrap" title="Verzögerung zwischen sequenziellen Ausführungen">
           <span style="font-size:.65rem;color:var(--text3)">Delay</span>
           <input type="number" id="oiDelayInput" class="oi-delay-inp" value="3" min="1" max="60"
@@ -3673,8 +3721,8 @@ document.write('<scr'+'ipt src="outfit-import.js?_='+_cbv+'"><\/scr'+'ipt>');
 <div id="tab-outfit-scan" class="tab-pane">
   <div class="os-header">
     <button class="btn btn-primary" onclick="scanOutfits()">▶ Scannen</button>
-    <input id="osSearchInput" class="os-search" type="text" placeholder="🔍 Name suchen…"
-           oninput="osSearch(this.value)" value="">
+    <div class="search-wrap" data-icon="search"><input id="osSearchInput" class="os-search" type="text" placeholder="🔍 Name suchen…"
+           oninput="osSearch(this.value)" value=""></div>
     <button class="os-filter-btn" onclick="toggleIgnorePanel()" title="Gruppen-Filter">⚙ Filter</button>
     <button class="btn btn-primary" onclick="captureAllMissingOsScreenshots()" title="Für alle Einträge ohne Bild ein Canvas-Bild aufnehmen" style="font-size:.68rem;padding:4px 10px">📸 Fehlende Bilder</button>
     <button class="btn" onclick="clearAllLscgScreenshots()" title="Alle Bilder löschen (Codes bleiben)" style="font-size:.68rem;padding:4px 10px;color:#fb7185;border-color:rgba(251,113,133,0.3)">🖼️ Alle Bilder löschen</button>
@@ -3710,9 +3758,9 @@ document.write('<scr'+'ipt src="outfit-import.js?_='+_cbv+'"><\/scr'+'ipt>');
     <button onclick="mbsWheelClearAll()" class="btn btn-red" style="font-size:.65rem;padding:2px 8px;flex-shrink:0" title="Alle Outfits + Bilder löschen">🗑️</button>
   </div>
   <div style="padding-bottom:6px">
-    <input id="wheelSearchInput" type="text" placeholder="🔍 Spieler, Outfit oder Datum (z.B. 02.07.) suchen…"
+    <div class="search-wrap" data-icon="search"><input id="wheelSearchInput" type="text" placeholder="🔍 Spieler, Outfit oder Datum (z.B. 02.07.) suchen…"
       oninput="mbsWheelSearch(this.value)"
-      style="width:100%;box-sizing:border-box;font-size:.72rem;padding:5px 8px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r-sm);color:var(--text1);outline:none">
+      style="width:100%;box-sizing:border-box;font-size:.72rem;padding:5px 8px 5px 33px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r-sm);color:var(--text1);outline:none"></div>
   </div>
   <div style="display:flex;gap:6px;padding-bottom:8px">
     <button id="wheelFilterAll" onclick="mbsWheelSetFilter('all')" class="btn" style="font-size:.65rem;padding:2px 10px">Alle</button>

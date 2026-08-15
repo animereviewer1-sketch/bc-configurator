@@ -5686,7 +5686,7 @@ setInterval(function() {
     _playerChecked = false;
     stopRoomScan();
     const cs = document.getElementById('connStatus');
-    if (cs) { cs.textContent = '🔴 Verbindung verloren'; cs.style.color = 'var(--red)'; }
+    if (cs) { cs.textContent = 'Verbindung verloren'; cs.dataset.conn = 'off'; }
     startPingRetry();
   }
 }, 5000);
@@ -5699,8 +5699,8 @@ function manualReconnect() {
   _connected = false;
   _playerChecked = false;
   stopRoomScan();
-  document.getElementById('connStatus').textContent = '🔴 Nicht verbunden';
-  document.getElementById('connStatus').style.color = 'var(--red)';
+  document.getElementById('connStatus').textContent = 'Nicht verbunden';
+  document.getElementById('connStatus').dataset.conn = 'off';
   console.log('[BCK-Popup] manualReconnect()');
   bcSend({ type: 'PING' });
   startPingRetry();
@@ -5748,8 +5748,8 @@ window.addEventListener('message', function(ev) {
         // geladen worden sein und hat dann andere/mehr Eintr\u00e4ge (craftCache aus IDB).
         _curseFullReceived = false;
         if (_pingInterval) { clearInterval(_pingInterval); _pingInterval = null; }
-        document.getElementById('connStatus').textContent = '🟢 Verbunden';
-        document.getElementById('connStatus').style.color = 'var(--green)';
+        document.getElementById('connStatus').textContent = 'Verbunden';
+        document.getElementById('connStatus').dataset.conn = 'on';
         document.getElementById('connectHint')?.classList.add('hidden');
         // Curse-DB an Loader pushen → Wear nach Browserwechsel/Neustart möglich
         if (Object.keys(CURSE_DB).length > 0) {
@@ -5837,7 +5837,7 @@ window.addEventListener('message', function(ev) {
               _playerChecked = false;
               stopRoomScan();
               const cs = document.getElementById('connStatus');
-              if (cs) { cs.textContent = '🔴 Falscher Spieler – nicht verbunden'; cs.style.color = 'var(--red)'; }
+              if (cs) { cs.textContent = 'Falscher Spieler – nicht verbunden'; cs.dataset.conn = 'off'; }
               showStatus('❌ Verbindung abgelehnt: anderer Spieler (#' + ev.data.memberNumber + ')', 'error');
               break;
             }

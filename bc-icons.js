@@ -107,8 +107,14 @@
 
   var EMOJI_RE = /(?:▶▶|[←-⇿⌀-➿⬀-⯿️\u{1F000}-\u{1FAFF}])+/gu;
 
-  /** Selektoren, in denen Emojis automatisch ersetzt werden. */
-  var SEL = 'button, .filter-chip, .tab-btn, .obertab-btn, .tweaks-btn, .stats-tab-btn';
+  /** Selektoren, in denen Emojis automatisch ersetzt werden.
+      bc-icons-ergaenzung.js hängt über BC_ICON_EXTRA_SELECTORS die Fundstellen
+      außerhalb von Buttons an (Sektions-Titel, Badges, Info-Boxen …). */
+  var SEL_BASE = 'button, .filter-chip, .tab-btn, .obertab-btn, .tweaks-btn, .stats-tab-btn';
+  function selector() {
+    var extra = root.BC_ICON_EXTRA_SELECTORS;
+    return extra ? SEL_BASE + ',' + extra : SEL_BASE;
+  }
 
   function bcIcon(name, size) {
     var p = P[name];
@@ -158,15 +164,18 @@
    */
   function bcIconsApply(scope) {
     var root = scope || document;
-    var els = root.querySelectorAll(SEL);
+    var els = root.querySelectorAll(selector());
     for (var i = 0; i < els.length; i++) {
       var el = els[i];
-      if (el.dataset.bciDone) continue;
+      // Nicht nur auf das Flag verlassen: App-Code wie _updateCurseDefaultOutfitBtn()
+      // schreibt btn.textContent neu und löscht damit das SVG, während das Attribut
+      // am Element überlebt. Darum zusätzlich prüfen, ob das Icon wirklich noch da ist.
+      if (el.dataset.bciDone && el.querySelector(':scope > svg.bci')) continue;
       var name = el.dataset.icon || stripLeadingEmoji(el);
       if (!name || !P[name]) continue;
       el.insertBefore(iconNode(name), el.firstChild);
       el.dataset.bciDone = '1';
-      if (!el.textContent.trim()) el.classList.add('btn-icon-only');
+      if (el.tagName === 'BUTTON' && !el.textContent.trim()) el.classList.add('btn-icon-only');
     }
   }
 
