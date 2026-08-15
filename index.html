@@ -8,6 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&family=Inter:wght@400;500&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js"></script>
+  <script src="bc-icons.js"></script>
   <style>
 
 :root {
@@ -319,11 +320,20 @@ select option:hover {
    BUTTONS
 ═══════════════════════════════════════════════ */
 .btn {
-  font-family: var(--font-ui); padding: 7px 17px; border: none; border-radius: 99px;
+  font-family: var(--font-ui); padding: 7px 15px; border: none; border-radius: 99px;
   font-size: 0.79rem; font-weight: 700; cursor: pointer; transition: all 0.18s ease;
-  white-space: nowrap; display: inline-flex; align-items: center; gap: 5px; letter-spacing: 0.01em;
+  white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; letter-spacing: 0.01em;
 }
 .btn:active { transform: scale(0.96); }
+
+/* ── Stroke-Icons (bc-icons.js) ── */
+svg.bci { width: 1.15em; height: 1.15em; flex-shrink: 0; }
+.btn svg.bci { margin-right: 1px; }
+.btn.btn-icon-only { padding: 7px 9px; }
+.tab-btn, .obertab-btn, .stats-tab-btn {
+  display: inline-flex; align-items: center; gap: 7px;
+}
+.tweaks-btn { display: inline-flex; align-items: center; justify-content: center; gap: 5px; }
 
 .btn-primary {
   background: var(--accent);
@@ -3985,5 +3995,16 @@ document.write('<scr'+'ipt src="outfit-import.js?_='+_cbv+'"><\/scr'+'ipt>');
 </div>
 
 <!-- ══════════════════════════════════════════ -->
+
+<script>
+  // Emojis in Buttons/Tabs/Chips durch die Stroke-Icons aus bc-icons.js ersetzen.
+  // bcIconsAuto() beobachtet das DOM, damit auch dynamisch gerenderte Listen
+  // (Item-Grid, Bot-UI, Shop, Rang …) Icons bekommen.
+  if (document.readyState === 'loading') {
+    addEventListener('DOMContentLoaded', bcIconsAuto);
+  } else {
+    bcIconsAuto();
+  }
+</script>
 
 </body>
