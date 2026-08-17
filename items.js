@@ -6792,7 +6792,7 @@ function importAllData() {
           _saveMbsWheelData();
           _updateWheelTabBadge();
         }
-        if (d.mbsWheelFavs)       { d.mbsWheelFavs.forEach(k => _mbsWheelFavs.add(k)); _saveMbsWheelFavs(); }
+        if (d.mbsWheelFavs)       { d.mbsWheelFavs.forEach(k => _mbsWheelFavs.add(_mbsNum(k))); _saveMbsWheelFavs(); }
         if (d.mbsWheelOutfitFavs) { d.mbsWheelOutfitFavs.forEach(k => _mbsWheelOutfitFavs.add(k)); _saveMbsWheelOutfitFavs(); }
         if (d.mbsWheelShots) { Object.assign(_mbsWheelShots, d.mbsWheelShots); _saveMbsWheelShots(); }
         if (d.defaultOutfit?.code && !CURSE_DEFAULT_OUTFIT_CODE) {
@@ -8516,13 +8516,34 @@ idbGet(_MBS_WHEEL_IDB_KEY).then(function(d) {
     if (_activeTab === 'lscg-wheel') _renderMbsWheelTab();
   }
 });
-try { _mbsWheelFavs = new Set(JSON.parse(localStorage.getItem(_MBS_WHEEL_FAVS_KEY) || '[]')); } catch {}
+// Favs liegen wie die übrigen Nutzerdaten in IDB. Der localStorage-Stand wird
+// einmalig übernommen (die Wheel-Favs waren bei der IDB-Migration übersehen
+// worden – als einziger Teil des Wheel-Tabs lagen sie noch im localStorage,
+// während Daten und Bilder längst in IDB liegen).
+idbGet(_MBS_WHEEL_FAVS_KEY).then(function(d) {
+  if (Array.isArray(d)) d.forEach(k => _mbsWheelFavs.add(_mbsNum(k)));
+  let ls = null;
+  try { ls = JSON.parse(localStorage.getItem(_MBS_WHEEL_FAVS_KEY) || 'null'); } catch {}
+  if (Array.isArray(ls)) {
+    ls.forEach(k => _mbsWheelFavs.add(_mbsNum(k)));
+    _saveMbsWheelFavs();
+    try { localStorage.removeItem(_MBS_WHEEL_FAVS_KEY); } catch {}
+  }
+  if (_mbsWheelFavs.size && _activeTab === 'lscg-wheel') _renderMbsWheelTab();
+});
+
+/** memberNumber kommt je nach Quelle als Zahl oder String – vereinheitlichen,
+    sonst greift Set.has() nicht und der Stern wirkt „verloren". */
+function _mbsNum(v) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : v;
+}
 
 function _saveMbsWheelData() {
   idbSet(_MBS_WHEEL_IDB_KEY, _mbsWheelData);
 }
 function _saveMbsWheelFavs() {
-  try { localStorage.setItem(_MBS_WHEEL_FAVS_KEY, JSON.stringify([..._mbsWheelFavs])); } catch {}
+  idbSet(_MBS_WHEEL_FAVS_KEY, [..._mbsWheelFavs]);
 }
 
 function scanWheelOutfits() {
@@ -8598,6 +8619,7 @@ idbGet(_MBS_WHEEL_SS_KEY).then(function(d) {
 function _saveMbsWheelShots() { idbSet(_MBS_WHEEL_SS_KEY, _mbsWheelShots); }
 
 function mbsWheelToggleFav(mn) {
+  mn = _mbsNum(mn);
   if (_mbsWheelFavs.has(mn)) _mbsWheelFavs.delete(mn);
   else _mbsWheelFavs.add(mn);
   _saveMbsWheelFavs();
@@ -8607,12 +8629,23 @@ function mbsWheelToggleFav(mn) {
 // ── Einzelne Outfits als Favorit (Key: mn|OutfitName) ────────────────────────
 const _MBS_WHEEL_OFAVS_KEY = 'BC_MBS_WHEEL_OFAVS_v1';
 let _mbsWheelOutfitFavs = new Set();
-try { _mbsWheelOutfitFavs = new Set(JSON.parse(localStorage.getItem(_MBS_WHEEL_OFAVS_KEY) || '[]')); } catch {}
+idbGet(_MBS_WHEEL_OFAVS_KEY).then(function(d) {
+  if (Array.isArray(d)) d.forEach(k => _mbsWheelOutfitFavs.add(k));
+  let ls = null;
+  try { ls = JSON.parse(localStorage.getItem(_MBS_WHEEL_OFAVS_KEY) || 'null'); } catch {}
+  if (Array.isArray(ls)) {
+    ls.forEach(k => _mbsWheelOutfitFavs.add(k));
+    _saveMbsWheelOutfitFavs();
+    try { localStorage.removeItem(_MBS_WHEEL_OFAVS_KEY); } catch {}
+  }
+  if (_mbsWheelOutfitFavs.size && _activeTab === 'lscg-wheel') _renderMbsWheelTab();
+});
 function _saveMbsWheelOutfitFavs() {
-  try { localStorage.setItem(_MBS_WHEEL_OFAVS_KEY, JSON.stringify([..._mbsWheelOutfitFavs])); } catch {}
+  idbSet(_MBS_WHEEL_OFAVS_KEY, [..._mbsWheelOutfitFavs]);
 }
 function mbsWheelToggleOutfitFav(mn, oi) {
-  const r = _mbsWheelData.find(x => x.memberNumber === mn);
+  mn = _mbsNum(mn);
+  const r = _mbsWheelData.find(x => _mbsNum(x.memberNumber) === mn);
   const o = r?.outfits[oi];
   if (!o) return;
   const key = mn + '|' + o.name;
@@ -8634,7 +8667,8 @@ function _mbsOutfitIsNew(o) {
 }
 
 function mbsWheelDeletePlayer(mn) {
-  _mbsWheelData = _mbsWheelData.filter(x => x.memberNumber !== mn);
+  mn = _mbsNum(mn);
+  _mbsWheelData = _mbsWheelData.filter(x => _mbsNum(x.memberNumber) !== mn);
   _mbsWheelFavs.delete(mn);
   for (const k of [..._mbsWheelOutfitFavs]) {
     if (k.startsWith(mn + '|')) _mbsWheelOutfitFavs.delete(k);
@@ -8693,7 +8727,7 @@ function _renderMbsWheelTab() {
   const entries = visible.map(function(r) {
     let pairs = r.outfits.map((o, oi) => [o, oi]);
     if (_mbsWheelFilter === 'fav') {
-      const playerFav = _mbsWheelFavs.has(r.memberNumber);
+      const playerFav = _mbsWheelFavs.has(_mbsNum(r.memberNumber));
       pairs = pairs.filter(([o]) => playerFav || _mbsWheelOutfitFavs.has(r.memberNumber + '|' + o.name));
     } else if (_mbsWheelFilter === 'new') {
       pairs = pairs.filter(([o]) => _mbsOutfitIsNew(o));
@@ -8710,7 +8744,7 @@ function _renderMbsWheelTab() {
 
   // Sortieren: Spieler-Favoriten zuerst, dann nach gewähltem Modus
   entries.sort(function(a, b) {
-    const fa = _mbsWheelFavs.has(a.r.memberNumber), fb = _mbsWheelFavs.has(b.r.memberNumber);
+    const fa = _mbsWheelFavs.has(_mbsNum(a.r.memberNumber)), fb = _mbsWheelFavs.has(_mbsNum(b.r.memberNumber));
     if (fa !== fb) return fa ? -1 : 1;
     if (_mbsWheelSort === 'ts') return (b.r.ts || 0) - (a.r.ts || 0);
     return (a.r.name || '').localeCompare(b.r.name || '');
@@ -8753,7 +8787,7 @@ function _renderMbsWheelTab() {
   // Kartenlayout wie LSCG Outfits (os-member-block / os-strip / os-card)
   function _buildWheelMemberHtml(e) {
     const r     = e.r;
-    const mn    = r.memberNumber;
+    const mn    = _mbsNum(r.memberNumber);
     const isFav = _mbsWheelFavs.has(mn);
 
     const cards = e.pairs.map(function([o, oi]) {
@@ -8997,7 +9031,7 @@ function mbsWheelImportDB() {
             if ((r.ts || 0) > (_mbsWheelData[idx].ts || 0)) { _mbsWheelData[idx] = r; updated++; }
           } else { _mbsWheelData.push(r); added++; }
         }
-        if (d.favs)       d.favs.forEach(k => _mbsWheelFavs.add(k));
+        if (d.favs)       d.favs.forEach(k => _mbsWheelFavs.add(_mbsNum(k)));
         if (d.outfitFavs) d.outfitFavs.forEach(k => _mbsWheelOutfitFavs.add(k));
         if (d.shots) {
           for (const [fp, img] of Object.entries(d.shots)) {

@@ -72,7 +72,10 @@
     '💻': 'code',     '💡': 'bulb',      '☑': 'checkbox',  '☑️': 'checkbox',
     '▾': 'caretDown', '▼': 'caretDown',  '❌': 'xCircle',  '🎉': 'party',
     '◀': 'caretLeft', '⬅': 'caretLeft',  '▶️': 'play',     '➡': 'caretRight',
-    '☐': 'checkboxOff', '🚩': 'pennant'
+    '☐': 'checkboxOff', '🚩': 'pennant',
+    /* Leerer Stern: gleiches Icon wie ⭐ – den Zustand trägt die Farbe bzw.
+       die Füllung, nicht eine zweite Form. */
+    '☆': 'star'
   });
 
   /* Fundstellen außerhalb von Buttons: Sektions-Titel, Chips, Badges,

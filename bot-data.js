@@ -70,8 +70,14 @@ function _selBot() { return _bots.find(b => b.id === _selBotId) ?? null; }
     }
     _bots.forEach(b => { b.laufend = false; });
   } catch(err) { console.warn('[bot-data] IDB init:', err); }
-  // Immer re-rendern nach async init (nicht nur wenn Tab aktiv)
-  renderBotTab();
+  // Immer re-rendern nach async init (nicht nur wenn Tab aktiv).
+  // bot-data.js wird vor bot-ui.js geladen; der await oben kann früher
+  // auflösen, als bot-ui.js geparst ist – dann existiert renderBotTab noch
+  // nicht und die aus IDB geladenen Bots blieben bis zum Tab-Wechsel unsichtbar.
+  if (typeof renderBotTab === 'function') renderBotTab();
+  else addEventListener('DOMContentLoaded', function () {
+    if (typeof renderBotTab === 'function') renderBotTab();
+  });
 })()
 
 function groupNew() {
