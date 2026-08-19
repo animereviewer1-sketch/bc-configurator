@@ -329,14 +329,18 @@ select option:hover {
    BUTTONS
 ═══════════════════════════════════════════════ */
 .btn {
-  font-family: var(--font-ui); padding: 7px 15px; border: none; border-radius: 99px;
+  font-family: var(--font-ui); padding: 7px 15px; border-radius: 99px;
   font-size: 0.79rem; font-weight: 700; cursor: pointer; transition: all 0.18s ease;
   white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; letter-spacing: 0.01em;
-  /* Ohne Farbvariante fiel .btn auf das UA-Schwarz zurück. Mit Emojis fiel das
-     nicht auf (die bringen ihre eigene Farbe mit), die Stroke-Icons zeichnen
-     aber in currentColor und wären unsichtbar. */
-  color: var(--text);
+  /* .btn ohne Farbvariante hatte weder Hintergrund noch Farbe und fiel damit
+     komplett auf die UA-Defaults zurueck (weisse Flaeche, schwarzer Text).
+     Laut Design ist alles ohne eigene Variante neutral – das ist jetzt die
+     Basis, sonst steht heller Text auf der weissen UA-Flaeche. */
+  background: var(--btn-neutral);
+  color: var(--btn-neutral-text);
+  border: 1px solid var(--btn-neutral-edge);
 }
+.btn:hover { background: rgba(255,255,255,0.09); }
 .btn:active { transform: scale(0.96); }
 
 /* ── Stroke-Icons (bc-icons.js) ── */
