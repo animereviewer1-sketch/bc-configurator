@@ -8511,7 +8511,7 @@ let _mbsWheelFavs    = new Set();
 // IDB laden beim Start
 idbGet(_MBS_WHEEL_IDB_KEY).then(function(d) {
   if (Array.isArray(d) && d.length) {
-    _mbsWheelData = d;
+    _mbsWheelData = _mbsNormRecords(d);
     _updateWheelTabBadge();
     if (_activeTab === 'lscg-wheel') _renderMbsWheelTab();
   }
@@ -8568,6 +8568,7 @@ function _handleMbsWheelData(data) {
   for (const r of (data.results ?? [])) {
     r.room = _room;
     r.ts   = _ts;
+    r.memberNumber = _mbsNum(r.memberNumber);
     const idx = _mbsWheelData.findIndex(x => x.memberNumber === r.memberNumber);
     if (idx >= 0) {
       // firstSeen pro Outfit übernehmen: bekannte behalten ihr Datum, neue = jetzt
@@ -8728,7 +8729,7 @@ function _renderMbsWheelTab() {
     let pairs = r.outfits.map((o, oi) => [o, oi]);
     if (_mbsWheelFilter === 'fav') {
       const playerFav = _mbsWheelFavs.has(_mbsNum(r.memberNumber));
-      pairs = pairs.filter(([o]) => playerFav || _mbsWheelOutfitFavs.has(r.memberNumber + '|' + o.name));
+      pairs = pairs.filter(([o]) => playerFav || _mbsWheelOutfitFavs.has(_mbsNum(r.memberNumber) + '|' + o.name));
     } else if (_mbsWheelFilter === 'new') {
       pairs = pairs.filter(([o]) => _mbsOutfitIsNew(o));
     }
@@ -8780,7 +8781,7 @@ function _renderMbsWheelTab() {
   for (const r of _mbsWheelData) {
     r.outfits.forEach(function(o) {
       const fp = _mbsOutfitFp(o);
-      (fpMap[fp] = fpMap[fp] || []).push({ mn: r.memberNumber, name: r.name });
+      (fpMap[fp] = fpMap[fp] || []).push({ mn: _mbsNum(r.memberNumber), name: r.name });
     });
   }
 
@@ -8870,7 +8871,8 @@ function mbsWheelToggleMember(mn) {
 }
 
 function mbsWheelDeleteShot(mn, oi) {
-  const r = _mbsWheelData.find(x => x.memberNumber === mn);
+  mn = _mbsNum(mn);
+  const r = _mbsWheelData.find(x => _mbsNum(x.memberNumber) === mn);
   const o = r?.outfits[oi];
   if (!o) return;
   delete _mbsWheelShots[_mbsOutfitFp(o)];
@@ -9128,7 +9130,8 @@ function mbsWheelImport() {
 // identische Outfits bei anderen Spielern teilen sich das Bild automatisch).
 function mbsWheelCaptureShot(mn, oi) {
   if (!_connected) { showStatus('❌ Nicht verbunden', 'error'); return; }
-  const r = _mbsWheelData.find(x => x.memberNumber === mn);
+  mn = _mbsNum(mn);
+  const r = _mbsWheelData.find(x => _mbsNum(x.memberNumber) === mn);
   const o = r?.outfits[oi];
   if (!o) return;
   const fp = _mbsOutfitFp(o);
@@ -9200,13 +9203,18 @@ function _handleWheelShotData(data) {
 
 // Lightbox (nutzt die LSCG-Lightbox-Elemente)
 function mbsWheelOpenShot(_unused, mn, oi) {
-  const r = _mbsWheelData.find(x => x.memberNumber === mn);
+  mn = _mbsNum(mn);
+  const r = _mbsWheelData.find(x => _mbsNum(x.memberNumber) === mn);
   const o = r?.outfits[oi];
   if (!o) return;
-  const img = _mbsWheelShots[_mbsOutfitFp(o)];
+  const fp  = _mbsOutfitFp(o);
+  const img = _mbsWheelShots[fp];
   if (!img) return;
-  _osLightboxMk  = null;
-  _osLightboxKey = null;
+  // Die Lightbox wird mit LSCG geteilt. Ohne eigene Herkunft fand
+  // deleteOsScreenshotFromLb() weder mk noch key und loeschte nichts.
+  _osLightboxMk     = null;
+  _osLightboxKey    = null;
+  _osLightboxWheelFp = fp;
   document.getElementById('osLbImg').src = img;
   document.getElementById('osLbName').textContent = o.name;
   document.getElementById('osLbSub').textContent  = '🎡 ' + (r.name || '') + ' #' + mn;
@@ -9578,6 +9586,7 @@ function osThumbClick(mk) {
 // Lightbox (Gro\xdfansicht im Tool)
 let _osLightboxMk  = null;
 let _osLightboxKey = null;  // version-specific key (mk|fp) or null
+let _osLightboxWheelFp = null;  // MBS-Wheel: Outfit-Fingerprint (kann '' sein)
 
 function openOsLightbox(mk) {
   const img = _getLscgScreenshot(mk);
@@ -9585,6 +9594,7 @@ function openOsLightbox(mk) {
   const entry = LSCG_DB[mk];
   _osLightboxMk  = mk;
   _osLightboxKey = null;
+  _osLightboxWheelFp = null;
   document.getElementById('osLbImg').src   = img;
   document.getElementById('osLbName').textContent = entry ? (entry.name ?? mk) : mk;
   document.getElementById('osLbSub').textContent  = '#' + mk + (entry?.nickname ? ' · „' + entry.nickname + '”' : '');
@@ -9602,6 +9612,7 @@ function openOsLightboxVersion(mk, vIdx) {
   const dateStr = d ? d.toLocaleDateString('de-DE') : '';
   _osLightboxMk  = mk;
   _osLightboxKey = key;
+  _osLightboxWheelFp = null;
   document.getElementById('osLbImg').src   = img;
   document.getElementById('osLbName').textContent = entry ? (entry.name ?? mk) : mk;
   document.getElementById('osLbSub').textContent  = '#' + mk
@@ -9615,10 +9626,16 @@ function closeOsLightbox() {
   document.getElementById('osLbImg').src = '';
   _osLightboxMk  = null;
   _osLightboxKey = null;
+  _osLightboxWheelFp = null;
 }
 
 function deleteOsScreenshotFromLb() {
-  if (_osLightboxKey) {
+  // Wheel zuerst: der Fingerprint darf '' sein, daher explizit auf null pruefen
+  if (_osLightboxWheelFp !== null) {
+    delete _mbsWheelShots[_osLightboxWheelFp];
+    _saveMbsWheelShots();
+    if (_activeTab === 'lscg-wheel') _renderMbsWheelTab();
+  } else if (_osLightboxKey) {
     deleteOsScreenshotKey(_osLightboxKey);
   } else if (_osLightboxMk) {
     deleteOsScreenshot(_osLightboxMk);

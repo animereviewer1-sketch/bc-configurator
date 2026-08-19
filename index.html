@@ -1526,8 +1526,9 @@ textarea.outfit-code { width: 100%; min-height: 210px; background: rgba(0,0,0,0.
   transition: background 0.12s;
 }
 .cg-row:hover { background: rgba(255,255,255,0.025); }
-.cg-row.fav { background: rgba(251,191,36,0.04); }
-.cg-row.fav:hover { background: rgba(251,191,36,0.08); }
+/* Kein Hintergrund fuer Favoriten – der gelbe Stern traegt die Information.
+   Die Zeile verhaelt sich wie jede andere (inkl. normalem Hover). */
+.cg-row.fav:hover { background: rgba(255,255,255,0.025); }
 .cg-row.outfit-flagged { background: rgba(52,211,153,0.05); }
 .cg-row.outfit-flagged:hover { background: rgba(52,211,153,0.09); }
 .cg-row.ct-active { background: rgba(251,191,36,0.10) !important; box-shadow: inset 3px 0 0 var(--yellow); }
@@ -1608,7 +1609,7 @@ textarea.outfit-code { width: 100%; min-height: 210px; background: rgba(0,0,0,0.
 /* Der drop-shadow stammt aus der Emoji-Zeit: er umriss die volle Glyphe.
    Das Stroke-Icon ist innen leer, dadurch blieb nur ein Leuchten ohne Stern
    übrig. Stattdessen füllt der aktive Stern jetzt in Bernstein. */
-.cg-fav .curse-fav-btn.fav { opacity: 1; color: #fbbf24; }
+.curse-fav-btn.fav, .cg-fav .curse-fav-btn.fav { opacity: 1; color: #fbbf24; }
 .cg-fav:hover .curse-fav-btn     { opacity: 0.65; transform: scale(1.2); }
 .cg-fav:hover .curse-fav-btn.fav { opacity: 1;    transform: scale(1.2); }
 
