@@ -53,6 +53,11 @@
     const idx = _mbsWheelData.findIndex(x => Number(x.memberNumber) === MN);
     if (idx >= 0) _mbsWheelData[idx] = rec; else _mbsWheelData.push(rec);
 
+    // Direkt aussortieren, was bereits unter einem echten Spieler steht –
+    // sonst laege dasselbe Outfit doppelt vor (einmal mit richtigem Namen).
+    let schonBekannt = 0;
+    if (typeof _mbsHealRecovered === 'function') schonBekannt = _mbsHealRecovered();
+
     _saveMbsWheelData();
     if (typeof _updateWheelTabBadge === 'function') _updateWheelTabBadge();
     if (typeof _renderMbsWheelTab === 'function') _renderMbsWheelTab();
@@ -60,13 +65,15 @@
     const shots = (typeof _mbsWheelShots !== 'undefined') ? _mbsWheelShots : {};
     const mitBild = outfits.filter(o => shots[_mbsOutfitFp(o)]).length;
     console.log('%cZurückgeschrieben', 'color:#4ade80;font-weight:700;font-size:14px');
+    const rest = _mbsWheelData.find(x => Number(x.memberNumber) === MN);
     console.table({
-      outfits: outfits.length,
+      outfitsInDatei: outfits.length,
+      davonSchonUnterEchtemSpieler: schonBekannt,
+      imPlatzhalterVerblieben: rest ? rest.outfits.length : 0,
       items: outfits.reduce((s, o) => s + o.items.length, 0),
-      mitPassendemBild: mitBild,
-      andereSpielerUnberuehrt: _mbsWheelData.length - 1
+      mitPassendemBild: mitBild
     });
-    return { outfits: outfits.length, mitBild };
+    return { outfits: outfits.length, schonBekannt, mitBild };
   };
 
   const inp = document.createElement('input');

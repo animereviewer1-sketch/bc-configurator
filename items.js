@@ -6678,6 +6678,53 @@ function itemsExportCatalog() {
 }
 
 // ── Komplett-Backup Export / Import ──────────────────────────────────────────
+/* JSON in Teilstrings zerlegen. Ein einzelner String darf nicht ueber das
+   V8-Limit (~512 MB) wachsen, sonst wirft JSON.stringify "Invalid string
+   length". Massgeblich ist die tatsaechliche Groesse, nicht die Anzahl der
+   Schluessel: ein Objekt mit drei Schluesseln kann 700 MB Bilddaten
+   enthalten. Das Ergebnis ist normales JSON. */
+function _jsonParts(value, parts) {
+  parts = parts || [];
+  const MAX   = 32 * 1024 * 1024;   // Obergrenze je Teilstueck
+  const VIELE = 64;                 // ab so vielen Eintraegen gar nicht erst am Stueck
+
+  if (value === undefined) { parts.push('null'); return parts; }
+  if (value === null || typeof value !== 'object') {
+    parts.push(JSON.stringify(value)); return parts;
+  }
+
+  const gross = Array.isArray(value) ? value.length > VIELE
+                                     : Object.keys(value).length > VIELE;
+  if (!gross) {
+    let s = null;
+    try { s = JSON.stringify(value); } catch (e) { s = null; }
+    if (typeof s === 'string' && s.length <= MAX) { parts.push(s); return parts; }
+  }
+
+  if (Array.isArray(value)) {
+    parts.push('[');
+    for (let i = 0; i < value.length; i++) {
+      if (i) parts.push(',');
+      _jsonParts(value[i], parts);
+    }
+    parts.push(']');
+    return parts;
+  }
+
+  parts.push('{');
+  let first = true;
+  for (const k of Object.keys(value)) {
+    const v = value[k];
+    if (v === undefined) continue;
+    if (!first) parts.push(',');
+    first = false;
+    parts.push(JSON.stringify(k) + ':');
+    _jsonParts(v, parts);
+  }
+  parts.push('}');
+  return parts;
+}
+
 function exportAllData() {
   try {
     const profileCount = Object.keys(PROFILES).length;
@@ -6718,17 +6765,22 @@ function exportAllData() {
       mbsWheelShots:      _mbsWheelShots,
       defaultOutfit:      CURSE_DEFAULT_OUTFIT_CODE ? { code: CURSE_DEFAULT_OUTFIT_CODE, date: CURSE_DEFAULT_OUTFIT_DATE } : null,
     };
-    // Kein pretty-print — bei 27k Einträgen deutlich schneller
-    const json = JSON.stringify(payload);
-    const blob = new Blob([json], { type: 'application/json' });
+    // Stueckweise serialisieren statt JSON.stringify(payload) am Stueck:
+    // Bei grossen Screenshot-Speichern sprengt ein einzelner String das
+    // V8-Limit (~512 MB) und wirft "Invalid string length". Der Blob nimmt
+    // beliebig viele Teilstrings entgegen und liegt nicht komplett im RAM.
+    const parts = _jsonParts(payload);
+    const blob  = new Blob(parts, { type: 'application/json' });
     const a    = document.createElement('a');
     a.href     = URL.createObjectURL(blob);
     a.download = 'BC_Backup_' + new Date().toISOString().slice(0, 10) + '.json';
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-    URL.revokeObjectURL(a.href);
-    showStatus('✅ Backup: ' + profileCount + ' Profile, ' + curseCount + ' Curse-Einträge', 'success');
+    setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+    const mb = (blob.size / 1048576).toFixed(1);
+    showStatus('✅ Backup: ' + profileCount + ' Profile, ' + curseCount + ' Curse-Eintraege, '
+      + wheelCount + ' Wheel-Spieler (' + mb + ' MB)', 'success');
   } catch(err) {
     showStatus('❌ Export fehlgeschlagen: ' + err.message, 'error');
     console.error('[exportAllData]', err);
@@ -8514,6 +8566,15 @@ idbGet(_MBS_WHEEL_IDB_KEY).then(function(d) {
   try {
     if (Array.isArray(d) && d.length) {
       _mbsWheelData = _mbsNormRecords(d);
+      _mbsWheelLoaded = true;
+      // Rueckwirkend aufraeumen: Outfits, die schon unter einem echten
+      // Spieler stehen, muessen nicht zusaetzlich im Platzhalter liegen.
+      // Betrifft alles, was vor dem Einbau der Selbstheilung gescannt wurde.
+      const geheilt = _mbsHealRecovered();
+      if (geheilt) {
+        _saveMbsWheelData();
+        console.info('[Wheel] ' + geheilt + ' doppelte Outfits aus "Wiederhergestellt" entfernt');
+      }
       _updateWheelTabBadge();
       if (_activeTab === 'lscg-wheel') _renderMbsWheelTab();
     }
