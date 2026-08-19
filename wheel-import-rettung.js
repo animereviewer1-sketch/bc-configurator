@@ -25,12 +25,29 @@
       return;
     }
 
-    const pad = n => String(n).padStart(4, '0');
-    const outfits = src.map((o, i) => ({
-      name: 'R' + pad(i + 1),
-      firstSeen: 0,                       // 0 = kein „NEU"-Badge
-      items: (o.items || []).map(it => ({ group: it.group, asset: it.asset }))
-    })).filter(o => o.items.length);
+    // Die echten Outfit-Namen sind mit dem ueberschriebenen Datensatz verloren.
+    // Ersatzweise ein sprechender Name aus der Zusammensetzung: die zwei
+    // charakteristischsten Kleidungs-Slots plus Item-Zahl. Damit bleibt das
+    // Outfit ueber die Suche auffindbar.
+    const PRIO = ['Cloth','ClothLower','Suit','SuitLower','Bra','Panties',
+                  'ItemArms','ItemNeck','ItemHead','ItemMouth','ItemDevices','ItemBoots'];
+    const benennen = items => {
+      const by = {};
+      for (const it of items) if (!(it.group in by)) by[it.group] = it.asset;
+      let teile = PRIO.filter(g => g in by).map(g => by[g]).slice(0, 2);
+      if (!teile.length) teile = [items[0].asset];
+      return teile.join(' · ');
+    };
+
+    const gesehen = {};
+    const outfits = src.map(o => {
+      const items = (o.items || []).map(it => ({ group: it.group, asset: it.asset }));
+      if (!items.length) return null;
+      let nm = benennen(items) + ' (' + items.length + ')';
+      gesehen[nm] = (gesehen[nm] || 0) + 1;
+      if (gesehen[nm] > 1) nm += ' #' + gesehen[nm];
+      return { name: nm, firstSeen: 0, items };   // firstSeen 0 = kein NEU-Badge
+    }).filter(Boolean);
 
     const rec = { memberNumber: MN, name: NAME, room: 'Wiederhergestellt', ts: Date.now(), outfits };
     const idx = _mbsWheelData.findIndex(x => Number(x.memberNumber) === MN);

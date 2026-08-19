@@ -8604,9 +8604,43 @@ function _handleMbsWheelData(data) {
       _mbsWheelData.push(r);
     }
   }
+  const geheilt = _mbsHealRecovered();
   _saveMbsWheelData();
   _updateWheelTabBadge();
   if (_activeTab === 'lscg-wheel') _renderMbsWheelTab();
+  if (geheilt) {
+    showStatus('✅ ' + geheilt + ' wiederhergestellte Outfit(s) durch echte Daten ersetzt', 'success');
+  }
+}
+
+/* ── Selbstheilung des Rettungs-Bestands ──────────────────────────────────
+   Nach dem Verlust der Wheel-Datenbank wurden die Outfits ohne Spielername,
+   ID und Original-Outfitnamen als Platzhalter-Eintrag „Wiederhergestellt"
+   zurueckgeschrieben. Taucht ein solches Outfit bei einem Scan mit echten
+   Daten wieder auf – erkennbar am identischen Fingerprint – ist die
+   namenlose Kopie ueberfluessig und wird entfernt. So loest sich der
+   Platzhalter mit der Zeit von selbst auf.                               */
+const _MBS_RECOVERY_MN = 0;
+
+function _mbsHealRecovered() {
+  const idx = _mbsWheelData.findIndex(x => _mbsNum(x.memberNumber) === _MBS_RECOVERY_MN);
+  if (idx < 0) return 0;
+
+  const echte = new Set();
+  for (const r of _mbsWheelData) {
+    if (_mbsNum(r.memberNumber) === _MBS_RECOVERY_MN) continue;
+    for (const o of (r.outfits || [])) echte.add(_mbsOutfitFp(o));
+  }
+  if (!echte.size) return 0;
+
+  const rec = _mbsWheelData[idx];
+  const vorher = (rec.outfits || []).length;
+  rec.outfits = (rec.outfits || []).filter(o => !echte.has(_mbsOutfitFp(o)));
+  const entfernt = vorher - rec.outfits.length;
+
+  // Platzhalter ganz entfernen, sobald nichts mehr uebrig ist
+  if (!rec.outfits.length) _mbsWheelData.splice(idx, 1);
+  return entfernt;
 }
 
 let _mbsWheelSearchTimer = null;
