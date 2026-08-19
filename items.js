@@ -8509,12 +8509,22 @@ let _mbsWheelSearch  = '';
 let _mbsWheelFavs    = new Set();
 
 // IDB laden beim Start
+let _mbsWheelLoaded = false;   // erst nach dem IDB-Load darf gespeichert werden
 idbGet(_MBS_WHEEL_IDB_KEY).then(function(d) {
-  if (Array.isArray(d) && d.length) {
-    _mbsWheelData = _mbsNormRecords(d);
-    _updateWheelTabBadge();
-    if (_activeTab === 'lscg-wheel') _renderMbsWheelTab();
+  try {
+    if (Array.isArray(d) && d.length) {
+      _mbsWheelData = _mbsNormRecords(d);
+      _updateWheelTabBadge();
+      if (_activeTab === 'lscg-wheel') _renderMbsWheelTab();
+    }
+    _mbsWheelLoaded = true;
+  } catch (err) {
+    // Nicht als "geladen" markieren: sonst wuerde ein Scan die noch in IDB
+    // liegenden Outfits mit einer leeren Liste ueberschreiben.
+    console.error('[Wheel] Laden fehlgeschlagen – Speichern gesperrt:', err);
   }
+}).catch(function(err) {
+  console.error('[Wheel] Laden fehlgeschlagen – Speichern gesperrt:', err);
 });
 // Favs liegen wie die übrigen Nutzerdaten in IDB. Der localStorage-Stand wird
 // einmalig übernommen (die Wheel-Favs waren bei der IDB-Migration übersehen
@@ -8539,7 +8549,18 @@ function _mbsNum(v) {
   return Number.isFinite(n) ? n : v;
 }
 
+/** memberNumber in einer Datensatzliste vereinheitlichen. */
+function _mbsNormRecords(arr) {
+  if (!Array.isArray(arr)) return [];
+  for (const r of arr) { if (r) r.memberNumber = _mbsNum(r.memberNumber); }
+  return arr;
+}
+
 function _saveMbsWheelData() {
+  if (!_mbsWheelLoaded) {
+    console.warn('[Wheel] Speichern übersprungen: Daten noch nicht geladen.');
+    return;
+  }
   idbSet(_MBS_WHEEL_IDB_KEY, _mbsWheelData);
 }
 function _saveMbsWheelFavs() {
