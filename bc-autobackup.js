@@ -432,6 +432,30 @@
     };
   };
 
+  /* Was liegt im Backup-Ordner? Nach Generationen gruppiert. */
+  root.bcBackupDateien = async function () {
+    if (!ordner) return 'kein Ordner gewaehlt';
+    if (!(await darfSchreiben(true))) return 'keine Berechtigung';
+    var zeilen = [];
+    for await (var e of ordner.values()) {
+      if (e.kind !== 'file') continue;
+      if (e.name.indexOf(P_VOLL) !== 0 && e.name.indexOf(P_INKR) !== 0) continue;
+      var f = await e.getFile();
+      zeilen.push({
+        datei: e.name,
+        art: e.name.indexOf(P_VOLL) === 0 ? 'voll' : 'inkrement',
+        generation: genVon(e.name),
+        mb: +(f.size / 1048576).toFixed(2),
+        geschrieben: new Date(f.lastModified).toLocaleString('de-DE')
+      });
+    }
+    zeilen.sort(function (a, b) { return a.datei < b.datei ? -1 : 1; });
+    console.table(zeilen);
+    var summe = zeilen.reduce(function (s, z) { return s + z.mb; }, 0);
+    console.log(zeilen.length + ' Dateien, ' + summe.toFixed(1) + ' MB gesamt');
+    return zeilen;
+  };
+
   root.bcBackupEinstellen = async function (o) {
     if (o && typeof o.proVoll === 'number')      cfg.proVoll = Math.max(1, o.proVoll);
     if (o && typeof o.generationen === 'number') cfg.generationen = Math.max(1, o.generationen);
