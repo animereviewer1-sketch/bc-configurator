@@ -2504,7 +2504,7 @@ button { cursor: pointer; }
   <div>
     <div class="tweaks-section-title">🔁 Automatisches Backup</div>
     <div class="tweaks-btn-group">
-      <button class="tweaks-btn" onclick="bcBackupOrdnerWaehlen().then(_bcBackupZeigeStatus)" title="Zielordner festlegen – z. B. der Google-Drive-Ordner. Danach laeuft die Sicherung von selbst.">📁 Ordner</button>
+      <button class="tweaks-btn" onclick="bcBackupOrdnerWaehlen().then(_bcBackupZeigeStatus)" title="Zielordner festlegen – z. B. der Google-Drive-Ordner. Danach sichert das Tool einmal täglich beim ersten Start.">📁 Ordner</button>
       <button class="tweaks-btn" onclick="bcBackupJetzt().then(_bcBackupZeigeStatus)" title="Sofort ein Voll-Backup schreiben">💾 Jetzt</button>
     </div>
     <div id="bcBackupInfo" style="font-size:.62rem;color:var(--text3);margin-top:5px;line-height:1.5">–</div>
@@ -4097,7 +4097,10 @@ document.write('<scr'+'ipt src="bc-autobackup.js?_='+_cbv+'"><\/scr'+'ipt>');
     const s = await bcBackupStatus();
     el.innerHTML = s.ordner
       ? 'Ordner: <b>' + s.ordner + '</b><br>Zuletzt: ' + s.zuletzt
-        + '<br>Alle ' + s.abstandStunden + ' h, ' + s.behalten + ' Stände'
+        + '<br>' + (s.heuteSchonGesichert ? 'Heute bereits gesichert' : 'Heute noch offen')
+        + ' · Voll nach ' + s.inkrementeProVoll + ' Inkrementen · '
+        + s.generationen + ' Generationen'
+        + '<br>Aktuell: ' + (s.aktuelleGeneration || '–') + ' (' + s.inkrementeSeitVoll + ' Inkr.)'
         + (s.berechtigung === 'granted' ? '' : '<br><span style="color:#fbbf24">Berechtigung beim nächsten Klick bestätigen</span>')
       : 'Kein Ordner gewählt – Backups laufen nicht automatisch.';
   }
