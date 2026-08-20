@@ -6826,8 +6826,22 @@ function importAllData() {
 
         // v2-Felder: LSCG-DB, Wheel-DB, Screenshots, Favoriten, Standard-Outfit
         if (d.lscgDB) {
+          // Versionen zusammenfuehren statt den ganzen Eintrag zu verwerfen:
+          // Frueher gewann ein bereits vorhandener Spieler komplett, wodurch ein
+          // Backup fehlende Outfit-Versionen nicht zurueckbringen konnte.
           for (const [mk, entry] of Object.entries(d.lscgDB)) {
-            if (!LSCG_DB[mk]) LSCG_DB[mk] = entry;
+            const cur = LSCG_DB[mk];
+            if (!cur) { LSCG_DB[mk] = entry; continue; }
+            if (!Array.isArray(cur.versions)) cur.versions = [];
+            const bekannt = new Set(cur.versions.map(v => v.fingerprint ?? v.code));
+            for (const v of (entry.versions || [])) {
+              const id = v.fingerprint ?? v.code;
+              if (id != null && bekannt.has(id)) continue;
+              cur.versions.push(v);
+              if (id != null) bekannt.add(id);
+            }
+            if (!cur.name && entry.name) cur.name = entry.name;
+            if (!cur.nickname && entry.nickname) cur.nickname = entry.nickname;
           }
           _saveLscgDB();
         }
@@ -6836,10 +6850,26 @@ function importAllData() {
         if (d.profileScreenshots) { Object.assign(PROFILE_SCREENSHOTS, d.profileScreenshots); _saveProfileScreenshots(); }
         if (d.profileFavs)        { d.profileFavs.forEach(k => PROFILE_FAVS.add(k)); try { localStorage.setItem('BC_PROFILE_FAVS_v1', JSON.stringify([...PROFILE_FAVS])); } catch {} }
         if (Array.isArray(d.mbsWheel)) {
+          // Outfits je Spieler zusammenfuehren. Vorher ersetzte der neuere
+          // Zeitstempel den ganzen Eintrag – hatte der Spieler beim Export
+          // weniger Outfits, gingen die uebrigen dabei verloren.
           for (const r of d.mbsWheel) {
-            const idx = _mbsWheelData.findIndex(x => x.memberNumber === r.memberNumber);
-            if (idx >= 0) { if ((r.ts || 0) > (_mbsWheelData[idx].ts || 0)) _mbsWheelData[idx] = r; }
-            else _mbsWheelData.push(r);
+            r.memberNumber = _mbsNum(r.memberNumber);
+            const idx = _mbsWheelData.findIndex(x => _mbsNum(x.memberNumber) === r.memberNumber);
+            if (idx < 0) { _mbsWheelData.push(r); continue; }
+            const cur = _mbsWheelData[idx];
+            if (!Array.isArray(cur.outfits)) cur.outfits = [];
+            const bekannt = new Set(cur.outfits.map(o => _mbsOutfitFp(o)));
+            for (const o of (r.outfits || [])) {
+              const fp = _mbsOutfitFp(o);
+              if (bekannt.has(fp)) continue;
+              cur.outfits.push(o); bekannt.add(fp);
+            }
+            if ((r.ts || 0) > (cur.ts || 0)) {
+              cur.ts = r.ts;
+              if (r.name) cur.name = r.name;
+              if (r.room) cur.room = r.room;
+            }
           }
           _saveMbsWheelData();
           _updateWheelTabBadge();
@@ -7532,7 +7562,10 @@ const LSCG_LS_KEY       = 'BC_LSCG_OUTFITS_LS_v3';   // localStorage-Backup (Fal
 const LSCG_IGNORE_KEY   = 'BC_LSCG_IGNORE_v1';
 const LSCG_FAV_KEY      = 'BC_LSCG_FAVS_v1';
 const LSCG_SLOTS_KEY    = 'BC_LSCG_SLOTS_v1';         // Persistierte LSCG-Outfit-Slots (key → code)
-const LSCG_MAX_VERSIONS = 30;
+// Angehoben von 30: nach der Wiederherstellung aus den Screenshot-Schluesseln
+// haben einzelne Spieler weit mehr Versionen. Mit 30 haette der naechste Scan
+// eines solchen Spielers alles ausser den letzten 30 verworfen.
+const LSCG_MAX_VERSIONS = 1500;
 let LSCG_DB = {};
 // Synchrones localStorage-Preload entfernt: JSON.parse eines großen LSCG_DB blockiert den UI-Thread.
 // IDB lädt async in der IIFE unten (<50ms) – kein spürbarer Unterschied für den Nutzer.
