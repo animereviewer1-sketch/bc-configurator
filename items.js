@@ -4360,6 +4360,23 @@ function curseScan() {
 // ── Handle SCAN_RESULT ────────────────────────────────
 // called from postMessage handler
 
+
+/* Namen quer nachtragen: Der Curse-Scanner erfasst nur Leute, die Crafts
+   besitzen – der LSCG-Scanner jeden im Raum. Wer ueber LSCG erfasst wurde,
+   aber nie ein Craft hatte, blieb daher namenlos. Sieht der Curse-Scan so
+   jemanden spaeter doch, wird der Name hier in den LSCG-Bestand uebernommen. */
+function _lscgNameNachtragen(besitzer) {
+  if (!besitzer || besitzer.Nummer == null || !besitzer.Name) return;
+  const mk = String(besitzer.Nummer);
+  const nm = String(besitzer.Name).trim();
+  if (!nm || nm === mk || nm === '#' + mk) return;
+  const e = (typeof LSCG_DB !== 'undefined') ? LSCG_DB[mk] : null;
+  if (!e) return;
+  if (e.name && e.name !== mk && e.name !== '#' + mk) return;
+  e.name = nm;
+  if (typeof _saveLscgDB === 'function') _saveLscgDB();
+}
+
 function _saveCurseDB() {
   idbSet('BC_CURSE_DB_v1', {database:CURSE_DB,lscgTable:CURSE_LSCG,lscgCache:CURSE_CACHE_LSCG,favourites:[...CURSE_FAVOURITES],outfitFlags:CURSE_OUTFIT_FLAGS});
 }
@@ -4390,6 +4407,7 @@ function _handleCurseData(data) {
         else if (CURSE_DB[k]?.ZuletztGescannt) entry.ZuletztGescannt = CURSE_DB[k].ZuletztGescannt;
       }
       CURSE_DB[k] = entry;
+      _lscgNameNachtragen(entry.Besitzer);
     }
     // lscgTable/lscgCache sind klein – BC sendet sie weiterhin vollständig
     if (data.lscgTable) CURSE_LSCG       = data.lscgTable;
