@@ -2502,6 +2502,15 @@ button { cursor: pointer; }
   </div>
 
   <div>
+    <div class="tweaks-section-title">🔁 Automatisches Backup</div>
+    <div class="tweaks-btn-group">
+      <button class="tweaks-btn" onclick="bcBackupOrdnerWaehlen().then(_bcBackupZeigeStatus)" title="Zielordner festlegen – z. B. der Google-Drive-Ordner. Danach laeuft die Sicherung von selbst.">📁 Ordner</button>
+      <button class="tweaks-btn" onclick="bcBackupJetzt().then(_bcBackupZeigeStatus)" title="Sofort ein Voll-Backup schreiben">💾 Jetzt</button>
+    </div>
+    <div id="bcBackupInfo" style="font-size:.62rem;color:var(--text3);margin-top:5px;line-height:1.5">–</div>
+  </div>
+
+  <div>
     <div class="tweaks-section-title">📦 Item-Katalog</div>
     <div style="font-size:.63rem;color:var(--text3);margin-bottom:7px">Exportiert jedes Item &amp; jede Klamotte aus dem Cache mit allen Infos + Bild-URL als JSON.</div>
     <button class="tweaks-btn" style="width:100%" onclick="itemsExportCatalog()" title="Alle Items mit allen Feldern und Vorschaubild-URLs als JSON exportieren">⬇️ Katalog exportieren</button>
@@ -3548,6 +3557,7 @@ document.write('<scr'+'ipt src="bot-data.js?_='+_cbv+'"><\/scr'+'ipt>');
 document.write('<scr'+'ipt src="bot-ui.js?_='+_cbv+'"><\/scr'+'ipt>');
 document.write('<scr'+'ipt src="bot-engine.js?_='+_cbv+'"><\/scr'+'ipt>');
 document.write('<scr'+'ipt src="outfit-import.js?_='+_cbv+'"><\/scr'+'ipt>');
+document.write('<scr'+'ipt src="bc-autobackup.js?_='+_cbv+'"><\/scr'+'ipt>');
 </script>
 <script>
   // Engine-Version in Topbar anzeigen
@@ -4077,6 +4087,21 @@ document.write('<scr'+'ipt src="outfit-import.js?_='+_cbv+'"><\/scr'+'ipt>');
   } else {
     bcIconsAuto();
   }
+</script>
+
+<script>
+  // Zustand des automatischen Backups im Einstellungen-Panel anzeigen
+  async function _bcBackupZeigeStatus() {
+    const el = document.getElementById('bcBackupInfo');
+    if (!el || typeof bcBackupStatus !== 'function') return;
+    const s = await bcBackupStatus();
+    el.innerHTML = s.ordner
+      ? 'Ordner: <b>' + s.ordner + '</b><br>Zuletzt: ' + s.zuletzt
+        + '<br>Alle ' + s.abstandStunden + ' h, ' + s.behalten + ' Stände'
+        + (s.berechtigung === 'granted' ? '' : '<br><span style="color:#fbbf24">Berechtigung beim nächsten Klick bestätigen</span>')
+      : 'Kein Ordner gewählt – Backups laufen nicht automatisch.';
+  }
+  addEventListener('DOMContentLoaded', () => setTimeout(_bcBackupZeigeStatus, 1500));
 </script>
 
 </body>
