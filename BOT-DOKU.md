@@ -39,6 +39,78 @@ Jeder Trigger hat:
 - **⚡ Aktionen** – laufen nacheinander ab; jede mit eigenem Delay, Ziel und „bei Fehler"-Verhalten.
 - **🔙 Fallback** – läuft, wenn eine Aktion den Trigger ungültig macht.
 
+## 4a. Trigger – Wie oft, Vorrang, Klammern
+
+### Wie oft soll er auslösen?
+
+| Einstellung | Bedeutung |
+|---|---|
+| ∞ So oft wie es passt | keine Begrenzung |
+| 1× Nur ein einziges Mal | insgesamt einmal |
+| N× Höchstens N-mal | mit Zähler |
+| 📅 Einmal pro Tag je Person | zählt ab Mitternacht neu |
+| 🚪 Einmal pro Raumbesuch je Person | neu, sobald die Person den Raum verlässt und wiederkommt |
+
+### Zwei Arten von Pause
+
+- **Pause je Person** – Mindestabstand für jede Person einzeln.
+- **Pause insgesamt** – Mindestabstand für den ganzen Trigger, egal wer auslöst.
+
+Beide können gleichzeitig gesetzt sein; 0 heißt „keine Pause“.
+
+### Vorrang
+
+Passen mehrere Trigger auf dieselbe Nachricht, kommt der mit der **höheren Zahl** zuerst dran.
+Gleiche Zahl = Reihenfolge wie in der Liste. Mit **🛑 danach keine weiteren** hört der Bot
+nach diesem Trigger auf, weitere zu prüfen – praktisch für „erst die Sonderregel, sonst die
+allgemeine“.
+
+### Klammern in den Bedingungen
+
+Mit **( ) Klammer** lassen sich Bedingungen gruppieren:
+
+> **WENN** (sagt „hallo“ **oder** sagt „hi“) **und** ist gefesselt
+
+In der Klammer wählst du, ob **eine davon genügt** (ODER) oder **alle davon nötig** sind (UND).
+Mit ⤵ schiebst du eine bestehende Bedingung in die Klammer darüber, mit ⤴ wieder heraus.
+Klammern dürfen ineinander stehen. Über den Bedingungen steht durchgehend der Satz in
+Klartext – dort siehst du die Klammern genauso, wie der Bot sie auswertet.
+
+Bestehende Trigger ohne Klammern bleiben unverändert.
+
+### 🧪 Prüfen – warum feuert mein Trigger (nicht)?
+
+Der Knopf **🧪 Prüfen** an jeder Trigger-Karte zeigt für jede Person im Raum, welche
+Bedingung zutrifft und welche nicht – in ganzen Sätzen, und ohne irgendetwas auszuführen:
+
+```
+Anna #42
+  ✓ ist gefesselt
+  ✗ zwischen 20:00 und 23:59 Uhr
+  → Löst nicht aus.
+```
+
+Trifft alles zu, steht darunter, welche Aktionen laufen würden – mit bereits eingesetzten
+Platzhaltern. Der rote Knopf **▶ Jetzt wirklich auslösen** führt den Trigger dann echt aus
+(Wiederholungsgrenze und Pause werden dabei übergangen).
+
+Der Bot muss dafür **laufen** – nur dann kann er im Spiel nachsehen, wer wo steht und was er
+trägt.
+
+Zusätzlich steht ab sofort im Log **🔎 Bedingung nicht erfüllt**, wenn ein Trigger deswegen
+geschwiegen hat – mit der Nummer der Bedingung, an der es lag.
+
+### Wer darf auslösen, wen trifft die Aktion
+
+Der **Auslöser-Filter** kennt jetzt: jeder · jeder außer dem Bot · nur der Bot · nur diese
+Personen · alle außer diesen Personen · nur ab einem bestimmten Rang.
+
+Beim **Ziel einer Aktion** kam dazu: alle außer der auslösenden Person · alle ab einem Rang ·
+eine zufällige Person im Raum.
+
+Personen wählst du aus der Liste der Anwesenden – mit Namen statt Nummern. Wer nicht im Raum
+ist, bleibt trotzdem eingetragen; die Nummer lässt sich weiterhin von Hand eintippen.
+
 ## 5. Bedingungen
 
 | Bedingung | Funktion |
@@ -74,7 +146,7 @@ der Scanner liest.
 | 🙈 **Blind** | sieht nichts |
 | 🦵 **Kann nicht gehen** | festgesetzt, am Boden, angeleint oder eingeschlossen |
 | 📍 **Item an Slot** | trägt *irgendetwas* an einem Slot – anders als „Item trägt", das den genauen Namen braucht |
-| ✏️ **Craft getragen** | trägt ein Craft mit diesem Namen |
+| ✏️ **Craft getragen** | trägt ein Craft mit diesem Namen – über **📦 Wählen** aus der Craft-Liste mit Suchfeld (kein Aufklappmenü, dafür sind es zu viele) |
 | 🔒 **Schloss** | trägt ein Schloss; Typ leer lassen = irgendeines |
 
 Jede dieser Bedingungen lässt sich umdrehen („ist NICHT“ / „trägt NICHT“).

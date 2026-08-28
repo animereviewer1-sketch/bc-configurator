@@ -10,6 +10,12 @@ function _buildBotCode(bot) {
       charSpec: !!t.charSpec, resetOnLeave: !!t.resetOnLeave,
       von: t.von??'alle',
       vonNummern: (t.vonNummern||[]).map(Number),
+      // vonRangId fehlte hier - der Rang-Filter kam nie im Bot an und liess
+      // dadurch jeden durch.
+      vonRangId: t.vonRangId??'',
+      cooldownGlobalSek: t.cooldownGlobalSek??0,
+      prioritaet: Number(t.prioritaet)||0,
+      stopptWeitere: !!t.stopptWeitere,
       ifElse: !!t.ifElse,
     bedingungen: (t.bedingungen||[]),
     ifBedingungen: (t.ifBedingungen||[]),
@@ -152,8 +158,16 @@ const _evFiredCnt=Object.assign({},_savedState.evFiredCnt??{});
 // roomEver: merge window-state + popup-persisted (build-time injected) + log-based
 const _roomEver=new Set([...(_savedState.roomEver??[]),...(${roomEverJson})]);
 // State sofort zurückschreiben damit Referenz live ist
-window[_stateKey]={fired:_fired,firedCnt:_firedCnt,firedChar:_firedChar,roomEver:_roomEver};
+/* Kalendertag als Schluessel - fuer die Wiederholung "einmal pro Tag". */
+function _heuteKey(){const d=new Date();return d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate();}
+const _firedTag=_savedState.firedTag??{};       // trigId_mn -> 'JJJJ-M-T'
+const _firedBesuch=_savedState.firedBesuch??{}; // trigId_mn -> true, faellt beim Verlassen weg
+window[_stateKey]={fired:_fired,firedCnt:_firedCnt,firedChar:_firedChar,roomEver:_roomEver,
+                   firedTag:_firedTag,firedBesuch:_firedBesuch};
 // Quick lookup: trigId -> trigger config (for charSpec)
+/* Hoehere Prioritaet zuerst. Array.sort ist stabil, gleiche Prioritaet
+   behaelt also die Reihenfolge aus der Liste. */
+_trigs.sort((a,b)=>(Number(b.prioritaet)||0)-(Number(a.prioritaet)||0));
 const _trigMap=Object.fromEntries(_trigs.map(t=>[t.id,t]));
 // Pre-filtered trigger lists for each poll type (avoids re-filtering every tick)
 const _itTrigs=_trigs.filter(t=>(t.bedingungen??[]).some(c=>c.typ==='item_traegt'||c.typ==='item_traegt_nicht')&&!(t.bedingungen??[]).some(c=>c.typ==='wort'));
@@ -534,6 +548,12 @@ function _checkCond(c,ctx){
       return _scTruth(a,c.op||'==',b);
     }
 
+    // Eine Gruppe ist eine geklammerte Teilbedingung: (A oder B).
+    // _gruppenOk ruft sich dafuer selbst auf. Bestehende flache Listen
+    // enthalten keine Gruppen und verhalten sich deshalb unveraendert.
+    case 'gruppe':
+      return _gruppenOk(c.kinder??[], ctx, c.verknuepfung||'und');
+
     case 'shop_kauf':      return !ctx.shopBlockt;
     case 'player_betritt': return true;  // vom Join-Poll behandelt
     default:               return true;
@@ -546,8 +566,15 @@ function _checkCond(c,ctx){
    sonst entstuende bei 'oder' eine leere erste Gruppe, und [].every() ist true
    -> saemtliche Bedingungen waeren ausgehebelt. Aus demselben Grund gilt
    'und_nicht' erst ab der zweiten Bedingung. */
-function _gruppenOk(beds,ctx){
+function _gruppenOk(beds,ctx,verknuepfung){
   if(!beds||!beds.length)return true;
+  // Innerhalb einer Klammer-Gruppe entscheidet deren eigene Verknuepfung:
+  // 'oder' = eine genuegt, sonst muessen alle passen. Das logik-Feld der
+  // Kinder wird dann nicht gebraucht.
+  if(verknuepfung==='oder')
+    return beds.some(c=>_checkCond(c,ctx));
+  if(verknuepfung==='und')
+    return beds.every(c=>_checkCond(c,ctx));
   const groups=[[]];
   beds.forEach((c,i)=>{
     if(i>0&&(c.logik==='oder'||c.logik==='und_oder'))groups.push([]);
@@ -1285,7 +1312,7 @@ function _run(trig,vars){
   // Rejoin-Trigger: nur überspringen wenn Fenster geschlossen (nach Gnadenfrist)
   if(_isRejoinTrig && !_rejoinWindow.has(C.MemberNumber)){
     _log('\u23ED [Rejoin] "'+trig.name+'" – Fenster geschlossen (Gnadenfrist abgelaufen), übersprungen');
-    return;
+    return false;
   }
 
   // ── Wiederholung prüfen ──────────────────────────────────
@@ -1294,19 +1321,37 @@ function _run(trig,vars){
   if(wdh==='einmalig'&&cnt>=1){
     _log('⏭ "'+trig.name+'" bereits ausgelöst (1×)');
     _pushLog({status:'skip_wdh',msg:'1× bereits ausgelöst'},vars,trig);
-    return;
+    return false;
   }
   if(wdh==='n_mal'&&cnt>=(trig.maxMal??2)){
     _log('⏭ "'+trig.name+'" max '+trig.maxMal+'× erreicht');
     _pushLog({status:'skip_max',msg:'Max '+trig.maxMal+'× erreicht'},vars,trig);
-    return;
+    return false;
+  }
+  if(wdh==='taeglich'&&_firedTag[trig.id+'_'+C.MemberNumber]===_heuteKey()){
+    _log('⏭ "'+trig.name+'" heute schon fuer '+C.Name);
+    _pushLog({status:'skip_wdh',msg:'heute bereits ausgelöst'},vars,trig);
+    return false;
+  }
+  if(wdh==='pro_besuch'&&_firedBesuch[trig.id+'_'+C.MemberNumber]){
+    _log('⏭ "'+trig.name+'" in diesem Raumbesuch schon fuer '+C.Name);
+    _pushLog({status:'skip_wdh',msg:'in diesem Raumbesuch bereits ausgelöst'},vars,trig);
+    return false;
+  }
+  if(trig.cooldownGlobalSek>0){
+    const _letzte=_fired[trig.id]||0;
+    if(Date.now()-_letzte < trig.cooldownGlobalSek*1000){
+      _log('\u23F3 "'+trig.name+'" Gesamt-Pause aktiv ('+trig.cooldownGlobalSek+'s)');
+      _pushLog({status:'skip_cooldown',msg:'Gesamt-Pause '+trig.cooldownGlobalSek+'s'},vars,trig);
+      return false;
+    }
   }
   if(trig.cooldownSek>0){
     const _cdLast=_firedChar[trig.id+'_'+C.MemberNumber]||0;
     if(Date.now()-_cdLast < trig.cooldownSek*1000){
-      _log('\u23F3 "'+trig.name+'" Cooldown aktiv ('+trig.cooldownSek+'s/Spieler)');
-      _pushLog({status:'skip_cooldown',msg:'Cooldown '+trig.cooldownSek+'s'},vars,trig);
-      return;
+      _log('\u23F3 "'+trig.name+'" Pause aktiv ('+trig.cooldownSek+'s/Spieler)');
+      _pushLog({status:'skip_cooldown',msg:'Pause '+trig.cooldownSek+'s'},vars,trig);
+      return false;
     }
   }
 
@@ -1326,6 +1371,8 @@ function _run(trig,vars){
         _fired[trig.id]=now;
         _firedChar[trig.id+'_'+C.MemberNumber]=now;
         _firedCnt[trig.id]=(cnt+1);
+        _firedTag[trig.id+'_'+C.MemberNumber]=_heuteKey();
+        _firedBesuch[trig.id+'_'+C.MemberNumber]=true;
         _log('\u2705 Trigger "'+trig.name+'" abgeschlossen #'+_firedCnt[trig.id]+(trig.charSpec?' [pro Spieler]':' [global]'));
         _pushLog({status:'ok'},vars,trig);
         _syncRoomEver();
@@ -1341,6 +1388,7 @@ function _run(trig,vars){
       }
     );
   },trig.delay??0);
+  return true;   // hat alle Sperren passiert - fuer "danach keine weiteren"
 }
 
 // ── If/Else SONST-Branch: läuft wenn Bedingungen NICHT zutreffen ──
@@ -1837,7 +1885,9 @@ function _proc(rohText,typKey,C){
   }
   const pos={X:C.X??0,Y:C.Y??0}; // direkt vom Character
   const typLabel={chat:'\u{1F4AC} Chat',emote:'\u{2728} Emote',whisper:'\u{1F917} Whisper'}[typKey]??typKey;
+  let _stoppNachDiesem=false;
   _trigs.forEach(trig=>{
+    if(_stoppNachDiesem)return;   // ein Trigger hat die Runde beendet
     // Trigger mit player_betritt -> nur Join-Poll, nie Nachrichten
     if((trig.bedingungen??[]).some(c=>c.typ==='player_betritt'))return;
     // Trigger mit item_traegt/item_traegt_nicht aber ohne wort -> nur Polling
@@ -1855,7 +1905,9 @@ function _proc(rohText,typKey,C){
       const ifBeds=trig.ifBedingungen??[];
       const ifOk=!trig.ifElse||!ifBeds.length||_okIf(trig,rohText,typKey,C);
       if(ifOk){
-        _run(trig,{name:C.Name,wort:rohText,typ:typLabel,x:pos.X,y:pos.Y,zone:'',C});
+        const _lief=_run(trig,{name:C.Name,wort:rohText,typ:typLabel,x:pos.X,y:pos.Y,zone:'',C});
+        // Trigger mit "danach keine weiteren" beenden die Runde fuer diese Nachricht
+        if(_lief&&trig.stopptWeitere)_stoppNachDiesem=true;
       } else if((trig.aktionen_sonst??[]).length){
         _runSonst(trig,{name:C.Name,wort:rohText,typ:typLabel,x:pos.X,y:pos.Y,zone:'',C});
       }
@@ -2112,6 +2164,8 @@ function _tickBeitritt(){
         if(k.startsWith(prevNum+'_'))delete _zoneState[k];
       }
       _trigs.forEach(trig=>{
+        // "einmal pro Raumbesuch" gilt ab jetzt wieder
+        delete _firedBesuch[trig.id+'_'+prevNum];
         if(trig.charSpec&&trig.resetOnLeave){
           delete _firedChar[trig.id+'_'+prevNum];
           _log('\u{1F504} State von "'+trig.name+'" für #'+prevNum+' zurückgesetzt');
@@ -2479,6 +2533,7 @@ window['_BCBot_'+_BID]={
         fired:_fired, firedCnt:_firedCnt,
         firedChar:_firedChar, roomEver:[..._roomEver],
         evFiredCnt:_evFiredCnt,
+        firedTag:_firedTag, firedBesuch:_firedBesuch,
         ts:Date.now()
       };
       localStorage.setItem('__BCKBotStates',JSON.stringify(ls));
@@ -2505,6 +2560,8 @@ window['_BCBot_'+_BID]={
     Object.keys(_fired).forEach(k=>delete _fired[k]);
     Object.keys(_firedCnt).forEach(k=>delete _firedCnt[k]);
     Object.keys(_firedChar).forEach(k=>delete _firedChar[k]);
+    Object.keys(_firedTag).forEach(k=>delete _firedTag[k]);
+    Object.keys(_firedBesuch).forEach(k=>delete _firedBesuch[k]);
     Object.keys(_evFiredCnt).forEach(k=>delete _evFiredCnt[k]);
     _roomEver.clear();
     console.log('\u{1F9F9} [Bot:${safeName}] States zurückgesetzt (Mem+LS)');

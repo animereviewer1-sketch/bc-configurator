@@ -623,6 +623,11 @@ function _btLogikWort(l) {
 function _btCondPhrase(bot, c) {
   const e = (s)=>escHtml(String(s));
   // Neue Typen beschreiben sich im Verzeichnis selbst
+  if (c && c.typ === 'gruppe') {
+    const wort = (c.verknuepfung||'und') === 'oder' ? ' oder ' : ' und ';
+    const teile = (c.kinder||[]).map(k => _btCondPhrase(bot, k));
+    return teile.length ? '(' + teile.join(wort) + ')' : '(leere Klammer)';
+  }
   const reg = c && COND_DEFS[c.typ];
   if (reg && typeof reg.klartext === 'function') {
     try { return e(reg.klartext(c)); } catch (err) { return e(reg.label); }
@@ -883,15 +888,27 @@ function renderTrigCard(bot, t, i) {
         <input class="cf cf-w160" value="${escHtml(t.name||'')}" oninput="trigField('${t.id}','name',this.value)" placeholder="Trigger-Name">
         <label style="font-size:.65rem;color:var(--text3)">Delay:</label>
         <input class="cf cf-w80" type="number" value="${t.delay??0}" oninput="trigField('${t.id}','delay',+this.value)"> ms
-        <label style="font-size:.65rem;color:var(--text3)">🔁 Wiederholung:</label>
-        <select class="cf" onchange="trigField('${t.id}','wiederholung',this.value);trigRerender('${t.id}')">
-          <option value="immer"    ${wdh==='immer'?'selected':''}>∞ Unbegrenzt</option>
-          <option value="einmalig" ${wdh==='einmalig'?'selected':''}>1× Einmalig</option>
-          <option value="n_mal"    ${wdh==='n_mal'?'selected':''}>N× N-mal</option>
+        <label style="font-size:.65rem;color:var(--text3)">🔁 Wie oft?</label>
+        <select class="cf" style="width:190px" onchange="trigField('${t.id}','wiederholung',this.value);trigRerender('${t.id}')">
+          <option value="immer"      ${wdh==='immer'?'selected':''}>∞ So oft wie es passt</option>
+          <option value="einmalig"   ${wdh==='einmalig'?'selected':''}>1× Nur ein einziges Mal</option>
+          <option value="n_mal"      ${wdh==='n_mal'?'selected':''}>N× Höchstens N-mal</option>
+          <option value="taeglich"   ${wdh==='taeglich'?'selected':''}>📅 Einmal pro Tag je Person</option>
+          <option value="pro_besuch" ${wdh==='pro_besuch'?'selected':''}>🚪 Einmal pro Raumbesuch je Person</option>
         </select>
-        ${wdh==='n_mal'?`<input class="cf cf-w80" type="number" min="1" value="${t.maxMal??2}" oninput="trigField('${t.id}','maxMal',+this.value)" title="Wie oft max. feuern">× max.`:''}
-        <label style="font-size:.65rem;color:var(--text3);margin-left:8px" title="Mindestabstand zwischen zwei Auslösungen pro Spieler (0 = aus)">⏳ Cooldown:</label>
-        <input class="cf cf-w80" type="number" min="0" value="${t.cooldownSek??0}" oninput="trigField('${t.id}','cooldownSek',+this.value)" title="Sekunden pro Spieler"> s
+        ${wdh==='n_mal'?`<input class="cf cf-w80" type="number" min="1" value="${t.maxMal??2}" oninput="trigField('${t.id}','maxMal',+this.value)" title="Wie oft höchstens">× höchstens`:''}
+        ${wdh==='taeglich'?`<span style="font-size:.6rem;color:var(--text3)" title="Zählt ab Mitternacht neu – nach der Uhr deines Rechners">ⓘ zählt ab Mitternacht neu</span>`:''}
+        ${wdh==='pro_besuch'?`<span style="font-size:.6rem;color:var(--text3)" title="Sobald die Person den Raum verlässt und wiederkommt, geht es von vorn los">ⓘ neu ab dem nächsten Betreten</span>`:''}
+        <label style="font-size:.65rem;color:var(--text3);margin-left:8px" title="Mindestabstand zwischen zwei Auslösungen für dieselbe Person (0 = keine Pause)">⏳ Pause je Person:</label>
+        <input class="cf cf-w80" type="number" min="0" value="${t.cooldownSek??0}" oninput="trigField('${t.id}','cooldownSek',+this.value)" title="Sekunden – gilt für jede Person einzeln"> s
+        <label style="font-size:.65rem;color:var(--text3)" title="Mindestabstand insgesamt, egal wer auslöst (0 = keine Pause)">⏳ Pause insgesamt:</label>
+        <input class="cf cf-w80" type="number" min="0" value="${t.cooldownGlobalSek??0}" oninput="trigField('${t.id}','cooldownGlobalSek',+this.value)" title="Sekunden – gilt für alle zusammen"> s
+        <label style="font-size:.65rem;color:var(--text3);margin-left:8px" title="Passen mehrere Trigger auf dieselbe Nachricht, kommt der mit der höheren Zahl zuerst dran. Gleiche Zahl = Reihenfolge wie in der Liste.">⬆️ Vorrang:</label>
+        <input class="cf cf-w80" type="number" value="${t.prioritaet??0}" oninput="trigField('${t.id}','prioritaet',+this.value);renderBotEditor()" title="Höhere Zahl kommt zuerst dran">
+        <label style="font-size:.65rem;color:var(--text3);display:flex;align-items:center;gap:4px;cursor:pointer" title="Wenn dieser Trigger auslöst, werden für dieselbe Nachricht keine weiteren Trigger mehr geprüft">
+          <input type="checkbox" ${t.stopptWeitere?'checked':''} onchange="trigField('${t.id}','stopptWeitere',this.checked)" style="accent-color:var(--purple)">
+          <span>🛑 danach keine weiteren</span>
+        </label>
         <label style="font-size:.65rem;color:var(--text3);margin-left:8px">🔑 Als Vorbedingung:</label>
         <select class="cf" style="width:170px" title="Wie zählt dieser Trigger als Vorbedingung für andere Trigger?" onchange="trigField('${t.id}','charSpec',this.value==='true');trigRerender('${t.id}')">
           <option value="false" ${!t.charSpec?'selected':''}>🌐 Global – einmal gilt für alle</option>
@@ -951,6 +968,8 @@ function renderTrigCard(bot, t, i) {
           <button onclick="trigAddCond('${t.id}','variable')" title="Prüft eine Spieler-Variable/Punkte (z.B. punkte ≥ 100)">🔢 Variable</button>
           <button onclick="trigAddCond('${t.id}','zufall')" title="X% Wahrscheinlichkeit, dass der Trigger zutrifft">🎲 Zufall</button>
           <button onclick="trigAddCond('${t.id}','erregung')" title="Prüft die Erregung (z.B. ≥ 99 % → Edging)">💗 Erregung</button>
+          <button onclick="trigAddGruppe('${t.id}')" title="Fasst mehrere Bedingungen zu einer Klammer zusammen, z.B. (sagt hallo ODER sagt hi)"
+            style="border-color:#fbbf2455;color:#fbbf24">( ) Klammer</button>
           ${_condKnoepfe(t.id)}
         </div>
         <div id="conds-${t.id}">${(t.bedingungen||[]).map((c,ci)=>renderCond(bot,t.id,c,ci)).join('')}</div>
@@ -1027,6 +1046,121 @@ function renderTrigCard(bot, t, i) {
 }
 
 // ── Conditions ────────────────────────────────────────────────
+/* -- Klammer-Gruppen ------------------------------------------------------
+   Eine Gruppe fasst Bedingungen zu einer Klammer zusammen:
+       (sagt "hallo" ODER sagt "hi") UND ist gefesselt
+   Sie ist selbst eine Bedingung mit typ:'gruppe', steht also ganz normal in
+   der Liste. Alte Trigger ohne Gruppen bleiben unveraendert - es gibt keine
+   Umwandlung.                                                              */
+function trigAddGruppe(tid) {
+  const b = _selBot(); if (!b) return;
+  const t = b.triggers.find(x => x.id === tid); if (!t) return;
+  t.bedingungen = t.bedingungen ?? [];
+  t.bedingungen.push({ typ:'gruppe', verknuepfung:'oder', kinder:[] });
+  _normLogik(t.bedingungen); _saveBots(); condRerender(tid);
+}
+
+/* Bedingung in die Gruppe direkt darueber verschieben */
+function condInGruppe(tid, ci) {
+  const b = _selBot(); if (!b) return;
+  const t = b.triggers.find(x => x.id === tid); if (!t) return;
+  const liste = t.bedingungen || [];
+  let gi = -1;
+  for (let i = ci - 1; i >= 0; i--) if (liste[i]?.typ === 'gruppe') { gi = i; break; }
+  if (gi < 0) { showStatus('Keine Gruppe darüber – erst eine Gruppe anlegen', 'info'); return; }
+  const [c] = liste.splice(ci, 1);
+  (liste[gi].kinder = liste[gi].kinder || []).push(c);
+  _normLogik(liste); _saveBots(); condRerender(tid);
+}
+
+/* Bedingung aus einer Gruppe wieder herausholen */
+function condAusGruppe(tid, gi, ki) {
+  const b = _selBot(); if (!b) return;
+  const t = b.triggers.find(x => x.id === tid); if (!t) return;
+  const g = (t.bedingungen || [])[gi]; if (!g || g.typ !== 'gruppe') return;
+  const [c] = (g.kinder || []).splice(ki, 1);
+  if (c) t.bedingungen.splice(gi + 1, 0, c);
+  _normLogik(t.bedingungen); _saveBots(); condRerender(tid);
+}
+
+function gruppeFeld(tid, gi, wert) {
+  const b = _selBot(); if (!b) return;
+  const t = b.triggers.find(x => x.id === tid); if (!t) return;
+  const g = (t.bedingungen || [])[gi]; if (!g) return;
+  g.verknuepfung = wert; _saveBots(); condRerender(tid);
+}
+
+function gruppeAddCond(tid, gi, typ) {
+  const b = _selBot(); if (!b) return;
+  const t = b.triggers.find(x => x.id === tid); if (!t) return;
+  const g = (t.bedingungen || [])[gi]; if (!g) return;
+  const vorgabe = COND_DEFS[typ] ? Object.assign({ typ }, COND_DEFS[typ].vorgabe) : { typ };
+  (g.kinder = g.kinder || []).push(vorgabe);
+  _saveBots(); condRerender(tid);
+}
+
+function gruppeCondRemove(tid, gi, ki) {
+  const b = _selBot(); if (!b) return;
+  const t = b.triggers.find(x => x.id === tid); if (!t) return;
+  const g = (t.bedingungen || [])[gi]; if (!g) return;
+  (g.kinder || []).splice(ki, 1);
+  _saveBots(); condRerender(tid);
+}
+
+/* Darstellung einer Gruppe: eingerueckter Kasten mit eigenem Rand. */
+function _renderGruppe(bot, tid, c, ci) {
+  const kinder = c.kinder || [];
+  const oder = (c.verknuepfung || 'und') === 'oder';
+  const farbe = oder ? '#fbbf24' : '#8b5cf6';
+  const kindZeilen = kinder.map((k, ki) => {
+    const def = COND_DEFS[k.typ];
+    // Zielbeschreibung statt Umschreiben der fertigen Ausgabe
+    const inner = def
+      ? `<span style="font-size:.68rem;color:var(--text2)">${escHtml(def.label)}</span> `
+        + _condFelder(tid, ci, k, def, { fn:'gruppeKindFeld', args:[tid, ci, ki] })
+      : `<span style="font-size:.68rem;color:var(--text2)">${escHtml(_btCondPhrase(bot, k))}</span>`;
+    return `<div style="display:flex;align-items:center;gap:5px;padding:3px 0">`
+      + `<span style="font-size:.6rem;color:${farbe};font-weight:700;min-width:26px">`
+      + (ki === 0 ? '' : (oder ? 'ODER' : 'UND')) + `</span>`
+      + `<span style="font-size:.7rem">${COND_DEFS[k.typ]?.icon || '❓'}</span>`
+      + `<div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;flex:1">${inner}</div>`
+      + `<button onclick="condAusGruppe('${tid}',${ci},${ki})" title="Aus der Klammer herausnehmen"`
+      + ` style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:.7rem">⤴</button>`
+      + `<button onclick="gruppeCondRemove('${tid}',${ci},${ki})" title="Löschen"`
+      + ` style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.7rem">✕</button>`
+      + `</div>`;
+  }).join('');
+
+  return `<div style="border:1px solid ${farbe}55;border-left:3px solid ${farbe};border-radius:7px;`
+    + `padding:6px 9px;margin:3px 0 3px 12px;background:${farbe}0d">`
+    + `<div style="display:flex;align-items:center;gap:6px;margin-bottom:2px">`
+    + `<span style="font-size:.62rem;font-weight:700;color:${farbe}">( Klammer )</span>`
+    + `<select class="cf" style="width:150px;font-size:.66rem" onchange="gruppeFeld('${tid}',${ci},this.value)">`
+    + `<option value="oder" ${oder?'selected':''}>eine davon genügt</option>`
+    + `<option value="und" ${!oder?'selected':''}>alle davon nötig</option>`
+    + `</select>`
+    + `<select class="cf" style="width:150px;font-size:.66rem" onchange="if(this.value){gruppeAddCond('${tid}',${ci},this.value);this.value='';}">`
+    + `<option value="">+ Bedingung hinzufügen</option>`
+    + Object.entries(COND_DEFS).map(([typ,d])=>`<option value="${typ}">${d.icon} ${escHtml(d.label)}</option>`).join('')
+    + `<option value="wort">💬 Wort/Chat</option>`
+    + `</select>`
+    + `<span style="flex:1"></span>`
+    + `<button onclick="condRemove('${tid}',${ci})" title="Ganze Klammer löschen"`
+    + ` style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.75rem">✕</button>`
+    + `</div>`
+    + (kindZeilen || `<div style="font-size:.64rem;color:var(--text3);padding:3px 0">noch leer – oben eine Bedingung hinzufügen</div>`)
+    + `</div>`;
+}
+
+/* Feldaenderung an einer Bedingung INNERHALB einer Gruppe */
+function gruppeKindFeld(tid, gi, ki, key, wert) {
+  const b = _selBot(); if (!b) return;
+  const t = b.triggers.find(x => x.id === tid); if (!t) return;
+  const g = (t.bedingungen || [])[gi]; if (!g) return;
+  const k = (g.kinder || [])[ki]; if (!k) return;
+  k[key] = wert; _saveBots();
+}
+
 /* -- Probelauf ------------------------------------------------------------
    Zeigt fuer jede Person im Raum, welche Bedingung zutrifft und welche nicht,
    in ganzen Saetzen. Die Auswertung selbst macht der laufende Bot (siehe
@@ -1319,8 +1453,8 @@ const COND_DEFS = {
   craft_getragen: { gruppe:'Zustand', label:'Craft getragen', icon:'\u270f\ufe0f',
     vorgabe:{modus:'ist',craftName:''},
     felder:[{key:'modus',typ:'select',breite:96,werte:[['ist','tr\u00e4gt'],['nicht','tr\u00e4gt NICHT']]},
-            {key:'craftName',typ:'auswahl',breite:190,quelle:_quelleCrafts,platzhalter:'– Craft wählen –',
-             leerHinweis:'Noch keine Crafts gescannt – im Craft & Curse-Tab scannen'}],
+            {key:'craftName',typ:'picker',pickerTab:'curse',platzhalter:'kein Craft gewählt',
+             hilfe:'Öffnet die Craft-Liste mit Suchfeld – bei tausenden Crafts wäre ein Aufklappmenü unbrauchbar'}],
     klartext:c=>(c.modus==='nicht'?'tr\u00e4gt Craft nicht: ':'tr\u00e4gt Craft: ')+(c.craftName||'?') },
 
   schloss: { gruppe:'Zustand', label:'Schloss', icon:'\ud83d\udd12',
@@ -1369,8 +1503,11 @@ const COND_DEFS = {
 };
 
 /* Baut die Editor-Felder eines Bausteins aus seiner Beschreibung. */
-function _condFelder(tid, ci, c, def) {
-  const setz = (k, wert) => `condField('${tid}',${ci},'${k}',${wert})`;
+function _condFelder(tid, ci, c, def, ziel) {
+  // ziel beschreibt den Setter: {fn, args}. Ohne Angabe die normale Bedingung.
+  ziel = ziel || { fn:'condField', args:[tid, ci] };
+  const argStr = ziel.args.map(a => typeof a === 'number' ? a : `'${a}'`).join(',');
+  const setz = (k, wert) => `${ziel.fn}(${argStr},'${k}',${wert})`;
   return (def.felder||[]).map(f => {
     const v = c[f.key];
     const br = f.breite ? `style="width:${f.breite}px"` : '';
@@ -1379,11 +1516,35 @@ function _condFelder(tid, ci, c, def) {
       return lbl+`<select class="cf" ${br} onchange="${setz(f.key,'this.value')};condRerender('${tid}')">`
         + f.werte.map(w=>`<option value="${escHtml(w[0])}" ${v===w[0]?'selected':''}>${escHtml(w[1])}</option>`).join('')
         + `</select>`;
+    if (f.typ === 'picker') {
+      // Fuer grosse Bestaende (Crafts, Items, Outfits): kein Aufklappmenue,
+      // sondern der vorhandene Auswahl-Dialog mit Suche. Tausende Eintraege
+      // in jeder Bedingungskarte machen den Editor sonst unbenutzbar.
+      const argsJson = escHtml(JSON.stringify(ziel.args));
+      return lbl
+        + `<span style="font-size:.68rem;color:var(--text2);min-width:90px">`
+        + (v ? `<b>${escHtml(v)}</b>` : `<span style="color:var(--text3)">${escHtml(f.platzhalter||'nichts gewählt')}</span>`)
+        + `</span>`
+        + `<button onclick="_condPicker('${ziel.fn}','${argsJson}','${f.key}','${f.pickerTab||'item'}','${tid}')"`
+        + ` style="font-size:.62rem;padding:2px 7px;background:var(--pd);border:none;color:var(--pl);border-radius:4px;cursor:pointer"`
+        + ` title="${escHtml(f.hilfe||'Aus der Liste wählen – mit Suchfeld')}">📦 Wählen</button>`
+        + (v ? `<button onclick="${setz(f.key, "''")};condRerender('${tid}')" title="Auswahl löschen"`
+             + ` style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:.7rem">✕</button>` : '');
+    }
     if (f.typ === 'auswahl') {
       // Liste aus dem, was das Tool kennt. Ist sie leer (Katalog noch nicht
       // geladen), bleibt die freie Eingabe - sonst koennte man nichts setzen.
       let werte = [];
       try { werte = f.quelle() || []; } catch (e) { werte = []; }
+      // Sicherheitsnetz: wird eine Quelle unerwartet gross, kein Aufklappmenue
+      // mit tausenden Eintraegen bauen - das bremst den ganzen Editor aus.
+      const grenze = f.maxListe || 60;
+      if (werte.length > grenze) {
+        return lbl + `<input class="cf" ${br||'style="width:170px"'} value="${escHtml(v??'')}"`
+          + ` placeholder="${escHtml(f.platzhalter||'')}" oninput="${setz(f.key,'this.value')}"`
+          + ` title="${werte.length} Einträge – zu viele für eine Liste, bitte tippen">`
+          + `<span style="font-size:.6rem;color:var(--text3)">${werte.length} bekannt</span>`;
+      }
       if (!werte.length)
         return lbl+`<input class="cf" ${br||'style="width:150px"'} value="${escHtml(v??'')}"`
           + ` placeholder="${escHtml(f.platzhalter||'')}" title="${escHtml(f.leerHinweis||'')}"`
@@ -1413,6 +1574,25 @@ function _condFelder(tid, ci, c, def) {
     return lbl+`<input class="cf" ${br||'style="width:130px"'} value="${escHtml(v??'')}"`
       + ` placeholder="${escHtml(f.platzhalter||'')}" oninput="${setz(f.key,'this.value')}">`;
   }).join('\n      ');
+}
+
+/* Oeffnet den vorhandenen Auswahl-Dialog und schreibt das Ergebnis in die
+   richtige Bedingung - egal ob sie normal in der Liste steht oder in einer
+   Klammer-Gruppe. */
+const _CondSetter = {
+  condField:      (...a) => condField(...a),
+  gruppeKindFeld: (...a) => gruppeKindFeld(...a),
+};
+function _condPicker(fnName, argsJson, key, tab, tid) {
+  let args;
+  try { args = JSON.parse(argsJson); } catch (e) { return; }
+  const setter = _CondSetter[fnName];
+  if (!setter) return;
+  ipickerOpen(tab, v => {
+    const wert = v?.name ?? v?.asset ?? '';
+    setter(...args, key, wert);
+    condRerender(tid);
+  });
 }
 
 /* Wochentag an-/abwaehlen */
@@ -1445,6 +1625,8 @@ function _condKnoepfe(tid) {
 }
 
 function renderCond(bot, tid, c, ci) {
+  // Klammer-Gruppen bekommen eine eigene, eingerueckte Darstellung
+  if (c.typ === 'gruppe') return _renderGruppe(bot, tid, c, ci);
   let inner = '';
   const _def = COND_DEFS[c.typ];
   if (_def) {
@@ -1600,6 +1782,7 @@ function renderCond(bot, tid, c, ci) {
       <div style="display:flex;flex-direction:column;gap:2px">
         <button class="order-btn" onclick="condMoveUp('${tid}',${ci})" ${ci===0?'disabled':''}>▲</button>
         <button class="order-btn" onclick="condMoveDown('${tid}',${ci})" title="Nach unten">▼</button>
+        <button class="order-btn" onclick="condInGruppe('${tid}',${ci})" title="In die Klammer darüber verschieben">⤵</button>
         <button class="rm-btn" style="margin-top:2px" onclick="condRemove('${tid}',${ci})">✕</button>
       </div>
     </div>
