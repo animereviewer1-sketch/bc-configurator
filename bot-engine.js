@@ -176,11 +176,26 @@ window[_stateKey]={fired:_fired,firedCnt:_firedCnt,firedChar:_firedChar,roomEver
 _trigs.sort((a,b)=>(Number(b.prioritaet)||0)-(Number(a.prioritaet)||0));
 const _trigMap=Object.fromEntries(_trigs.map(t=>[t.id,t]));
 // Pre-filtered trigger lists for each poll type (avoids re-filtering every tick)
-const _itTrigs=_trigs.filter(t=>(t.bedingungen??[]).some(c=>c.typ==='item_traegt'||c.typ==='item_traegt_nicht')&&!(t.bedingungen??[]).some(c=>c.typ==='wort'));
-const _zoneTrigs=_trigs.filter(t=>(t.bedingungen??[]).some(c=>c.typ==='zone'||c.typ==='zone_rect')&&!(t.bedingungen??[]).some(c=>c.typ==='wort'||c.typ==='player_betritt'));
-const _joinTrigs=_trigs.filter(t=>(t.bedingungen??[]).some(c=>c.typ==='player_betritt'));
+/* Sucht einen Bedingungstyp - AUCH innerhalb von Klammer-Gruppen. Ohne diese
+   Rekursion waren Bedingungen in einer Klammer fuer die Zuordnung zu den
+   Pollern unsichtbar: der Trigger wurde dann von gar keinem Poll ueberwacht
+   und feuerte nur noch, wenn zufaellig jemand etwas in den Chat schrieb. */
+function _hatTyp(beds,typen){
+  return (beds??[]).some(function(c){
+    if(c&&c.typ==='gruppe')return _hatTyp(c.kinder,typen);
+    return c&&typen.indexOf(c.typ)>=0;
+  });
+}
+/* Alles, was vom Zustand einer Person abhaengt und sich ohne Chatnachricht
+   aendern kann - wird darum wie "Item traegt" ueberwacht und feuert bei
+   Aenderung, nicht erst beim naechsten Chat. */
+const _ZUSTAND_TYPEN=['item_traegt','item_traegt_nicht','gefesselt','geknebelt','blind',
+                      'bewegung_blockiert','item_gruppe','craft_getragen','schloss'];
+const _itTrigs=_trigs.filter(t=>_hatTyp(t.bedingungen,_ZUSTAND_TYPEN)&&!_hatTyp(t.bedingungen,['wort']));
+const _zoneTrigs=_trigs.filter(t=>_hatTyp(t.bedingungen,['zone','zone_rect'])&&!_hatTyp(t.bedingungen,['wort','player_betritt']));
+const _joinTrigs=_trigs.filter(t=>_hatTyp(t.bedingungen,['player_betritt']));
 // Erregung als primärer Auslöser (gepollt) – nur wenn kein anderes Auslöse-Event vorhanden ist
-const _arTrigs=_trigs.filter(t=>(t.bedingungen??[]).some(c=>c.typ==='erregung')&&!(t.bedingungen??[]).some(c=>['wort','zone','zone_rect','item_traegt','item_traegt_nicht','player_betritt','ev_timer','ev_interval'].includes(c.typ)));
+const _arTrigs=_trigs.filter(t=>_hatTyp(t.bedingungen,['erregung'])&&!_hatTyp(t.bedingungen,['wort','zone','zone_rect','player_betritt','ev_timer','ev_interval'].concat(_ZUSTAND_TYPEN)));
 // Rejoin-Fenster: memberNum → true – schließt wenn Nicht-Rejoin-Trigger feuert
 const _rejoinWindow=new Map(); // memberNum → timestamp when opened
 const _REJOIN_GRACE=1000; // ms window stays open regardless of other triggers
@@ -526,8 +541,14 @@ function _vonOkEv(ev, C) {
      shopBlockt     true = 'shop_kauf' sperrt (nur der Chat-Weg)
      istRejoinTrig  true = Rejoin-Sonderfall bei 'trigger_war' (Beitritt)   */
 function _checkCond(c,ctx){
-  if(ctx.ueberspringe&&ctx.ueberspringe.indexOf(c.typ)>=0)return true;
-  if(ctx.nur&&ctx.nur.indexOf(c.typ)<0)return true; // Gegenstueck: nur diese Typen pruefen
+  // Eine Klammer ist ein Behaelter, kein Bedingungstyp - sie darf nie
+  // uebersprungen werden, sonst gaelte sie pauschal als erfuellt und der
+  // Trigger wuerde feuern, obwohl nichts darin zutrifft. Die Filter greifen
+  // eine Ebene tiefer, bei den Bedingungen IN der Klammer.
+  if(c.typ!=='gruppe'){
+    if(ctx.ueberspringe&&ctx.ueberspringe.indexOf(c.typ)>=0)return true;
+    if(ctx.nur&&ctx.nur.indexOf(c.typ)<0)return true;
+  }
   const C=ctx.C, cx=C.X??-999, cy=C.Y??-999;
   switch(c.typ){
     case 'wort':{
@@ -720,8 +741,10 @@ function _gruppenOk(beds,ctx,verknuepfung){
   // selbst geprueft hat, ist neutral – 'und_nicht' wuerde es sonst in false
   // verkehren und der Trigger koennte nie feuern.
   const passt=c=>{
-    if(ctx.ueberspringe&&ctx.ueberspringe.indexOf(c.typ)>=0)return true;
-    if(ctx.nur&&ctx.nur.indexOf(c.typ)<0)return true;
+    if(c.typ!=='gruppe'){   // Klammern immer betreten, siehe _checkCond
+      if(ctx.ueberspringe&&ctx.ueberspringe.indexOf(c.typ)>=0)return true;
+      if(ctx.nur&&ctx.nur.indexOf(c.typ)<0)return true;
+    }
     return (c!==erste&&c.logik==='und_nicht')?!_checkCond(c,ctx):_checkCond(c,ctx);
   };
   return groups.some(g=>g.every(passt));
@@ -2025,11 +2048,9 @@ function _proc(rohText,typKey,C){
   _trigs.forEach(trig=>{
     if(_stoppNachDiesem)return;   // ein Trigger hat die Runde beendet
     // Trigger mit player_betritt -> nur Join-Poll, nie Nachrichten
-    if((trig.bedingungen??[]).some(c=>c.typ==='player_betritt'))return;
-    // Trigger mit item_traegt/item_traegt_nicht aber ohne wort -> nur Polling
-    const hasItem=(trig.bedingungen??[]).some(c=>c.typ==='item_traegt'||c.typ==='item_traegt_nicht');
-    const hasWort=(trig.bedingungen??[]).some(c=>c.typ==='wort');
-    if(hasItem&&!hasWort)return;
+    if(_hatTyp(trig.bedingungen,['player_betritt']))return;
+    // Zustands-Trigger ohne Wort laufen ueber den Poll, nicht ueber den Chat
+    if(_hatTyp(trig.bedingungen,_ZUSTAND_TYPEN)&&!_hatTyp(trig.bedingungen,['wort']))return;
     // Von-Filter: wer darf diesen Trigger auslösen?
     const vonOk=_vonOk(trig,C);
     if(!vonOk)return;
@@ -2099,13 +2120,12 @@ const _itState={}; // 'memberNum_trigId_typ' -> bool
 function _tickItems(chars){
   if(!_itTrigs.length)return;
   _itTrigs.forEach(trig=>{
-    const itemConds=(trig.bedingungen??[]).filter(c=>c.typ==='item_traegt'||c.typ==='item_traegt_nicht');
     chars.forEach(C=>{
-      // Check positive (traegt) and negative (traegt_nicht) conditions
-      const condMet=itemConds.every(c=>{
-        const worn=(C.Appearance??[]).some(a=>a.Asset?.Name===c.item);
-        return c.typ==='item_traegt_nicht'?!worn:worn;
-      });
+      // Ueber _gruppenOk statt eigener Schleife: so gelten Klammern und
+      // UND/ODER auch hier, und alle Zustands-Bedingungen (gefesselt,
+      // geknebelt, blind, Schloss, Craft, Slot) werden mitgeprueft.
+      const condMet=_gruppenOk(trig.bedingungen??[],
+        {C,rohText:null,typKey:null,nur:_ZUSTAND_TYPEN});
       const key=C.MemberNumber+'_'+trig.id;
       const was=_itState[key]??false;
       if(condMet&&!was){
@@ -2113,7 +2133,7 @@ function _tickItems(chars){
         // Von-Filter
         const vonOk=_vonOk(trig,C);
         const otherOk=vonOk&&_gruppenOk(trig.bedingungen??[],
-          {C,rohText:null,typKey:null,ueberspringe:['wort','item_traegt','item_traegt_nicht']});
+          {C,rohText:null,typKey:null,ueberspringe:['wort'].concat(_ZUSTAND_TYPEN)});
         if(otherOk){
           const ifBeds=trig.ifBedingungen??[];
           const ifOk=!trig.ifElse||!ifBeds.length||_okIf(trig,'','item',C);
@@ -2445,8 +2465,20 @@ const _botTakt=setInterval(()=>{
 // Eigene Nachrichten via hookFunction – Mod bekommt unique Namen (Timestamp) um Kollisionen beim Live-Sync zu vermeiden
 let _mod = null;
 try {
-  const _modName = 'BCBot_${safeId}_' + Date.now();
-  _mod = bcModSdk.registerMod({name: _modName, fullName:'${safeName}', version:'1.0'});
+  // Mod EINMAL je Bot und Seitenladen registrieren und danach
+  // wiederverwenden. Frueher bekam jeder Sync einen neuen Namen mit
+  // Zeitstempel - die alten Registrierungen blieben im ModSDK stehen und
+  // sammelten sich an, bis beim Neuanmelden die Meldung
+  // "failed to patch a function" erschien. Jetzt werden nur die Patches
+  // der bestehenden Registrierung erneuert.
+  const _modKey='__BCBot_mod_${safeId}';
+  if(window[_modKey]){
+    _mod=window[_modKey];
+    try{ _mod.removePatches(); }catch(e){}
+  } else {
+    _mod = bcModSdk.registerMod({name:'BCBot_${safeId}', fullName:'${safeName}', version:'1.0'});
+    window[_modKey]=_mod;
+  }
   if(typeof ChatRoomSendChat!=='function'){throw new Error('ChatRoomSendChat nicht patchbar – Socket-Fallback');}
   var _bckOrigAlert=window.alert; window.alert=function(){}; var _hookOk=false;
   try {
@@ -2804,14 +2836,14 @@ function botStopById(id) {
 function botDeploy() { const b=_selBot(); if(b) botDeployById(b.id); }
 function botStop()   { const b=_selBot(); if(b) botStopById(b.id);   }
 
-function botSync() {
+function botSync(still) {
   const b = _selBot();
   if (!b) return;
-  if (!_connected) { showStatus('❌ Nicht mit BC verbunden', 'error'); return; }
-  if (!b.laufend)  { showStatus('ℹ️ Bot läuft nicht – einfach Starten klicken', 'info'); return; }
+  if (!_connected) { if(!still) showStatus('❌ Nicht mit BC verbunden', 'error'); return; }
+  if (!b.laufend)  { if(!still) showStatus('ℹ️ Bot läuft nicht – einfach Starten klicken', 'info'); return; }
 
   const btn = document.getElementById('syncBtn');
-  if (btn) { btn.disabled = true; btn.textContent = '⏳ Sync…'; }
+  if (btn && !still) { btn.disabled = true; btn.textContent = '⏳ Sync…'; }
 
   // Step 1: Stop
   const safeId = b.id.replace(/\W/g,'_');
@@ -2822,7 +2854,10 @@ function botSync() {
     const latest = _selBot();
     if (!latest) return;
     bcSend({ type:'EXEC', code: _botExecCode(latest) });
-    latest.laufend = true; _saveBots(); renderBotList(); renderBotEditor();
-    showStatus('✅ Bot synchronisiert und neu gestartet', 'success');
+    latest.laufend = true;
+    // Kein _saveBots() hier: das wuerde den automatischen Sync erneut
+    // ausloesen und den Bot in einer Schleife immer wieder neu starten.
+    renderBotList(); renderBotEditor();
+    showStatus(still ? '🔄 Änderung übernommen' : '✅ Bot synchronisiert und neu gestartet', 'success');
   }, 700);
 }

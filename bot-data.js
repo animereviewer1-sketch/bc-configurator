@@ -41,7 +41,26 @@ function _migriereLogik() {
   return n;
 }
 
-function _saveBots()      { idbSet(BOT_KEY,      _bots);      }
+/* Aenderungen am laufenden Bot automatisch uebernehmen.
+
+   Gebuendelt mit 1,5 s Ruhe: sonst wuerde jeder Tastendruck im Editor einen
+   Stopp-und-Neustart ausloesen. Laeuft der Bot nicht oder besteht keine
+   Verbindung, passiert nichts - dann ist auch nichts zu uebernehmen.        */
+let _autoSyncTimer = null;
+function _autoSync() {
+  try {
+    if (typeof _connected !== 'undefined' && !_connected) return;
+    const b = (typeof _selBot === 'function') ? _selBot() : null;
+    if (!b || !b.laufend) return;
+    clearTimeout(_autoSyncTimer);
+    _autoSyncTimer = setTimeout(function () {
+      const akt = _selBot();
+      if (akt && akt.laufend && typeof botSync === 'function') botSync(true);
+    }, 1500);
+  } catch (e) { /* Automatik darf das Speichern nie stoeren */ }
+}
+
+function _saveBots()      { idbSet(BOT_KEY,      _bots); _autoSync(); }
 function _saveBotGroups() { idbSet(BOT_GROUP_KEY, _botGroups); }
 
 // ── Persistente Spieler-Variablen/-Profile (pro MemberNumber, über Sessions) ──
