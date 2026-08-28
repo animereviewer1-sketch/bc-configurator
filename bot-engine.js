@@ -316,139 +316,122 @@ function _log(...a){if(_cfg.logAktiv)console.log('[Bot:${safeName}]',...a);}
 // Direkt C.X/C.Y verwenden – exakt wie funktionierendes ZoneMonitor-Pattern
 // Kein Lookup nötig: [Player,...ChatRoomCharacter] enthält bereits korrekte Positionen
 
-function _ok(trig,rohText,typKey,C){
-  const cx=C.X??-999,cy=C.Y??-999;
-  const beds=trig.bedingungen??[];
-  if(!beds.length)return true;
-  // AND/OR Auswertung: logik-Feld pro Bedingung verbindet mit vorheriger
-  // Ablauf: Bedingungen in OR-Gruppen aufteilen (trennend bei "oder"), dann alle Gruppen mit AND prüfen
-  function checkOne(c){
-    if(c.typ==='wort'){
+/* ── Bedingungspruefung – eine Stelle fuer alle Wege ─────────────────────
+   Diese Auswertung stand vorher SECHSMAL im Code: in _ok, _okIf, _okEv und
+   noch einmal inline in den Polls fuer Items, Erregung und Zonen. Die drei
+   Poll-Kopien waren dabei abgedriftet – sie verbanden alle Bedingungen mit
+   .every(), also reinem UND, und werteten das logik-Feld ueberhaupt nicht
+   aus. Ein Trigger "Zone A ODER Zone B" feuerte darum ueber den Chat
+   korrekt, ueber den Zonen-Poll aber nie.
+
+   ctx-Felder:
+     C              Charakter, gegen den geprueft wird
+     rohText/typKey Chat-Kontext (bei Polls leer)
+     ueberspringe   Typen, die der Aufrufer bereits selbst geprueft hat
+     nur            umgekehrt: NUR diese Typen pruefen, Rest gilt als erfuellt
+     wortOhneText   true = 'wort' gilt ohne Chat-Text als erfuellt (Events)
+     zoneLog        true = Zonen-Fehlschlag ins Log (nur der Chat-Weg)
+     shopBlockt     true = 'shop_kauf' sperrt (nur der Chat-Weg)
+     istRejoinTrig  true = Rejoin-Sonderfall bei 'trigger_war' (Beitritt)   */
+function _checkCond(c,ctx){
+  if(ctx.ueberspringe&&ctx.ueberspringe.indexOf(c.typ)>=0)return true;
+  if(ctx.nur&&ctx.nur.indexOf(c.typ)<0)return true; // Gegenstueck: nur diese Typen pruefen
+  const C=ctx.C, cx=C.X??-999, cy=C.Y??-999;
+  switch(c.typ){
+    case 'wort':{
+      if(ctx.wortOhneText&&!ctx.rohText)return true; // Timer/Intervall: kein Text
       const m=c.typ_msg||'any';
-      if(m!=='any'&&m!==typKey)return false;
-      return (c.modus==='fehlt')?(!!c.wort&&!!rohText&&!((rohText||'').toLowerCase().includes((c.wort||'').toLowerCase()))):(!c.wort||(rohText||'').toLowerCase().includes((c.wort||'').toLowerCase()));
+      if(m!=='any'&&m!==ctx.typKey)return false;
+      const t=(ctx.rohText||'').toLowerCase(), w=(c.wort||'').toLowerCase();
+      return (c.modus==='fehlt')?(!!c.wort&&!!ctx.rohText&&!t.includes(w)):(!c.wort||t.includes(w));
     }
-    if(c.typ==='zone'){
+    case 'zone':{
       const p=c.puffer??1;
       const ok=cx>=c.x-p&&cx<=c.x+p&&cy>=c.y-p&&cy<=c.y+p;
-      if(!ok)_log('Zone miss: X='+cx+' Y='+cy+' erwartet X='+c.x+' Y='+c.y+'±'+p);
+      if(!ok&&ctx.zoneLog)_log('Zone miss: X='+cx+' Y='+cy+' erwartet X='+c.x+' Y='+c.y+'\u00b1'+p);
       return ok;
     }
-    if(c.typ==='zone_rect'){
-      const ok=cx>=Math.min(c.x1,c.x2)&&cx<=Math.max(c.x1,c.x2)&&cy>=Math.min(c.y1,c.y2)&&cy<=Math.max(c.y1,c.y2);
-      return ok;
-    }
-    if(c.typ==='item_traegt'){
-      const Cf=ChatRoomCharacter.find(x=>x.MemberNumber===C.MemberNumber)??C;
+    case 'zone_rect':
+      return cx>=Math.min(c.x1,c.x2)&&cx<=Math.max(c.x1,c.x2)&&cy>=Math.min(c.y1,c.y2)&&cy<=Math.max(c.y1,c.y2);
+    case 'item_traegt':{
+      const Cf=(ChatRoomCharacter||[]).find(x=>x.MemberNumber===C.MemberNumber)??C;
       return(Cf.Appearance??[]).some(a=>a.Asset?.Name===c.item);
     }
-    if(c.typ==='item_traegt_nicht'){
-      const Cf=ChatRoomCharacter.find(x=>x.MemberNumber===C.MemberNumber)??C;
+    case 'item_traegt_nicht':{
+      const Cf=(ChatRoomCharacter||[]).find(x=>x.MemberNumber===C.MemberNumber)??C;
       return!(Cf.Appearance??[]).some(a=>a.Asset?.Name===c.item);
     }
-    if(c.typ==='trigger_war'){
+    case 'trigger_war':{
+      // Beim Rejoin: verweist ein Rejoin-Trigger auf einen anderen
+      // Rejoin-Trigger, gilt die Bedingung als erfuellt – beide feuern im
+      // selben Fenster, die Reihenfolge ist nicht garantiert.
+      if(ctx.istRejoinTrig){
+        const refT=_trigMap[c.trigId];
+        if((refT?.bedingungen??[]).some(bc=>bc.typ==='player_betritt'&&bc.betritt_typ==='rejoin'))return true;
+      }
       const ref=_trigMap[c.trigId];
       return ref?.charSpec?!!_firedChar[c.trigId+'_'+C.MemberNumber]:!!_fired[c.trigId];
     }
-    if(c.typ==='variable'){return _varCondOk(c,C);} if(c.typ==='zufall'){return _chanceOk(c);} if(c.typ==='erregung'){return _arousalOk(c,C);} if(c.typ==='rang'){
+    case 'variable': return _varCondOk(c,C);
+    case 'zufall':   return _chanceOk(c);
+    case 'erregung': return _arousalOk(c,C);
+    case 'rang':{
       const op=c.rang_op??'=';
       const currentId=_rangState[C.MemberNumber]??null;
-      if(op==='kein') return !currentId;
-      if(!c.rang_id) return false;
-      const defs=_rankDefs;
-      const targetDef=defs.find(r=>r.id===c.rang_id);
-      const currentDef=defs.find(r=>r.id===currentId);
-      if(!targetDef) return false;
-      if(!currentDef) return false; // kein Rang → nicht erfüllt wenn level gebraucht
+      if(op==='kein')return !currentId;
+      if(!c.rang_id)return false;
+      const targetDef=_rankDefs.find(r=>r.id===c.rang_id);
+      const currentDef=_rankDefs.find(r=>r.id===currentId);
+      if(!targetDef||!currentDef)return false; // kein Rang -> nicht erfuellt
       const tl=targetDef.level, cl=currentDef.level;
-      if(op==='=')   return cl===tl;
-      if(op==='min') return cl>=tl;
-      if(op==='max') return cl<=tl;
+      if(op==='=')  return cl===tl;
+      if(op==='min')return cl>=tl;
+      if(op==='max')return cl<=tl;
       return false;
     }
-    if(c.typ==='shop_kauf') return false; // Nur via _handleShopCmd auslösbar
-    if(c.typ==='player_betritt')return true; // handled by poll
-    return true;
+    // Sperrt nur den Chat-Weg: ein Shop-Trigger soll dort nicht durch
+    // gewoehnliche Nachrichten feuern. Fuer IF-Zweige, Events und Polls galt
+    // die Bedingung schon immer als erfuellt – das bleibt so.
+    case 'shop_kauf':      return !ctx.shopBlockt;
+    case 'player_betritt': return true;  // vom Join-Poll behandelt
+    default:               return true;
   }
-  // Split into OR-groups (oder + und_oder both split groups)
-  // logik verbindet eine Bedingung mit der VORHERIGEN – die erste hat keine.
-  // Steht dort trotzdem etwas (durch Verschieben/Loeschen in der UI oder per
-  // JSON-Import), wird es ignoriert, genau wie die Oberflaeche es anzeigt.
-  // Sonst entstuende bei 'oder' eine leere erste Gruppe, und [].every() ist
-  // true → saemtliche Bedingungen waeren ausgehebelt.
+}
+
+/* UND/ODER-Gruppen. logik verbindet eine Bedingung mit der VORHERIGEN – die
+   erste hat keine. Steht dort trotzdem etwas (Verschieben/Loeschen in der UI
+   oder JSON-Import), wird es ignoriert, genau wie die Oberflaeche es anzeigt:
+   sonst entstuende bei 'oder' eine leere erste Gruppe, und [].every() ist true
+   -> saemtliche Bedingungen waeren ausgehebelt. Aus demselben Grund gilt
+   'und_nicht' erst ab der zweiten Bedingung. */
+function _gruppenOk(beds,ctx){
+  if(!beds||!beds.length)return true;
   const groups=[[]];
   beds.forEach((c,i)=>{
     if(i>0&&(c.logik==='oder'||c.logik==='und_oder'))groups.push([]);
     groups[groups.length-1].push(c);
   });
-  // At least one group (OR) must be fully satisfied (AND within group)
-  // und_nicht: Bedingung muss FALSCH sein
-  // Aus demselben Grund gilt 'und_nicht' erst ab der zweiten Bedingung.
-  const _erste=beds[0];
-  return groups.some(g=>g.every(c=>(c!==_erste&&c.logik==='und_nicht')?!checkOne(c):checkOne(c)));
+  const erste=beds[0];
+  // Erst Ueberspringen pruefen, DANN erst negieren: was der Aufrufer bereits
+  // selbst geprueft hat, ist neutral – 'und_nicht' wuerde es sonst in false
+  // verkehren und der Trigger koennte nie feuern.
+  const passt=c=>{
+    if(ctx.ueberspringe&&ctx.ueberspringe.indexOf(c.typ)>=0)return true;
+    if(ctx.nur&&ctx.nur.indexOf(c.typ)<0)return true;
+    return (c!==erste&&c.logik==='und_nicht')?!_checkCond(c,ctx):_checkCond(c,ctx);
+  };
+  return groups.some(g=>g.every(passt));
+}
+
+function _ok(trig,rohText,typKey,C){
+  return _gruppenOk(trig.bedingungen??[],{C,rohText,typKey,zoneLog:true,shopBlockt:true});
 }
 
 // ── IF-Bedingungen Check (entscheidet DANN vs. SONST wenn ifElse aktiv) ──
 function _okIf(trig,rohText,typKey,C){
-  const cx=C.X??-999,cy=C.Y??-999;
-  const beds=trig.ifBedingungen??[];
-  if(!beds.length)return true; // keine IF-Beds → immer DANN
-  function checkOne(c){
-    if(c.typ==='wort'){
-      const m=c.typ_msg||'any';
-      if(m!=='any'&&m!==typKey)return false;
-      return (c.modus==='fehlt')?(!!c.wort&&!!rohText&&!((rohText||'').toLowerCase().includes((c.wort||'').toLowerCase()))):(!c.wort||(rohText||'').toLowerCase().includes((c.wort||'').toLowerCase()));
-    }
-    if(c.typ==='zone'){
-      const p=c.puffer??1;
-      return cx>=c.x-p&&cx<=c.x+p&&cy>=c.y-p&&cy<=c.y+p;
-    }
-    if(c.typ==='zone_rect'){
-      return cx>=Math.min(c.x1,c.x2)&&cx<=Math.max(c.x1,c.x2)&&cy>=Math.min(c.y1,c.y2)&&cy<=Math.max(c.y1,c.y2);
-    }
-    if(c.typ==='item_traegt'){
-      const Cf=ChatRoomCharacter.find(x=>x.MemberNumber===C.MemberNumber)??C;
-      return(Cf.Appearance??[]).some(a=>a.Asset?.Name===c.item);
-    }
-    if(c.typ==='item_traegt_nicht'){
-      const Cf=ChatRoomCharacter.find(x=>x.MemberNumber===C.MemberNumber)??C;
-      return!(Cf.Appearance??[]).some(a=>a.Asset?.Name===c.item);
-    }
-    if(c.typ==='trigger_war'){
-      const ref=_trigMap[c.trigId];
-      return ref?.charSpec?!!_firedChar[c.trigId+'_'+C.MemberNumber]:!!_fired[c.trigId];
-    }
-    if(c.typ==='variable'){return _varCondOk(c,C);} if(c.typ==='zufall'){return _chanceOk(c);} if(c.typ==='erregung'){return _arousalOk(c,C);} if(c.typ==='rang'){
-      const op=c.rang_op??'=';
-      const currentId=_rangState[C.MemberNumber]??null;
-      if(op==='kein') return !currentId;
-      if(!c.rang_id) return false;
-      const defs=_rankDefs;
-      const targetDef=defs.find(r=>r.id===c.rang_id);
-      const currentDef=defs.find(r=>r.id===currentId);
-      if(!targetDef) return false;
-      if(!currentDef) return false;
-      const tl=targetDef.level, cl=currentDef.level;
-      if(op==='=')   return cl===tl;
-      if(op==='min') return cl>=tl;
-      if(op==='max') return cl<=tl;
-      return false;
-    }
-    return true;
-  }
-  // logik verbindet eine Bedingung mit der VORHERIGEN – die erste hat keine.
-  // Steht dort trotzdem etwas (durch Verschieben/Loeschen in der UI oder per
-  // JSON-Import), wird es ignoriert, genau wie die Oberflaeche es anzeigt.
-  // Sonst entstuende bei 'oder' eine leere erste Gruppe, und [].every() ist
-  // true → saemtliche Bedingungen waeren ausgehebelt.
-  const groups=[[]];
-  beds.forEach((c,i)=>{
-    if(i>0&&(c.logik==='oder'||c.logik==='und_oder'))groups.push([]);
-    groups[groups.length-1].push(c);
-  });
-  // Aus demselben Grund gilt 'und_nicht' erst ab der zweiten Bedingung.
-  const _erste=beds[0];
-  return groups.some(g=>g.every(c=>(c!==_erste&&c.logik==='und_nicht')?!checkOne(c):checkOne(c)));
+  // Kein wortOhneText: die Polls rufen mit '' auf, und dort galt eine
+  // gesetzte Wort-Bedingung bisher als NICHT erfuellt. Bleibt so.
+  return _gruppenOk(trig.ifBedingungen??[],{C,rohText,typKey});
 }
 function _istBesetzt(x,y,ausschliessen){
   // Ignore target positions at 0,0 — BC hasn't synced position yet
@@ -1013,52 +996,8 @@ const _evTimers={};
 const _evState={}; // for interval state
 
 function _okEv(ev,C,rohText,typKey){
-  const beds=ev.bedingungen??[];
-  if(!beds.length)return true;
-  const cx=C.X??-999,cy=C.Y??-999;
-  function checkOne(c){
-    if(c.typ==='wort'){
-      if(!rohText)return true; // no chat context → skip wort check (timer/interval)
-      const m=c.typ_msg||'any';
-      if(m!=='any'&&m!==typKey)return false;
-      return (c.modus==='fehlt')?(!!c.wort&&!!rohText&&!((rohText||'').toLowerCase().includes((c.wort||'').toLowerCase()))):(!c.wort||(rohText||'').toLowerCase().includes((c.wort||'').toLowerCase()));
-    }
-    if(c.typ==='zone'){const p=c.puffer??1;return cx>=c.x-p&&cx<=c.x+p&&cy>=c.y-p&&cy<=c.y+p;}
-    if(c.typ==='zone_rect'){return cx>=Math.min(c.x1,c.x2)&&cx<=Math.max(c.x1,c.x2)&&cy>=Math.min(c.y1,c.y2)&&cy<=Math.max(c.y1,c.y2);}
-    if(c.typ==='item_traegt'){return(C.Appearance??[]).some(a=>a.Asset?.Name===c.item);}
-    if(c.typ==='item_traegt_nicht'){return!(C.Appearance??[]).some(a=>a.Asset?.Name===c.item);}
-    if(c.typ==='trigger_war'){const ref=_trigMap[c.trigId];return ref?.charSpec?!!_firedChar[c.trigId+'_'+C.MemberNumber]:!!_fired[c.trigId];}
-    if(c.typ==='variable'){return _varCondOk(c,C);} if(c.typ==='zufall'){return _chanceOk(c);} if(c.typ==='erregung'){return _arousalOk(c,C);} if(c.typ==='rang'){
-      const op=c.rang_op??'=';
-      const currentId=_rangState[C.MemberNumber]??null;
-      if(op==='kein') return !currentId;
-      if(!c.rang_id) return false;
-      const defs=_rankDefs;
-      const targetDef=defs.find(r=>r.id===c.rang_id);
-      const currentDef=defs.find(r=>r.id===currentId);
-      if(!targetDef) return false;
-      if(!currentDef) return false;
-      const tl=targetDef.level, cl=currentDef.level;
-      if(op==='=')   return cl===tl;
-      if(op==='min') return cl>=tl;
-      if(op==='max') return cl<=tl;
-      return false;
-    }
-    return true;
-  }
-  // logik verbindet eine Bedingung mit der VORHERIGEN – die erste hat keine.
-  // Steht dort trotzdem etwas (durch Verschieben/Loeschen in der UI oder per
-  // JSON-Import), wird es ignoriert, genau wie die Oberflaeche es anzeigt.
-  // Sonst entstuende bei 'oder' eine leere erste Gruppe, und [].every() ist
-  // true → saemtliche Bedingungen waeren ausgehebelt.
-  const groups=[[]];
-  beds.forEach((c,i)=>{
-    if(i>0&&(c.logik==='oder'||c.logik==='und_oder'))groups.push([]);
-    groups[groups.length-1].push(c);
-  });
-  // Aus demselben Grund gilt 'und_nicht' erst ab der zweiten Bedingung.
-  const _erste=beds[0];
-  return groups.some(g=>g.every(c=>(c!==_erste&&c.logik==='und_nicht')?!checkOne(c):checkOne(c)));
+  // Timer-/Intervall-Events haben keinen Chat-Text – 'wort' zaehlt dann als erfuellt.
+  return _gruppenOk(ev.bedingungen??[],{C,rohText,typKey,wortOhneText:true});
 }
 
 function _fireEv(ev){
@@ -1810,9 +1749,8 @@ function _procEvents(rohText,typKey,C){
 // ── Item-Trägt Polling (edge-triggered: feuert 1x wenn Item erscheint) ──
 const _itState={}; // 'memberNum_trigId_typ' -> bool
 // FIX: 500ms is sufficient for item-state changes, 100ms caused unnecessary CPU load
-const _itPoll=setInterval(()=>{
+function _tickItems(chars){
   if(!_itTrigs.length)return;
-  const chars=[Player,...(ChatRoomCharacter||[])];
   _itTrigs.forEach(trig=>{
     const itemConds=(trig.bedingungen??[]).filter(c=>c.typ==='item_traegt'||c.typ==='item_traegt_nicht');
     chars.forEach(C=>{
@@ -1831,29 +1769,8 @@ const _itPoll=setInterval(()=>{
           if(trig.von==='whitelist')return(trig.vonNummern||[]).map(Number).includes(Number(C.MemberNumber));
           return true;
         })();
-        const otherOk=vonOk&&(trig.bedingungen??[]).every(c=>{
-          if(c.typ==='item_traegt'||c.typ==='item_traegt_nicht')return true;
-          if(c.typ==='zone'){const p=c.puffer??1;return pos.X>=c.x-p&&pos.X<=c.x+p&&pos.Y>=c.y-p&&pos.Y<=c.y+p;}
-          if(c.typ==='zone_rect'){return pos.X>=Math.min(c.x1,c.x2)&&pos.X<=Math.max(c.x1,c.x2)&&pos.Y>=Math.min(c.y1,c.y2)&&pos.Y<=Math.max(c.y1,c.y2);}
-          if(c.typ==='trigger_war'){const ref=_trigMap[c.trigId];return ref?.charSpec?!!_firedChar[c.trigId+'_'+C.MemberNumber]:!!_fired[c.trigId];}
-          if(c.typ==='variable'){return _varCondOk(c,C);} if(c.typ==='zufall'){return _chanceOk(c);} if(c.typ==='erregung'){return _arousalOk(c,C);} if(c.typ==='rang'){
-            const op=c.rang_op??'=';
-            const currentId=_rangState[C.MemberNumber]??null;
-            if(op==='kein') return !currentId;
-            if(!c.rang_id) return false;
-            const defs=_rankDefs;
-            const targetDef=defs.find(r=>r.id===c.rang_id);
-            const currentDef=defs.find(r=>r.id===currentId);
-            if(!targetDef) return false;
-            if(!currentDef) return false;
-            const tl=targetDef.level, cl=currentDef.level;
-            if(op==='=')   return cl===tl;
-            if(op==='min') return cl>=tl;
-            if(op==='max') return cl<=tl;
-            return false;
-          }
-          return true;
-        });
+        const otherOk=vonOk&&_gruppenOk(trig.bedingungen??[],
+          {C,rohText:null,typKey:null,ueberspringe:['wort','item_traegt','item_traegt_nicht']});
         if(otherOk){
           const ifBeds=trig.ifBedingungen??[];
           const ifOk=!trig.ifElse||!ifBeds.length||_okIf(trig,'','item',C);
@@ -1864,13 +1781,12 @@ const _itPoll=setInterval(()=>{
       _itState[key]=condMet;
     });
   });
-},500);
+}
 
 // ── Erregungs-Polling (edge-triggered: feuert 1x wenn Erregungs-Bedingung wahr wird) ──
 const _arState={}; // 'memberNum_trigId' -> bool
-const _arPoll=setInterval(()=>{
+function _tickErregung(chars){
   if(!_arTrigs.length)return;
-  const chars=[Player,...(ChatRoomCharacter||[])];
   _arTrigs.forEach(trig=>{
     chars.forEach(C=>{
       const pos={X:C.X??0,Y:C.Y??0};
@@ -1879,28 +1795,8 @@ const _arPoll=setInterval(()=>{
         if(trig.von==='whitelist')return(trig.vonNummern||[]).map(Number).includes(Number(C.MemberNumber));
         return true;
       })();
-      const condMet=vonOk&&(trig.bedingungen??[]).every(c=>{
-        if(c.typ==='erregung'){return _arousalOk(c,C);}
-        if(c.typ==='variable'){return _varCondOk(c,C);}
-        if(c.typ==='zufall'){return _chanceOk(c);}
-        if(c.typ==='trigger_war'){const ref=_trigMap[c.trigId];return ref?.charSpec?!!_firedChar[c.trigId+'_'+C.MemberNumber]:!!_fired[c.trigId];}
-        if(c.typ==='rang'){
-          const op=c.rang_op??'=';
-          const currentId=_rangState[C.MemberNumber]??null;
-          if(op==='kein') return !currentId;
-          if(!c.rang_id) return false;
-          const defs=_rankDefs;
-          const targetDef=defs.find(r=>r.id===c.rang_id);
-          const currentDef=defs.find(r=>r.id===currentId);
-          if(!targetDef||!currentDef) return false;
-          const tl=targetDef.level, cl=currentDef.level;
-          if(op==='=')   return cl===tl;
-          if(op==='min') return cl>=tl;
-          if(op==='max') return cl<=tl;
-          return false;
-        }
-        return true;
-      });
+      const condMet=vonOk&&_gruppenOk(trig.bedingungen??[],
+        {C,rohText:null,typKey:null,nur:['erregung','variable','zufall','trigger_war','rang']});
       const key=C.MemberNumber+'_'+trig.id;
       const was=_arState[key]??false;
       if(condMet&&!was){
@@ -1912,7 +1808,7 @@ const _arPoll=setInterval(()=>{
       _arState[key]=condMet;
     });
   });
-},2000);
+}
 
 // ── Spieler-Betritt Polling (feuert 1x beim Betreten) ──
 const _roomPrev=new Set((ChatRoomCharacter||[]).map(c=>c.MemberNumber));
@@ -1974,37 +1870,9 @@ function _processJoinQueue(){
       if(trig.von==='whitelist')return(trig.vonNummern||[]).map(Number).includes(Number(C.MemberNumber));
       return true;
     })();
-    const otherOk=vonOk&&(trig.bedingungen??[]).every(c=>{
-      if(c.typ==='player_betritt')return true;
-      if(c.typ==='zone'){const p=c.puffer??1;return pos.X>=c.x-p&&pos.X<=c.x+p&&pos.Y>=c.y-p&&pos.Y<=c.y+p;}
-      if(c.typ==='zone_rect'){return pos.X>=Math.min(c.x1,c.x2)&&pos.X<=Math.max(c.x1,c.x2)&&pos.Y>=Math.min(c.y1,c.y2)&&pos.Y<=Math.max(c.y1,c.y2);}
-      if(c.typ==='trigger_war'){
-        if(isRejoinTrig){
-          const refTrig=_trigMap[c.trigId];
-          const refIsRejoin=(refTrig?.bedingungen??[]).some(bc=>bc.typ==='player_betritt'&&bc.betritt_typ==='rejoin');
-          if(refIsRejoin)return true;
-        }
-        const ref=_trigMap[c.trigId];
-        return ref?.charSpec?!!_firedChar[c.trigId+'_'+C.MemberNumber]:!!_fired[c.trigId];
-      }
-      if(c.typ==='variable'){return _varCondOk(c,C);} if(c.typ==='zufall'){return _chanceOk(c);} if(c.typ==='erregung'){return _arousalOk(c,C);} if(c.typ==='rang'){
-        const op=c.rang_op??'=';
-        const currentId=_rangState[C.MemberNumber]??null;
-        if(op==='kein') return !currentId;
-        if(!c.rang_id) return false;
-        const defs=_rankDefs;
-        const targetDef=defs.find(r=>r.id===c.rang_id);
-        const currentDef=defs.find(r=>r.id===currentId);
-        if(!targetDef) return false;
-        if(!currentDef) return false;
-        const tl=targetDef.level, cl=currentDef.level;
-        if(op==='=')   return cl===tl;
-        if(op==='min') return cl>=tl;
-        if(op==='max') return cl<=tl;
-        return false;
-      }
-      return true;
-    });
+    const otherOk=vonOk&&_gruppenOk(trig.bedingungen??[],
+      {C,rohText:null,typKey:null,istRejoinTrig:isRejoinTrig,
+       ueberspringe:['wort','player_betritt','item_traegt','item_traegt_nicht']});
     if(!otherOk)return;
     if(isRejoinTrig){
       rejoinBatch.push(trig);
@@ -2033,26 +1901,8 @@ function _processJoinQueue(){
       return true;
     })();
     if(!vonOk)return;
-    const evOtherOk=(ev.bedingungen??[]).every(c=>{
-      if(c.typ==='player_betritt')return true;
-      if(c.typ==='variable'){return _varCondOk(c,C);} if(c.typ==='zufall'){return _chanceOk(c);} if(c.typ==='erregung'){return _arousalOk(c,C);} if(c.typ==='rang'){
-        const op=c.rang_op??'=';
-        const currentId=_rangState[C.MemberNumber]??null;
-        if(op==='kein') return !currentId;
-        if(!c.rang_id) return false;
-        const defs=_rankDefs;
-        const targetDef=defs.find(r=>r.id===c.rang_id);
-        const currentDef=defs.find(r=>r.id===currentId);
-        if(!targetDef) return false;
-        if(!currentDef) return false;
-        const tl=targetDef.level, cl=currentDef.level;
-        if(op==='=')   return cl===tl;
-        if(op==='min') return cl>=tl;
-        if(op==='max') return cl<=tl;
-        return false;
-      }
-      return true;
-    });
+    const evOtherOk=_gruppenOk(ev.bedingungen??[],
+      {C,rohText:null,typKey:null,nur:['variable','zufall','erregung','rang']});
     if(!evOtherOk)return;
     const allChars=[Player,...(ChatRoomCharacter||[])];
     let targets=[];
@@ -2081,11 +1931,8 @@ function _processJoinQueue(){
           return;
         }
         const Cfresh=ChatRoomCharacter.find(x=>x.MemberNumber===C.MemberNumber)??C;
-        const itemOk=(trig.bedingungen??[]).every(c=>{
-          if(c.typ==='item_traegt')return(Cfresh.Appearance??[]).some(a=>a.Asset?.Name===c.item);
-          if(c.typ==='item_traegt_nicht')return!(Cfresh.Appearance??[]).some(a=>a.Asset?.Name===c.item);
-          return true;
-        });
+        const itemOk=_gruppenOk(trig.bedingungen??[],
+          {C:Cfresh,rohText:null,typKey:null,nur:['item_traegt','item_traegt_nicht']});
         if(!itemOk){
           _log('⏭ [Rejoin] "'+trig.name+'" – Item-Bedingung nach Sync nicht erfüllt (Appearance jetzt geladen)');
           return;
@@ -2104,7 +1951,7 @@ function _processJoinQueue(){
   });
 }
 
-const _joinPoll=setInterval(()=>{
+function _tickBeitritt(){
   // Process one queued joiner first (spreads work across ticks)
   _processJoinQueue();
 
@@ -2140,26 +1987,25 @@ const _joinPoll=setInterval(()=>{
   }
   _roomPrev.clear();
   for(const n of cur)_roomPrev.add(n);
-},500);
+}
 
 // ── Zonen-Betreten Polling – direkt C.X/C.Y (wie ZoneMonitor-Pattern) ──
 const _zoneState={}; // 'memberNum_trigId' -> bool (war zuletzt drin)
 const _zonePos={};   // 'memberNum_trigId' -> 'x,y' (letzte Position, für 'dauerhaft' = pro Feld-Wechsel)
 // FIX: 500ms is sufficient for zone detection, 100ms caused unnecessary CPU load
-const _zonePoll=setInterval(()=>{
+function _tickZonen(chars){
   if(!_zoneTrigs.length)return;
-  const chars=[Player,...(ChatRoomCharacter||[])];
   _zoneTrigs.forEach(trig=>{
     const zoneConds=(trig.bedingungen??[]).filter(c=>c.typ==='zone'||c.typ==='zone_rect');
     chars.forEach(C=>{
       if(!C)return;
       // Direkt C.X / C.Y – kein _getPos Umweg nötig
       const cx=C.X??-999, cy=C.Y??-999;
-      const inZone=zoneConds.every(c=>{
-        if(c.typ==='zone_rect')return cx>=Math.min(c.x1,c.x2)&&cx<=Math.max(c.x1,c.x2)&&cy>=Math.min(c.y1,c.y2)&&cy<=Math.max(c.y1,c.y2);
-        const p=c.puffer??1;
-        return cx>=c.x-p&&cx<=c.x+p&&cy>=c.y-p&&cy<=c.y+p;
-      });
+      // Ueber _gruppenOk statt zoneConds.every(): sonst muessten ALLE
+      // Zonen-Bedingungen gleichzeitig zutreffen und "Zone A ODER Zone B"
+      // koennte nie wahr werden – man kann nicht an zwei Orten stehen.
+      const inZone=_gruppenOk(trig.bedingungen??[],
+        {C,rohText:null,typKey:null,nur:['zone','zone_rect']});
       const key=C.MemberNumber+'_'+trig.id;
       const war=_zoneState[key]??false;
       // Zonen-Modus: 'dauerhaft' = bei jedem FELD-WECHSEL feuern solange drin (pro Schritt,
@@ -2174,29 +2020,8 @@ const _zonePoll=setInterval(()=>{
           if(trig.von==='whitelist')return(trig.vonNummern||[]).map(Number).includes(Number(C.MemberNumber));
           return true;
         })();
-        const otherOk=vonOk&&(trig.bedingungen??[]).every(c=>{
-          if(c.typ==='zone'||c.typ==='zone_rect')return true;
-          if(c.typ==='trigger_war'){const ref=_trigMap[c.trigId];return ref?.charSpec?!!_firedChar[c.trigId+'_'+C.MemberNumber]:!!_fired[c.trigId];}
-          if(c.typ==='item_traegt')return(C.Appearance??[]).some(a=>a.Asset?.Name===c.item);
-          if(c.typ==='item_traegt_nicht')return!(C.Appearance??[]).some(a=>a.Asset?.Name===c.item);
-          if(c.typ==='variable'){return _varCondOk(c,C);} if(c.typ==='zufall'){return _chanceOk(c);} if(c.typ==='erregung'){return _arousalOk(c,C);} if(c.typ==='rang'){
-            const op=c.rang_op??'=';
-            const currentId=_rangState[C.MemberNumber]??null;
-            if(op==='kein') return !currentId;
-            if(!c.rang_id) return false;
-            const defs=_rankDefs;
-            const targetDef=defs.find(r=>r.id===c.rang_id);
-            const currentDef=defs.find(r=>r.id===currentId);
-            if(!targetDef) return false;
-            if(!currentDef) return false;
-            const tl=targetDef.level, cl=currentDef.level;
-            if(op==='=')   return cl===tl;
-            if(op==='min') return cl>=tl;
-            if(op==='max') return cl<=tl;
-            return false;
-          }
-          return true;
-        });
+        const otherOk=vonOk&&_gruppenOk(trig.bedingungen??[],
+          {C,rohText:null,typKey:null,ueberspringe:['wort','zone','zone_rect']});
         if(otherOk){
           _log('\u{1F4CD} Zone: '+C.Name+' X='+cx+' Y='+cy+' \u2192 "'+trig.name+'"');
           _run(trig,{name:C.Name,wort:'',typ:'\u{1F4CD} Zone',x:cx,y:cy,zone:'',C});
@@ -2206,15 +2031,15 @@ const _zonePoll=setInterval(()=>{
       _zonePos[key]=inZone?_posKey:null;
     });
   });
-},500);
+}
 
 // ── NoStrip Polling (500ms) ─────────────────────────────────
 // Prueft ob /nostrip-Items noch vorhanden sind. Wenn entfernt → sofort re-equip.
 // Unabhaengig vom ChatRoomMessage-Listener – funktioniert bei JEDER Art von Entfernung.
-const _nsPoll=setInterval(()=>{
+function _tickNoStrip(chars){
   const keys=Object.keys(_nsWatchers);
   if(!keys.length)return;
-  const allChars=[Player,...(ChatRoomCharacter||[])];
+  const allChars=chars;
   for(let i=0;i<keys.length;i++){
     (function(w){
       let C=null;
@@ -2259,6 +2084,30 @@ const _nsPoll=setInterval(()=>{
       }
     })(_nsWatchers[keys[i]]);
   }
+}
+
+/* ── Ein Takt fuer alle Poller ───────────────────────────────────────────
+   Vorher liefen fuenf getrennte setInterval nebeneinander, von denen jeder
+   sich [Player,...ChatRoomCharacter] neu zusammenbaute. Jetzt wird die Liste
+   einmal je Tick gebildet und durchgereicht.
+
+   Jede Teilaufgabe laeuft in ihrem eigenen try: frueher konnte ein Fehler in
+   einem Poller die anderen nicht mitreissen, weil es eigene Intervalle waren.
+   Das bleibt so.
+
+   Die Erregungspruefung lief mit 2000 ms – sie kommt darum nur bei jedem
+   vierten Tick dran. */
+let _taktNr=0;
+const _botTakt=setInterval(()=>{
+  const chars=[Player,...(ChatRoomCharacter||[])];
+  _taktNr++;
+  try{ _tickItems(chars); }   catch(e){ _log('⚠ Takt/Items:',e.message); }
+  if(_taktNr%4===0){
+    try{ _tickErregung(chars); }catch(e){ _log('⚠ Takt/Erregung:',e.message); }
+  }
+  try{ _tickBeitritt(); }     catch(e){ _log('⚠ Takt/Beitritt:',e.message); }
+  try{ _tickZonen(chars); }   catch(e){ _log('⚠ Takt/Zonen:',e.message); }
+  try{ _tickNoStrip(chars); } catch(e){ _log('⚠ Takt/NoStrip:',e.message); }
 },500);
 // ─────────────────────────────────────────────────────────────
 
@@ -2400,11 +2249,7 @@ window['_BCBot_'+_BID]={
   playScene(sid){try{_playScene(sid,Player,{},null);}catch(e){console.warn(e);}},
   setVar(mn,name,val){try{_vset(mn,String(name),val);}catch(e){console.warn(e);}},
   stop(){
-    clearInterval(_itPoll);
-    clearInterval(_joinPoll);
-    clearInterval(_zonePoll);
-    clearInterval(_nsPoll);
-    clearInterval(_arPoll);
+    clearInterval(_botTakt);   // ein Takt fuer alle Teilaufgaben
     try{ if(_mod) _mod.removePatches(); } catch(e){}
     // Restore ServerSend if we patched it as fallback
     if(window.__BCBot_origSend_${safeId}) {

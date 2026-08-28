@@ -110,6 +110,15 @@ Fertige Trigger-Sets per Klick einfügen, danach Felder anpassen:
 
 ## 11. Tipps & Grenzen
 
+> **Geändert:** UND / ODER / UND-NICHT wirken jetzt bei **allen** Auslösern.
+> Bisher wertete nur der Chat-Weg das Verknüpfungsfeld aus; Trigger, die über
+> Zone, Item, Erregung oder Beitritt feuern, verbanden ihre Bedingungen immer
+> mit UND. Ein Trigger „Zone A **ODER** Zone B" konnte darum über die Zone nie
+> auslösen — zwei Zonen gleichzeitig sind unmöglich. Solche Trigger feuern
+> jetzt. Wenn ein Trigger plötzlich häufiger auslöst als früher, hier zuerst
+> nachsehen.
+
+
 - Nach jeder Änderung **🔄 Sync** (oder Bot neu starten).
 - Viele Aktionen kurz hintereinander: BC drosselt Chat/Updates → der Bot hält automatisch kleine Abstände ein; bei sehr großen Outfits wird gewartet, bis alles sitzt.
 - Zonen-Trigger, die teleportieren, können sich selbst neu auslösen (Position ändert sich) – ggf. Cooldown/Wiederholung setzen.
