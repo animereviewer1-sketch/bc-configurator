@@ -40,7 +40,7 @@ function _buildBotCode(bot) {
   const safeName = bot.name.replace(/\\/g,'\\\\').replace(/`/g,'\\`');
 
   // Alle User-Daten als Base64 kodieren → kein Zeichen kann das Template-Literal brechen
-  const _cfgRaw = JSON.stringify({hearChat:s.hearChat,hearEmote:s.hearEmote,hearWhisper:s.hearWhisper,nurEigene:s.nurEigene,logAktiv:s.logAktiv??true,modus:s.modus,moneyQueryCmd:_money?.settings?.queryCmd??'',moneyQueryTyp:_money?.settings?.queryTyp??'whisper',moneyName:_money?.settings?.name??'Gold',rankQueryCmd:_rankData?.settings?.queryCmd??'',rankQueryTyp:_rankData?.settings?.queryCmdTyp??'whisper',rankQueryText:_rankData?.settings?.queryCmdText??'{name} hat Rang: {rang_icon} {rang}',rankDefs:_rankData?.defs??[],rankPlayers:Object.fromEntries(Object.entries(_rankData?.players??{}).map(([k,v])=>[k,v.rankId??null])),shopCmd:_shop?.settings?.cmd??'!pay',shopListCmd:_shop?.settings?.listCmd??'!shop',shopAnnounceNostripMsg:_shop?.settings?.announceNostripMsg??'',shopConfirmMsg:_shop?.settings?.confirmMsg??'',shopAnnounceMsg:_shop?.settings?.announceMsg??'',shopAnnounceAllMsg:_shop?.settings?.announceAllMsg??'',shopErrorMsg:_shop?.settings?.errorMsg??'',shopPreisU:_shop?.settings?.preisU??0,shopPreisNostrip:_shop?.settings?.preisNostrip??0,shopItems:(_shop?.items??[]).filter(i=>i.aktiv!==false),moneyBalances:Object.fromEntries(Object.entries(_money?.balances??{}).map(([k,v])=>[k,{balance:v.balance??0,name:v.name??''}])),botVars:(typeof _botVars!=='undefined'&&_botVars)?_botVars:{},playerKeys:(typeof _playerKeys!=='undefined'&&_playerKeys)?_playerKeys:{}});
+  const _cfgRaw = JSON.stringify({hearChat:s.hearChat,hearEmote:s.hearEmote,hearWhisper:s.hearWhisper,nurEigene:s.nurEigene,logAktiv:s.logAktiv??true,modus:s.modus,moneyQueryCmd:_money?.settings?.queryCmd??'',moneyQueryTyp:_money?.settings?.queryTyp??'whisper',moneyName:_money?.settings?.name??'Gold',rankQueryCmd:_rankData?.settings?.queryCmd??'',rankQueryTyp:_rankData?.settings?.queryCmdTyp??'whisper',rankQueryText:_rankData?.settings?.queryCmdText??'{name} hat Rang: {rang_icon} {rang}',rankDefs:_rankData?.defs??[],rankPlayers:Object.fromEntries(Object.entries(_rankData?.players??{}).map(([k,v])=>[k,v.rankId??null])),shopCmd:_shop?.settings?.cmd??'!pay',shopListCmd:_shop?.settings?.listCmd??'!shop',shopAnnounceNostripMsg:_shop?.settings?.announceNostripMsg??'',shopConfirmMsg:_shop?.settings?.confirmMsg??'',shopAnnounceMsg:_shop?.settings?.announceMsg??'',shopAnnounceAllMsg:_shop?.settings?.announceAllMsg??'',shopErrorMsg:_shop?.settings?.errorMsg??'',shopPreisU:_shop?.settings?.preisU??0,shopPreisNostrip:_shop?.settings?.preisNostrip??0,shopItems:(_shop?.items??[]).filter(i=>i.aktiv!==false),moneyBalances:Object.fromEntries(Object.entries(_money?.balances??{}).map(([k,v])=>[k,{balance:v.balance??0,name:v.name??''}])),botVars:(typeof _botVars!=='undefined'&&_botVars)?_botVars:{},playerKeys:(typeof _playerKeys!=='undefined'&&_playerKeys)?_playerKeys:{},figurName:s.figurName??'',figurRede:s.figurRede??'[{figur}] {text}',figurErzaehler:s.figurErzaehler??'{text}'});
   const cfgJson  = btoa(unescape(encodeURIComponent(_cfgRaw)));
   const trigsJson = btoa(unescape(encodeURIComponent(JSON.stringify(triggers))));
   const events = (bot.events||[]).filter(e=>e.aktiv).map(e => ({
@@ -162,8 +162,14 @@ const _roomEver=new Set([...(_savedState.roomEver??[]),...(${roomEverJson})]);
 function _heuteKey(){const d=new Date();return d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate();}
 const _firedTag=_savedState.firedTag??{};       // trigId_mn -> 'JJJJ-M-T'
 const _firedBesuch=_savedState.firedBesuch??{}; // trigId_mn -> true, faellt beim Verlassen weg
+/* Wo steht wer in welcher Geschichte. Bisher lebte der Szenen-Fortschritt nur
+   in _sceneWait im Arbeitsspeicher - Bot-Neustart, BC-Reload oder kurzes
+   Verlassen des Raums setzten jede Erzaehlung auf Anfang zurueck. Jetzt wird
+   die Stelle mitgeschrieben und ueberlebt.
+     mn -> { sid, stepId, ts, wartet }                                       */
+const _story=_savedState.story??{};
 window[_stateKey]={fired:_fired,firedCnt:_firedCnt,firedChar:_firedChar,roomEver:_roomEver,
-                   firedTag:_firedTag,firedBesuch:_firedBesuch};
+                   firedTag:_firedTag,firedBesuch:_firedBesuch,story:_story};
 // Quick lookup: trigId -> trigger config (for charSpec)
 /* Hoehere Prioritaet zuerst. Array.sort ist stabil, gleiche Prioritaet
    behaelt also die Reihenfolge aus der Liste. */
@@ -208,6 +214,18 @@ function _scTpl(s,C){
   var out=String(s==null?'':s).replace(/\{v:([^}]+)\}/g,function(_m,n){var val=_vget(mn,String(n).trim());return val==null?'':String(val);});
   return _tpl(out,{name:C&&C.Name,C:C,memberNum:mn});
 }
+/* Die Figur des Bots. Erzaehltext und Figurenrede sehen unterschiedlich aus,
+   damit im Chat erkennbar ist, wer gerade spricht. Ohne gesetzten Namen
+   bleibt alles wie bisher - bestehende Szenen aendern sich also nicht. */
+function _figurName(){ return _cfg.figurName||''; }
+function _figurFormat(text,wer){
+  const name=_figurName();
+  if(!name)return text;                       // keine Figur eingerichtet
+  const muster=(wer==='figur')?(_cfg.figurRede||'[{figur}] {text}')
+                             :(_cfg.figurErzaehler||'{text}');
+  return String(muster).replace(/\{figur\}/gi,name).replace(/\{text\}/gi,text);
+}
+
 function _scSend(typ,txt,C){
   if(typ==='whisper')ServerSend('ChatRoomChat',{Content:txt,Type:'Whisper',Target:C.MemberNumber});
   else if(typ==='emote')ServerSend('ChatRoomChat',{Content:txt,Type:'Emote'});
@@ -240,11 +258,14 @@ function _scGoto(sc,steps,ziel,curIdx,C){
   _scStep(sc,steps,(j<0?curIdx+1:j),C);
 }
 function _scStep(sc,steps,idx,C){
-  if(idx<0||idx>=steps.length)return;
+  if(idx<0||idx>=steps.length){_storyEnde(C&&C.MemberNumber);return;}
   var st=steps[idx], mn=C.MemberNumber;
+  // Stelle festhalten, BEVOR der Schritt laeuft - sonst geht bei einem
+  // Abbruch mittendrin genau der aktuelle Schritt verloren.
+  _storyMerk(mn,sc.id,st.id,st.typ==='frage');
   try{
     if(st.typ==='nachricht'){
-      if(st.text)_scSend(st.msgTyp,_scTpl(st.text,C),C);
+      if(st.text)_scSend(st.msgTyp,_figurFormat(_scTpl(st.text,C),st.wer||'erzaehler'),C);
       setTimeout(function(){_scStep(sc,steps,idx+1,C);},(Number(st.pause)||0)*1000);
     } else if(st.typ==='warte'){
       setTimeout(function(){_scStep(sc,steps,idx+1,C);},(Number(st.sek)||0)*1000);
@@ -255,24 +276,93 @@ function _scStep(sc,steps,idx,C){
       var truth=_scTruth(_vget(mn,st.varName),st.varCmp||'==',st.varWert);
       _scGoto(sc,steps,truth?st.zielJa:st.zielNein,idx,C);
     } else if(st.typ==='frage'){
-      if(st.text)_scSend(st.msgTyp,_scTpl(st.text,C),C);
+      // Antwortmoeglichkeiten koennen an eine Bedingung geknuepft sein -
+      // "das Messer ziehen" nur, wenn man eins hat.
+      var _moeglich=(st.antworten||[]).filter(function(an){
+        if(!an.bedVar)return true;
+        return _scTruth(_vget(mn,an.bedVar),an.bedCmp||'==',an.bedWert);
+      });
+      var _frageText=st.text?_scTpl(st.text,C):'';
+      if(st.auswahlZeigen&&_moeglich.length){
+        // Sichtbare Auswahl statt Stichwort-Raten
+        var _liste=_moeglich.map(function(an,i){
+          return (i+1)+') '+(an.label||an.wort||('Antwort '+(i+1)));
+        }).join('   ');
+        _frageText=(_frageText?_frageText+'\\n':'')+_liste;
+      }
+      if(_frageText)_scSend(st.msgTyp,_figurFormat(_frageText,st.wer||'figur'),C);
       var rid=++_sceneRunId;
-      var w={sid:sc.id,steps:steps,idx:idx,answers:(st.antworten||[]),rid:rid,timer:null};
+      var w={sid:sc.id,steps:steps,idx:idx,answers:_moeglich,rid:rid,timer:null,
+             zeigt:!!st.auswahlZeigen};
       if(Number(st.timeout)>0){
         w.timer=setTimeout(function(){
-          if(_sceneWait[mn]&&_sceneWait[mn].rid===rid){delete _sceneWait[mn];_scGoto(sc,steps,st.timeoutZiel,idx,C);}
+          if(_sceneWait[mn]&&_sceneWait[mn].rid===rid){
+            delete _sceneWait[mn];
+            // Bei Zeitablauf greift eine als Standard markierte Antwort,
+            // sonst das eigens dafuer hinterlegte Ziel.
+            var _std=_moeglich.find(function(an){return an.standard;});
+            _scGoto(sc,steps,_std?_std.ziel:st.timeoutZiel,idx,C);
+          }
         },Number(st.timeout)*1000);
       }
       _sceneWait[mn]=w;
+    } else if(st.typ==='aktion'){
+      // Ueber _runSeq statt _execAct: so erbt die Szene die vorhandene
+      // Ziel-Aufloesung (diese Person / alle ausser dem Ausloeser / nach Rang /
+      // zufaellig). Erst wenn die Kette durch ist, geht die Erzaehlung weiter -
+      // sonst ueberholen sich Text und Wirkung.
+      var _akt=st.aktionen||[];
+      if(!_akt.length){ _scStep(sc,steps,idx+1,C); }
+      else {
+        var _weiter=function(){ _scStep(sc,steps,idx+1,C); };
+        var _pseudo={id:'szene_'+sc.id, name:'Szene: '+(sc.name||sc.id)+', Schritt '+(idx+1),
+                     delay:0, fallbackTyp:'nichts'};
+        _runSeq(_akt, C, {name:C.Name,wort:'',typ:'Szene',x:C.X??0,y:C.Y??0,zone:'',C},
+                _pseudo, _weiter,
+                function(){ // eine Aktion meldete "ungueltig"
+                  _log('\u26A0 Szene "'+sc.name+'" Schritt '+(idx+1)+': Aktion fehlgeschlagen');
+                  if(st.beiFehler==='stopp'){ _storyEnde(mn); return; }
+                  _weiter();
+                });
+      }
     } else if(st.typ==='sprung'){
       _scGoto(sc,steps,st.ziel,idx,C);
     } else if(st.typ==='ende'){
+      _storyEnde(mn);
       return;
     } else {
       _scStep(sc,steps,idx+1,C);
     }
   }catch(ex){_log('Szenen-Schritt Fehler:',ex.message);}
 }
+/* Stelle merken bzw. vergessen. */
+function _storyMerk(mn,sid,stepId,wartet){
+  if(mn==null)return;
+  _story[mn]={sid:sid,stepId:stepId,ts:Date.now(),wartet:!!wartet};
+}
+function _storyEnde(mn){ if(mn!=null) delete _story[mn]; }
+
+/* Fortsetzen, wenn jemand mit offener Geschichte wiederkommt.
+   Ein wartender frage-Schritt kann seinen Timer nicht ueberleben - er wird
+   deshalb neu gestellt. Das ist auch erzaehlerisch richtig: der Gegenueber
+   saehe die Frage sonst nicht mehr. */
+function _storyFortsetzen(C){
+  if(!C||!C.MemberNumber)return false;
+  const st=_story[C.MemberNumber];
+  if(!st||!st.sid)return false;
+  const sc=(_scenes||[]).find(function(x){return x.id===st.sid;});
+  if(!sc){_storyEnde(C.MemberNumber);return false;}          // Szene geloescht
+  const modus=sc.fortsetzen||'fragen';
+  if(modus==='nein'){_storyEnde(C.MemberNumber);return false;}
+  const steps=sc.steps||[];
+  const idx=steps.findIndex(function(x){return x.id===st.stepId;});
+  if(idx<0){_storyEnde(C.MemberNumber);return false;}        // Schritt geloescht
+  if(sc.rueckkehrText)_scSend(sc.rueckkehrTyp||'emote',_scTpl(sc.rueckkehrText,C),C);
+  _log('\u{1F4D6} Geschichte "'+sc.name+'" fuer '+C.Name+' fortgesetzt (Schritt '+(idx+1)+')');
+  setTimeout(function(){_scStep(sc,steps,idx,C);}, modus==='auto'?1200:1200);
+  return true;
+}
+
 function _playScene(sid,C,vars,startId){
   if(!C||!C.MemberNumber)return;
   var sc=(_scenes||[]).find(function(x){return x.id===sid;});
@@ -288,8 +378,23 @@ function _playScene(sid,C,vars,startId){
 function _sceneHandleAnswer(rohText,C){
   if(!C||!C.MemberNumber)return false;
   var w=_sceneWait[C.MemberNumber];if(!w)return false;
-  var txt=(rohText||'').toLowerCase();
-  var match=(w.answers||[]).find(function(a){return a.wort&&txt.indexOf(String(a.wort).toLowerCase())!==-1;});
+  var roh=String(rohText||'').trim();
+  var txt=roh.toLowerCase();
+  var antworten=w.answers||[];
+  // 1) Zahl - nur wenn die Auswahl auch angezeigt wurde, sonst wuerde eine
+  //    beilaeufige "2" im Chat ungewollt antworten.
+  var match=null;
+  if(w.zeigt&&/^[0-9]{1,2}[).:]?$/.test(roh)){
+    var nr=parseInt(roh,10);
+    if(nr>=1&&nr<=antworten.length)match=antworten[nr-1];
+  }
+  // 2) Genauer Antworttext
+  if(!match)match=antworten.find(function(a){
+    var l=(a.label||'').toLowerCase();
+    return l&&l===txt;
+  });
+  // 3) Wie bisher: Stichwort kommt im Text vor
+  if(!match)match=antworten.find(function(a){return a.wort&&txt.indexOf(String(a.wort).toLowerCase())!==-1;});
   if(!match)return false;
   try{clearTimeout(w.timer);}catch(e){}
   delete _sceneWait[C.MemberNumber];
@@ -553,6 +658,36 @@ function _checkCond(c,ctx){
     // enthalten keine Gruppen und verhalten sich deshalb unveraendert.
     case 'gruppe':
       return _gruppenOk(c.kinder??[], ctx, c.verknuepfung||'und');
+
+    // ── Fremde Geschichten lesen ────────────────────────────────────────
+    // Die Wirkung AUF andere gibt es schon ueber das Aktions-Ziel; hier fehlte
+    // die Gegenrichtung: nachsehen, wie weit jemand anderes ist.
+    case 'andere_variable':{
+      const wen=String(c.wer||'');
+      const leute=(ChatRoomCharacter||[]).filter(x=>
+        wen==='' || wen==='irgendwer' ? true : String(x.MemberNumber)===wen);
+      if(!leute.length)return false;                    // Person nicht im Raum
+      const trifft=x=>_scTruth(_vget(x.MemberNumber,String(c.varName||'')),c.varCmp||'==',c.varWert);
+      return (wen==='irgendwer'||wen==='') ? leute.some(trifft) : leute.every(trifft);
+    }
+    case 'andere_szene':{
+      const wen=String(c.wer||'');
+      const leute=(ChatRoomCharacter||[]).filter(x=>
+        wen==='' || wen==='irgendwer' ? true : String(x.MemberNumber)===wen);
+      if(!leute.length)return false;
+      const trifft=x=>{
+        const st=_story[x.MemberNumber];
+        const drin=!!st && (!c.szeneId || st.sid===c.szeneId);
+        return (c.modus==='fertig') ? !drin : drin;     // 'fertig' = nicht (mehr) darin
+      };
+      return (wen==='irgendwer'||wen==='') ? leute.some(trifft) : leute.every(trifft);
+    }
+    case 'zusammen_im_raum':{
+      const noetig=(c.nummern||[]).map(Number).filter(n=>n>0);
+      if(!noetig.length)return true;
+      const da=new Set((ChatRoomCharacter||[]).map(x=>Number(x.MemberNumber)));
+      return noetig.every(n=>da.has(n));
+    }
 
     case 'shop_kauf':      return !ctx.shopBlockt;
     case 'player_betritt': return true;  // vom Join-Poll behandelt
@@ -1407,6 +1542,7 @@ function _runSonst(trig,vars){
 function _tpl(s,v){
   const cur=_shopCfg.moneyName||'Gold';
   return(s??'')
+    .replace(/{figur}/gi,_cfg.figurName||'')
     .replace(/{name}/gi,v.name??'')
     .replace(/{wort}/gi,v.wort??'')
     .replace(/{typ}/gi,v.typ??'')
@@ -2051,6 +2187,8 @@ function _processJoinQueue(){
   _syncRoomEver();
   // Skip trigger firing during startup grace period (avoids blasting all triggers on room load)
   if(Date.now()-_startupTs<_JOIN_GRACE_MS)return;
+  // Offene Geschichte dieser Person wieder aufnehmen
+  try{ _storyFortsetzen(C); }catch(e){ _log('\u26A0 Fortsetzen:',e.message); }
   // Profil: Besuche + letzter Besuch automatisch mitführen (persistent)
   try{ var _bs=Number(_vget(C.MemberNumber,'besuche'))||0; _vset(C.MemberNumber,'besuche',_bs+1); _vset(C.MemberNumber,'letzterBesuch',Date.now()); }catch(e){}
   if(!istNeu) _rejoinWindow.set(C.MemberNumber, Date.now());
@@ -2510,6 +2648,24 @@ function _feuereJetzt(trigId,memberNum){
 window['_BCBot_'+_BID]={
   playScene(sid){try{_playScene(sid,Player,{},null);}catch(e){console.warn(e);}},
   probe(trigId){try{_probe(trigId);}catch(e){console.warn('[Bot] Probelauf:',e);}},
+  /* Wo steht wer in welcher Geschichte - fuer die Anzeige im Konfigurator */
+  storyStand(){
+    try{
+      const raus={};
+      for(const mn of Object.keys(_story)){
+        const st=_story[mn];
+        const sc=(_scenes||[]).find(x=>x.id===st.sid);
+        const idx=sc?(sc.steps||[]).findIndex(x=>x.id===st.stepId):-1;
+        const C=[Player,...(ChatRoomCharacter||[])].find(x=>String(x.MemberNumber)===String(mn));
+        raus[mn]={name:C?C.Name:null,szene:sc?sc.name:'(gelöscht)',sid:st.sid,
+                  schritt:idx>=0?idx+1:null,gesamt:sc?(sc.steps||[]).length:0,
+                  wartet:!!st.wartet,ts:st.ts,imRaum:!!C};
+      }
+      window.__BCK_popupRef?.postMessage({app:'BCKonfigurator',type:'BOT_STORY',botId:_BOTID,stand:raus},'*');
+    }catch(e){console.warn('[Bot] storyStand:',e);}
+  },
+  /* Geschichte einer Person von vorn beginnen lassen */
+  storyReset(mn){ _storyEnde(Number(mn)); _log('\u{1F4D6} Geschichte von #'+mn+' zurueckgesetzt'); },
   feuereJetzt(trigId,mn){try{_feuereJetzt(trigId,mn);}catch(e){console.warn('[Bot] Handausloeser:',e);}},
   setVar(mn,name,val){try{_vset(mn,String(name),val);}catch(e){console.warn(e);}},
   stop(){
@@ -2534,6 +2690,7 @@ window['_BCBot_'+_BID]={
         firedChar:_firedChar, roomEver:[..._roomEver],
         evFiredCnt:_evFiredCnt,
         firedTag:_firedTag, firedBesuch:_firedBesuch,
+        story:_story,
         ts:Date.now()
       };
       localStorage.setItem('__BCKBotStates',JSON.stringify(ls));
@@ -2555,13 +2712,15 @@ window['_BCBot_'+_BID]={
   fireEvent(eid){this.fireEventNow(eid);},
   // Manuelles State-Reset (z.B. aus der Konsole: window['_BCBot_...'].clearState())
   clearState(){
-    window[_stateKey]={fired:{},firedCnt:{},firedChar:{},roomEver:[],evFiredCnt:{}};
+    window[_stateKey]={fired:{},firedCnt:{},firedChar:{},roomEver:[],evFiredCnt:{},
+                       firedTag:{},firedBesuch:{},story:{}};
     try{const ls=JSON.parse(localStorage.getItem('__BCKBotStates')||'{}');delete ls['${safeId}'];localStorage.setItem('__BCKBotStates',JSON.stringify(ls));}catch(e){}
     Object.keys(_fired).forEach(k=>delete _fired[k]);
     Object.keys(_firedCnt).forEach(k=>delete _firedCnt[k]);
     Object.keys(_firedChar).forEach(k=>delete _firedChar[k]);
     Object.keys(_firedTag).forEach(k=>delete _firedTag[k]);
     Object.keys(_firedBesuch).forEach(k=>delete _firedBesuch[k]);
+    Object.keys(_story).forEach(k=>delete _story[k]);
     Object.keys(_evFiredCnt).forEach(k=>delete _evFiredCnt[k]);
     _roomEver.clear();
     console.log('\u{1F9F9} [Bot:${safeName}] States zurückgesetzt (Mem+LS)');
