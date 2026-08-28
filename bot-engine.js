@@ -316,6 +316,48 @@ function _log(...a){if(_cfg.logAktiv)console.log('[Bot:${safeName}]',...a);}
 // Direkt C.X/C.Y verwenden – exakt wie funktionierendes ZoneMonitor-Pattern
 // Kein Lookup nötig: [Player,...ChatRoomCharacter] enthält bereits korrekte Positionen
 
+/* ── Zustand eines Charakters ────────────────────────────────────────────
+   BCs eigene Methoden zuerst; gibt es sie nicht, wird ueber die Effect-Listen
+   der getragenen Items ausgewertet – dieselbe Quelle, aus der auch der Scanner
+   in loader.js liest. Damit haengt nichts an einer unbestaetigten API. */
+const _GAG_STUFEN=['GagVeryLight','GagLight','GagEasy','GagNormal','GagMedium',
+                   'GagHeavy','GagVeryHeavy','GagTotal','GagTotal2','GagTotal3','GagTotal4'];
+const _BLIND_EFF=['BlindLight','BlindNormal','BlindHeavy','BlindTotal'];
+const _FESSEL_EFF=['Block','Freeze','Prone','ForceKneel','Tethered','Mounted','Enclose'];
+const _GEH_EFF=['Freeze','Prone','ForceKneel','Tethered','Mounted','Enclose','Slow'];
+
+function _effekte(C){
+  const raus=[];
+  for(const it of (C?.Appearance??[])){
+    const a=it?.Asset?.Effect, pr=it?.Property?.Effect;
+    if(Array.isArray(a))raus.push(...a);
+    if(Array.isArray(pr))raus.push(...pr);
+  }
+  return raus;
+}
+function _hatEffekt(C,liste){
+  const e=_effekte(C);
+  return liste.some(x=>e.indexOf(x)>=0);
+}
+/* 0 = nicht geknebelt, sonst 1..11 nach _GAG_STUFEN */
+function _knebelStufe(C){
+  let max=0;
+  for(const e of _effekte(C)){ const i=_GAG_STUFEN.indexOf(e); if(i>=0&&i+1>max)max=i+1; }
+  return max;
+}
+function _zustand(C,was){
+  try{
+    if(was==='gefesselt') return (typeof C.IsRestrained==='function')?!!C.IsRestrained():_hatEffekt(C,_FESSEL_EFF);
+    if(was==='blind')     return (typeof C.IsBlind==='function')    ?!!C.IsBlind()    :_hatEffekt(C,_BLIND_EFF);
+    if(was==='stumm')     return (typeof C.CanTalk==='function')    ?!C.CanTalk()     :_knebelStufe(C)>0;
+    if(was==='steht')     return (typeof C.CanWalk==='function')    ?!C.CanWalk()     :_hatEffekt(C,_GEH_EFF);
+  }catch(e){}
+  return false;
+}
+/* Frischen Charakter aus dem Raum holen – die Appearance im uebergebenen
+   Objekt kann veraltet sein. */
+function _frisch(C){ return (ChatRoomCharacter||[]).find(x=>x.MemberNumber===C.MemberNumber)??C; }
+
 /* ── Bedingungspruefung – eine Stelle fuer alle Wege ─────────────────────
    Diese Auswertung stand vorher SECHSMAL im Code: in _ok, _okIf, _okEv und
    noch einmal inline in den Polls fuer Items, Erregung und Zonen. Die drei
@@ -392,6 +434,75 @@ function _checkCond(c,ctx){
     // Sperrt nur den Chat-Weg: ein Shop-Trigger soll dort nicht durch
     // gewoehnliche Nachrichten feuern. Fuer IF-Zweige, Events und Polls galt
     // die Bedingung schon immer als erfuellt – das bleibt so.
+
+    // ── Zustand ─────────────────────────────────────────────────────────
+    case 'gefesselt':          return (c.modus==='nicht')!==_zustand(_frisch(C),'gefesselt');
+    case 'blind':              return (c.modus==='nicht')!==_zustand(_frisch(C),'blind');
+    case 'bewegung_blockiert': return (c.modus==='nicht')!==_zustand(_frisch(C),'steht');
+    case 'geknebelt':{
+      const stufe=_knebelStufe(_frisch(C));
+      const noetig={leicht:1,mittel:4,schwer:6}[c.stufe]??1;   // 'egal' -> mindestens leicht
+      const ja=(typeof _frisch(C).CanTalk==='function'&&c.stufe==='egal')
+        ? _zustand(_frisch(C),'stumm') : stufe>=noetig;
+      return (c.modus==='nicht')!==ja;
+    }
+    case 'item_gruppe':{
+      const ja=(_frisch(C).Appearance??[]).some(a=>a.Asset?.Group?.Name===c.gruppe);
+      return (c.modus==='nicht')!==ja;
+    }
+    case 'craft_getragen':{
+      const n=String(c.craftName||'').trim().toLowerCase();
+      const ja=!n||(_frisch(C).Appearance??[]).some(a=>String(a.Craft?.Name||'').toLowerCase()===n);
+      return (c.modus==='nicht')!==ja;
+    }
+    case 'schloss':{
+      const typ=String(c.lockTyp||'').trim().toLowerCase();
+      const ja=(_frisch(C).Appearance??[]).some(a=>{
+        const lb=a.Property?.LockedBy; if(!lb)return false;
+        return !typ||String(lb).toLowerCase()===typ;
+      });
+      return (c.modus==='nicht')!==ja;
+    }
+
+    // ── Zeit (reines JavaScript, unabhaengig von BC) ─────────────────────
+    case 'uhrzeit':{
+      const zuMin=t=>{const [h,m]=String(t||'0:00').split(':');return (+h||0)*60+(+m||0);};
+      const jetzt=new Date(), m=jetzt.getHours()*60+jetzt.getMinutes();
+      const von=zuMin(c.von), bis=zuMin(c.bis);
+      return von<=bis ? (m>=von&&m<=bis) : (m>=von||m<=bis);  // ueber Mitternacht
+    }
+    case 'wochentag':{
+      const tage=(c.tage||[]).map(Number);
+      return !tage.length||tage.indexOf(new Date().getDay())>=0;
+    }
+    case 'datum':{
+      const tag=d=>{const x=new Date(d); return isNaN(x.getTime())?null:(x.setHours(0,0,0,0),x.getTime());};
+      const heute=new Date(); heute.setHours(0,0,0,0);
+      const von=c.von?tag(c.von):null, bis=c.bis?tag(c.bis):null;
+      if(von!==null&&heute.getTime()<von)return false;
+      if(bis!==null&&heute.getTime()>bis)return false;
+      return true;
+    }
+
+    // ── Raum und Variablen ───────────────────────────────────────────────
+    case 'anzahl_im_raum':{
+      const n=(ChatRoomCharacter||[]).length, w=Number(c.wert)||0;
+      const op=c.op||'min';
+      return op==='min'?n>=w:op==='max'?n<=w:n===w;
+    }
+    case 'raumname':{
+      const rn=(typeof ChatRoomData!=='undefined'&&ChatRoomData&&ChatRoomData.Name)?String(ChatRoomData.Name):'';
+      const w=String(c.wert||'').trim();
+      if(!w)return true;
+      return (c.modus==='enthaelt')
+        ? rn.toLowerCase().indexOf(w.toLowerCase())>=0
+        : rn.toLowerCase()===w.toLowerCase();
+    }
+    case 'variable2':{
+      const a=_vget(C.MemberNumber,String(c.varA||'')), b=_vget(C.MemberNumber,String(c.varB||''));
+      return _scTruth(a,c.op||'==',b);
+    }
+
     case 'shop_kauf':      return !ctx.shopBlockt;
     case 'player_betritt': return true;  // vom Join-Poll behandelt
     default:               return true;

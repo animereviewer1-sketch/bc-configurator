@@ -622,6 +622,11 @@ function _btLogikWort(l) {
 }
 function _btCondPhrase(bot, c) {
   const e = (s)=>escHtml(String(s));
+  // Neue Typen beschreiben sich im Verzeichnis selbst
+  const reg = c && COND_DEFS[c.typ];
+  if (reg && typeof reg.klartext === 'function') {
+    try { return e(reg.klartext(c)); } catch (err) { return e(reg.label); }
+  }
   switch (c?.typ) {
     case 'wort': {
       const w = c.wort ? '„'+e(c.wort)+'"' : '(leeres Wort)';
@@ -927,6 +932,7 @@ function renderTrigCard(bot, t, i) {
           <button onclick="trigAddCond('${t.id}','variable')" title="Prüft eine Spieler-Variable/Punkte (z.B. punkte ≥ 100)">🔢 Variable</button>
           <button onclick="trigAddCond('${t.id}','zufall')" title="X% Wahrscheinlichkeit, dass der Trigger zutrifft">🎲 Zufall</button>
           <button onclick="trigAddCond('${t.id}','erregung')" title="Prüft die Erregung (z.B. ≥ 99 % → Edging)">💗 Erregung</button>
+          ${_condKnoepfe(t.id)}
         </div>
         <div id="conds-${t.id}">${(t.bedingungen||[]).map((c,ci)=>renderCond(bot,t.id,c,ci)).join('')}</div>
       </div>
@@ -1002,9 +1008,159 @@ function renderTrigCard(bot, t, i) {
 }
 
 // ── Conditions ────────────────────────────────────────────────
+/* -- Bausteinverzeichnis fuer Bedingungen --------------------------------
+   Ein neuer Bedingungstyp musste bisher an sechs Stellen eingetragen werden:
+   Auswertung, Vorgabewerte, Editor-Zeile, Klartext, Auswahlknopf, Doku. Jede
+   vergessene Stelle war ein stiller Fehler. Neue Typen stehen darum nur noch
+   hier; renderCond, _btCondPhrase, trigAddCond und die Auswahlleiste lesen
+   daraus. Die alten Typen behalten vorerst ihren handgeschriebenen Code und
+   wandern nach und nach hierher - kein Big-Bang.
+
+   felder: typ 'select' | 'zahl' | 'text' | 'zeit' | 'datum' | 'tage'        */
+const COND_DEFS = {
+  gefesselt: { gruppe:'Zustand', label:'Gefesselt', icon:'\u26d3',
+    vorgabe:{modus:'ist'}, hinweis:'Erkennt Fesselung \u00fcber die Effekte der getragenen Items',
+    felder:[{key:'modus',typ:'select',breite:96,werte:[['ist','ist'],['nicht','ist NICHT']]}],
+    klartext:c=>c.modus==='nicht'?'ist nicht gefesselt':'ist gefesselt' },
+
+  geknebelt: { gruppe:'Zustand', label:'Geknebelt', icon:'\ud83e\udd10',
+    vorgabe:{modus:'ist',stufe:'egal'},
+    felder:[{key:'modus',typ:'select',breite:96,werte:[['ist','ist'],['nicht','ist NICHT']]},
+            {key:'stufe',typ:'select',breite:132,werte:[['egal','egal wie stark'],['leicht','mind. leicht'],
+              ['mittel','mind. mittel'],['schwer','mind. schwer']]}],
+    klartext:c=>(c.modus==='nicht'?'ist nicht geknebelt':'ist geknebelt')
+      +(c.stufe&&c.stufe!=='egal'?' ('+c.stufe+')':'') },
+
+  blind: { gruppe:'Zustand', label:'Blind', icon:'\ud83d\ude48',
+    vorgabe:{modus:'ist'},
+    felder:[{key:'modus',typ:'select',breite:96,werte:[['ist','ist'],['nicht','ist NICHT']]}],
+    klartext:c=>c.modus==='nicht'?'sieht etwas':'sieht nichts' },
+
+  bewegung_blockiert: { gruppe:'Zustand', label:'Kann nicht gehen', icon:'\ud83e\uddb5',
+    vorgabe:{modus:'ist'}, hinweis:'Festgesetzt, am Boden, angeleint oder eingeschlossen',
+    felder:[{key:'modus',typ:'select',breite:96,werte:[['ist','ist'],['nicht','ist NICHT']]}],
+    klartext:c=>c.modus==='nicht'?'kann gehen':'kann nicht gehen' },
+
+  item_gruppe: { gruppe:'Zustand', label:'Item an Slot', icon:'\ud83d\udccd',
+    vorgabe:{modus:'ist',gruppe:''},
+    hinweis:'Tr\u00e4gt IRGENDETWAS an diesem Slot - anders als "Item tr\u00e4gt", das einen genauen Namen braucht',
+    felder:[{key:'modus',typ:'select',breite:96,werte:[['ist','tr\u00e4gt'],['nicht','tr\u00e4gt NICHT']]},
+            {key:'gruppe',typ:'text',breite:120,platzhalter:'z.B. ItemArms'}],
+    klartext:c=>(c.modus==='nicht'?'tr\u00e4gt nichts an ':'tr\u00e4gt etwas an ')+(c.gruppe||'?') },
+
+  craft_getragen: { gruppe:'Zustand', label:'Craft getragen', icon:'\u270f\ufe0f',
+    vorgabe:{modus:'ist',craftName:''},
+    felder:[{key:'modus',typ:'select',breite:96,werte:[['ist','tr\u00e4gt'],['nicht','tr\u00e4gt NICHT']]},
+            {key:'craftName',typ:'text',breite:150,platzhalter:'Craft-Name'}],
+    klartext:c=>(c.modus==='nicht'?'tr\u00e4gt Craft nicht: ':'tr\u00e4gt Craft: ')+(c.craftName||'?') },
+
+  schloss: { gruppe:'Zustand', label:'Schloss', icon:'\ud83d\udd12',
+    vorgabe:{modus:'ist',lockTyp:''}, hinweis:'Leer lassen = irgendein Schloss',
+    felder:[{key:'modus',typ:'select',breite:96,werte:[['ist','tr\u00e4gt'],['nicht','tr\u00e4gt NICHT']]},
+            {key:'lockTyp',typ:'text',breite:160,platzhalter:'Schloss-Typ (leer = egal)'}],
+    klartext:c=>(c.modus==='nicht'?'tr\u00e4gt kein Schloss':'tr\u00e4gt Schloss')+(c.lockTyp?' ('+c.lockTyp+')':'') },
+
+  uhrzeit: { gruppe:'Zeit', label:'Uhrzeit', icon:'\ud83d\udd50',
+    vorgabe:{von:'20:00',bis:'23:59'}, hinweis:'\u00dcber Mitternacht erlaubt, z.B. 23:00-01:00',
+    felder:[{key:'von',typ:'zeit',label:'von'},{key:'bis',typ:'zeit',label:'bis'}],
+    klartext:c=>'zwischen '+(c.von||'?')+' und '+(c.bis||'?')+' Uhr' },
+
+  wochentag: { gruppe:'Zeit', label:'Wochentag', icon:'\ud83d\udcc5',
+    vorgabe:{tage:[]}, hinweis:'Kein Tag angehakt = an jedem Tag',
+    felder:[{key:'tage',typ:'tage'}],
+    klartext:c=>{const n=['So','Mo','Di','Mi','Do','Fr','Sa'];
+      return (c.tage||[]).length?'an '+(c.tage||[]).map(t=>n[t]).join(', '):'an jedem Tag';} },
+
+  datum: { gruppe:'Zeit', label:'Zeitraum', icon:'\ud83d\uddd3',
+    vorgabe:{von:'',bis:''}, hinweis:'Leeres Feld = offen',
+    felder:[{key:'von',typ:'datum',label:'ab'},{key:'bis',typ:'datum',label:'bis'}],
+    klartext:c=>'im Zeitraum '+(c.von||'\u2026')+' bis '+(c.bis||'\u2026') },
+
+  anzahl_im_raum: { gruppe:'Raum', label:'Personen im Raum', icon:'\ud83d\udc65',
+    vorgabe:{op:'min',wert:2},
+    felder:[{key:'op',typ:'select',breite:110,werte:[['min','mindestens'],['max','h\u00f6chstens'],['=','genau']]},
+            {key:'wert',typ:'zahl',breite:56}],
+    klartext:c=>({min:'mindestens',max:'h\u00f6chstens','=':'genau'}[c.op||'min'])+' '+(c.wert??0)+' Personen im Raum' },
+
+  raumname: { gruppe:'Raum', label:'Raumname', icon:'\ud83c\udff7',
+    vorgabe:{modus:'ist',wert:''}, hinweis:'Leer lassen = jeder Raum',
+    felder:[{key:'modus',typ:'select',breite:100,werte:[['ist','ist genau'],['enthaelt','enth\u00e4lt']]},
+            {key:'wert',typ:'text',breite:150,platzhalter:'Raumname'}],
+    klartext:c=>'Raumname '+(c.modus==='enthaelt'?'enth\u00e4lt ':'ist ')+'\u201e'+(c.wert||'')+'"' },
+
+  variable2: { gruppe:'Fortschritt', label:'Variable vs. Variable', icon:'\u2696\ufe0f',
+    vorgabe:{varA:'',op:'==',varB:''}, hinweis:'Vergleicht zwei Variablen desselben Spielers',
+    felder:[{key:'varA',typ:'text',breite:110,platzhalter:'Variable A'},
+            {key:'op',typ:'select',breite:70,werte:[['==','=='],['!=','!='],['>','>'],['>=','>='],['<','<'],['<=','<=']]},
+            {key:'varB',typ:'text',breite:110,platzhalter:'Variable B'}],
+    klartext:c=>(c.varA||'?')+' '+(c.op||'==')+' '+(c.varB||'?') },
+};
+
+/* Baut die Editor-Felder eines Bausteins aus seiner Beschreibung. */
+function _condFelder(tid, ci, c, def) {
+  const setz = (k, wert) => `condField('${tid}',${ci},'${k}',${wert})`;
+  return (def.felder||[]).map(f => {
+    const v = c[f.key];
+    const br = f.breite ? `style="width:${f.breite}px"` : '';
+    const lbl = f.label ? `<span style="font-size:.66rem;color:var(--text3)">${escHtml(f.label)}</span>` : '';
+    if (f.typ === 'select')
+      return lbl+`<select class="cf" ${br} onchange="${setz(f.key,'this.value')};condRerender('${tid}')">`
+        + f.werte.map(w=>`<option value="${escHtml(w[0])}" ${v===w[0]?'selected':''}>${escHtml(w[1])}</option>`).join('')
+        + `</select>`;
+    if (f.typ === 'zahl')
+      return lbl+`<input class="cf" type="number" ${br||'style="width:64px"'} value="${v??0}" oninput="${setz(f.key,'+this.value')}">`;
+    if (f.typ === 'zeit')
+      return lbl+`<input class="cf" type="time" style="width:92px" value="${escHtml(v||'')}" oninput="${setz(f.key,'this.value')}">`;
+    if (f.typ === 'datum')
+      return lbl+`<input class="cf" type="date" style="width:132px" value="${escHtml(v||'')}" oninput="${setz(f.key,'this.value')}">`;
+    if (f.typ === 'tage') {
+      const namen=['So','Mo','Di','Mi','Do','Fr','Sa'];
+      const an=(v||[]).map(Number);
+      return namen.map((n,i)=>`<label style="font-size:.64rem;display:inline-flex;align-items:center;gap:2px;margin-right:4px">`
+        + `<input type="checkbox" ${an.indexOf(i)>=0?'checked':''} onchange="condTagUm('${tid}',${ci},${i},this.checked)">${n}</label>`).join('');
+    }
+    return lbl+`<input class="cf" ${br||'style="width:130px"'} value="${escHtml(v??'')}"`
+      + ` placeholder="${escHtml(f.platzhalter||'')}" oninput="${setz(f.key,'this.value')}">`;
+  }).join('\n      ');
+}
+
+/* Wochentag an-/abwaehlen */
+function condTagUm(tid, ci, tag, an) {
+  const b = _selBot(); if (!b) return;
+  const t = b.triggers.find(x=>x.id===tid); if (!t) return;
+  const c = t.bedingungen?.[ci]; if (!c) return;
+  const menge = new Set((c.tage||[]).map(Number));
+  if (an) menge.add(tag); else menge.delete(tag);
+  c.tage = [...menge].sort((x,y)=>x-y);
+  _saveBots(); condRerender(tid);
+}
+
+/* Auswahlknoepfe fuer die neuen Bausteine, nach Gruppe sortiert. Die alten
+   Typen stehen weiterhin fest im Markup - sie wandern mit der Zeit hierher. */
+function _condKnoepfe(tid) {
+  const nachGruppe = {};
+  for (const [typ, d] of Object.entries(COND_DEFS)) {
+    (nachGruppe[d.gruppe||'Sonstige'] = nachGruppe[d.gruppe||'Sonstige'] || []).push([typ, d]);
+  }
+  return Object.keys(nachGruppe).sort().map(g =>
+    `<span style="width:100%;height:0"></span>`
+    + `<span style="font-size:.58rem;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;`
+    + `align-self:center;margin-right:2px">${escHtml(g)}</span>`
+    + nachGruppe[g].map(([typ, d]) =>
+        `<button onclick="trigAddCond('${tid}','${typ}')"`
+        + (d.hinweis ? ` title="${escHtml(d.hinweis)}"` : '')
+        + `>${d.icon} ${escHtml(d.label)}</button>`).join('')
+  ).join('');
+}
+
 function renderCond(bot, tid, c, ci) {
   let inner = '';
-  if (c.typ === 'wort') {
+  const _def = COND_DEFS[c.typ];
+  if (_def) {
+    inner = `<span style="font-size:.68rem;color:var(--text2);margin-right:2px">${escHtml(_def.label)}</span>`
+      + _condFelder(tid, ci, c, _def)
+      + (_def.hinweis ? `<span style="font-size:.6rem;color:var(--text3);margin-left:4px" title="${escHtml(_def.hinweis)}">ⓘ</span>` : '');
+  } else if (c.typ === 'wort') {
     inner = `
       <input class="cf cf-w120" value="${escHtml(c.wort||'')}" oninput="condField('${tid}',${ci},'wort',this.value)" placeholder="Triggerwort (lowercase)">
       <select class="cf" onchange="condField('${tid}',${ci},'typ_msg',this.value)">
@@ -1130,6 +1286,8 @@ function renderCond(bot, tid, c, ci) {
       <span style="font-size:.6rem;color:var(--text3)">prüft die Erregung des auslösenden Spielers · funktioniert auch allein (wird alle 2s geprüft, feuert beim Überschreiten) · setzt voraus, dass der Spieler seine Erregung teilt (BC-Sichtbarkeit „Everyone/Access")</span>`;
   }
   const icons = {wort:'💬',zone:'🗺️',zone_rect:'📐',item_traegt:'👗',item_traegt_nicht:'🚫',trigger_war:'🔗',player_betritt:'👋',ev_timer:'⏱',ev_interval:'🔁',rang:'🏆',shop_kauf:'🛒',variable:'🔢',zufall:'🎲',erregung:'💗'};
+  // Neue Typen bringen ihr Symbol im Verzeichnis mit
+  Object.keys(COND_DEFS).forEach(k=>{ if(!icons[k]) icons[k]=COND_DEFS[k].icon; });
   // Logik-Operator: verbindet diese Bedingung mit der vorherigen
   const logik = c.logik ?? 'und';
   const logikBadge = ci === 0
@@ -1576,7 +1734,9 @@ function trigAddCond(tid, typ) {
     ev_interval:    {typ:'ev_interval', sek_min:30, sek_max:180},
   };
   t.bedingungen = t.bedingungen ?? [];
-  t.bedingungen.push(defs[typ]??{typ});
+  // Neue Typen bringen ihre Vorgabewerte im Verzeichnis mit
+  const ausReg = COND_DEFS[typ] ? Object.assign({typ}, COND_DEFS[typ].vorgabe) : null;
+  t.bedingungen.push(ausReg ?? defs[typ] ?? {typ});
   _saveBots();
   document.getElementById('conds-'+tid).innerHTML = t.bedingungen.map((c,ci)=>renderCond(b,tid,c,ci)).join('');
   document.getElementById('tb-'+tid)?.classList.add('open');

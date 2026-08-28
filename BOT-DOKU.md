@@ -56,6 +56,54 @@ Jeder Trigger hat:
 | 🎲 **Zufall** | Trifft mit X % Wahrscheinlichkeit zu. Wofür: Glücksspiele, zufällige Reaktionen. |
 | 💗 **Erregung** | Vergleicht die Erregung (0–100 %, z.B. `≥ 99`). Wofür: Edging/Reaktionen ab Schwelle. |
 
+## 5a. Bedingungen – Zustand, Zeit und Raum
+
+Diese Bedingungen kamen neu dazu. In der Auswahlleiste stehen sie nach Gruppen sortiert
+unter den bisherigen Knöpfen.
+
+### Zustand
+
+Prüft, wie jemand *dasteht* – unabhängig davon, welches Item genau dafür sorgt.
+Ausgewertet werden die Effekte der getragenen Items, also dieselbe Quelle, aus der auch
+der Scanner liest.
+
+| Bedingung | Prüft |
+|---|---|
+| ⛓ **Gefesselt** | ist gefesselt / ist nicht gefesselt |
+| 🤐 **Geknebelt** | kann nicht sprechen, mit wählbarer Mindeststufe (leicht / mittel / schwer) |
+| 🙈 **Blind** | sieht nichts |
+| 🦵 **Kann nicht gehen** | festgesetzt, am Boden, angeleint oder eingeschlossen |
+| 📍 **Item an Slot** | trägt *irgendetwas* an einem Slot – anders als „Item trägt", das den genauen Namen braucht |
+| ✏️ **Craft getragen** | trägt ein Craft mit diesem Namen |
+| 🔒 **Schloss** | trägt ein Schloss; Typ leer lassen = irgendeines |
+
+Jede dieser Bedingungen lässt sich umdrehen („ist NICHT“ / „trägt NICHT“).
+
+### Zeit
+
+| Bedingung | Prüft |
+|---|---|
+| 🕐 **Uhrzeit** | zwischen zwei Uhrzeiten. Über Mitternacht ist erlaubt: 23:00–01:00 gilt nachts |
+| 📅 **Wochentag** | nur an angehakten Tagen. Kein Tag angehakt = an jedem Tag |
+| 🗓 **Zeitraum** | zwischen zwei Daten. Leeres Feld = nach oben bzw. unten offen |
+
+Die Zeit kommt vom Rechner, auf dem der Konfigurator läuft – nicht vom BC-Server.
+
+### Raum und Werte
+
+| Bedingung | Prüft |
+|---|---|
+| 👥 **Personen im Raum** | mindestens / höchstens / genau N Anwesende |
+| 🏷 **Raumname** | Raum heißt genau so oder enthält den Text. Leer = jeder Raum |
+| ⚖️ **Variable vs. Variable** | vergleicht zwei Variablen desselben Spielers miteinander |
+
+### Beispiele
+
+- *Nur abends und nur wenn gefesselt:* „Uhrzeit 20:00–02:00“ **UND** „Gefesselt: ist“
+- *Freitags-Regel:* „Wochentag: Fr“ **UND** „Wort: guten abend“
+- *Nur wenn niemand zusieht:* „Personen im Raum: höchstens 2“
+- *Nicht sprechen können ausnutzen:* „Geknebelt: mind. mittel“ → Bot antwortet stellvertretend
+
 ## 6. Aktionen
 
 | Aktion | Funktion |
