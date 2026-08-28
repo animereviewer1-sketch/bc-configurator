@@ -499,8 +499,13 @@ window.CurseScanner = (() => {
       const lscgMatch = items.find(ci => ci.Name?.toLowerCase() === craft.Name?.toLowerCase());
       if (lscgMatch && lscgMatch.Name?.toLowerCase() !== craft.Name?.toLowerCase()) {
         const aliasKey = C.MemberNumber + ':' + craft.Name.toLowerCase();
+        // Nur als Aenderung zaehlen, wenn der Alias wirklich neu ist. Vorher
+        // stand hier ein unbedingtes changed=true: der Poll laeuft alle 6 s,
+        // also wurde der Cache dauerhaft immer wieder geschrieben, obwohl sich
+        // nichts geaendert hatte.
+        const istNeu = !lscgCache[aliasKey];
         lscgCache[aliasKey] = { ...lscgCache[C.MemberNumber + ':' + lscgMatch.Name.toLowerCase()], _craftAlias: craft.Name };
-        changed = true;
+        if (istNeu) changed = true;
       }
     });
     if (changed) _persistLscgCache();

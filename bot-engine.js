@@ -358,6 +358,37 @@ function _zustand(C,was){
    Objekt kann veraltet sein. */
 function _frisch(C){ return (ChatRoomCharacter||[]).find(x=>x.MemberNumber===C.MemberNumber)??C; }
 
+/* -- Wer darf ausloesen ---------------------------------------------------
+   Diese Pruefung stand NEUNMAL im Code, in fuenf leicht verschiedenen
+   Fassungen. Zwei Modelle sind es tatsaechlich: Trigger kennen eine Liste
+   ("whitelist" + vonNummern), Events nur eine einzelne Nummer ("nummer" +
+   vonNummer). Deshalb zwei Funktionen statt einer - ein blindes
+   Zusammenlegen haette die Events stillschweigend kaputt gemacht.       */
+/* Erreicht die Person mindestens den angegebenen Rang? */
+function _rangMindestens(C, rangId) {
+  if (!rangId) return true;
+  const ziel = _rankDefs.find(r => r.id === rangId);
+  const hat  = _rankDefs.find(r => r.id === (_rangState[C.MemberNumber] ?? null));
+  if (!ziel || !hat) return false;
+  return hat.level >= ziel.level;
+}
+
+function _vonOk(trig, C) {
+  const nummern = () => (trig.vonNummern||[]).map(Number);
+  if (trig.von === 'bot')       return C.MemberNumber === Player.MemberNumber;
+  if (trig.von === 'whitelist') return nummern().includes(Number(C.MemberNumber));
+  // ── neu ──────────────────────────────────────────────────────────
+  if (trig.von === 'blacklist') return !nummern().includes(Number(C.MemberNumber));
+  if (trig.von === 'nicht_bot') return C.MemberNumber !== Player.MemberNumber;
+  if (trig.von === 'rang')      return _rangMindestens(C, trig.vonRangId);
+  return true;   // 'alle'
+}
+function _vonOkEv(ev, C) {
+  if (ev.von === 'bot')    return C.MemberNumber === Player.MemberNumber;
+  if (ev.von === 'nummer') return ev.vonNummer && C.MemberNumber === +ev.vonNummer;
+  return true;   // 'alle'
+}
+
 /* ── Bedingungspruefung – eine Stelle fuer alle Wege ─────────────────────
    Diese Auswertung stand vorher SECHSMAL im Code: in _ok, _okIf, _okEv und
    noch einmal inline in den Polls fuer Items, Erregung und Zonen. Die drei
@@ -1041,6 +1072,14 @@ function _runSeq(aktionen,C,vars,trigBase,onDone,onUngueltig){
     } else if(a.aktZiel==='whitelist'){
       const nrs=(a.aktZielNummern||[]).map(Number);
       targets=allChars.filter(ch=>nrs.includes(Number(ch.MemberNumber)));
+    } else if(a.aktZiel==='ausser_ausloeser'){
+      // Fuer Ansagen an die Runde: alle im Raum, nur der Ausloeser nicht
+      targets=allChars.filter(ch=>ch.MemberNumber!==C.MemberNumber);
+    } else if(a.aktZiel==='rang'){
+      targets=allChars.filter(ch=>_rangMindestens(ch,a.aktZielRangId));
+    } else if(a.aktZiel==='zufall'){
+      const moeglich=allChars.filter(ch=>ch.MemberNumber!==Player.MemberNumber);
+      targets=moeglich.length?[moeglich[Math.floor(Math.random()*moeglich.length)]]:[];
     } else if(a.aktZiel==='shop_kaeufer'){
       // Zielt auf den Käufer (vars.shopBuyer), nicht das Kaufziel
       const buyerNum=vars.shopBuyer?.MemberNumber;
@@ -1203,6 +1242,30 @@ function _syncRoomEver(){
   try{
     window.__BCK_popupRef?.postMessage({app:'BCKonfigurator',type:'BOT_ROOM_EVER',botId:'${safeId}',members:[..._roomEver]},'*');
   }catch(e){}
+}
+
+
+/* Haelt fest, WARUM ein Trigger geschwiegen hat - vorher passierte in dem
+   Fall gar nichts, man konnte es also nicht herausfinden. Gedrosselt auf
+   einmal pro Person und Trigger je Minute, sonst laufen die Logs voll. */
+const _nichtErfuelltZuletzt={};
+function _logNichtErfuellt(trig,C,rohText,typKey){
+  if(!_cfg.logAktiv)return;
+  const beds=trig.bedingungen??[];
+  if(!beds.length)return;
+  const key=trig.id+'_'+C.MemberNumber;
+  const jetzt=Date.now();
+  if(jetzt-(_nichtErfuelltZuletzt[key]||0) < 60000)return;
+  _nichtErfuelltZuletzt[key]=jetzt;
+  // Welche Bedingung war es? Die erste nicht erfuellte genuegt als Hinweis.
+  const ctx={C,rohText,typKey,shopBlockt:true};
+  let idx=-1;
+  for(let i=0;i<beds.length;i++){
+    let e=false; try{ e=!!_checkCond(beds[i],ctx); }catch(err){}
+    if(!e){ idx=i; break; }
+  }
+  _pushLog({status:'nicht_erfuellt',msg:'Bedingung '+(idx>=0?(idx+1):'?')+' nicht erfuellt',
+            bedIndex:idx},{name:C.Name,wort:rohText,typ:typKey,x:C.X??0,y:C.Y??0,C},trig);
 }
 
 function _run(trig,vars){
@@ -1518,11 +1581,7 @@ function _handleShopCmd(rohText,buyerC){
         if(!shopConds.length)return;
         const itemMatch=shopConds.every(c=>!c.shop_id||c.shop_id===shopItem.id);
         if(!itemMatch)return;
-        const vonOk=(()=>{
-          if(trig.von==='bot')return buyerC.MemberNumber===Player.MemberNumber;
-          if(trig.von==='whitelist')return(trig.vonNummern||[]).map(Number).includes(Number(buyerC.MemberNumber));
-          return true;
-        })();
+        const vonOk=_vonOk(trig,buyerC);
         if(!vonOk)return;
         const otherConds=(trig.bedingungen??[]).filter(c=>c.typ!=='shop_kauf');
         const otherOk=otherConds.every(c=>{
@@ -1657,11 +1716,7 @@ function _handleShopCmd(rohText,buyerC){
     if(!shopConds.length)return;
     const itemMatch=shopConds.every(c=>!c.shop_id||c.shop_id===shopItem.id);
     if(!itemMatch)return;
-    const vonOk=(()=>{
-      if(trig.von==='bot')return buyerC.MemberNumber===Player.MemberNumber;
-      if(trig.von==='whitelist')return(trig.vonNummern||[]).map(Number).includes(Number(buyerC.MemberNumber));
-      return true;
-    })();
+    const vonOk=_vonOk(trig,buyerC);
     if(!vonOk)return;
     const otherConds=(trig.bedingungen??[]).filter(c=>c.typ!=='shop_kauf');
     const otherOk=otherConds.every(c=>{
@@ -1790,14 +1845,11 @@ function _proc(rohText,typKey,C){
     const hasWort=(trig.bedingungen??[]).some(c=>c.typ==='wort');
     if(hasItem&&!hasWort)return;
     // Von-Filter: wer darf diesen Trigger auslösen?
-    const vonOk=(()=>{
-      if(trig.von==='bot')return C.MemberNumber===Player.MemberNumber;
-      if(trig.von==='whitelist')return(trig.vonNummern||[]).map(Number).includes(Number(C.MemberNumber));
-      return true; // 'alle'
-    })();
+    const vonOk=_vonOk(trig,C);
     if(!vonOk)return;
     // Alle anderen: _ok prueft Auslöser-Bedingungen (wort, zone, vortrigger)
     const condOk=_ok(trig,rohText,typKey,C);
+    if(!condOk) _logNichtErfuellt(trig,C,rohText,typKey);
     if(condOk){
       // Auslöser passt → jetzt IF-Bedingungen prüfen (nur wenn ifElse aktiv und ifBedingungen vorhanden)
       const ifBeds=trig.ifBedingungen??[];
@@ -1821,11 +1873,7 @@ function _procEvents(rohText,typKey,C){
     if(!ev.aktiv)return;
     // Chat-Events: brauchen wort-Bedingung und KEIN ev_timer/ev_interval
     // Von-Filter: wer darf das Event auslösen?
-    const vonOk=(()=>{
-      if(ev.von==='bot')return C.MemberNumber===Player.MemberNumber;
-      if(ev.von==='nummer')return ev.vonNummer&&C.MemberNumber===+ev.vonNummer;
-      return true; // 'alle'
-    })();
+    const vonOk=_vonOkEv(ev,C);
     if(!vonOk)return;
     // Wort-Bedingungen prüfen
     const hasTimerBed=(ev.bedingungen??[]).some(c=>c.typ==='ev_timer'||c.typ==='ev_interval'||c.typ==='player_betritt');
@@ -1875,11 +1923,7 @@ function _tickItems(chars){
       if(condMet&&!was){
         const pos={X:C.X??0,Y:C.Y??0};
         // Von-Filter
-        const vonOk=(()=>{
-          if(trig.von==='bot')return C.MemberNumber===Player.MemberNumber;
-          if(trig.von==='whitelist')return(trig.vonNummern||[]).map(Number).includes(Number(C.MemberNumber));
-          return true;
-        })();
+        const vonOk=_vonOk(trig,C);
         const otherOk=vonOk&&_gruppenOk(trig.bedingungen??[],
           {C,rohText:null,typKey:null,ueberspringe:['wort','item_traegt','item_traegt_nicht']});
         if(otherOk){
@@ -1901,11 +1945,7 @@ function _tickErregung(chars){
   _arTrigs.forEach(trig=>{
     chars.forEach(C=>{
       const pos={X:C.X??0,Y:C.Y??0};
-      const vonOk=(()=>{
-        if(trig.von==='bot')return C.MemberNumber===Player.MemberNumber;
-        if(trig.von==='whitelist')return(trig.vonNummern||[]).map(Number).includes(Number(C.MemberNumber));
-        return true;
-      })();
+      const vonOk=_vonOk(trig,C);
       const condMet=vonOk&&_gruppenOk(trig.bedingungen??[],
         {C,rohText:null,typKey:null,nur:['erregung','variable','zufall','trigger_war','rang']});
       const key=C.MemberNumber+'_'+trig.id;
@@ -1976,11 +2016,7 @@ function _processJoinQueue(){
       return true;
     });
     if(!bOk)return;
-    const vonOk=(()=>{
-      if(trig.von==='bot')return C.MemberNumber===Player.MemberNumber;
-      if(trig.von==='whitelist')return(trig.vonNummern||[]).map(Number).includes(Number(C.MemberNumber));
-      return true;
-    })();
+    const vonOk=_vonOk(trig,C);
     const otherOk=vonOk&&_gruppenOk(trig.bedingungen??[],
       {C,rohText:null,typKey:null,istRejoinTrig:isRejoinTrig,
        ueberspringe:['wort','player_betritt','item_traegt','item_traegt_nicht']});
@@ -2006,11 +2042,7 @@ function _processJoinQueue(){
       return true;
     });
     if(!bOk)return;
-    const vonOk=(()=>{
-      if(ev.von==='bot')return C.MemberNumber===Player.MemberNumber;
-      if(ev.von==='nummer')return ev.vonNummer&&C.MemberNumber===+ev.vonNummer;
-      return true;
-    })();
+    const vonOk=_vonOkEv(ev,C);
     if(!vonOk)return;
     const evOtherOk=_gruppenOk(ev.bedingungen??[],
       {C,rohText:null,typKey:null,nur:['variable','zufall','erregung','rang']});
@@ -2126,11 +2158,7 @@ function _tickZonen(chars){
       const _moved=_zonePos[key]!==_posKey;
       if(inZone&&(_zCont?_moved:!war)){
         // Prüfe andere Bedingungen (vortrigger, item_traegt)
-        const vonOk=(()=>{
-          if(trig.von==='bot')return C.MemberNumber===Player.MemberNumber;
-          if(trig.von==='whitelist')return(trig.vonNummern||[]).map(Number).includes(Number(C.MemberNumber));
-          return true;
-        })();
+        const vonOk=_vonOk(trig,C);
         const otherOk=vonOk&&_gruppenOk(trig.bedingungen??[],
           {C,rohText:null,typKey:null,ueberspringe:['wort','zone','zone_rect']});
         if(otherOk){
@@ -2356,8 +2384,79 @@ const _msgH=function(data){
 };
 ServerSocket.on('ChatRoomMessage',_msgH);
 
+
+/* -- Probelauf ------------------------------------------------------------
+   Prueft jede Bedingung EINZELN gegen jede Person im Raum und schickt das
+   Ergebnis ans Popup. Fuehrt nichts aus und sendet nichts ins Spiel.
+
+   Wichtig: hier wird _checkCond und _gruppenOk benutzt, also genau das, was
+   im Betrieb auch entscheidet. Eine zweite Auswertung waere wertlos - sie
+   koennte etwas anderes sagen als der Bot tatsaechlich tut.               */
+function _probe(trigId){
+  const trig=_trigMap[trigId];
+  if(!trig){
+    window.__BCK_popupRef?.postMessage({app:'BCKonfigurator',type:'BOT_PROBE',
+      botId:_BOTID,trigId,fehler:'Trigger nicht gefunden - laeuft der Bot mit der aktuellen Fassung? (Sync)'},'*');
+    return;
+  }
+  const beds=trig.bedingungen??[];
+  // BC fuehrt den Spieler bereits in ChatRoomCharacter - ohne Entdoppelung
+  // stuende der Bot zweimal in der Liste.
+  const gesehen=new Set();
+  const chars=[Player,...(ChatRoomCharacter||[])].filter(C=>{
+    if(!C||gesehen.has(C.MemberNumber))return false;
+    gesehen.add(C.MemberNumber); return true;
+  });
+  const personen=chars.map(C=>{
+    const ctx={C,rohText:null,typKey:null,shopBlockt:true};
+    let einzeln=[], gesamt=false, vonOk=false;
+    try{
+      vonOk=!!_vonOk(trig,C);
+      einzeln=beds.map((c,i)=>{
+        let e=false, hinweis=null;
+        try{ e=!!_checkCond(c,ctx); }
+        catch(err){ hinweis=err.message; }
+        return {i,erfuellt:e,hinweis};
+      });
+      gesamt=vonOk&&_gruppenOk(beds,ctx);
+    }catch(err){ /* eine kaputte Bedingung darf den Probelauf nicht kippen */ }
+    // Aktionen trocken aufloesen: Platzhalter ersetzen, aber nichts senden
+    const vars={name:C.Name,wort:'',typ:'Probelauf',x:C.X??0,y:C.Y??0,zone:'',C};
+    const aktionen=(trig.aktionen??[]).map((a,i)=>({
+      i, typ:a.typ,
+      text: (a.text!=null&&a.text!=='') ? _tpl(String(a.text),vars) : null
+    }));
+    return {num:C.MemberNumber,name:C.Name,istBot:C.MemberNumber===Player.MemberNumber,
+            vonOk,bedingungen:einzeln,gesamt,aktionen};
+  });
+  window.__BCK_popupRef?.postMessage({app:'BCKonfigurator',type:'BOT_PROBE',
+    botId:_BOTID,trigId,trigName:trig.name,vonModus:trig.von||'alle',personen},'*');
+  _log('\u{1F9EA} Probelauf "'+trig.name+'" fuer '+personen.length+' Person(en)');
+}
+
+/* Von Hand ausloesen - fuehrt den Trigger wirklich aus.
+   Wiederholungsgrenze und Cooldown werden dabei bewusst uebergangen, sonst
+   koennte man einen einmaligen Trigger kein zweites Mal testen. Im Log ist
+   der Eintrag als Handausloeser erkennbar. */
+function _feuereJetzt(trigId,memberNum){
+  const trig=_trigMap[trigId];
+  if(!trig){_log('\u26A0 Handausloeser: Trigger nicht gefunden');return;}
+  const C=[Player,...(ChatRoomCharacter||[])].find(x=>x.MemberNumber===Number(memberNum));
+  if(!C){_log('\u26A0 Handausloeser: Person nicht im Raum');return;}
+  const merkWdh=trig.wiederholung, merkCd=trig.cooldownSek;
+  trig.wiederholung='immer'; trig.cooldownSek=0;
+  try{
+    _log('\u25B6 Handausloeser: "'+trig.name+'" fuer '+C.Name);
+    _run(trig,{name:C.Name,wort:'',typ:'Handausl\u00f6ser',x:C.X??0,y:C.Y??0,zone:'',C});
+  } finally {
+    trig.wiederholung=merkWdh; trig.cooldownSek=merkCd;
+  }
+}
+
 window['_BCBot_'+_BID]={
   playScene(sid){try{_playScene(sid,Player,{},null);}catch(e){console.warn(e);}},
+  probe(trigId){try{_probe(trigId);}catch(e){console.warn('[Bot] Probelauf:',e);}},
+  feuereJetzt(trigId,mn){try{_feuereJetzt(trigId,mn);}catch(e){console.warn('[Bot] Handausloeser:',e);}},
   setVar(mn,name,val){try{_vset(mn,String(name),val);}catch(e){console.warn(e);}},
   stop(){
     clearInterval(_botTakt);   // ein Takt fuer alle Teilaufgaben

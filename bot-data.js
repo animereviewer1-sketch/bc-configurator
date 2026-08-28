@@ -311,6 +311,9 @@ function renderLogTab() {
     join:        '<span class="log-badge" style="background:#0a1a0a;color:#5f5;border:1px solid #1a5a1a">🆕 Erstes Mal</span>',
     join_rejoin: '<span class="log-badge" style="background:#0a0a2a;color:#88f;border:1px solid #1a1a5a">🔄 Rejoin</span>',
     leave:       '<span class="log-badge" style="background:#111;color:#777;border:1px solid #333">🚪 Verlassen</span>',
+    // Ohne diese beiden stand im Log der rohe Schlüssel, z.B. "nicht_erfuellt"
+    skip_cooldown:   '<span class="log-badge skip">⏳ Noch Pause</span>',
+    nicht_erfuellt:  '<span class="log-badge skip" style="background:#1a1408;color:#d8a657;border:1px solid #4a3a1a">🔎 Bedingung nicht erfüllt</span>',
   };
 
   const html = entries.map((e, i) => {

@@ -906,14 +906,33 @@ function renderTrigCard(bot, t, i) {
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap;padding:7px 10px;background:rgba(139,92,246,0.04);border:1px solid rgba(139,92,246,0.12);border-radius:8px">
         <span style="font-size:.65rem;font-weight:700;color:var(--purple)">🎯 Auslöser-Filter</span>
         <label style="font-size:.65rem;color:var(--text3)">Wer darf feuern?</label>
-        <select class="cf" style="width:160px" onchange="trigField('${t.id}','von',this.value);trigRerender('${t.id}')">
-          <option value="alle"      ${(!t.von||t.von==='alle')?'selected':''}>👥 Alle Spieler</option>
-          <option value="bot"       ${t.von==='bot'?'selected':''}>🤖 Nur der Bot</option>
-          <option value="whitelist" ${t.von==='whitelist'?'selected':''}>📋 Whitelist</option>
+        <select class="cf" style="width:210px" onchange="trigField('${t.id}','von',this.value);trigRerender('${t.id}')">
+          <option value="alle"      ${(!t.von||t.von==='alle')?'selected':''}>👥 Jeder</option>
+          <option value="nicht_bot" ${t.von==='nicht_bot'?'selected':''}>👥 Jeder außer dem Bot selbst</option>
+          <option value="bot"       ${t.von==='bot'?'selected':''}>🤖 Nur der Bot selbst</option>
+          <option value="whitelist" ${t.von==='whitelist'?'selected':''}>✅ Nur diese Personen</option>
+          <option value="blacklist" ${t.von==='blacklist'?'selected':''}>🚫 Alle außer diesen Personen</option>
+          <option value="rang"      ${t.von==='rang'?'selected':''}>🏆 Nur ab einem bestimmten Rang</option>
         </select>
-        ${(t.von==='whitelist')?`<input class="cf" style="min-width:180px;flex:1" value="${escHtml((t.vonNummern||[]).join(', '))}"
-          oninput="trigField('${t.id}','vonNummern',this.value.split(',').map(x=>+x.trim()).filter(x=>x>0))"
-          placeholder="MemberNummer, z.B. 12345, 67890">`:''}
+        ${(t.von==='whitelist'||t.von==='blacklist')?_personenFeld(t.id,'vonNummern',t.vonNummern):''}
+        ${(t.von==='rang')?`<select class="cf" style="width:200px" onchange="trigField('${t.id}','vonRangId',this.value)">
+          <option value="">– Rang wählen –</option>
+          ${_quelleRaenge().map(r=>`<option value="${escHtml(r[0])}" ${t.vonRangId===r[0]?'selected':''}>${escHtml(r[1])}</option>`).join('')}
+        </select><span style="font-size:.6rem;color:var(--text3)" title="Gilt für diesen Rang und alle höheren">ⓘ ab dieser Stufe aufwärts</span>`:''}
+      </div>
+
+      <div style="display:flex;gap:6px;align-items:center;margin-bottom:8px">
+        <button onclick="trigProbe('${t.id}')" title="Zeigt für jede Person im Raum, welche Bedingung zutrifft – ohne etwas auszuführen"
+          style="font-size:.66rem;padding:4px 11px;background:rgba(52,211,153,0.12);border:1px solid rgba(52,211,153,0.35);color:#34d399;border-radius:6px;cursor:pointer">🧪 Prüfen</button>
+        <span style="font-size:.6rem;color:var(--text3)">Probelauf gegen die Personen im Raum – führt nichts aus</span>
+      </div>
+      <div id="probe-${t.id}" style="display:none;margin-bottom:10px;padding:8px 11px;background:rgba(255,255,255,0.03);border:1px solid var(--border2);border-radius:8px">
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+          <span style="font-size:.64rem;font-weight:700;color:var(--text2)">🧪 Probelauf</span>
+          <span style="flex:1"></span>
+          <button onclick="trigProbeSchliessen('${t.id}')" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:.7rem">✕</button>
+        </div>
+        <div id="probe-inhalt-${t.id}"></div>
       </div>
 
       <div class="te-section">
@@ -1008,6 +1027,254 @@ function renderTrigCard(bot, t, i) {
 }
 
 // ── Conditions ────────────────────────────────────────────────
+/* -- Probelauf ------------------------------------------------------------
+   Zeigt fuer jede Person im Raum, welche Bedingung zutrifft und welche nicht,
+   in ganzen Saetzen. Die Auswertung selbst macht der laufende Bot (siehe
+   _probe in bot-engine.js) - hier wird nur dargestellt. Die Saetze kommen aus
+   _btCondPhrase, also aus derselben Quelle wie die Trigger-Zusammenfassung. */
+
+const _probeErgebnis = {};   // trigId -> Antwort des Bots
+
+function trigProbe(tid) {
+  const b = _selBot();
+  if (!b) return;
+  const feld = document.getElementById('probe-' + tid);
+  if (feld) feld.style.display = 'block';
+  if (!b.laufend) {
+    _probeZeige(tid, { fehler: 'Der Bot läuft gerade nicht. Klicke oben auf ▶️ Starten – '
+      + 'nur ein laufender Bot kann im Spiel nachsehen, wer gerade wo steht und was er trägt.' });
+    return;
+  }
+  if (!_connected) { _probeZeige(tid, { fehler: 'Keine Verbindung zu Bondage Club.' }); return; }
+  _probeZeige(tid, { laeuft: true });
+  const safeId = b.id.replace(/\W/g, '_');
+  bcSend({ type:'EXEC', code:
+    `window['_BCBot_${safeId}']&&window['_BCBot_${safeId}'].probe(${JSON.stringify(tid)});` });
+}
+
+/* Antwort des Bots (kommt ueber die Bruecke in items.js an) */
+function _probeEmpfangen(data) {
+  _probeErgebnis[data.trigId] = data;
+  _probeZeige(data.trigId, data);
+}
+
+function trigProbeSchliessen(tid) {
+  const feld = document.getElementById('probe-' + tid);
+  if (feld) feld.style.display = 'none';
+}
+
+function trigFeuereJetzt(tid, num, name) {
+  const b = _selBot(); if (!b) return;
+  if (!confirm('Trigger „' + (b.triggers.find(t=>t.id===tid)?.name || tid) + '" jetzt wirklich für '
+      + name + ' auslösen?\n\nDas wirkt im Spiel – Nachrichten werden gesendet, Items angelegt.\n'
+      + 'Wiederholungsgrenze und Cooldown werden dabei übergangen.')) return;
+  const safeId = b.id.replace(/\W/g, '_');
+  bcSend({ type:'EXEC', code:
+    `window['_BCBot_${safeId}']&&window['_BCBot_${safeId}'].feuereJetzt(${JSON.stringify(tid)},${Number(num)});` });
+  showStatus('▶ Trigger für ' + name + ' ausgelöst', 'success');
+}
+
+const _VON_TEXT = {
+  alle:'jeder darf auslösen', nicht_bot:'jeder außer dem Bot', bot:'nur der Bot selbst',
+  whitelist:'nur ausgewählte Personen', blacklist:'alle außer den gesperrten Personen',
+  rang:'nur ab einem bestimmten Rang',
+};
+
+function _probeZeige(tid, d) {
+  const el = document.getElementById('probe-inhalt-' + tid);
+  if (!el) return;
+  const rahmen = inhalt => `<div style="font-size:.7rem;line-height:1.55">${inhalt}</div>`;
+
+  if (d.laeuft)  { el.innerHTML = rahmen('<span style="color:var(--text3)">⏳ Der Bot schaut nach…</span>'); return; }
+  if (d.fehler)  { el.innerHTML = rahmen(`<span style="color:var(--yellow)">⚠️ ${escHtml(d.fehler)}</span>`); return; }
+
+  const b = _selBot();
+  const trig = b?.triggers.find(t => t.id === tid);
+  const beds = trig?.bedingungen || [];
+
+  if (!d.personen || !d.personen.length) {
+    el.innerHTML = rahmen('<span style="color:var(--text3)">Niemand im Raum.</span>'); return;
+  }
+
+  const bloecke = d.personen.map(pn => {
+    const kopf = `<div style="font-weight:700;color:var(--text1);margin-top:6px">`
+      + `${escHtml(pn.name || ('#'+pn.num))}`
+      + `<span style="font-weight:400;color:var(--text3);font-size:.64rem"> #${pn.num}`
+      + `${pn.istBot ? ' · der Bot selbst' : ''}</span></div>`;
+
+    let zeilen = '';
+    if (!pn.vonOk) {
+      zeilen += `<div style="color:var(--red)">✗ darf diesen Trigger nicht auslösen `
+        + `<span style="color:var(--text3)">(${escHtml(_VON_TEXT[d.vonModus] || d.vonModus)})</span></div>`;
+    }
+    zeilen += (pn.bedingungen || []).map(e => {
+      const c = beds[e.i];
+      const satz = c ? _btCondPhrase(b, c) : ('Bedingung ' + (e.i + 1));
+      if (e.hinweis) return `<div style="color:var(--yellow)">⚠️ ${satz} – ${escHtml(e.hinweis)}</div>`;
+      return `<div style="color:${e.erfuellt ? 'var(--green)' : 'var(--red)'}">`
+        + `${e.erfuellt ? '✓' : '✗'} ${satz}</div>`;
+    }).join('');
+    if (!beds.length && pn.vonOk)
+      zeilen += `<div style="color:var(--text3)">keine Bedingungen – trifft immer zu</div>`;
+
+    if (pn.gesamt) {
+      const akt = (pn.aktionen || []).map((a, n) =>
+        `<div style="color:var(--text2);margin-left:10px">${n+1}. ${escHtml(_aktLabel(a.typ))}`
+        + (a.text ? `: „${escHtml(a.text)}"` : '') + `</div>`).join('')
+        || `<div style="color:var(--text3);margin-left:10px">keine Aktionen hinterlegt</div>`;
+      zeilen += `<div style="color:var(--green);font-weight:600;margin-top:3px">→ Würde auslösen. Das passiert dann:</div>${akt}`
+        + `<button onclick="trigFeuereJetzt('${tid}',${pn.num},${JSON.stringify(pn.name||('#'+pn.num))})"`
+        + ` style="margin-top:4px;font-size:.64rem;padding:3px 9px;background:rgba(248,113,113,0.14);`
+        + `border:1px solid rgba(248,113,113,0.4);color:#f87171;border-radius:5px;cursor:pointer"`
+        + ` title="Führt den Trigger wirklich aus – das wirkt im Spiel">▶ Jetzt wirklich auslösen</button>`;
+    } else {
+      zeilen += `<div style="color:var(--text3);margin-top:3px">→ Löst nicht aus.</div>`;
+    }
+    return kopf + zeilen;
+  }).join('');
+
+  el.innerHTML = rahmen(bloecke);
+}
+
+/* Kurzbezeichnung einer Aktion in Alltagssprache */
+function _aktLabel(typ) {
+  return ({
+    chat:'Nachricht im Chat', whisper:'Flüstern', emote:'Emote',
+    item:'Item anlegen', item_entf:'Item entfernen', teleport:'Teleportieren',
+    variable:'Variable setzen', rang:'Rang ändern', money:'Guthaben ändern',
+    mapkey:'Map-Schlüssel', erregung:'Erregung ändern', szene:'Szene abspielen',
+  })[typ] || typ;
+}
+
+/* -- Quellen fuer Auswahllisten -----------------------------------------
+   Statt Slot-Namen, Schloss-Typen oder Craft-Namen von Hand zu tippen, werden
+   sie aus dem angeboten, was das Tool ohnehin kennt. Jede Quelle liefert
+   [[wert, anzeigetext], ...] und darf leer sein - dann faellt das Feld auf
+   freie Eingabe zurueck, damit man nie feststeckt.                         */
+
+/* Item-Slots aus dem geladenen Item-Katalog. */
+function _quelleSlots() {
+  try {
+    const gruppen = Object.keys(CACHE || {}).sort();
+    return gruppen.map(g => [g, g]);
+  } catch (e) { return []; }
+}
+
+/* Schloss-Typen - dieselbe Liste, die auch der Locks-Tab benutzt. */
+function _quelleSchloesser() {
+  try {
+    return (_APPLY_LOCK_TYPES || []).map(o => [o.v, o.l + '  (' + o.v + ')']);
+  } catch (e) { return []; }
+}
+
+/* Craft-Namen aus der gescannten Curse-Datenbank, ohne Doppelte. */
+function _quelleCrafts() {
+  try {
+    const namen = new Set();
+    for (const e of Object.values(CURSE_DB || {})) {
+      const n = e && e.CraftName;
+      if (n) namen.add(String(n));
+    }
+    return [...namen].sort((a, b) => a.localeCompare(b)).map(n => [n, n]);
+  } catch (e) { return []; }
+}
+
+/* Variablennamen: was der Bot bereits gesetzt hat, plus was in seinen
+   eigenen Triggern und Szenen vorkommt. */
+function _quelleVariablen() {
+  const namen = new Set();
+  try {
+    for (const eintrag of Object.values(_botVars || {}))
+      for (const k of Object.keys(eintrag || {})) if (k !== 'letzterBesuch') namen.add(k);
+  } catch (e) {}
+  try {
+    const b = _selBot();
+    const sammle = liste => (liste || []).forEach(x => { if (x && x.varName) namen.add(x.varName); });
+    (b?.triggers || []).forEach(t => {
+      sammle(t.bedingungen); sammle(t.ifBedingungen); sammle(t.aktionen); sammle(t.aktionen_sonst);
+    });
+    (b?.szenen || []).forEach(sz => sammle(sz.steps));
+    (b?.events || []).forEach(ev => { sammle(ev.bedingungen); sammle(ev.aktionen); });
+  } catch (e) {}
+  return [...namen].sort((a, b) => a.localeCompare(b)).map(n => [n, n]);
+}
+
+/* Eingabefeld fuer eine Personenliste. Statt Nummern zu tippen, waehlt man
+   aus den Leuten im Raum. Bereits eingetragene Nummern bleiben immer stehen,
+   auch wenn die Person gerade nicht da ist - eine Auswahl darf nichts
+   verschlucken. Freie Eingabe bleibt zusaetzlich moeglich.               */
+function _personenFeld(tid, feld, werte) {
+  const liste = (werte || []).map(Number).filter(n => n > 0);
+  const imRaum = _quellePersonen();
+  const nameVon = n => {
+    const t = imRaum.find(x => x[0] === String(n));
+    return t ? t[1].replace(/\s+\(#\d+\)$/, '') : null;
+  };
+  const chips = liste.map(n => {
+    const nm = nameVon(n);
+    return `<span style="display:inline-flex;align-items:center;gap:3px;background:var(--bg3);`
+      + `border:1px solid var(--border2);border-radius:10px;padding:1px 4px 1px 7px;font-size:.64rem">`
+      + escHtml(nm ? nm : '#' + n)
+      + (nm ? `<span style="color:var(--text3)">#${n}</span>` : '')
+      + `<button onclick="_personEntfernen('${tid}','${feld}',${n})" title="Entfernen"`
+      + ` style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.7rem;padding:0 2px">✕</button></span>`;
+  }).join(' ');
+  const offen = imRaum.filter(x => !liste.includes(Number(x[0])));
+  const auswahl = offen.length
+    ? `<select class="cf" style="width:190px" onchange="_personHinzu('${tid}','${feld}',this.value);this.value=''">`
+      + `<option value="">+ Person aus dem Raum</option>`
+      + offen.map(x => `<option value="${escHtml(x[0])}">${escHtml(x[1])}</option>`).join('')
+      + `</select>`
+    : `<span style="font-size:.6rem;color:var(--text3)">niemand sonst im Raum</span>`;
+  return `<div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap;flex:1;min-width:200px">`
+    + chips + auswahl
+    + `<input class="cf" style="width:118px" placeholder="oder Nummer…"`
+    + ` onkeydown="if(event.key==='Enter'){_personHinzu('${tid}','${feld}',this.value);this.value='';}"`
+    + ` title="Spieler-Nummer eintippen und Enter drücken"></div>`;
+}
+
+function _personHinzu(tid, feld, wert) {
+  const n = +String(wert).trim();
+  if (!n || n <= 0) return;
+  const b = _selBot(); if (!b) return;
+  const t = b.triggers.find(x => x.id === tid); if (!t) return;
+  const liste = (t[feld] || []).map(Number);
+  if (!liste.includes(n)) liste.push(n);
+  t[feld] = liste; _saveBots(); trigRerender(tid);
+}
+function _personEntfernen(tid, feld, nummer) {
+  const b = _selBot(); if (!b) return;
+  const t = b.triggers.find(x => x.id === tid); if (!t) return;
+  t[feld] = (t[feld] || []).map(Number).filter(n => n !== Number(nummer));
+  _saveBots(); trigRerender(tid);
+}
+
+/* Personen, die gerade im Raum stehen - mit Namen statt nackter Nummern. */
+function _quellePersonen() {
+  try {
+    return (_lastRoomMembers || [])
+      .filter(m => m && m.num)
+      .map(m => [String(m.num), (m.name || 'Unbekannt') + '  (#' + m.num + ')']);
+  } catch (e) { return []; }
+}
+
+/* Raenge des Bots, fuer Filter "ab Rang X". */
+function _quelleRaenge() {
+  try {
+    return (_rankData?.defs || []).slice().sort((a,b)=>a.level-b.level)
+      .map(r => [r.id, (r.icon||'') + ' ' + r.name + '  (Stufe ' + r.level + ')']);
+  } catch (e) { return []; }
+}
+
+/* Raumnamen, die beim Scannen schon gesehen wurden. */
+function _quelleRaeume() {
+  try {
+    const namen = new Set();
+    for (const m of Object.values(CURSE_SCAN_META || {})) if (m && m.room) namen.add(String(m.room));
+    return [...namen].sort((a, b) => a.localeCompare(b)).map(n => [n, n]);
+  } catch (e) { return []; }
+}
+
 /* -- Bausteinverzeichnis fuer Bedingungen --------------------------------
    Ein neuer Bedingungstyp musste bisher an sechs Stellen eingetragen werden:
    Auswertung, Vorgabewerte, Editor-Zeile, Klartext, Auswahlknopf, Doku. Jede
@@ -1045,19 +1312,21 @@ const COND_DEFS = {
     vorgabe:{modus:'ist',gruppe:''},
     hinweis:'Tr\u00e4gt IRGENDETWAS an diesem Slot - anders als "Item tr\u00e4gt", das einen genauen Namen braucht',
     felder:[{key:'modus',typ:'select',breite:96,werte:[['ist','tr\u00e4gt'],['nicht','tr\u00e4gt NICHT']]},
-            {key:'gruppe',typ:'text',breite:120,platzhalter:'z.B. ItemArms'}],
+            {key:'gruppe',typ:'auswahl',breite:170,quelle:_quelleSlots,platzhalter:'– Slot wählen –',
+             leerHinweis:'Item-Katalog noch nicht geladen – im Item-Tab auf "Laden" klicken'}],
     klartext:c=>(c.modus==='nicht'?'tr\u00e4gt nichts an ':'tr\u00e4gt etwas an ')+(c.gruppe||'?') },
 
   craft_getragen: { gruppe:'Zustand', label:'Craft getragen', icon:'\u270f\ufe0f',
     vorgabe:{modus:'ist',craftName:''},
     felder:[{key:'modus',typ:'select',breite:96,werte:[['ist','tr\u00e4gt'],['nicht','tr\u00e4gt NICHT']]},
-            {key:'craftName',typ:'text',breite:150,platzhalter:'Craft-Name'}],
+            {key:'craftName',typ:'auswahl',breite:190,quelle:_quelleCrafts,platzhalter:'– Craft wählen –',
+             leerHinweis:'Noch keine Crafts gescannt – im Craft & Curse-Tab scannen'}],
     klartext:c=>(c.modus==='nicht'?'tr\u00e4gt Craft nicht: ':'tr\u00e4gt Craft: ')+(c.craftName||'?') },
 
   schloss: { gruppe:'Zustand', label:'Schloss', icon:'\ud83d\udd12',
     vorgabe:{modus:'ist',lockTyp:''}, hinweis:'Leer lassen = irgendein Schloss',
     felder:[{key:'modus',typ:'select',breite:96,werte:[['ist','tr\u00e4gt'],['nicht','tr\u00e4gt NICHT']]},
-            {key:'lockTyp',typ:'text',breite:160,platzhalter:'Schloss-Typ (leer = egal)'}],
+            {key:'lockTyp',typ:'auswahl',breite:190,quelle:_quelleSchloesser,platzhalter:'– egal welches –'}],
     klartext:c=>(c.modus==='nicht'?'tr\u00e4gt kein Schloss':'tr\u00e4gt Schloss')+(c.lockTyp?' ('+c.lockTyp+')':'') },
 
   uhrzeit: { gruppe:'Zeit', label:'Uhrzeit', icon:'\ud83d\udd50',
@@ -1085,14 +1354,17 @@ const COND_DEFS = {
   raumname: { gruppe:'Raum', label:'Raumname', icon:'\ud83c\udff7',
     vorgabe:{modus:'ist',wert:''}, hinweis:'Leer lassen = jeder Raum',
     felder:[{key:'modus',typ:'select',breite:100,werte:[['ist','ist genau'],['enthaelt','enth\u00e4lt']]},
-            {key:'wert',typ:'text',breite:150,platzhalter:'Raumname'}],
+            {key:'wert',typ:'auswahl',breite:180,quelle:_quelleRaeume,platzhalter:'– Raum wählen –',
+             leerHinweis:'Noch keine Räume gesehen – einmal scannen'}],
     klartext:c=>'Raumname '+(c.modus==='enthaelt'?'enth\u00e4lt ':'ist ')+'\u201e'+(c.wert||'')+'"' },
 
   variable2: { gruppe:'Fortschritt', label:'Variable vs. Variable', icon:'\u2696\ufe0f',
     vorgabe:{varA:'',op:'==',varB:''}, hinweis:'Vergleicht zwei Variablen desselben Spielers',
-    felder:[{key:'varA',typ:'text',breite:110,platzhalter:'Variable A'},
+    felder:[{key:'varA',typ:'auswahl',breite:130,quelle:_quelleVariablen,platzhalter:'– Variable A –',
+             leerHinweis:'Noch keine Variablen bekannt'},
             {key:'op',typ:'select',breite:70,werte:[['==','=='],['!=','!='],['>','>'],['>=','>='],['<','<'],['<=','<=']]},
-            {key:'varB',typ:'text',breite:110,platzhalter:'Variable B'}],
+            {key:'varB',typ:'auswahl',breite:130,quelle:_quelleVariablen,platzhalter:'– Variable B –',
+             leerHinweis:'Noch keine Variablen bekannt'}],
     klartext:c=>(c.varA||'?')+' '+(c.op||'==')+' '+(c.varB||'?') },
 };
 
@@ -1107,6 +1379,25 @@ function _condFelder(tid, ci, c, def) {
       return lbl+`<select class="cf" ${br} onchange="${setz(f.key,'this.value')};condRerender('${tid}')">`
         + f.werte.map(w=>`<option value="${escHtml(w[0])}" ${v===w[0]?'selected':''}>${escHtml(w[1])}</option>`).join('')
         + `</select>`;
+    if (f.typ === 'auswahl') {
+      // Liste aus dem, was das Tool kennt. Ist sie leer (Katalog noch nicht
+      // geladen), bleibt die freie Eingabe - sonst koennte man nichts setzen.
+      let werte = [];
+      try { werte = f.quelle() || []; } catch (e) { werte = []; }
+      if (!werte.length)
+        return lbl+`<input class="cf" ${br||'style="width:150px"'} value="${escHtml(v??'')}"`
+          + ` placeholder="${escHtml(f.platzhalter||'')}" title="${escHtml(f.leerHinweis||'')}"`
+          + ` oninput="${setz(f.key,'this.value')}">`;
+      // Ein bereits gesetzter Wert, der nicht in der Liste steht, wird
+      // mit aufgenommen - eine Auswahlliste darf nichts verschlucken.
+      const bekannt = werte.some(w => w[0] === v);
+      const zusatz = (v && !bekannt) ? `<option value="${escHtml(v)}" selected>${escHtml(v)}  (eigener Wert)</option>` : '';
+      return lbl+`<select class="cf" ${br||'style="width:170px"'} onchange="${setz(f.key,'this.value')};condRerender('${tid}')">`
+        + `<option value="" ${!v?'selected':''}>${escHtml(f.platzhalter||'– wählen –')}</option>`
+        + zusatz
+        + werte.map(w=>`<option value="${escHtml(w[0])}" ${v===w[0]?'selected':''}>${escHtml(w[1])}</option>`).join('')
+        + `</select>`;
+    }
     if (f.typ === 'zahl')
       return lbl+`<input class="cf" type="number" ${br||'style="width:64px"'} value="${v??0}" oninput="${setz(f.key,'+this.value')}">`;
     if (f.typ === 'zeit')
@@ -1633,12 +1924,19 @@ function renderAct(tid, a, ai, branch) {
       </div>
       <div style="display:flex;gap:6px;align-items:center;margin-top:5px;padding:5px 8px;background:rgba(96,165,250,0.05);border:1px solid rgba(96,165,250,0.12);border-radius:6px;flex-wrap:wrap">
         <span style="font-size:.62rem;font-weight:700;color:#60a5fa;white-space:nowrap">🎯 Ziel</span>
-        <select class="cf" style="width:150px;font-size:.68rem" onchange="actField('${tid}',${ai},'aktZiel',this.value${branchArg});actRerender('${tid}',${ai}${branchArg})">
-          <option value="ausloeser" ${(!a.aktZiel||a.aktZiel==='ausloeser')?'selected':''}>👤 Auslöser / Kaufziel</option>
-          <option value="shop_kaeufer" ${a.aktZiel==='shop_kaeufer'?'selected':''}>💳 Käufer (bei Shop)</option>
+        <select class="cf" style="width:230px;font-size:.68rem" onchange="actField('${tid}',${ai},'aktZiel',this.value${branchArg});actRerender('${tid}',${ai}${branchArg})">
+          <option value="ausloeser" ${(!a.aktZiel||a.aktZiel==='ausloeser')?'selected':''}>👤 Die Person, die ausgelöst hat</option>
+          <option value="ausser_ausloeser" ${a.aktZiel==='ausser_ausloeser'?'selected':''}>👥 Alle außer der auslösenden Person</option>
           <option value="alle"      ${a.aktZiel==='alle'?'selected':''}>👥 Alle im Raum</option>
-          <option value="whitelist" ${a.aktZiel==='whitelist'?'selected':''}>📋 Whitelist</option>
+          <option value="whitelist" ${a.aktZiel==='whitelist'?'selected':''}>✅ Nur diese Personen</option>
+          <option value="rang"      ${a.aktZiel==='rang'?'selected':''}>🏆 Alle ab einem bestimmten Rang</option>
+          <option value="zufall"    ${a.aktZiel==='zufall'?'selected':''}>🎲 Eine zufällige Person im Raum</option>
+          <option value="shop_kaeufer" ${a.aktZiel==='shop_kaeufer'?'selected':''}>💳 Wer im Shop gekauft hat</option>
         </select>
+        ${a.aktZiel==='rang'?`<select class="cf" style="width:190px;font-size:.68rem" onchange="actField('${tid}',${ai},'aktZielRangId',this.value${branchArg})">
+          <option value="">– Rang wählen –</option>
+          ${_quelleRaenge().map(r=>`<option value="${escHtml(r[0])}" ${a.aktZielRangId===r[0]?'selected':''}>${escHtml(r[1])}</option>`).join('')}
+        </select><span style="font-size:.6rem;color:var(--text3)" title="Gilt für diesen Rang und alle höheren">ⓘ ab dieser Stufe aufwärts</span>`:''}
         ${a.aktZiel==='whitelist'?`<input class="cf" style="flex:1;min-width:150px;font-size:.68rem" value="${escHtml((a.aktZielNummern||[]).join(', '))}"
           oninput="actField('${tid}',${ai},'aktZielNummern',this.value.split(',').map(x=>+x.trim()).filter(x=>x>0)${branchArg})"
           placeholder="MemberNummer, z.B. 12345, 67890">`:''}

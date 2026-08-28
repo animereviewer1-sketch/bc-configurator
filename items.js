@@ -98,6 +98,10 @@ const _debouncedSaveCurseDB      = _debounce(function() { _saveCurseDB(); }, 120
 const _debouncedRenderCurseTab   = _debounce(function() { renderCurseTab(); }, 220);
 const _debouncedRenderOutfitList = _debounce(function() { renderOutfitList(); }, 160);
 const _debouncedRenderProfileList= _debounce(function() { renderProfileList(); }, 160);
+// Beim Aufnehmen vieler Bilder wurde der ganze Tab pro Bild neu gezeichnet
+// (gemessen ~93 ms bei 400 Outfits). Einmal am Ende genuegt.
+const _debouncedRenderOutfitScanTab = _debounce(function() { renderOutfitScanTab(); }, 250);
+const _debouncedRenderMbsWheelTab   = _debounce(function() { _renderMbsWheelTab(); }, 250);
 function _debouncedRenderGroups(val) {
   clearTimeout(_debouncedRenderGroups._t);
   _debouncedRenderGroups._t = setTimeout(() => renderGroups(val), 160);
@@ -491,15 +495,73 @@ idbGet('BC_PROFILES_v12').then(d => {
   if (d && typeof d === 'object' && Object.keys(d).length) PROFILES = { ...PROFILES, ...d };
 });
 // Speichert Profile in IDB (primär) + localStorage (Fallback)
-function _saveProfiles() {
+/* -- Gebuendeltes Speichern -----------------------------------------------
+   Grosse Bestaende (vor allem die Screenshot-Sammlungen) wurden bisher bei
+   JEDEM einzelnen neuen Bild komplett neu geschrieben. Da die Schreibdauer
+   mit der Sammlungsgroesse waechst, war ein Scan-Durchlauf quadratisch:
+   gemessen 135 ms je Schreibvorgang bei 1000 Bildern, also ueber eine halbe
+   Minute allein fuers Speichern bei einem groesseren Stapellauf.
+
+   Hier wird gebuendelt. WICHTIG fuer die Datensicherheit: gebuendelt heisst
+   verzoegert, niemals verworfen.
+     - Jeder Aufruf verschiebt den Schreibvorgang um hoechstens `ms`.
+     - Wird die Seite versteckt oder geschlossen, wird sofort geschrieben.
+     - bcSpeichernJetzt() erzwingt das Schreiben von Hand (Export, Backup).
+   Damit kann hoechstens die Reihenfolge spaeter sein, nie der Inhalt weg.   */
+const _sammelSpeicher = (() => {
+  const offen = new Map();          // Name -> { fn, timer }
+
+  function plane(name, fn, ms) {
+    const vorhanden = offen.get(name);
+    if (vorhanden) clearTimeout(vorhanden.timer);
+    const timer = setTimeout(() => { offen.delete(name); _fuehreAus(name, fn); }, ms ?? 700);
+    offen.set(name, { fn, timer });
+  }
+
+  function _fuehreAus(name, fn) {
+    try { fn(); }
+    catch (e) { console.error('[Speichern] "' + name + '" fehlgeschlagen:', e); }
+  }
+
+  function jetzt(grund) {
+    if (!offen.size) return 0;
+    const anzahl = offen.size;
+    for (const [name, e] of offen) { clearTimeout(e.timer); _fuehreAus(name, e.fn); }
+    offen.clear();
+    if (grund) console.info('[Speichern] ' + anzahl + ' ausstehende Schreibvorgaenge sofort ausgefuehrt (' + grund + ')');
+    return anzahl;
+  }
+
+  // Nichts darf beim Schliessen oder Tab-Wechsel offen bleiben
+  addEventListener('pagehide', () => jetzt('Seite verlassen'));
+  addEventListener('beforeunload', () => jetzt('Seite wird geschlossen'));
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') jetzt('Tab in den Hintergrund');
+  });
+
+  return { plane, jetzt, offen: () => offen.size };
+})();
+
+/* Von Hand ausloesbar, z.B. vor einem Export. */
+function bcSpeichernJetzt() { return _sammelSpeicher.jetzt('von Hand'); }
+
+function _saveProfilesJetzt() {
   idbSet('BC_PROFILES_v12', PROFILES);
+  // Spiegel im localStorage als Rueckfallebene. JSON.stringify plus der
+  // synchrone Schreibvorgang blockieren den Hauptthread, darum gebuendelt.
   try { localStorage.setItem('BC_PROFILES_v11', JSON.stringify(PROFILES)); } catch(e) {}
+}
+function _saveProfiles() {
+  _sammelSpeicher.plane('profile', _saveProfilesJetzt);
 }
 
 // ── Profile Screenshots (base64, per Profil-Name) ─────
 let PROFILE_SCREENSHOTS = {};
 idbGet('BC_PROFILE_SCREENSHOTS_v1').then(d => { if (d && typeof d === 'object') Object.assign(PROFILE_SCREENSHOTS, d); });
-function _saveProfileScreenshots() { idbSet('BC_PROFILE_SCREENSHOTS_v1', PROFILE_SCREENSHOTS); }
+function _saveProfileScreenshotsJetzt() { idbSet('BC_PROFILE_SCREENSHOTS_v1', PROFILE_SCREENSHOTS); }
+function _saveProfileScreenshots() {
+  _sammelSpeicher.plane('profilScreenshots', _saveProfileScreenshotsJetzt);
+}
 
 // ── Profile Favoriten ─────────────────────────────────
 let PROFILE_FAVS = new Set();
@@ -2673,7 +2735,7 @@ function _handleCanvasPreviewData(data) {
         LSCG_SCREENSHOTS[storeKey] = dataUrl;
         _saveLscgScreenshots();
         _syncLscgScreenshotToProfiles(mk, fp);
-        if (_activeTab === 'outfit-scan') renderOutfitScanTab();
+        if (_activeTab === 'outfit-scan') _debouncedRenderOutfitScanTab();
         showStatus('✅ Bild gespeichert', 'success');
         if (_pendingOsTab === mk) {
           _pendingOsTab = null;
@@ -6001,6 +6063,11 @@ window.addEventListener('message', function(ev) {
       _botVarApply(ev.data.memberNum, ev.data.name, ev.data.value);
       break;
 
+    // Antwort auf einen Probelauf – die Anzeige baut bot-ui.js
+    case 'BOT_PROBE':
+      if (typeof _probeEmpfangen === 'function') _probeEmpfangen(ev.data);
+      break;
+
     case 'BOT_MAPKEY':
       if (typeof _playerKeyApply === 'function') _playerKeyApply(ev.data.memberNum, ev.data.name, ev.data.key, ev.data.has);
       break;
@@ -7047,6 +7114,9 @@ function _backupNebenDatenImport(d) {
 
 function exportAllData() {
   try {
+    // Nichts Ausstehendes im Puffer lassen - der Export liest zwar aus dem
+    // Arbeitsspeicher, aber danach soll die Datenbank denselben Stand haben.
+    bcSpeichernJetzt();
     const profileCount = Object.keys(PROFILES).length;
     const curseCount   = Object.keys(CURSE_DB).length;
     const wheelCount   = _mbsWheelData.length;
@@ -7373,8 +7443,14 @@ function importAllData() {
 const LSCG_SCREENSHOTS_KEY = 'BC_LSCG_SCREENSHOTS_v1';
 let   LSCG_SCREENSHOTS     = {};   // mk (string) → dataUrl (jpeg)
 
-async function _saveLscgScreenshots() {
+/* Sofort schreiben - fuer den Sammelspeicher und alles, was nicht warten darf. */
+async function _saveLscgScreenshotsJetzt() {
   await idbSet(LSCG_SCREENSHOTS_KEY, LSCG_SCREENSHOTS);
+}
+/* Regelfall: buendeln. Beim Aufnehmen vieler Bilder hintereinander wird die
+   Sammlung sonst pro Bild komplett neu geschrieben. */
+function _saveLscgScreenshots() {
+  _sammelSpeicher.plane('lscgScreenshots', _saveLscgScreenshotsJetzt);
 }
 
 // Gibt das beste verfügbare Bild für mk zurück:
@@ -9234,7 +9310,12 @@ idbGet(_MBS_WHEEL_SS_KEY).then(function(d) {
     if (_activeTab === 'lscg-wheel') _renderMbsWheelTab();
   }
 });
-function _saveMbsWheelShots() { idbSet(_MBS_WHEEL_SS_KEY, _mbsWheelShots); }
+function _saveMbsWheelShotsJetzt() { idbSet(_MBS_WHEEL_SS_KEY, _mbsWheelShots); }
+/* Wie bei LSCG buendeln - die Stapel-Erzeugung weiter unten laeuft sonst
+   pro Bild einmal ueber die ganze Sammlung. */
+function _saveMbsWheelShots() {
+  _sammelSpeicher.plane('wheelShots', _saveMbsWheelShotsJetzt);
+}
 
 function mbsWheelToggleFav(mn) {
   mn = _mbsNum(mn);
@@ -9821,7 +9902,7 @@ function _handleWheelShotData(data) {
     canvas.getContext('2d').drawImage(imgEl, 0, 0, w, h);
     _mbsWheelShots[fp] = canvas.toDataURL('image/jpeg', 0.85);
     _saveMbsWheelShots();
-    if (_activeTab === 'lscg-wheel') _renderMbsWheelTab();
+    if (_activeTab === 'lscg-wheel') _debouncedRenderMbsWheelTab();
     showStatus('✅ Wheel-Screenshot gespeichert', 'success');
   };
   imgEl.src = data.data;
