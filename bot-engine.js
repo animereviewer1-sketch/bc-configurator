@@ -2462,7 +2462,22 @@ const _botTakt=setInterval(()=>{
 },500);
 // ─────────────────────────────────────────────────────────────
 
-// Eigene Nachrichten via hookFunction – Mod bekommt unique Namen (Timestamp) um Kollisionen beim Live-Sync zu vermeiden
+/* Einen Mod sauber ablegen.
+
+   ACHTUNG: removePatches() des ModSDK erwartet einen FUNKTIONSNAMEN. Ohne
+   Argument meldet es "Expected function name string, got undefined" - und
+   zwar als Browser-Hinweis, den das try/catch nicht abfaengt. Genau das
+   erschien bisher nach jedem Sync. Richtig ist unload(); nur falls es die
+   Fassung nicht kennt, wird removePatches MIT Namen benutzt. */
+function _modAblegen(m){
+  if(!m)return;
+  try{
+    if(typeof m.unload==='function'){ m.unload(); return; }
+    if(typeof m.removePatches==='function'){ m.removePatches('ChatRoomSendChat'); }
+  }catch(e){ /* Aufraeumen darf nie den Bot stoppen */ }
+}
+
+// Eigene Nachrichten via hookFunction – Mod mit stabilem Namen, wird beim Sync entladen und neu angemeldet
 let _mod = null;
 try {
   // Mod EINMAL je Bot und Seitenladen registrieren und danach
@@ -2472,13 +2487,12 @@ try {
   // "failed to patch a function" erschien. Jetzt werden nur die Patches
   // der bestehenden Registrierung erneuert.
   const _modKey='__BCBot_mod_${safeId}';
-  if(window[_modKey]){
-    _mod=window[_modKey];
-    try{ _mod.removePatches(); }catch(e){}
-  } else {
-    _mod = bcModSdk.registerMod({name:'BCBot_${safeId}', fullName:'${safeName}', version:'1.0'});
-    window[_modKey]=_mod;
-  }
+  // Vorherige Registrierung erst entladen, dann unter demselben Namen neu
+  // anmelden. So sammeln sich keine Altlasten an und es gibt keine
+  // Namenskollision.
+  if(window[_modKey]){ _modAblegen(window[_modKey]); window[_modKey]=null; }
+  _mod = bcModSdk.registerMod({name:'BCBot_${safeId}', fullName:'${safeName}', version:'1.0'});
+  window[_modKey]=_mod;
   if(typeof ChatRoomSendChat!=='function'){throw new Error('ChatRoomSendChat nicht patchbar – Socket-Fallback');}
   var _bckOrigAlert=window.alert; window.alert=function(){}; var _hookOk=false;
   try {
@@ -2702,7 +2716,8 @@ window['_BCBot_'+_BID]={
   setVar(mn,name,val){try{_vset(mn,String(name),val);}catch(e){console.warn(e);}},
   stop(){
     clearInterval(_botTakt);   // ein Takt fuer alle Teilaufgaben
-    try{ if(_mod) _mod.removePatches(); } catch(e){}
+    _modAblegen(_mod);
+    try{ window['__BCBot_mod_${safeId}']=null; }catch(e){}
     // Restore ServerSend if we patched it as fallback
     if(window.__BCBot_origSend_${safeId}) {
       window.ServerSend = window.__BCBot_origSend_${safeId};
