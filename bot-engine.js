@@ -1,6 +1,29 @@
 const BOT_ENGINE_VERSION = '1.5.0';
 window.BOT_ENGINE_VERSION = BOT_ENGINE_VERSION;
 
+/* Eine Aktion fuer den Bot aufbereiten.
+
+   MUSS rekursiv sein: eine Klammer enthaelt weitere Aktionen, und ohne den
+   Abstieg in kinder bekaemen ein Curse oder ein Outfit INNERHALB einer
+   Klammer ihre Daten nicht mitgeliefert - sie liefen dann ins Leere.
+   Frueher stand dieser Block dreimal fast gleich in der Datei.            */
+function _mapAkt(a) {
+  if (a && a.typ === 'gruppe') {
+    return { ...a,
+      kinder: (a.kinder || []).map(_mapAkt),
+      bedingungen: (a.bedingungen || []),
+      verknuepfung: a.verknuepfung ?? 'und',
+      aktZiel: a.aktZiel ?? 'erben',
+      aktZielNummern: (a.aktZielNummern || []).map(Number) };
+  }
+  const base = a.typ==='item' && a.curseKey && !a.curseEntry ? {...a, curseEntry: CURSE_DB[a.curseKey]??null}
+             : a.typ==='item' && a.profilName && (!a.profilItems||!a.profilItems.length) ? {...a, profilItems: PROFILES[a.profilName]?.items??[]}
+             : {...a};
+  base.aktZiel = a.aktZiel ?? 'ausloeser';
+  base.aktZielNummern = (a.aktZielNummern||[]).map(Number);
+  return base;
+}
+
 function _buildBotCode(bot) {
   const s = bot.settings;
   const triggers = (bot.triggers||[]).filter(t=>t.aktiv).map(t => ({
@@ -19,28 +42,14 @@ function _buildBotCode(bot) {
       ifElse: !!t.ifElse,
     bedingungen: (t.bedingungen||[]),
     ifBedingungen: (t.ifBedingungen||[]),
-    aktionen: (t.aktionen||[]).map(a => {
-      const base = a.typ==='item' && a.curseKey && !a.curseEntry ? {...a, curseEntry: CURSE_DB[a.curseKey]??null}
-                 : a.typ==='item' && a.profilName && (!a.profilItems||!a.profilItems.length) ? {...a, profilItems: PROFILES[a.profilName]?.items??[]}
-                 : {...a};
-      base.aktZiel = a.aktZiel ?? 'ausloeser';
-      base.aktZielNummern = (a.aktZielNummern||[]).map(Number);
-      return base;
-    }),
-    aktionen_sonst: (t.aktionen_sonst||[]).map(a => {
-      const base = a.typ==='item' && a.curseKey && !a.curseEntry ? {...a, curseEntry: CURSE_DB[a.curseKey]??null}
-                 : a.typ==='item' && a.profilName && (!a.profilItems||!a.profilItems.length) ? {...a, profilItems: PROFILES[a.profilName]?.items??[]}
-                 : {...a};
-      base.aktZiel = a.aktZiel ?? 'ausloeser';
-      base.aktZielNummern = (a.aktZielNummern||[]).map(Number);
-      return base;
-    }),
+    aktionen: (t.aktionen||[]).map(_mapAkt),
+    aktionen_sonst: (t.aktionen_sonst||[]).map(_mapAkt),
   }));
   const safeId   = bot.id.replace(/\W/g,'_');
   const safeName = bot.name.replace(/\\/g,'\\\\').replace(/`/g,'\\`');
 
   // Alle User-Daten als Base64 kodieren → kein Zeichen kann das Template-Literal brechen
-  const _cfgRaw = JSON.stringify({hearChat:s.hearChat,hearEmote:s.hearEmote,hearWhisper:s.hearWhisper,nurEigene:s.nurEigene,logAktiv:s.logAktiv??true,modus:s.modus,moneyQueryCmd:_money?.settings?.queryCmd??'',moneyQueryTyp:_money?.settings?.queryTyp??'whisper',moneyName:_money?.settings?.name??'Gold',rankQueryCmd:_rankData?.settings?.queryCmd??'',rankQueryTyp:_rankData?.settings?.queryCmdTyp??'whisper',rankQueryText:_rankData?.settings?.queryCmdText??'{name} hat Rang: {rang_icon} {rang}',rankDefs:_rankData?.defs??[],rankPlayers:Object.fromEntries(Object.entries(_rankData?.players??{}).map(([k,v])=>[k,v.rankId??null])),shopCmd:_shop?.settings?.cmd??'!pay',shopListCmd:_shop?.settings?.listCmd??'!shop',shopAnnounceNostripMsg:_shop?.settings?.announceNostripMsg??'',shopConfirmMsg:_shop?.settings?.confirmMsg??'',shopAnnounceMsg:_shop?.settings?.announceMsg??'',shopAnnounceAllMsg:_shop?.settings?.announceAllMsg??'',shopErrorMsg:_shop?.settings?.errorMsg??'',shopPreisU:_shop?.settings?.preisU??0,shopPreisNostrip:_shop?.settings?.preisNostrip??0,shopItems:(_shop?.items??[]).filter(i=>i.aktiv!==false),moneyBalances:Object.fromEntries(Object.entries(_money?.balances??{}).map(([k,v])=>[k,{balance:v.balance??0,name:v.name??''}])),botVars:(typeof _botVars!=='undefined'&&_botVars)?_botVars:{},playerKeys:(typeof _playerKeys!=='undefined'&&_playerKeys)?_playerKeys:{},figurName:s.figurName??'',figurRede:s.figurRede??'[{figur}] {text}',figurErzaehler:s.figurErzaehler??'{text}'});
+  const _cfgRaw = JSON.stringify({hearChat:s.hearChat,hearEmote:s.hearEmote,hearWhisper:s.hearWhisper,nurEigene:s.nurEigene,logAktiv:s.logAktiv??true,modus:s.modus,moneyQueryCmd:_money?.settings?.queryCmd??'',moneyQueryTyp:_money?.settings?.queryTyp??'whisper',moneyName:_money?.settings?.name??'Gold',rankQueryCmd:_rankData?.settings?.queryCmd??'',rankQueryTyp:_rankData?.settings?.queryCmdTyp??'whisper',rankQueryText:_rankData?.settings?.queryCmdText??'{name} hat Rang: {rang_icon} {rang}',rankDefs:_rankData?.defs??[],rankPlayers:Object.fromEntries(Object.entries(_rankData?.players??{}).map(([k,v])=>[k,v.rankId??null])),shopCmd:_shop?.settings?.cmd??'!pay',shopListCmd:_shop?.settings?.listCmd??'!shop',shopAnnounceNostripMsg:_shop?.settings?.announceNostripMsg??'',shopConfirmMsg:_shop?.settings?.confirmMsg??'',shopAnnounceMsg:_shop?.settings?.announceMsg??'',shopAnnounceAllMsg:_shop?.settings?.announceAllMsg??'',shopErrorMsg:_shop?.settings?.errorMsg??'',shopPreisU:_shop?.settings?.preisU??0,shopPreisNostrip:_shop?.settings?.preisNostrip??0,shopItems:(_shop?.items??[]).filter(i=>i.aktiv!==false),moneyBalances:Object.fromEntries(Object.entries(_money?.balances??{}).map(([k,v])=>[k,{balance:v.balance??0,name:v.name??''}])),botVars:(typeof _botVars!=='undefined'&&_botVars)?_botVars:{},playerKeys:(typeof _playerKeys!=='undefined'&&_playerKeys)?_playerKeys:{},figurName:s.figurName??'',figurRede:s.figurRede??'[{figur}] {text}',figurErzaehler:s.figurErzaehler??'{text}',itemDefs:(typeof _itemDefs!=='undefined'&&_itemDefs&&Array.isArray(_itemDefs.items))?_itemDefs.items:[],invWearCmd:(typeof _inventar!=='undefined'&&_inventar?.settings?.wearCmd)??'!wear',invListCmd:(typeof _inventar!=='undefined'&&_inventar?.settings?.listCmd)??'!inventar',invFremdErlaubt:(typeof _inventar!=='undefined'&&_inventar?.settings?.fremdErlaubt)!==false,invFremdRangId:(typeof _inventar!=='undefined'&&_inventar?.settings?.fremdRangId)??'',invSpieler:(typeof _inventar!=='undefined'&&_inventar?.spieler)??{},invAusleihe:(typeof _inventar!=='undefined'&&_inventar?.ausleihe)??[]});
   const cfgJson  = btoa(unescape(encodeURIComponent(_cfgRaw)));
   const trigsJson = btoa(unescape(encodeURIComponent(JSON.stringify(triggers))));
   const events = (bot.events||[]).filter(e=>e.aktiv).map(e => ({
@@ -50,11 +59,7 @@ function _buildBotCode(bot) {
     wiederholung: e.wiederholung??'immer', maxMal: e.maxMal??2,
     fallbackTyp: e.fallbackTyp??'nichts', fallbackText: e.fallbackText??'',
     bedingungen: e.bedingungen??[],
-    aktionen: (e.aktionen||[]).map(a => {
-      if (a.typ==='item' && a.curseKey && !a.curseEntry) return {...a, curseEntry: CURSE_DB[a.curseKey]??null};
-      if (a.typ==='item' && a.profilName && (!a.profilItems||!a.profilItems.length)) return {...a, profilItems: PROFILES[a.profilName]?.items??[]};
-      return a;
-    }),
+    aktionen: (e.aktionen||[]).map(_mapAkt),
   }));
   const eventsJson = btoa(unescape(encodeURIComponent(JSON.stringify(events))));
   const scenesJson = btoa(unescape(encodeURIComponent(JSON.stringify(bot.szenen||[]))));
@@ -442,6 +447,214 @@ const _shopCfg={
 // Money-Balances: lokale Kopie für Echtzeit-Prüfungen (wird bei Abbuchung synchron aktualisiert)
 const _moneyBalances=Object.assign({},_cfg.moneyBalances??{});
 
+/* ── Item-Katalog und Inventar ──────────────────────────────────────
+   Der Konfigurator fuehrt den Bestand; der Bot arbeitet auf einer Kopie
+   und meldet jede Buchung per BOT_INVENTAR zurueck. Nach einem Neustart
+   kommt der Stand also aus der Konfiguration - auch die offenen
+   Ausleihen, weshalb ein verliehener Gegenstand einen Neustart, einen
+   Rejoin und einen Disconnect uebersteht.                              */
+const _invCfg={
+  wearCmd:(_cfg.invWearCmd||'!wear').trim(),
+  listCmd:(_cfg.invListCmd||'!inventar').trim(),
+  fremdErlaubt:_cfg.invFremdErlaubt!==false,
+  fremdRangId:_cfg.invFremdRangId||''
+};
+const _invDefs=Object.fromEntries((_cfg.itemDefs||[]).map(d=>[d.id,d]));
+const _invBestand=JSON.parse(JSON.stringify(_cfg.invSpieler||{}));
+let _invAusleihe=(_cfg.invAusleihe||[]).slice();
+
+function _invMelde(d){
+  try{
+    window.__BCK_popupRef?.postMessage(Object.assign(
+      {app:'BCKonfigurator',type:'BOT_INVENTAR',botId:_BOTID,ausleihe:_invAusleihe},d),'*');
+  }catch(e){}
+}
+function _invAnz(mn,id){
+  const sp=_invBestand[String(mn)];
+  return (sp&&sp.eintraege&&sp.eintraege[id])?(sp.eintraege[id].anzahl||0):0;
+}
+/* Bucht und meldet. Die Anzahl faellt nie unter 0, und der Eintrag bleibt
+   auch bei 0 stehen - so erscheint er weiter in der Inventarliste. */
+function _invBuch(mn,name,id,delta){
+  if(mn==null||!id)return 0;
+  const k=String(mn);
+  const sp=_invBestand[k]=_invBestand[k]||{name:name||('#'+k),eintraege:{}};
+  if(name)sp.name=name;
+  if(!sp.eintraege)sp.eintraege={};
+  const e=sp.eintraege[id]=sp.eintraege[id]||{anzahl:0};
+  e.anzahl=Math.max(0,(e.anzahl||0)+Number(delta||0));
+  _invMelde({memberNum:Number(mn),name:sp.name,itemDefId:id,delta:Number(delta||0)});
+  return e.anzahl;
+}
+
+/* Welche Slots traegt jemand gerade, und womit. Der Vorher-Nachher-
+   Vergleich sagt uns, was ein Gegenstand tatsaechlich belegt hat - ohne
+   die Gruppen-Ermittlung fuer Item, Curse und Outfit dreifach
+   nachzubauen. */
+function _invSlots(C){
+  const m={};
+  ((C&&C.Appearance)||[]).forEach(a=>{
+    const g=a&&a.Asset&&a.Asset.Group&&a.Asset.Group.Name;
+    if(g)m[g]=a.Asset.Name;
+  });
+  return m;
+}
+function _invBelegt(vor,nach){
+  const r=[];
+  Object.keys(nach).forEach(g=>{ if(vor[g]!==nach[g])r.push({g:g,asset:nach[g]}); });
+  return r;
+}
+/* Traegt die Person noch irgendetwas aus dieser Ausleihe? Bei einem Outfit
+   darf ein einzelnes abgelegtes Teil die Rueckgabe nicht ausloesen. */
+function _invNochGetragen(C,gruppen){
+  const jetzt=_invSlots(C);
+  return (gruppen||[]).some(x=>jetzt[x.g]===x.asset);
+}
+
+/* Rueckgabe. Der Eintrag wird ZUERST entfernt - dadurch kann dieselbe
+   Ausleihe nicht zweimal gutgeschrieben werden, auch wenn zwei Gruende
+   gleichzeitig zutreffen. */
+function _leiheZurueck(id,grund){
+  const i=_invAusleihe.findIndex(x=>x.id===id);
+  if(i<0)return false;
+  const l=_invAusleihe[i];
+  _invAusleihe.splice(i,1);
+  const bes=_invBestand[String(l.ownerMn)];
+  const def=_invDefs[l.itemDefId];
+  _invBuch(l.ownerMn,(bes&&bes.name)||'',l.itemDefId,1);
+  _log('\u{1F392} "'+((def&&def.name)||l.itemDefId)+'" zurueck an #'+l.ownerMn+' ('+(grund||'')+')');
+  return true;
+}
+
+/* Eine Person anhand von Nummer oder Namen finden.
+
+   Lag frueher nur inline im Shop-Befehl; !wear braucht dieselbe Logik
+   samt der Behandlung mehrdeutiger Namen. */
+function _charNachName(arg,fallbackC){
+  const alle=[Player,...(ChatRoomCharacter||[])];
+  const a=String(arg||'').trim();
+  if(!a)return {C:fallbackC};
+  if(/^[0-9]+$/.test(a)){
+    const n=parseInt(a,10);
+    return {C:alle.find(c=>c.MemberNumber===n)||fallbackC};
+  }
+  const treffer=alle.filter(c=>String(c.Name||'').toLowerCase()===a.toLowerCase());
+  if(treffer.length===1)return {C:treffer[0]};
+  if(treffer.length>1)return {mehrdeutig:treffer.map(c=>c.Name+' (#'+c.MemberNumber+')').join(', ')};
+  return {C:fallbackC};
+}
+function _invFluester(C,text){
+  try{ ServerSend('ChatRoomChat',{Content:text,Type:'Whisper',Target:C.MemberNumber}); }catch(e){}
+}
+
+/* Den laengsten passenden Katalognamen am Anfang des Textes finden.
+   Genau wie im Shop, damit mehrteilige Namen ("Rotes Halsband") gehen. */
+function _invDefAusText(text){
+  const lc=String(text||'').trim().toLowerCase();
+  let treffer=null, rest='';
+  Object.values(_invDefs).forEach(d=>{
+    if(d.aktiv===false)return;
+    const n=String(d.name||'').trim().toLowerCase();
+    if(!n)return;
+    if(lc===n||lc.startsWith(n+' ')){
+      if(!treffer||n.length>String(treffer.name).trim().length){
+        treffer=d; rest=String(text).trim().slice(n.length).trim();
+      }
+    }
+  });
+  return {def:treffer,rest:rest};
+}
+
+/* !wear <Gegenstand> [Person] */
+function _handleWearCmd(rohText,C){
+  const cmd=_invCfg.wearCmd;
+  const text=String(rohText).trim().slice(cmd.length).trim();
+  if(!text){ _invFluester(C,'\u{1F392} So geht es: '+cmd+' <Gegenstand> [Person]'); return; }
+  const gefunden=_invDefAusText(text);
+  const def=gefunden.def;
+  if(!def){ _invFluester(C,'\u26A0\uFE0F "'+text+'" kenne ich nicht. Mit '+_invCfg.listCmd+' siehst du, was du hast.'); return; }
+
+  let ziel=C;
+  if(gefunden.rest){
+    const r=_charNachName(gefunden.rest,null);
+    if(r.mehrdeutig){ _invFluester(C,'\u26A0\uFE0F Mehrere Spieler mit dem Namen "'+gefunden.rest+'". Bitte MemberNummer verwenden: '+r.mehrdeutig); return; }
+    if(!r.C){ _invFluester(C,'\u26A0\uFE0F "'+gefunden.rest+'" ist nicht im Raum.'); return; }
+    ziel=r.C;
+  }
+  const fremd=ziel.MemberNumber!==C.MemberNumber;
+  if(fremd&&!_invCfg.fremdErlaubt){ _invFluester(C,'\u{1F6AB} Anderen etwas anziehen ist hier nicht erlaubt.'); return; }
+  if(fremd&&_invCfg.fremdRangId&&!_rangMindestens(C,_invCfg.fremdRangId)){
+    _invFluester(C,'\u{1F512} Dafuer fehlt dir der noetige Rang.'); return;
+  }
+
+  const unendlich=!!def.unendlich;
+  if(!unendlich&&_invAnz(C.MemberNumber,def.id)<1){
+    _invFluester(C,'\u26A0\uFE0F "'+def.name+'" hast du gerade nicht. ('+_invCfg.listCmd+')'); return;
+  }
+  if(!def.inhalt){ _invFluester(C,'\u26A0\uFE0F Bei "'+def.name+'" ist nichts hinterlegt.'); return; }
+
+  const vor=_invSlots(ziel);
+  try{ _applyItemAction(Object.assign({typ:'item'},def.inhalt),ziel); }
+  catch(e){ _log('\u26A0 !wear:',e.message); _invFluester(C,'\u26A0\uFE0F Das hat nicht geklappt.'); return; }
+
+  // Erst nach dem Anlegen laesst sich sagen, was wirklich belegt wurde.
+  setTimeout(()=>{
+    try{
+      const ziel2=_frisch(ziel)||ziel;
+      const belegt=_invBelegt(vor,_invSlots(ziel2));
+      if(!belegt.length){
+        _log('\u26A0 "'+def.name+'" hat nichts veraendert - nicht abgebucht');
+        _invFluester(C,'\u26A0\uFE0F "'+def.name+'" konnte nicht angelegt werden.');
+        return;
+      }
+      if(!unendlich){
+        _invAusleihe.push({id:'l'+Date.now()+'_'+Math.random().toString(36).slice(2,6),
+          ownerMn:C.MemberNumber, itemDefId:def.id,
+          wearerMn:ziel.MemberNumber, gruppen:belegt, ts:Date.now()});
+        _invBuch(C.MemberNumber,C.Name,def.id,-1);
+      }
+      _invFluester(C,'\u2705 "'+def.name+'" angelegt'+(fremd?(' bei '+ziel.Name):'')+
+        (unendlich?'':' - kommt beim Ausziehen zurueck.'));
+    }catch(e){ _log('\u26A0 !wear Nachlauf:',e.message); }
+  },420);
+}
+
+/* !inventar - zeigt auch Eintraege mit Anzahl 0 */
+function _handleInvListCmd(C){
+  const sp=_invBestand[String(C.MemberNumber)];
+  const eintraege=(sp&&sp.eintraege)?Object.entries(sp.eintraege):[];
+  if(!eintraege.length){ _invFluester(C,'\u{1F392} Dein Inventar ist leer.'); return; }
+  const zeilen=eintraege.map(([id,e])=>{
+    const d=_invDefs[id];
+    const nm=d?((d.icon||'\u{1F381}')+' '+d.name):('? '+id);
+    const anz=(d&&d.unendlich)?'(unbegrenzt)':('(Anzahl '+(e.anzahl||0)+')');
+    const verliehen=_invAusleihe.filter(l=>String(l.ownerMn)===String(C.MemberNumber)&&l.itemDefId===id).length;
+    return nm+' '+anz+(verliehen?(' - '+verliehen+'x gerade getragen'):'');
+  });
+  const stuecke=[]; let akt='\u{1F392} Dein Inventar:';
+  zeilen.forEach(z=>{
+    if((akt+' | '+z).length>460){ stuecke.push(akt); akt=z; }
+    else akt=akt+' | '+z;
+  });
+  stuecke.push(akt);
+  stuecke.forEach((txt,i)=>setTimeout(()=>_invFluester(C,txt),i*130));
+}
+
+/* Alle vier Rueckgabegruende laufen ueber dieselbe Pruefung: der Traeger
+   ist weg (Verlassen, Disconnect, Rejoin) oder traegt nichts mehr davon.
+   Beim ersten Takt nach dem Start greift das auch fuer Ausleihen, die
+   einen Neustart ueberdauert haben. */
+function _tickInventar(chars){
+  if(!_invAusleihe.length)return;
+  const imRaum={};
+  chars.forEach(c=>{ if(c&&c.MemberNumber!=null)imRaum[String(c.MemberNumber)]=c; });
+  _invAusleihe.slice().forEach(l=>{
+    const w=imRaum[String(l.wearerMn)];
+    if(!w){ _leiheZurueck(l.id,'nicht mehr im Raum'); return; }
+    if(!_invNochGetragen(w,l.gruppen)) _leiheZurueck(l.id,'ausgezogen');
+  });
+}
+
 function _log(...a){if(_cfg.logAktiv)console.log('[Bot:${safeName}]',...a);}
 
 // bei_fehler: 'ignorieren' | 'kette_stoppen' | 'trigger_ungueltig'
@@ -708,6 +921,20 @@ function _checkCond(c,ctx){
       if(!noetig.length)return true;
       const da=new Set((ChatRoomCharacter||[]).map(x=>Number(x.MemberNumber)));
       return noetig.every(n=>da.has(n));
+    }
+
+    /* Gegenstand im Inventar. Ein unbegrenzter Gegenstand zaehlt als
+       praktisch beliebig oft vorhanden - "mindestens" trifft dann immer zu,
+       "genau 3" dagegen nicht. */
+    case 'inventar_hat':{
+      if(!c.itemDefId)return true;
+      const _d=_invDefs[c.itemDefId];
+      const _n=(_d&&_d.unendlich)?999999:_invAnz(C.MemberNumber,c.itemDefId);
+      const _soll=Number(c.anzahl)||0;
+      const _op=c.op||'>=';
+      if(_op==='==')return _n===_soll;
+      if(_op==='<') return _n<_soll;
+      return _n>=_soll;
     }
 
     case 'shop_kauf':      return !ctx.shopBlockt;
@@ -1196,6 +1423,17 @@ function _execAct(a,C,vars){
     }
     else if(a.typ==='szene'){ _playScene(a.szeneId,C,vars,a.szeneStep||null); ok=true; }
     else if(a.typ==='variable'){ _scVarApply(C.MemberNumber,a.varOp||'set',a.varName,a.varWert); ok=true; }
+    else if(a.typ==='inventar_geben'){
+      const _id=a.itemDefId||'';
+      const _n=Math.abs(Number(a.invAnzahl)||1);
+      if(!_id){ _log('\u26A0 Inventar-Aktion ohne Gegenstand'); ok=false; }
+      else {
+        const _neu=_invBuch(C.MemberNumber,C.Name,_id,(a.invOp==='nehmen'?-_n:_n));
+        const _d=_invDefs[_id];
+        _log('\u{1F392} '+(a.invOp==='nehmen'?'-':'+')+_n+'x "'+((_d&&_d.name)||_id)+'" bei '+C.Name+' (jetzt '+_neu+')');
+        ok=true;
+      }
+    }
     else if(a.typ==='erregung'){
       try{
         var _eop=a.erregOp||'set';
@@ -1249,6 +1487,38 @@ function _runSeq(aktionen,C,vars,trigBase,onDone,onUngueltig){
   if(!aktionen.length){onDone();return;}
   const [a,...rest]=aktionen;
   setTimeout(()=>{
+    /* ── Klammer ──────────────────────────────────────────────────────
+       Sie kann beides: eine eigene Bedingung und ein gemeinsames Ziel.
+       Beides ist freiwillig - ohne Angaben ist sie reine Gliederung.
+       Klammern in Klammern ergeben sich von selbst, weil die Kinder
+       wieder durch _runSeq laufen.                                      */
+    if(a.typ==='gruppe'){
+      const _beds=a.bedingungen||[];
+      const _trifft = !_beds.length ||
+        _gruppenOk(_beds,{C,rohText:null,typKey:null},a.verknuepfung||'und');
+      if(!_trifft){
+        _log('( ) Klammer uebersprungen \u2013 Bedingung trifft nicht zu');
+        _runSeq(rest,C,vars,trigBase,onDone,onUngueltig);
+        return;
+      }
+      // Gemeinsames Ziel vererben - eine Aktion mit eigenem Ziel behaelt ihres
+      const _erbt=(a.aktZiel&&a.aktZiel!=='erben');
+      const _kinder=(a.kinder||[]).map(k=>{
+        if(!_erbt) return k;
+        if(k.aktZiel&&k.aktZiel!=='erben'&&k.aktZiel!=='ausloeser') return k;
+        return Object.assign({},k,{aktZiel:a.aktZiel,
+          aktZielNummern:a.aktZielNummern||[], aktZielRangId:a.aktZielRangId||''});
+      });
+      // Erst die Klammer fertig abarbeiten, dann weiter - sonst ueberholen
+      // sich die beiden Ketten. "Kette stoppen" von innen beendet alles.
+      _runSeq(_kinder,C,vars,trigBase,
+        (gestoppt)=>{
+          if(gestoppt){onDone(true);return;}
+          _runSeq(rest,C,vars,trigBase,onDone,onUngueltig);
+        },
+        onUngueltig);
+      return;
+    }
     // Ziel-Filter: welche Characters werden durch diese Aktion beeinflusst?
     const allChars=[Player,...(ChatRoomCharacter||[])];
     let targets;
@@ -1290,7 +1560,9 @@ function _runSeq(aktionen,C,vars,trigBase,onDone,onUngueltig){
     if(!overallOk){
       const bf=a.bei_fehler??'ignorieren';
       _log('\u26A0 Aktion '+a.typ+' fehlgeschlagen → '+bf);
-      if(bf==='kette_stoppen'){onDone();return;}
+      // true = abgebrochen. Nur so kann eine Klammer erkennen, ob sie
+      // regulaer fertig wurde oder die ganze Kette beendet werden soll.
+      if(bf==='kette_stoppen'){onDone(true);return;}
       if(bf==='trigger_ungueltig'){onUngueltig();return;}
     }
     // Mindest-Settle-Zeit BEVOR die nächste Aktion feuert: verhindert, dass BC bei
@@ -1825,19 +2097,12 @@ function _handleShopCmd(rohText,buyerC){
 
   if(args[1]){
     const arg2=args[1].trim();
-    if(/^\\d+$/.test(arg2)){
-      const num=parseInt(arg2);
-      targetC=allChars.find(c=>c.MemberNumber===num)||buyerC;
-    } else {
-      const nameMatches=allChars.filter(c=>c.Name.toLowerCase()===arg2.toLowerCase());
-      if(nameMatches.length===1){
-        targetC=nameMatches[0];
-      } else if(nameMatches.length>1){
-        const ids=nameMatches.map(c=>c.Name+' (#'+c.MemberNumber+')').join(', ');
-        ServerSend('ChatRoomChat',{Content:'⚠️ Mehrere Spieler mit dem Namen "'+arg2+'". Bitte MemberNummer verwenden: '+ids,Type:'Whisper',Target:buyerC.MemberNumber});
-        return;
-      }
+    const _tr=_charNachName(arg2,buyerC);
+    if(_tr.mehrdeutig){
+      ServerSend('ChatRoomChat',{Content:'⚠️ Mehrere Spieler mit dem Namen "'+arg2+'". Bitte MemberNummer verwenden: '+_tr.mehrdeutig,Type:'Whisper',Target:buyerC.MemberNumber});
+      return;
     }
+    targetC=_tr.C;
   }
 
   const preisEffektiv = preis + flagAufpreis;
@@ -1881,11 +2146,19 @@ function _handleShopCmd(rohText,buyerC){
     targetNum:targetC.MemberNumber,targetName:targetC.Name,
     itemName:shopItem.name,preis},'*');
   // Item/Outfit direkt beim Kauf anlegen (ohne Trigger), falls konfiguriert
-  if(shopItem.kaufItemAktiv&&shopItem.kaufItem){
+  /* Verweist der Artikel auf den Katalog, gilt der Katalog-Eintrag.
+     Alte Artikel ohne itemDefId verhalten sich exakt wie bisher. */
+  const _kaufDef=shopItem.itemDefId?_invDefs[shopItem.itemDefId]:null;
+  const _kaufInhalt=_kaufDef?(_kaufDef.inhalt||null):((shopItem.kaufItemAktiv&&shopItem.kaufItem)||null);
+  const _kaufZiel=shopItem.kaufZiel||'tragen';
+  if(_kaufInhalt&&(_kaufZiel==='tragen'||_kaufZiel==='beides')){
     setTimeout(()=>{
-      try{ _applyItemAction(Object.assign({typ:'item'},shopItem.kaufItem),targetC); if(shopItem.kaufItem.antiStrip)_asRegister(targetC,shopItem.kaufItem); if(flagNostrip)_nsRegister(targetC,shopItem.kaufItem); }
+      try{ _applyItemAction(Object.assign({typ:'item'},_kaufInhalt),targetC); if(_kaufInhalt.antiStrip)_asRegister(targetC,_kaufInhalt); if(flagNostrip)_nsRegister(targetC,_kaufInhalt); }
       catch(e){_log('\u26A0 Shop-Kauf-Item:',e.message);}
     },200);
+  }
+  if(shopItem.itemDefId&&(_kaufZiel==='inventar'||_kaufZiel==='beides')){
+    _invBuch(targetC.MemberNumber,targetC.Name,shopItem.itemDefId,1);
   }
 
   // Bestätigungs-Whisper an Käufer
@@ -2040,6 +2313,16 @@ function _proc(rohText,typKey,C){
   const _rohLc=rohText.trim().toLowerCase();
   if(shopCmd&&(_rohLc.startsWith(shopCmd+' ')||_rohLc===shopCmd)){
     _handleShopCmd(rohText,C);
+    return;
+  }
+  const _wearCmd=(_invCfg.wearCmd||'').toLowerCase();
+  if(_wearCmd&&(_rohLc.startsWith(_wearCmd+' ')||_rohLc===_wearCmd)){
+    try{ _handleWearCmd(rohText,C); }catch(e){ _log('\u26A0 !wear:',e.message); }
+    return;
+  }
+  const _invListCmd=(_invCfg.listCmd||'').toLowerCase();
+  if(_invListCmd&&_rohLc===_invListCmd){
+    try{ _handleInvListCmd(C); }catch(e){ _log('\u26A0 Inventarliste:',e.message); }
     return;
   }
   const pos={X:C.X??0,Y:C.Y??0}; // direkt vom Character
@@ -2455,6 +2738,7 @@ const _botTakt=setInterval(()=>{
   try{ _tickItems(chars); }   catch(e){ _log('⚠ Takt/Items:',e.message); }
   if(_taktNr%4===0){
     try{ _tickErregung(chars); }catch(e){ _log('⚠ Takt/Erregung:',e.message); }
+    try{ _tickInventar(chars); }catch(e){ _log('⚠ Takt/Inventar:',e.message); }
   }
   try{ _tickBeitritt(); }     catch(e){ _log('⚠ Takt/Beitritt:',e.message); }
   try{ _tickZonen(chars); }   catch(e){ _log('⚠ Takt/Zonen:',e.message); }

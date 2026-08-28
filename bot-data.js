@@ -47,8 +47,23 @@ function _migriereLogik() {
    Stopp-und-Neustart ausloesen. Laeuft der Bot nicht oder besteht keine
    Verbindung, passiert nichts - dann ist auch nichts zu uebernehmen.        */
 let _autoSyncTimer = null;
+/* Solange der Bot selbst zurueckschreibt, darf kein Sync ausgeloest werden.
+
+   Der Bot meldet Kontostaende, Raenge, Variablen und Kaeufe an den
+   Konfigurator zurueck; die dortigen Handler speichern. Ohne diese Sperre
+   wuerde jeder Einkauf den Bot neu starten - und der Neustart koennte die
+   naechste Meldung ausloesen. */
+let _botSchreibtZurueck = false;
+function _botRueckschreibStart() {
+  _botSchreibtZurueck = true;
+  // Der Handler laeuft synchron durch; der Timeout greift also erst,
+  // wenn alle Speicheraufrufe daraus erledigt sind.
+  setTimeout(function () { _botSchreibtZurueck = false; }, 0);
+}
+
 function _autoSync() {
   try {
+    if (_botSchreibtZurueck) return;
     if (typeof _connected !== 'undefined' && !_connected) return;
     const b = (typeof _selBot === 'function') ? _selBot() : null;
     if (!b || !b.laufend) return;
@@ -66,7 +81,7 @@ function _saveBotGroups() { idbSet(BOT_GROUP_KEY, _botGroups); }
 // ── Persistente Spieler-Variablen/-Profile (pro MemberNumber, über Sessions) ──
 const BOT_VARS_KEY = 'BC_BotVars_v1';
 let _botVars = {};            // { memberNum: { varName: value, ... } }
-function _saveBotVars(){ idbSet(BOT_VARS_KEY, _botVars); }
+function _saveBotVars(){ idbSet(BOT_VARS_KEY, _botVars); _autoSync(); }
 function _botVarApply(memberNum, name, value){
   if(memberNum==null || !name) return;
   const k = String(memberNum);
@@ -78,7 +93,7 @@ idbGet(BOT_VARS_KEY).then(d => { if (d && typeof d === 'object' && !Array.isArra
 // ── Persistente Map-Keys pro Spieler (Bronze/Silver/Gold), über Sessions ──
 const PLAYER_KEYS_KEY = 'BC_PlayerKeys_v1';
 let _playerKeys = {};         // { memberNum: { name, bronze:bool, silver:bool, gold:bool } }
-function _savePlayerKeys(){ idbSet(PLAYER_KEYS_KEY, _playerKeys); }
+function _savePlayerKeys(){ idbSet(PLAYER_KEYS_KEY, _playerKeys); _autoSync(); }
 function _playerKeyApply(memberNum, name, key, has){
   if(memberNum==null) return;
   const k = String(memberNum);

@@ -553,6 +553,7 @@ function _saveProfilesJetzt() {
 }
 function _saveProfiles() {
   _sammelSpeicher.plane('profile', _saveProfilesJetzt);
+  if (typeof _autoSync === 'function') _autoSync();
 }
 
 // ── Profile Screenshots (base64, per Profil-Name) ─────
@@ -4195,7 +4196,7 @@ let _activeTab = 'items';
 // Obertab-Gruppen: welche Untertabs gehören zu welchem Obertab
 const TAB_GROUPS = {
   items: ['items','outfit','curse','outfit-scan','lscg-wheel','outfit-import','locks'],
-  bots:  ['bot','shop','rank','money','log','spieler','variablen'],
+  bots:  ['bot','shop','rank','money','itemdefs','inventar','log','spieler','variablen'],
 };
 let _activeGroup = 'items';
 function _tabGroupOf(tab){
@@ -4223,7 +4224,7 @@ function switchTab(tab) {
   // Sichtbarkeits-Schleife nur, wenn sich der Obertab wirklich ändert (verhindert Lag bei Tab-Wechsel innerhalb einer Gruppe)
   const _grp = _tabGroupOf(tab);
   if (_grp !== _activeGroup) _applyGroupUI(_grp);
-  ['items','outfit','curse','bot','log','money','events','rank','shop','outfit-import','outfit-scan','lscg-wheel','locks','spieler','variablen'].forEach(t => {
+  ['items','outfit','curse','bot','log','money','events','rank','shop','outfit-import','outfit-scan','lscg-wheel','locks','spieler','variablen','itemdefs','inventar'].forEach(t => {
     document.getElementById('tab-'+t)?.classList.toggle('active', t===tab);
     document.getElementById('tab-'+t+'-btn')?.classList.toggle('active', t===tab);
   });
@@ -4235,6 +4236,8 @@ function switchTab(tab) {
   if (tab === 'money')         { renderMoneyTab(); }
   if (tab === 'rank')          { renderRankTab(); }
   if (tab === 'shop')          { renderShopTab(); }
+  if (tab === 'itemdefs')      { if (typeof renderItemDefsTab === 'function') renderItemDefsTab(); }
+  if (tab === 'inventar')      { if (typeof renderInventarTab === 'function') renderInventarTab(); }
   if (tab === 'outfit-import') { renderOutfitImportTab(); }
   if (tab === 'outfit-scan')   { renderOutfitScanTab(); }
   if (tab === 'lscg-wheel')   { if (_mbsWheelData.length) _renderMbsWheelTab(); scanWheelOutfits(); }
@@ -4459,6 +4462,7 @@ function _lscgNameNachtragen(besitzer) {
 
 function _saveCurseDB() {
   idbSet('BC_CURSE_DB_v1', {database:CURSE_DB,lscgTable:CURSE_LSCG,lscgCache:CURSE_CACHE_LSCG,favourites:[...CURSE_FAVOURITES],outfitFlags:CURSE_OUTFIT_FLAGS});
+  if (typeof _autoSync === 'function') _autoSync();
 }
 
 let _curseDBFresh = false; // true once BC sends live data — prevents IDB startup overwrite
@@ -5928,6 +5932,12 @@ window.addEventListener('message', function(ev) {
   _lastMsgTs = Date.now();
   console.log('[BCK-Popup] \u2190 message:', ev.data.type);
 
+  // Meldungen des Bots fuehren zu Speichervorgaengen. Waehrend die laufen,
+  // darf der automatische Sync nicht anspringen - sonst startet sich der Bot
+  // bei jedem Einkauf selbst neu.
+  if (/^(BOT_|RANG_INIT|MONEY_INIT_NEW)/.test(String(ev.data.type || '')) &&
+      typeof _botRueckschreibStart === 'function') _botRueckschreibStart();
+
   switch (ev.data.type) {
 
     case 'PONG':
@@ -6066,6 +6076,11 @@ window.addEventListener('message', function(ev) {
     // Antwort auf einen Probelauf – die Anzeige baut bot-ui.js
     case 'BOT_PROBE':
       if (typeof _probeEmpfangen === 'function') _probeEmpfangen(ev.data);
+      break;
+
+    // Der Bot meldet eine Inventar-Buchung oder den Stand der Ausleihen.
+    case 'BOT_INVENTAR':
+      if (typeof _invApply === 'function') _invApply(ev.data);
       break;
 
     case 'BOT_MAPKEY':
@@ -7007,6 +7022,8 @@ function _backupNebenDaten() {
     shopDaten:  g(null, () => _shop),
     rangDaten:  g(null, () => _rankData),
     moneyDaten: g(null, () => _money),
+    itemDefs:   g(null, () => _itemDefs),
+    inventar:   g(null, () => _inventar),
   };
 }
 
@@ -7014,7 +7031,8 @@ function _backupNebenDaten() {
    Wie beim Rest des Restores gilt "nur ergaenzen" – vorhandene Eintraege
    werden nie ueberschrieben. Gibt zurueck, was tatsaechlich dazukam. */
 function _backupNebenDatenImport(d) {
-  const dazu = { bots: 0, botGroups: 0, shopItems: 0, raenge: 0, konten: 0, logs: 0 };
+  const dazu = { bots: 0, botGroups: 0, shopItems: 0, raenge: 0, konten: 0, logs: 0,
+                 gegenstaende: 0, inventarPosten: 0 };
 
   // Bots + Gruppen: Identitaet ist die id
   if (Array.isArray(d.bots) && typeof _bots !== 'undefined') {
@@ -7107,6 +7125,39 @@ function _backupNebenDatenImport(d) {
     }
     _money.settings = Object.assign({}, d.moneyDaten.settings || {}, _money.settings || {});
     _saveMoney();
+  }
+
+  // Item-Katalog: Identitaet ist die id, vorhandene bleiben unangetastet
+  if (d.itemDefs && typeof _itemDefs !== 'undefined') {
+    _itemDefs.items = _itemDefs.items || [];
+    const da = new Set(_itemDefs.items.map(x => x.id));
+    for (const it of (d.itemDefs.items || [])) {
+      if (!it || da.has(it.id)) continue;
+      _itemDefs.items.push(it); da.add(it.id); dazu.gegenstaende++;
+    }
+    _saveItemDefs();
+  }
+
+  // Inventar: je Spieler die hoehere Anzahl behalten, nie etwas wegnehmen.
+  // Offene Ausleihen aus der Sicherung nur ergaenzen - eine laufende
+  // Ausleihe darf ein Import nicht ueberschreiben.
+  if (d.inventar && typeof _inventar !== 'undefined') {
+    _inventar.spieler = _inventar.spieler || {};
+    for (const [mk, sp] of Object.entries(d.inventar.spieler || {})) {
+      const ziel = (_inventar.spieler[mk] = _inventar.spieler[mk] || { name: sp.name || ('#' + mk), eintraege: {} });
+      ziel.eintraege = ziel.eintraege || {};
+      for (const [did, e] of Object.entries(sp.eintraege || {})) {
+        const alt = ziel.eintraege[did];
+        if (!alt) { ziel.eintraege[did] = e; dazu.inventarPosten++; }
+        else if ((e.anzahl || 0) > (alt.anzahl || 0)) alt.anzahl = e.anzahl;
+      }
+    }
+    _inventar.ausleihe = _inventar.ausleihe || [];
+    const offen = new Set(_inventar.ausleihe.map(x => x.id));
+    for (const l of (d.inventar.ausleihe || []))
+      if (l && !offen.has(l.id)) { _inventar.ausleihe.push(l); offen.add(l.id); }
+    _inventar.settings = Object.assign({}, d.inventar.settings || {}, _inventar.settings || {});
+    _saveInventar();
   }
 
   return dazu;

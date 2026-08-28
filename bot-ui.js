@@ -530,6 +530,20 @@ function _handlePosData(d){
   if(d.err){ showStatus('⚠️ Position: '+d.err,'error'); return; }
   cb(d.x??0, d.y??0);
 }
+/* Position uebernehmen - ortsunabhaengig, ueber denselben Setter-Weg
+   wie _condPicker. slot: '' = einfache Zone, 'A'/'B' = Rechteck-Ecke. */
+function condSetZoneZiel(fnName, argsJson, tid, slot){
+  let args; try{ args = JSON.parse(argsJson); }catch(e){ return; }
+  const setter = _CondSetter[fnName]; if(!setter) return;
+  _requestPos((x,y)=>{
+    if(slot==='B'){ setter(...args,'x2',x); setter(...args,'y2',y); }
+    else if(slot==='A'){ setter(...args,'x1',x); setter(...args,'y1',y); }
+    else { setter(...args,'x',x); setter(...args,'y',y); }
+    condRerender(tid);
+    showStatus('\u{1F4CD} '+(slot?slot+' ':'')+'= '+x+'/'+y+' \u00fcbernommen','success');
+  });
+}
+
 function condSetZone(tid, ci, slot){
   _requestPos((x,y)=>{
     const b=_selBot(); if(!b) return;
@@ -568,8 +582,8 @@ function _botItemGroups(){
   return [...set].sort();
 }
 function _actEntf(t, ai, branch){
-  const arr = branch==='sonst' ? (t.aktionen_sonst||[]) : (t.aktionen||[]);
-  const a=arr[ai]; if(!a) return null;
+  const { arr, idx } = _aktOrt(t, branch, ai);
+  const a=arr[idx]; if(!a) return null;
   if(!Array.isArray(a.gruppen)) a.gruppen = a.gruppe ? [a.gruppe] : [];
   return a;
 }
@@ -591,15 +605,15 @@ function actEntfRemoveGruppe(tid, ai, idx, branch){
 function profilItemMove(tid, ai, idx, dir, branch){
   const b=_selBot(); if(!b) return;
   const t=b.triggers.find(z=>z.id===tid); if(!t) return;
-  const arr=branch==='sonst'?(t.aktionen_sonst||[]):(t.aktionen||[]);
-  const a=arr[ai]; if(!a||!Array.isArray(a.profilItems)) return;
+  const ort = _aktOrt(t, branch, ai);
+  const a=ort.arr[ort.idx]; if(!a||!Array.isArray(a.profilItems)) return;
   const j=idx+dir; if(j<0||j>=a.profilItems.length) return;
   [a.profilItems[idx],a.profilItems[j]]=[a.profilItems[j],a.profilItems[idx]];
   _saveBots(); actRerender(tid,ai,branch);
 }
 function _outfitKeepArr(t, ai, branch){
-  const arr=branch==='sonst'?(t.aktionen_sonst||[]):(t.aktionen||[]);
-  const a=arr[ai]; if(!a) return null;
+  const { arr, idx } = _aktOrt(t, branch, ai);
+  const a=arr[idx]; if(!a) return null;
   if(!Array.isArray(a.outfitKeepGroups)) a.outfitKeepGroups = a.outfitKeepGroups ? (''+a.outfitKeepGroups).split(',').map(s=>s.trim()).filter(Boolean) : [];
   return a;
 }
@@ -1022,23 +1036,26 @@ function renderTrigCard(bot, t, i) {
           ✅ DANN – IF-Bedingungen treffen zu
         </div>
         <div class="ifelse-dann-body">
-          <div id="acts-${t.id}">${(t.aktionen||[]).map((a,ai)=>renderAct(t.id,a,ai,'dann')).join('')}</div>
+          <div id="acts-${t.id}">${(t.aktionen||[]).map((a,ai)=>renderAct(t.id,a,String(ai),'dann')).join('')}</div>
           <button class="ifelse-add-btn" onclick="trigAddAct('${t.id}','dann')">+ DANN-Aktion hinzufügen</button>
+          <button class="ifelse-add-btn" onclick="trigAddAktGruppe('${t.id}','dann')">+ Klammer</button>
         </div>
         <div class="ifelse-sonst-hdr">
           ❌ SONST – IF-Bedingungen treffen NICHT zu
         </div>
         <div class="ifelse-sonst-body">
-          <div id="acts-sonst-${t.id}">${(t.aktionen_sonst||[]).map((a,ai)=>renderAct(t.id,a,ai,'sonst')).join('')}</div>
+          <div id="acts-sonst-${t.id}">${(t.aktionen_sonst||[]).map((a,ai)=>renderAct(t.id,a,String(ai),'sonst')).join('')}</div>
           <button class="ifelse-add-btn sonst" onclick="trigAddAct('${t.id}','sonst')">+ SONST-Aktion hinzufügen</button>
+          <button class="ifelse-add-btn sonst" onclick="trigAddAktGruppe('${t.id}','sonst')">+ Klammer</button>
         </div>
       </div>
       ` : `
       <div class="te-section">
         <div class="te-section-title">⚡ Aktionen
           <button onclick="trigAddAct('${t.id}')">+ Aktion</button>
+          <button onclick="trigAddAktGruppe('${t.id}')" title="Mehrere Aktionen zusammenfassen – mit eigener Bedingung und gemeinsamem Ziel">+ Klammer</button>
         </div>
-        <div id="acts-${t.id}">${(t.aktionen||[]).map((a,ai)=>renderAct(t.id,a,ai)).join('')}</div>
+        <div id="acts-${t.id}">${(t.aktionen||[]).map((a,ai)=>renderAct(t.id,a,String(ai))).join('')}</div>
       </div>
       `}
     </div>
@@ -1074,59 +1091,121 @@ function condInGruppe(tid, ci) {
 }
 
 /* Bedingung aus einer Gruppe wieder herausholen */
-function condAusGruppe(tid, gi, ki) {
+/* Eine Bedingung eine Ebene nach aussen holen - aus einer verschachtelten
+   Klammer also in die umgebende, nicht gleich ganz nach oben. */
+function condAusGruppe(tid, pfad) {
   const b = _selBot(); if (!b) return;
   const t = b.triggers.find(x => x.id === tid); if (!t) return;
-  const g = (t.bedingungen || [])[gi]; if (!g || g.typ !== 'gruppe') return;
-  const [c] = (g.kinder || []).splice(ki, 1);
-  if (c) t.bedingungen.splice(gi + 1, 0, c);
+  const { arr, idx } = _bedOrt(t, pfad);
+  if (!arr[idx]) return;
+  const [c] = arr.splice(idx, 1);
+  const elternPfad = _bedEltern(pfad);
+  if (!elternPfad) { t.bedingungen.push(c); }        // Sicherheitsnetz
+  else {
+    const ziel = _bedOrt(t, elternPfad);
+    const liste = ziel.arr;
+    liste.splice(ziel.idx + 1, 0, c);
+  }
   _normLogik(t.bedingungen); _saveBots(); condRerender(tid);
 }
 
-function gruppeFeld(tid, gi, wert) {
+function gruppeFeld(tid, pfad, wert) {
   const b = _selBot(); if (!b) return;
   const t = b.triggers.find(x => x.id === tid); if (!t) return;
-  const g = (t.bedingungen || [])[gi]; if (!g) return;
-  g.verknuepfung = wert; _saveBots(); condRerender(tid);
+  const { arr, idx } = _bedOrt(t, pfad);
+  if (!arr[idx]) return;
+  arr[idx].verknuepfung = wert; _saveBots(); condRerender(tid);
 }
 
-function gruppeAddCond(tid, gi, typ) {
+function gruppeAddCond(tid, pfad, typ) {
   const b = _selBot(); if (!b) return;
   const t = b.triggers.find(x => x.id === tid); if (!t) return;
-  const g = (t.bedingungen || [])[gi]; if (!g) return;
-  const vorgabe = COND_DEFS[typ] ? Object.assign({ typ }, COND_DEFS[typ].vorgabe) : { typ };
-  (g.kinder = g.kinder || []).push(vorgabe);
+  const { arr, idx } = _bedOrt(t, pfad);
+  const g = arr[idx]; if (!g) return;
+  (g.kinder = g.kinder || []).push(_condVorgabe(typ));
   _saveBots(); condRerender(tid);
 }
 
-function gruppeCondRemove(tid, gi, ki) {
+function gruppeCondRemove(tid, pfad) {
   const b = _selBot(); if (!b) return;
   const t = b.triggers.find(x => x.id === tid); if (!t) return;
-  const g = (t.bedingungen || [])[gi]; if (!g) return;
-  (g.kinder || []).splice(ki, 1);
-  _saveBots(); condRerender(tid);
+  const { arr, idx } = _bedOrt(t, pfad);
+  if (idx < 0 || !arr[idx]) return;
+  arr.splice(idx, 1);
+  _normLogik(t.bedingungen); _saveBots(); condRerender(tid);
 }
 
 /* Darstellung einer Gruppe: eingerueckter Kasten mit eigenem Rand. */
-function _renderGruppe(bot, tid, c, ci) {
+/* Symbole und Auswahlliste aller Bedingungstypen - an einer Stelle, statt
+   wie bisher in drei getrennten Tabellen. */
+const _COND_ALT = {
+  wort:['\u{1F4AC}','Wort / Chat'], zone:['\u{1F5FA}\uFE0F','Zone (Punkt)'],
+  zone_rect:['\u{1F4D0}','Zone (Rechteck)'], item_traegt:['\u{1F457}','Traegt Item'],
+  item_traegt_nicht:['\u{1F6AB}','Traegt Item NICHT'], trigger_war:['\u{1F517}','Anderer Trigger war'],
+  player_betritt:['\u{1F44B}','Betritt den Raum'], rang:['\u{1F3C6}','Rang'],
+  shop_kauf:['\u{1F6D2}','Shop-Kauf'], variable:['\u{1F522}','Variable'],
+  zufall:['\u{1F3B2}','Zufall'], erregung:['\u{1F497}','Erregung'],
+  ev_timer:['\u23F1','Zeitpunkt'], ev_interval:['\u{1F501}','Intervall']
+};
+function _condIcon(typ){
+  if(typ==='gruppe')return '( )';
+  return (COND_DEFS[typ] && COND_DEFS[typ].icon) || (_COND_ALT[typ] && _COND_ALT[typ][0]) || '\u2753';
+}
+function _condTypOptionen(){
+  const raus=[];
+  for(const [typ,d] of Object.entries(COND_DEFS))
+    raus.push('<option value="'+typ+'">'+d.icon+' '+escHtml(d.label)+'</option>');
+  for(const [typ,d] of Object.entries(_COND_ALT)){
+    if(COND_DEFS[typ])continue;
+    if(typ==='ev_timer'||typ==='ev_interval')continue;   // nur fuer Ereignisse
+    raus.push('<option value="'+typ+'">'+d[0]+' '+escHtml(d[1])+'</option>');
+  }
+  return raus.join('');
+}
+
+/* Bedingungen innerhalb von Klammern werden per Pfad angesprochen:
+   "3" ist die vierte Bedingung, "3.1" die zweite darin, "3.1.0" die erste
+   in der Klammer darin. Ohne das liesse sich eine Klammer in einer Klammer
+   nicht bearbeiten - der Motor kann sie laengst, die Bedienung nicht. */
+function _bedOrt(t, pfad) {
+  const teile = String(pfad).split('.').map(Number);
+  let arr = t.bedingungen || [];
+  for (let i = 0; i < teile.length - 1; i++) {
+    const g = arr[teile[i]];
+    if (!g) return { arr: [], idx: -1 };
+    g.kinder = g.kinder || [];
+    arr = g.kinder;
+  }
+  return { arr, idx: teile[teile.length - 1] };
+}
+function _bedEltern(pfad) {
+  const teile = String(pfad).split('.');
+  teile.pop();
+  return teile.join('.');
+}
+
+function _renderGruppe(bot, tid, c, pfad) {
   const kinder = c.kinder || [];
   const oder = (c.verknuepfung || 'und') === 'oder';
   const farbe = oder ? '#fbbf24' : '#8b5cf6';
   const kindZeilen = kinder.map((k, ki) => {
-    const def = COND_DEFS[k.typ];
-    // Zielbeschreibung statt Umschreiben der fertigen Ausgabe
-    const inner = def
-      ? `<span style="font-size:.68rem;color:var(--text2)">${escHtml(def.label)}</span> `
-        + _condFelder(tid, ci, k, def, { fn:'gruppeKindFeld', args:[tid, ci, ki] })
-      : `<span style="font-size:.68rem;color:var(--text2)">${escHtml(_btCondPhrase(bot, k))}</span>`;
+    const kp = pfad + '.' + ki;
+    const vor = `<span style="font-size:.6rem;color:${farbe};font-weight:700;min-width:26px">`
+      + (ki === 0 ? '' : (oder ? 'ODER' : 'UND')) + `</span>`;
+    // Eine Klammer in der Klammer wird rekursiv gezeichnet
+    if (k.typ === 'gruppe')
+      return `<div style="display:flex;align-items:flex-start;gap:5px">${vor}`
+        + `<div style="flex:1">${_renderGruppe(bot, tid, k, kp)}</div></div>`;
+    // Jeder Typ ist hier voll bearbeitbar - auch die aelteren, die keinen
+    // Eintrag in COND_DEFS haben.
+    const inner = _condInner(bot, tid, kp, k, { fn:'gruppeKindFeld', args:[tid, kp] });
     return `<div style="display:flex;align-items:center;gap:5px;padding:3px 0">`
-      + `<span style="font-size:.6rem;color:${farbe};font-weight:700;min-width:26px">`
-      + (ki === 0 ? '' : (oder ? 'ODER' : 'UND')) + `</span>`
-      + `<span style="font-size:.7rem">${COND_DEFS[k.typ]?.icon || '❓'}</span>`
+      + vor
+      + `<span style="font-size:.7rem">${_condIcon(k.typ)}</span>`
       + `<div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;flex:1">${inner}</div>`
-      + `<button onclick="condAusGruppe('${tid}',${ci},${ki})" title="Aus der Klammer herausnehmen"`
+      + `<button onclick="condAusGruppe('${tid}','${kp}')" title="Aus der Klammer herausnehmen"`
       + ` style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:.7rem">⤴</button>`
-      + `<button onclick="gruppeCondRemove('${tid}',${ci},${ki})" title="Löschen"`
+      + `<button onclick="gruppeCondRemove('${tid}','${kp}')" title="Löschen"`
       + ` style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.7rem">✕</button>`
       + `</div>`;
   }).join('');
@@ -1135,17 +1214,17 @@ function _renderGruppe(bot, tid, c, ci) {
     + `padding:6px 9px;margin:3px 0 3px 12px;background:${farbe}0d">`
     + `<div style="display:flex;align-items:center;gap:6px;margin-bottom:2px">`
     + `<span style="font-size:.62rem;font-weight:700;color:${farbe}">( Klammer )</span>`
-    + `<select class="cf" style="width:150px;font-size:.66rem" onchange="gruppeFeld('${tid}',${ci},this.value)">`
+    + `<select class="cf" style="width:150px;font-size:.66rem" onchange="gruppeFeld('${tid}','${pfad}',this.value)">`
     + `<option value="oder" ${oder?'selected':''}>eine davon genügt</option>`
     + `<option value="und" ${!oder?'selected':''}>alle davon nötig</option>`
     + `</select>`
-    + `<select class="cf" style="width:150px;font-size:.66rem" onchange="if(this.value){gruppeAddCond('${tid}',${ci},this.value);this.value='';}">`
+    + `<select class="cf" style="width:150px;font-size:.66rem" onchange="if(this.value){gruppeAddCond('${tid}','${pfad}',this.value);this.value='';}">`
     + `<option value="">+ Bedingung hinzufügen</option>`
-    + Object.entries(COND_DEFS).map(([typ,d])=>`<option value="${typ}">${d.icon} ${escHtml(d.label)}</option>`).join('')
-    + `<option value="wort">💬 Wort/Chat</option>`
+    + _condTypOptionen()
+    + `<option value="gruppe">( ) Klammer in der Klammer</option>`
     + `</select>`
     + `<span style="flex:1"></span>`
-    + `<button onclick="condRemove('${tid}',${ci})" title="Ganze Klammer löschen"`
+    + `<button onclick="gruppeCondRemove('${tid}','${pfad}')" title="Ganze Klammer löschen"`
     + ` style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.75rem">✕</button>`
     + `</div>`
     + (kindZeilen || `<div style="font-size:.64rem;color:var(--text3);padding:3px 0">noch leer – oben eine Bedingung hinzufügen</div>`)
@@ -1153,12 +1232,12 @@ function _renderGruppe(bot, tid, c, ci) {
 }
 
 /* Feldaenderung an einer Bedingung INNERHALB einer Gruppe */
-function gruppeKindFeld(tid, gi, ki, key, wert) {
+function gruppeKindFeld(tid, pfad, key, wert) {
   const b = _selBot(); if (!b) return;
   const t = b.triggers.find(x => x.id === tid); if (!t) return;
-  const g = (t.bedingungen || [])[gi]; if (!g) return;
-  const k = (g.kinder || [])[ki]; if (!k) return;
-  k[key] = wert; _saveBots();
+  const { arr, idx } = _bedOrt(t, pfad);
+  if (!arr[idx]) return;
+  arr[idx][key] = wert; _saveBots();
 }
 
 /* -- Probelauf ------------------------------------------------------------
@@ -1315,6 +1394,16 @@ function _quelleCrafts() {
 
 /* Variablennamen: was der Bot bereits gesetzt hat, plus was in seinen
    eigenen Triggern und Szenen vorkommt. */
+/* Die Gegenstaende aus dem Items-Tab. Bewusst eine Liste und kein
+   Auswahl-Dialog: der Katalog ist von Hand gepflegt und damit kurz. */
+function _quelleItemDefs() {
+  try {
+    return (_itemDefs && Array.isArray(_itemDefs.items) ? _itemDefs.items : [])
+      .filter(d => d.aktiv !== false)
+      .map(d => [d.id, (d.icon || '\u{1F381}') + ' ' + (d.name || d.id)]);
+  } catch (e) { return []; }
+}
+
 function _quelleVariablen() {
   const namen = new Set();
   try {
@@ -1500,9 +1589,30 @@ const COND_DEFS = {
             {key:'varB',typ:'auswahl',breite:130,quelle:_quelleVariablen,platzhalter:'– Variable B –',
              leerHinweis:'Noch keine Variablen bekannt'}],
     klartext:c=>(c.varA||'?')+' '+(c.op||'==')+' '+(c.varB||'?') },
+  inventar_hat: { gruppe:'Fortschritt', label:'Gegenstand im Inventar', icon:'\u{1F392}',
+    vorgabe:{itemDefId:'',op:'>=',anzahl:1},
+    hinweis:'Prueft, wie viele Stueck jemand im Inventar hat. Unbegrenzte Gegenstaende gelten immer als vorhanden.',
+    felder:[{key:'itemDefId',typ:'auswahl',breite:170,quelle:_quelleItemDefs,
+             platzhalter:'\u2013 Gegenstand \u2013',
+             leerHinweis:'Noch keine Gegenstaende \u2013 lege sie im Items-Tab an'},
+            {key:'op',typ:'select',breite:110,werte:[['>=','mindestens'],['==','genau'],['<','weniger als']]},
+            {key:'anzahl',typ:'zahl',breite:60}],
+    klartext:c=>{
+      const d=(typeof _itemDefById==='function')?_itemDefById(c.itemDefId):null;
+      const nm=d?d.name:(c.itemDefId||'?');
+      const op={'>=':'mindestens','==':'genau','<':'weniger als'}[c.op||'>=']||'mindestens';
+      return 'hat '+op+' '+(c.anzahl??1)+'x "'+nm+'" im Inventar';
+    } },
 };
 
 /* Baut die Editor-Felder eines Bausteins aus seiner Beschreibung. */
+/* Einen Wochentag an- oder abwaehlen und die neue Liste zurueckgeben. */
+function _tageUm(an, i, b) {
+  an = (an || []).map(Number).filter(x => x !== i);
+  if (b) an.push(i);
+  return an.sort((p, q) => p - q);
+}
+
 function _condFelder(tid, ci, c, def, ziel) {
   // ziel beschreibt den Setter: {fn, args}. Ohne Angabe die normale Bedingung.
   ziel = ziel || { fn:'condField', args:[tid, ci] };
@@ -1568,8 +1678,11 @@ function _condFelder(tid, ci, c, def, ziel) {
     if (f.typ === 'tage') {
       const namen=['So','Mo','Di','Mi','Do','Fr','Sa'];
       const an=(v||[]).map(Number);
+      // Musste ueber den uebergebenen Setter laufen: der feste Aufruf
+      // condTagUm(tid, ci, ...) schrieb bei einer Bedingung INNERHALB einer
+      // Klammer auf die Klammer statt auf die Bedingung.
       return namen.map((n,i)=>`<label style="font-size:.64rem;display:inline-flex;align-items:center;gap:2px;margin-right:4px">`
-        + `<input type="checkbox" ${an.indexOf(i)>=0?'checked':''} onchange="condTagUm('${tid}',${ci},${i},this.checked)">${n}</label>`).join('');
+        + `<input type="checkbox" ${an.indexOf(i)>=0?'checked':''} onchange="${setz(f.key,'_tageUm('+JSON.stringify(an)+','+i+',this.checked)')}">${n}</label>`).join('');
     }
     return lbl+`<input class="cf" ${br||'style="width:130px"'} value="${escHtml(v??'')}"`
       + ` placeholder="${escHtml(f.platzhalter||'')}" oninput="${setz(f.key,'this.value')}">`;
@@ -1582,6 +1695,7 @@ function _condFelder(tid, ci, c, def, ziel) {
 const _CondSetter = {
   condField:      (...a) => condField(...a),
   gruppeKindFeld: (...a) => gruppeKindFeld(...a),
+  aktGruppeBedFeld: (...a) => aktGruppeBedFeld(...a),
 };
 function _condPicker(fnName, argsJson, key, tab, tid) {
   let args;
@@ -1624,36 +1738,67 @@ function _condKnoepfe(tid) {
   ).join('');
 }
 
-function renderCond(bot, tid, c, ci) {
-  // Klammer-Gruppen bekommen eine eigene, eingerueckte Darstellung
-  if (c.typ === 'gruppe') return _renderGruppe(bot, tid, c, ci);
+/* Der Innenteil einer Bedingung - unabhaengig davon, WO sie steht.
+
+   ziel beschreibt den Setter, genau wie bei _condFelder. Dadurch ist jeder
+   Bedingungstyp auch INNERHALB einer Klammer bearbeitbar. Frueher gab es
+   dort nur die Typen aus COND_DEFS; alle aelteren (Wort, Zone, Item,
+   Rang, Variable, Zufall, Erregung ...) erschienen als toter Text. */
+/* Vorgabewerte eines neuen Bausteins. Die alten Typen hatten ihre
+   Vorgaben nur in trigAddCond stehen und fehlten deshalb in Klammern. */
+function _condVorgabe(typ) {
+  if (typ === 'gruppe') return { typ:'gruppe', verknuepfung:'oder', kinder:[] };
+  if (COND_DEFS[typ]) return Object.assign({ typ }, COND_DEFS[typ].vorgabe);
+  const alt = {
+    wort:              { wort:'', typ_msg:'any', modus:'enthält' },
+    zone:              { name:'', x:0, y:0, puffer:1, zoneMode:'eintritt' },
+    zone_rect:         { name:'', x1:0, y1:0, x2:0, y2:0, zoneMode:'eintritt' },
+    item_traegt:       { item:'', gruppe:'' },
+    item_traegt_nicht: { item:'', gruppe:'' },
+    trigger_war:       { trigId:'', innerhalbSek:0 },
+    player_betritt:    {},
+    rang:              { rangId:'', rangCmp:'mind' },
+    shop_kauf:         { shop_id:'' },
+    variable:          { varName:'', varCmp:'==', varWert:'' },
+    zufall:            { prozent:50 },
+    erregung:          { arCmp:'>=', arWert:99 }
+  }[typ];
+  return Object.assign({ typ }, alt || {});
+}
+
+function _condInner(bot, tid, ci, c, ziel) {
+  const _z = ziel || { fn: 'condField', args: [tid, ci] };
+  const _zf = _z.fn;
+  const _zargs = escHtml(JSON.stringify(_z.args));
+  const SF = _zf + '(' + _z.args.map(a => typeof a === 'number' ? a : "'" + a + "'").join(',') + ',';
+  const RR = _z.rerender || ("condRerender('" + tid + "')");
   let inner = '';
   const _def = COND_DEFS[c.typ];
   if (_def) {
     inner = `<span style="font-size:.68rem;color:var(--text2);margin-right:2px">${escHtml(_def.label)}</span>`
-      + _condFelder(tid, ci, c, _def)
+      + _condFelder(tid, ci, c, _def, ziel)
       + (_def.hinweis ? `<span style="font-size:.6rem;color:var(--text3);margin-left:4px" title="${escHtml(_def.hinweis)}">ⓘ</span>` : '');
   } else if (c.typ === 'wort') {
     inner = `
-      <input class="cf cf-w120" value="${escHtml(c.wort||'')}" oninput="condField('${tid}',${ci},'wort',this.value)" placeholder="Triggerwort (lowercase)">
-      <select class="cf" onchange="condField('${tid}',${ci},'typ_msg',this.value)">
+      <input class="cf cf-w120" value="${escHtml(c.wort||'')}" oninput="${SF}'wort',this.value)" placeholder="Triggerwort (lowercase)">
+      <select class="cf" onchange="${SF}'typ_msg',this.value)">
         <option value="any"     ${(!c.typ_msg||c.typ_msg==='any')?'selected':''}>Chat+Emote+Whisper</option>
         <option value="chat"    ${c.typ_msg==='chat'?'selected':''}>Nur Chat</option>
         <option value="emote"   ${c.typ_msg==='emote'?'selected':''}>Nur Emote</option>
         <option value="whisper" ${c.typ_msg==='whisper'?'selected':''}>Nur Whisper</option>
       </select>
-      <select class="cf" style="width:118px" onchange="condField('${tid}',${ci},'modus',this.value)" title="enthält: Wort muss vorkommen. fehlt: Trigger löst aus, wenn das Wort FEHLT (Pflichtwort, z.B. immer 'Master').">
+      <select class="cf" style="width:118px" onchange="${SF}'modus',this.value)" title="enthält: Wort muss vorkommen. fehlt: Trigger löst aus, wenn das Wort FEHLT (Pflichtwort, z.B. immer 'Master').">
         <option value="enthält" ${(!c.modus||c.modus==='enthält')?'selected':''}>enthält</option>
         <option value="fehlt" ${c.modus==='fehlt'?'selected':''}>⚠️ fehlt</option>
       </select>`;
   } else if (c.typ === 'zone') {
     inner = `
-      <input class="cf cf-w100" value="${escHtml(c.name||'')}" oninput="condField('${tid}',${ci},'name',this.value)" placeholder="Zonen-Name (!set)" title="Name für den Admin-Befehl !set <Name> X">
-      X<input class="cf" style="width:46px" type="number" value="${c.x??0}" oninput="condField('${tid}',${ci},'x',+this.value)">
-      Y<input class="cf" style="width:46px" type="number" value="${c.y??0}" oninput="condField('${tid}',${ci},'y',+this.value)">
-      ±<input class="cf" style="width:38px" type="number" value="${c.puffer??1}" oninput="condField('${tid}',${ci},'puffer',+this.value)" title="Puffer">
-      <button onclick="condSetZone('${tid}',${ci})" style="font-size:.62rem;padding:2px 8px;background:var(--pd);border:none;color:var(--pl);border-radius:4px;cursor:pointer" title="Aktuelle Spielerposition übernehmen">📍 Set</button>
-      <select class="cf" style="width:150px" onchange="condField('${tid}',${ci},'zoneMode',this.value)" title="Bei Eintritt: einmal beim Betreten. Dauerhaft: bei jedem Check (~0,5s) solange drin – z.B. für %-Chance pro Schritt.">
+      <input class="cf cf-w100" value="${escHtml(c.name||'')}" oninput="${SF}'name',this.value)" placeholder="Zonen-Name (!set)" title="Name für den Admin-Befehl !set <Name> X">
+      X<input class="cf" style="width:46px" type="number" value="${c.x??0}" oninput="${SF}'x',+this.value)">
+      Y<input class="cf" style="width:46px" type="number" value="${c.y??0}" oninput="${SF}'y',+this.value)">
+      ±<input class="cf" style="width:38px" type="number" value="${c.puffer??1}" oninput="${SF}'puffer',+this.value)" title="Puffer">
+      <button onclick="condSetZoneZiel('${_zf}','${_zargs}','${tid}')" style="font-size:.62rem;padding:2px 8px;background:var(--pd);border:none;color:var(--pl);border-radius:4px;cursor:pointer" title="Aktuelle Spielerposition übernehmen">📍 Set</button>
+      <select class="cf" style="width:150px" onchange="${SF}'zoneMode',this.value)" title="Bei Eintritt: einmal beim Betreten. Dauerhaft: bei jedem Check (~0,5s) solange drin – z.B. für %-Chance pro Schritt.">
         <option value="eintritt" ${(!c.zoneMode||c.zoneMode==='eintritt')?'selected':''}>↘️ bei Eintritt</option>
         <option value="dauerhaft" ${c.zoneMode==='dauerhaft'?'selected':''}>🔁 dauerhaft (jeder Check)</option>
       </select>`;
@@ -1662,19 +1807,19 @@ function renderCond(bot, tid, c, ci) {
     inner = `
       ${negLabel}
       <span style="font-size:.68rem;color:var(--text2)">${c.gruppe?escHtml(c.gruppe)+' / ':''}<b>${escHtml(c.item||'–')}</b></span>
-      <button onclick="ipickerOpen('item',v=>{condField('${tid}',${ci},'item',v.asset||v.name);condField('${tid}',${ci},'gruppe',v.group);condRerender('${tid}');})" style="font-size:.62rem;padding:2px 7px;background:var(--pd);border:none;color:var(--pl);border-radius:4px;cursor:pointer">📦 Wählen</button>`;
+      <button onclick="ipickerOpen('item',v=>{${SF}'item',v.asset||v.name);${SF}'gruppe',v.group);${RR};})" style="font-size:.62rem;padding:2px 7px;background:var(--pd);border:none;color:var(--pl);border-radius:4px;cursor:pointer">📦 Wählen</button>`;
   } else if (c.typ === 'zone_rect') {
     inner = `
-      <input class="cf cf-w100" value="${escHtml(c.name||'')}" oninput="condField('${tid}',${ci},'name',this.value)" placeholder="Zonen-Name (!set)" title="Name für den Admin-Befehl !set <Name> X1 / X2">
+      <input class="cf cf-w100" value="${escHtml(c.name||'')}" oninput="${SF}'name',this.value)" placeholder="Zonen-Name (!set)" title="Name für den Admin-Befehl !set <Name> X1 / X2">
       <span style="font-size:.62rem;color:var(--text3)">Von</span>
-      X<input class="cf" style="width:44px" type="number" value="${c.x1??0}" oninput="condField('${tid}',${ci},'x1',+this.value)" title="X-Start">
-      Y<input class="cf" style="width:44px" type="number" value="${c.y1??0}" oninput="condField('${tid}',${ci},'y1',+this.value)" title="Y-Start">
+      X<input class="cf" style="width:44px" type="number" value="${c.x1??0}" oninput="${SF}'x1',+this.value)" title="X-Start">
+      Y<input class="cf" style="width:44px" type="number" value="${c.y1??0}" oninput="${SF}'y1',+this.value)" title="Y-Start">
       <span style="font-size:.62rem;color:var(--text3)">Bis</span>
-      X<input class="cf" style="width:44px" type="number" value="${c.x2??2}" oninput="condField('${tid}',${ci},'x2',+this.value)" title="X-Ende">
-      Y<input class="cf" style="width:44px" type="number" value="${c.y2??2}" oninput="condField('${tid}',${ci},'y2',+this.value)" title="Y-Ende">
-      <button onclick="condSetZone('${tid}',${ci},'A')" style="font-size:.62rem;padding:2px 8px;background:var(--pd);border:none;color:var(--pl);border-radius:4px;cursor:pointer" title="Von-Ecke = aktuelle Position">📍 Set A</button>
-      <button onclick="condSetZone('${tid}',${ci},'B')" style="font-size:.62rem;padding:2px 8px;background:var(--pd);border:none;color:var(--pl);border-radius:4px;cursor:pointer" title="Bis-Ecke = aktuelle Position">📍 Set B</button>
-      <select class="cf" style="width:150px" onchange="condField('${tid}',${ci},'zoneMode',this.value)" title="Bei Eintritt: einmal beim Betreten. Dauerhaft: bei jedem Check (~0,5s) solange drin – z.B. für %-Chance pro Schritt.">
+      X<input class="cf" style="width:44px" type="number" value="${c.x2??2}" oninput="${SF}'x2',+this.value)" title="X-Ende">
+      Y<input class="cf" style="width:44px" type="number" value="${c.y2??2}" oninput="${SF}'y2',+this.value)" title="Y-Ende">
+      <button onclick="condSetZoneZiel('${_zf}','${_zargs}','${tid}','A')" style="font-size:.62rem;padding:2px 8px;background:var(--pd);border:none;color:var(--pl);border-radius:4px;cursor:pointer" title="Von-Ecke = aktuelle Position">📍 Set A</button>
+      <button onclick="condSetZoneZiel('${_zf}','${_zargs}','${tid}','B')" style="font-size:.62rem;padding:2px 8px;background:var(--pd);border:none;color:var(--pl);border-radius:4px;cursor:pointer" title="Bis-Ecke = aktuelle Position">📍 Set B</button>
+      <select class="cf" style="width:150px" onchange="${SF}'zoneMode',this.value)" title="Bei Eintritt: einmal beim Betreten. Dauerhaft: bei jedem Check (~0,5s) solange drin – z.B. für %-Chance pro Schritt.">
         <option value="eintritt" ${(!c.zoneMode||c.zoneMode==='eintritt')?'selected':''}>↘️ bei Eintritt</option>
         <option value="dauerhaft" ${c.zoneMode==='dauerhaft'?'selected':''}>🔁 dauerhaft (jeder Check)</option>
       </select>`;
@@ -1688,7 +1833,7 @@ function renderCond(bot, tid, c, ci) {
         : `<span style="font-size:.58rem;background:#0a1a0a;border:1px solid var(--green);color:var(--green);padding:1px 5px;border-radius:3px">🌐 Global</span>`
       : '';
     inner = `
-      <select class="cf cf-w160" onchange="condField('${tid}',${ci},'trigId',this.value);condRerender('${tid}')">
+      <select class="cf cf-w160" onchange="${SF}'trigId',this.value);${RR}">
         <option value="">– Trigger wählen –</option>${opts}
       </select>
       ${modeBadge}
@@ -1696,7 +1841,7 @@ function renderCond(bot, tid, c, ci) {
   } else if (c.typ === 'player_betritt') {
     const bt = c.betritt_typ ?? 'alle';
     inner = `
-      <select class="cf" style="width:200px" onchange="condField('${tid}',${ci},'betritt_typ',this.value)">
+      <select class="cf" style="width:200px" onchange="${SF}'betritt_typ',this.value)">
         <option value="alle"   ${bt==='alle'?'selected':''}>👋 Jedes Mal (auch Erstbesuch)</option>
         <option value="neu"    ${bt==='neu'?'selected':''}>🆕 Erstes Mal in dieser Session</option>
         <option value="rejoin" ${bt==='rejoin'?'selected':''}>🔄 Nur Rejoin (war schon da)</option>
@@ -1705,20 +1850,20 @@ function renderCond(bot, tid, c, ci) {
     const rop = c.rang_op ?? '=';
     const ranks = _rankSorted();
     inner = `
-      <select class="cf" style="width:80px" onchange="condField('${tid}',${ci},'rang_op',this.value);condRerender('${tid}')">
+      <select class="cf" style="width:80px" onchange="${SF}'rang_op',this.value);${RR}">
         <option value="="   ${rop==='='  ?'selected':''}>= Genau</option>
         <option value="min" ${rop==='min'?'selected':''}>≥ Min.</option>
         <option value="max" ${rop==='max'?'selected':''}>≤ Max.</option>
         <option value="kein"${rop==='kein'?'selected':''}>∅ Kein Rang</option>
       </select>
-      ${rop!=='kein'?`<select class="cf" style="flex:1;min-width:130px" onchange="condField('${tid}',${ci},'rang_id',this.value)">
+      ${rop!=='kein'?`<select class="cf" style="flex:1;min-width:130px" onchange="${SF}'rang_id',this.value)">
         <option value="">– Rang wählen –</option>
         ${ranks.map(r=>`<option value="${r.id}" ${c.rang_id===r.id?'selected':''}>${escHtml(r.icon+' '+r.name)} (Lv.${r.level})</option>`).join('')}
       </select>`:''}`;
   } else if (c.typ === 'shop_kauf') {
     const shopItems = _shop.items;
     inner = `
-      <select class="cf" style="flex:1;min-width:180px" onchange="condField('${tid}',${ci},'shop_id',this.value)">
+      <select class="cf" style="flex:1;min-width:180px" onchange="${SF}'shop_id',this.value)">
         <option value="">🛒 Jeder Shop-Kauf</option>
         ${shopItems.map(i=>`<option value="${i.id}" ${c.shop_id===i.id?'selected':''}>${escHtml(i.icon+' '+i.name)} (${i.preis} 💰)</option>`).join('')}
       </select>
@@ -1727,37 +1872,44 @@ function renderCond(bot, tid, c, ci) {
   if (c.typ === 'ev_timer') {
     inner = `<span style="font-size:.65rem;color:var(--text3)">Einmalig nach</span>
       <input class="cf cf-w80" type="number" min="1" step="1" value="${c.sek??10}"
-        oninput="condField('${tid}',${ci},'sek',+this.value)">
+        oninput="${SF}'sek',+this.value)">
       <span style="font-size:.65rem;color:var(--text3)">Sekunden automatisch feuern</span>`;
   } else if (c.typ === 'ev_interval') {
     inner = `<span style="font-size:.65rem;color:var(--text3)">Alle</span>
       <input class="cf cf-w70" type="number" min="1" value="${c.sek_min??30}"
-        oninput="condField('${tid}',${ci},'sek_min',+this.value)">
+        oninput="${SF}'sek_min',+this.value)">
       <span style="font-size:.62rem;color:var(--text3)">–</span>
       <input class="cf cf-w70" type="number" min="1" value="${c.sek_max??180}"
-        oninput="condField('${tid}',${ci},'sek_max',+this.value)">
+        oninput="${SF}'sek_max',+this.value)">
       <span style="font-size:.65rem;color:var(--text3)">Sekunden wiederholt feuern</span>`;
   } else if (c.typ === 'variable') {
     inner = `
-      <input class="cf cf-w120" value="${escHtml(c.varName||'')}" oninput="condField('${tid}',${ci},'varName',this.value)" placeholder="Variable (z.B. punkte)">
-      <select class="cf" style="width:88px" onchange="condField('${tid}',${ci},'varCmp',this.value)">
+      <input class="cf cf-w120" value="${escHtml(c.varName||'')}" oninput="${SF}'varName',this.value)" placeholder="Variable (z.B. punkte)">
+      <select class="cf" style="width:88px" onchange="${SF}'varCmp',this.value)">
         ${['==','!=','>','<','>=','<=','gesetzt','leer'].map(o=>`<option value="${o}" ${(c.varCmp||'==')===o?'selected':''}>${o}</option>`).join('')}
       </select>
-      <input class="cf cf-w80" value="${escHtml(c.varWert||'')}" oninput="condField('${tid}',${ci},'varWert',this.value)" placeholder="Wert">`;
+      <input class="cf cf-w80" value="${escHtml(c.varWert||'')}" oninput="${SF}'varWert',this.value)" placeholder="Wert">`;
   } else if (c.typ === 'zufall') {
     inner = `
       <span style="font-size:.65rem;color:var(--text3)">Chance</span>
-      <input class="cf cf-w70" type="number" min="0" max="100" value="${c.prozent??50}" oninput="condField('${tid}',${ci},'prozent',+this.value)"> %
+      <input class="cf cf-w70" type="number" min="0" max="100" value="${c.prozent??50}" oninput="${SF}'prozent',+this.value)"> %
       <span style="font-size:.62rem;color:var(--text3)">dass die Bedingung zutrifft</span>`;
   } else if (c.typ === 'erregung') {
     inner = `
       <span style="font-size:.65rem;color:var(--text3)">Erregung</span>
-      <select class="cf" style="width:70px" onchange="condField('${tid}',${ci},'arCmp',this.value)">
+      <select class="cf" style="width:70px" onchange="${SF}'arCmp',this.value)">
         ${['>=','<=','>','<','=='].map(o=>`<option value="${o}" ${(c.arCmp||'>=')===o?'selected':''}>${o}</option>`).join('')}
       </select>
-      <input class="cf cf-w70" type="number" min="0" max="100" value="${c.arWert??99}" oninput="condField('${tid}',${ci},'arWert',+this.value)"> %
+      <input class="cf cf-w70" type="number" min="0" max="100" value="${c.arWert??99}" oninput="${SF}'arWert',+this.value)"> %
       <span style="font-size:.6rem;color:var(--text3)">prüft die Erregung des auslösenden Spielers · funktioniert auch allein (wird alle 2s geprüft, feuert beim Überschreiten) · setzt voraus, dass der Spieler seine Erregung teilt (BC-Sichtbarkeit „Everyone/Access")</span>`;
   }
+  return inner;
+}
+
+function renderCond(bot, tid, c, ci) {
+  // Klammer-Gruppen bekommen eine eigene, eingerueckte Darstellung
+  if (c.typ === 'gruppe') return _renderGruppe(bot, tid, c, String(ci));
+  const inner = _condInner(bot, tid, ci, c, null);
   const icons = {wort:'💬',zone:'🗺️',zone_rect:'📐',item_traegt:'👗',item_traegt_nicht:'🚫',trigger_war:'🔗',player_betritt:'👋',ev_timer:'⏱',ev_interval:'🔁',rang:'🏆',shop_kauf:'🛒',variable:'🔢',zufall:'🎲',erregung:'💗'};
   // Neue Typen bringen ihr Symbol im Verzeichnis mit
   Object.keys(COND_DEFS).forEach(k=>{ if(!icons[k]) icons[k]=COND_DEFS[k].icon; });
@@ -1794,11 +1946,136 @@ function _actBeiF(bf) {
   return {ignorieren:'⬇️ Ignorieren – weiter',kette_stoppen:'⏹ Kette stoppen',trigger_ungueltig:'❌ Trigger ungültig'}[bf]??'⬇️ Ignorieren – weiter';
 }
 
+/* Aktionen werden wie Bedingungen per Pfad angesprochen: "2" ist die dritte
+   Aktion, "2.0" die erste innerhalb der Klammer an Position 3. Ohne das
+   liessen sich Aktionen INNERHALB einer Klammer nicht bearbeiten. */
+function _aktOrt(t, branch, pfad) {
+  const teile = String(pfad).split('.').map(Number);
+  let arr = _getActArr(t, branch);
+  for (let i = 0; i < teile.length - 1; i++) {
+    const g = arr[teile[i]];
+    if (!g) return { arr: [], idx: -1 };
+    g.kinder = g.kinder || [];
+    arr = g.kinder;
+  }
+  return { arr, idx: teile[teile.length - 1] };
+}
+function _aktEltern(pfad) {
+  const teile = String(pfad).split('.');
+  teile.pop();
+  return teile.join('.');
+}
+/* Die ganze Aktionsliste neu zeichnen. Nach Umbauten (Einfuegen, Loeschen,
+   Verschieben) immer die komplette Liste - Teilaktualisierungen waeren bei
+   verschachtelten Klammern fehleranfaellig, und die Listen sind kurz. */
+function _aktListeNeu(tid, branch) {
+  const b = _selBot(); if (!b) return;
+  const t = b.triggers.find(x => x.id === tid); if (!t) return;
+  const arr = _getActArr(t, branch);
+  const listId = branch === 'sonst' ? 'acts-sonst-' + tid : 'acts-' + tid;
+  const el = document.getElementById(listId);
+  if (el) el.innerHTML = arr.map((a, i) => renderAct(tid, a, String(i), branch)).join('');
+}
+
+/* Eine Klammer im Aktionsteil: eigene Bedingung, gemeinsames Ziel, beliebig
+   viele Aktionen darin - auch weitere Klammern. */
+function _renderAktGruppe(bot, tid, a, ai, branch, lok, tot) {
+  const farbe = '#22c55e';
+  const bArg = branch ? `,'${branch}'` : '';
+  const AI = "'" + ai + "'";
+  const beds = a.bedingungen || [];
+  const oder = (a.verknuepfung || 'und') === 'oder';
+
+  const bedZeilen = beds.map((c, ci) => {
+    const inner = _condInner(bot, tid, ai, c, {
+      fn: 'aktGruppeBedFeld',
+      args: [tid, ai, ci, branch || ''],
+      rerender: `_aktListeNeu('${tid}','${branch || ''}')`
+    });
+    return `<div style="display:flex;align-items:center;gap:5px;padding:2px 0">`
+      + `<span style="font-size:.6rem;color:${farbe};font-weight:700;min-width:30px">`
+      + (ci === 0 ? 'WENN' : (oder ? 'ODER' : 'UND')) + `</span>`
+      + `<span style="font-size:.7rem">${_condIcon(c.typ)}</span>`
+      + `<div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;flex:1">${inner}</div>`
+      + `<button onclick="aktGruppeBedRemove('${tid}',${AI},${ci}${bArg})" title="Bedingung löschen"`
+      + ` style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.7rem">✕</button>`
+      + `</div>`;
+  }).join('');
+
+  const kinder = (a.kinder || []).map((k, ki) => renderAct(tid, k, ai + '.' + ki, branch)).join('');
+
+  return `<div class="act-card" id="act-${branch === 'sonst' ? 'sonst-' : ''}${tid}-${ai}"`
+    + ` style="border:1px solid ${farbe}55;border-left:3px solid ${farbe};background:${farbe}0d">
+    <div style="flex:1">
+      <div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">
+        <span style="display:flex;flex-direction:column;gap:1px;flex-shrink:0">
+          <button class="order-btn" onclick="actMoveUp('${tid}',${AI}${bArg})" ${lok === 0 ? 'disabled' : ''}>▲</button>
+          <button class="order-btn" onclick="actMoveDown('${tid}',${AI}${bArg})" ${lok === tot - 1 ? 'disabled' : ''}>▼</button>
+          <button class="order-btn" onclick="aktAusGruppe('${tid}',${AI}${bArg})" title="Aus der Klammer herausnehmen">⤴</button>
+        </span>
+        <span class="trig-order-num" style="margin-right:2px">${lok + 1}</span>
+        <span style="font-size:.68rem;font-weight:700;color:${farbe}">( ) Klammer</span>
+        <select class="cf" style="width:150px;font-size:.66rem" onchange="aktGruppeFeld('${tid}',${AI},'verknuepfung',this.value${bArg})">
+          <option value="und"  ${!oder ? 'selected' : ''}>alle Bedingungen nötig</option>
+          <option value="oder" ${oder ? 'selected' : ''}>eine Bedingung genügt</option>
+        </select>
+        <select class="cf" style="width:170px;font-size:.66rem" onchange="if(this.value){aktGruppeBedAdd('${tid}',${AI},this.value${bArg});this.value='';}">
+          <option value="">+ Bedingung für die Klammer</option>
+          ${_condTypOptionen()}
+          <option value="gruppe">( ) Klammer in der Klammer</option>
+        </select>
+        <input class="cf cf-w80" type="number" value="${a.delay ?? 0}" oninput="actField('${tid}',${AI},'delay',+this.value${bArg})" title="Wartezeit vor der Klammer (ms)"> ms
+      </div>
+
+      <div style="font-size:.59rem;color:var(--text3);margin:4px 0 2px">
+        Ohne Bedingung läuft die Klammer immer – sie dient dann nur der Übersicht.
+      </div>
+      ${bedZeilen}
+
+      <div style="display:flex;gap:6px;align-items:center;margin-top:6px;padding:5px 8px;background:rgba(96,165,250,0.05);border:1px solid rgba(96,165,250,0.12);border-radius:6px;flex-wrap:wrap">
+        <span style="font-size:.62rem;font-weight:700;color:#60a5fa;white-space:nowrap">🎯 Ziel für alles darin</span>
+        <select class="cf" style="width:230px;font-size:.68rem" onchange="aktGruppeFeld('${tid}',${AI},'aktZiel',this.value${bArg});_aktListeNeu('${tid}','${branch || ''}')">
+          <option value="erben"            ${(!a.aktZiel || a.aktZiel === 'erben') ? 'selected' : ''}>↳ jede Aktion behält ihr eigenes Ziel</option>
+          <option value="ausloeser"        ${a.aktZiel === 'ausloeser' ? 'selected' : ''}>👤 Die Person, die ausgelöst hat</option>
+          <option value="ausser_ausloeser" ${a.aktZiel === 'ausser_ausloeser' ? 'selected' : ''}>👥 Alle außer der auslösenden Person</option>
+          <option value="alle"             ${a.aktZiel === 'alle' ? 'selected' : ''}>👥 Alle im Raum</option>
+          <option value="whitelist"        ${a.aktZiel === 'whitelist' ? 'selected' : ''}>✅ Nur diese Personen</option>
+          <option value="rang"             ${a.aktZiel === 'rang' ? 'selected' : ''}>🏆 Alle ab einem bestimmten Rang</option>
+          <option value="zufall"           ${a.aktZiel === 'zufall' ? 'selected' : ''}>🎲 Eine zufällige Person im Raum</option>
+        </select>
+        ${a.aktZiel === 'rang' ? `<select class="cf" style="width:190px;font-size:.68rem" onchange="aktGruppeFeld('${tid}',${AI},'aktZielRangId',this.value${bArg})">
+          <option value="">– Rang wählen –</option>
+          ${_quelleRaenge().map(r => `<option value="${escHtml(r[0])}" ${a.aktZielRangId === r[0] ? 'selected' : ''}>${escHtml(r[1])}</option>`).join('')}
+        </select>` : ''}
+        ${a.aktZiel === 'whitelist' ? `<input class="cf" style="flex:1;min-width:150px;font-size:.68rem" value="${escHtml((a.aktZielNummern || []).join(', '))}"
+          oninput="aktGruppeFeld('${tid}',${AI},'aktZielNummern',this.value.split(',').map(x=>+x.trim()).filter(x=>x>0)${bArg})"
+          placeholder="MemberNummer, z.B. 12345, 67890">` : ''}
+      </div>
+
+      <div style="margin-top:6px;padding-left:10px;border-left:2px dashed ${farbe}44">
+        ${kinder || `<div style="font-size:.64rem;color:var(--text3);padding:4px 0">noch leer – unten eine Aktion hinzufügen</div>`}
+        <div style="display:flex;gap:6px;margin-top:4px">
+          <button onclick="aktGruppeAddKind('${tid}',${AI},'chat'${bArg})" style="font-size:.64rem;padding:3px 10px;background:none;border:1px solid rgba(255,255,255,0.12);border-radius:5px;color:var(--text2);cursor:pointer">+ Aktion</button>
+          <button onclick="aktGruppeAddKind('${tid}',${AI},'gruppe'${bArg})" style="font-size:.64rem;padding:3px 10px;background:none;border:1px solid ${farbe}55;border-radius:5px;color:${farbe};cursor:pointer">+ Klammer</button>
+        </div>
+      </div>
+    </div>
+    <button class="rm-btn" onclick="actRemove('${tid}',${AI}${bArg})" title="Ganze Klammer löschen">✕</button>
+  </div>`;
+}
+
 function renderAct(tid, a, ai, branch) {
   const b   = _selBot();
   const t   = b?.triggers.find(x=>x.id===tid);
-  const arr = branch === 'sonst' ? (t?.aktionen_sonst ?? []) : (t?.aktionen ?? []);
+  // ai ist ein Pfad: "2" ist die dritte Aktion, "2.0" die erste in der
+  // Klammer an Position 3. Deshalb muss er in den erzeugten Aufrufen in
+  // Anfuehrungszeichen stehen - dafuer AI.
+  const AI  = "'" + ai + "'";
+  const ort = t ? _aktOrt(t, branch, ai) : { arr: [], idx: 0 };
+  const arr = ort.arr;
+  const lok = ort.idx;
   const tot = arr.length;
+  if (a && a.typ === 'gruppe') return _renderAktGruppe(b, tid, a, ai, branch, lok, tot);
 
   const types = [
     ['chat','💬 Chat senden'],['emote','✨ Emote senden'],['whisper','🤫 Whisper senden'],
@@ -1808,6 +2085,7 @@ function renderAct(tid, a, ai, branch) {
     ['rang','🏆 Rang setzen'],
     ['szene','📖 Szene starten'],['variable','🔢 Variable setzen'],['erregung','💗 Erregung/Orgasmus'],
     ['mapkey','🔑 Map-Key geben/wegnehmen'],
+    ['inventar_geben','🎒 Gegenstand ins Inventar geben/nehmen'],
   ];
   const typeOpts = types.map(([v,l])=>`<option value="${v}" ${a.typ===v?'selected':''}>${l}</option>`).join('');
   const branchArg = branch ? `,'${branch}'` : '';
@@ -1815,11 +2093,11 @@ function renderAct(tid, a, ai, branch) {
   let extra = '';
   if (['chat','emote','whisper'].includes(a.typ)) {
     extra = `<textarea class="cf" style="width:100%;resize:vertical;min-height:44px;margin-top:4px" rows="2"
-        oninput="actField('${tid}',${ai},'text',this.value${branch?`,'${branch}'`:''})"
+        oninput="actField('${tid}',${AI},'text',this.value${branch?`,'${branch}'`:''})"
         placeholder="{name} schrieb: {wort} – Pos: {x}/{y}">${escHtml(a.text||'')}</textarea>
       <div style="font-size:.59rem;color:var(--text3);margin-top:2px">Variablen: {name} {wort} {typ} {x} {y}</div>
       <label style="cursor:pointer;display:flex;align-items:center;gap:5px;font-size:.62rem;color:var(--text2);margin-top:2px" title="An: jede Zeile ist eine Variante. Es wird zufällig EINE Zeile gesendet.">
-        <input type="checkbox" ${a.zufallstext?'checked':''} onchange="actField('${tid}',${ai},'zufallstext',this.checked${branch?`,'${branch}'`:''})">
+        <input type="checkbox" ${a.zufallstext?'checked':''} onchange="actField('${tid}',${AI},'zufallstext',this.checked${branch?`,'${branch}'`:''})">
         🎲 Zufallszeile (1 Zeile = 1 Variante, zufällig gewählt)
       </label>`;
   } else if (a.typ === 'item') {
@@ -1834,72 +2112,72 @@ function renderAct(tid, a, ai, branch) {
       <div class="as-act-row">
         <span class="as-act-label">Ersatz-Item:</span>
         <span style="font-size:.68rem;color:var(--text2);flex:1">${escHtml(asLabel)}</span>
-        <button onclick="ipickerOpenForActAntiStrip('${tid}',${ai}${branchArg})" style="font-size:.63rem;padding:3px 9px;background:var(--pd);border:none;color:var(--pl);border-radius:5px;cursor:pointer">📂 Wählen</button>
-        ${a.antiStrip_ersatz && !a.antiStrip_itemConfig ? `<input class="cf" type="color" value="${a.antiStrip_farbe||'#ff0000'}" oninput="actField('${tid}',${ai},'antiStrip_farbe',this.value${branchArg})" style="width:28px;padding:1px;cursor:pointer" title="Farbe">` : ''}
+        <button onclick="ipickerOpenForActAntiStrip('${tid}',${AI}${branchArg})" style="font-size:.63rem;padding:3px 9px;background:var(--pd);border:none;color:var(--pl);border-radius:5px;cursor:pointer">📂 Wählen</button>
+        ${a.antiStrip_ersatz && !a.antiStrip_itemConfig ? `<input class="cf" type="color" value="${a.antiStrip_farbe||'#ff0000'}" oninput="actField('${tid}',${AI},'antiStrip_farbe',this.value${branchArg})" style="width:28px;padding:1px;cursor:pointer" title="Farbe">` : ''}
       </div>
       <div class="as-act-row">
         <span class="as-act-label">Delay:</span>
         <input class="cf" type="number" value="${a.antiStrip_delay??500}" min="0" step="100"
-          oninput="actField('${tid}',${ai},'antiStrip_delay',+this.value${branchArg})"
+          oninput="actField('${tid}',${AI},'antiStrip_delay',+this.value${branchArg})"
           style="width:72px;font-size:.68rem"> ms
         <span style="font-size:.6rem;color:var(--text3)">(Wartezeit nach Entfernen)</span>
       </div>` : '';
     extra = `<div style="display:flex;gap:6px;align-items:center;margin-top:4px;flex-wrap:wrap">
         <span style="font-size:.7rem;color:var(--text2);flex:1">${escHtml(label)}${cfgInfo}</span>
-        <button onclick="ipickerOpenForAct('${tid}',${ai}${branchArg})" style="font-size:.63rem;padding:3px 9px;background:var(--pd);border:none;color:var(--pl);border-radius:5px;cursor:pointer">📂 Auswählen…</button>
-        ${a.item && !a.itemConfig ? `<input class="cf" type="color" value="${a.farbe||'#ffffff'}" oninput="actField('${tid}',${ai},'farbe',this.value${branchArg})" style="width:28px;padding:1px;cursor:pointer" title="Farbe">` : ''}
+        <button onclick="ipickerOpenForAct('${tid}',${AI}${branchArg})" style="font-size:.63rem;padding:3px 9px;background:var(--pd);border:none;color:var(--pl);border-radius:5px;cursor:pointer">📂 Auswählen…</button>
+        ${a.item && !a.itemConfig ? `<input class="cf" type="color" value="${a.farbe||'#ffffff'}" oninput="actField('${tid}',${AI},'farbe',this.value${branchArg})" style="width:28px;padding:1px;cursor:pointer" title="Farbe">` : ''}
       </div>
       <div style="display:flex;gap:5px;align-items:center;margin-top:3px">
         <span style="font-size:.62rem;color:var(--text3)" title="0 = aus. Nach X Sekunden wird das angelegte Item/Outfit automatisch wieder entfernt (Verfall).">⏳ Verfall nach:</span>
-        <input class="cf cf-w80" type="number" min="0" value="${a.verfallSek??0}" oninput="actField('${tid}',${ai},'verfallSek',+this.value${branchArg})"> s <span style="font-size:.6rem;color:var(--text3)">(0 = aus, auto-entfernen)</span>
+        <input class="cf cf-w80" type="number" min="0" value="${a.verfallSek??0}" oninput="actField('${tid}',${AI},'verfallSek',+this.value${branchArg})"> s <span style="font-size:.6rem;color:var(--text3)">(0 = aus, auto-entfernen)</span>
       </div>
       <div class="as-act-box">
         <label style="cursor:pointer;display:flex;align-items:center;gap:6px;font-size:.65rem;color:var(--text2)">
-          <input type="checkbox" ${a.antiStrip?'checked':''} onchange="actField('${tid}',${ai},'antiStrip',this.checked${branchArg});actRerender('${tid}',${ai}${branchArg})">
+          <input type="checkbox" ${a.antiStrip?'checked':''} onchange="actField('${tid}',${AI},'antiStrip',this.checked${branchArg});actRerender('${tid}',${AI}${branchArg})">
           🛡️ AntiStrip – Item wird wieder angelegt wenn der Spieler es entfernt
         </label>
         ${antiStripRows}
       </div>
       <div class="as-act-box" style="margin-top:2px">
         <label style="cursor:pointer;display:flex;align-items:center;gap:6px;font-size:.65rem;color:var(--text2)">
-          <input type="checkbox" ${a.nostrip?'checked':''} onchange="actField('${tid}',${ai},'nostrip',this.checked${branchArg})">
+          <input type="checkbox" ${a.nostrip?'checked':''} onchange="actField('${tid}',${AI},'nostrip',this.checked${branchArg})">
           🔒 NoStrip – Freeze + AntiStrip wenn K&auml;ufer /nostrip tippt
         </label>
       </div>
       ${(Array.isArray(a.profilItems)&&a.profilItems.length)?`
       <div class="as-act-box" style="margin-top:2px">
         <label style="cursor:pointer;display:flex;align-items:center;gap:6px;font-size:.65rem;color:var(--text2)" title="An: bereits angelegte Fesseln/Items (z.B. vom Bot, Cage) bleiben beim Outfit-Anlegen erhalten. Aus: werden vorher entfernt.">
-          <input type="checkbox" ${a.outfitKeep?'checked':''} onchange="actField('${tid}',${ai},'outfitKeep',this.checked${branchArg})">
+          <input type="checkbox" ${a.outfitKeep?'checked':''} onchange="actField('${tid}',${AI},'outfitKeep',this.checked${branchArg})">
           🛡️ Fesseln/Items behalten (nicht ablegen)
         </label>
         <label style="cursor:pointer;display:flex;align-items:center;gap:6px;font-size:.65rem;color:var(--text2);margin-top:3px" title="An: vorhandene Klamotten bleiben. Aus: alle Klamotten werden entfernt (Fesseln/Items bleiben je nach Option oben).">
-          <input type="checkbox" ${a.outfitKeepClothes?'checked':''} onchange="actField('${tid}',${ai},'outfitKeepClothes',this.checked${branchArg})">
+          <input type="checkbox" ${a.outfitKeepClothes?'checked':''} onchange="actField('${tid}',${AI},'outfitKeepClothes',this.checked${branchArg})">
           👗 Klamotten behalten (sonst werden sie abgelegt)
         </label>
         <div style="margin-top:3px">
           <span style="font-size:.6rem;color:var(--text3)" title="Haare (Hair/发) bleiben automatisch. Hier weitere Gruppen wählen, die NIE abgelegt werden (z.B. Augen). Eigene/Custom-Namen rechts eintippen + Enter.">🔒 immer behalten (zusätzlich):</span>
           <div style="display:flex;gap:5px;align-items:center;margin-top:2px;flex-wrap:wrap">
-            <select class="cf" style="min-width:150px" onchange="if(this.value){outfitKeepAdd('${tid}',${ai},this.value${branchArg});this.value='';}">
+            <select class="cf" style="min-width:150px" onchange="if(this.value){outfitKeepAdd('${tid}',${AI},this.value${branchArg});this.value='';}">
               <option value="">➕ Gruppe wählen …</option>
               ${_botItemGroups().map(g=>`<option value="${escHtml(g)}">${escHtml(g)}</option>`).join('')}
             </select>
-            <input class="cf" style="width:150px;font-size:.62rem" placeholder="eigener Name + Enter" onkeydown="if(event.key==='Enter'&&this.value.trim()){outfitKeepAdd('${tid}',${ai},this.value${branchArg});this.value='';event.preventDefault();}">
+            <input class="cf" style="width:150px;font-size:.62rem" placeholder="eigener Name + Enter" onkeydown="if(event.key==='Enter'&&this.value.trim()){outfitKeepAdd('${tid}',${AI},this.value${branchArg});this.value='';event.preventDefault();}">
           </div>
-          <div style="margin-top:3px">${_keepList.length?_keepList.map((g,gi)=>`<span style="display:inline-flex;align-items:center;gap:4px;background:var(--pd);color:var(--pl);padding:2px 8px;border-radius:11px;font-size:.62rem;margin:2px 3px 0 0">${escHtml(g)}<button onclick="outfitKeepRemove('${tid}',${ai},${gi}${branchArg})" style="background:none;border:none;color:var(--pl);cursor:pointer;font-size:.7rem;padding:0 1px;line-height:1">✕</button></span>`).join(''):`<span style="font-size:.6rem;color:var(--text3)">– nur Haare automatisch geschützt –</span>`}</div>
+          <div style="margin-top:3px">${_keepList.length?_keepList.map((g,gi)=>`<span style="display:inline-flex;align-items:center;gap:4px;background:var(--pd);color:var(--pl);padding:2px 8px;border-radius:11px;font-size:.62rem;margin:2px 3px 0 0">${escHtml(g)}<button onclick="outfitKeepRemove('${tid}',${AI},${gi}${branchArg})" style="background:none;border:none;color:var(--pl);cursor:pointer;font-size:.7rem;padding:0 1px;line-height:1">✕</button></span>`).join(''):`<span style="font-size:.6rem;color:var(--text3)">– nur Haare automatisch geschützt –</span>`}</div>
         </div>
         <label style="cursor:pointer;display:flex;align-items:center;gap:6px;font-size:.65rem;color:var(--text2);margin-top:3px">
-          <input type="checkbox" ${a.profilEinzeln?'checked':''} onchange="actField('${tid}',${ai},'profilEinzeln',this.checked${branchArg});actRerender('${tid}',${ai}${branchArg})">
+          <input type="checkbox" ${a.profilEinzeln?'checked':''} onchange="actField('${tid}',${AI},'profilEinzeln',this.checked${branchArg});actRerender('${tid}',${AI}${branchArg})">
           🧩 Items einzeln nacheinander anlegen (in Reihenfolge unten)
         </label>
         ${a.profilEinzeln?`<div style="display:flex;gap:6px;align-items:center;margin-top:3px">
           <span style="font-size:.6rem;color:var(--text3)">Abstand pro Item:</span>
-          <input class="cf" type="number" min="80" step="10" value="${a.profilEinzelnGap??250}" style="width:72px" oninput="actField('${tid}',${ai},'profilEinzelnGap',+this.value${branchArg})"> ms
+          <input class="cf" type="number" min="80" step="10" value="${a.profilEinzelnGap??250}" style="width:72px" oninput="actField('${tid}',${AI},'profilEinzelnGap',+this.value${branchArg})"> ms
         </div>`:''}
         <div style="margin-top:4px;display:flex;flex-direction:column;gap:2px;max-height:230px;overflow:auto">
           ${a.profilItems.map((it,ii)=>`<div style="display:flex;gap:5px;align-items:center;font-size:.62rem;background:rgba(255,255,255,0.03);border-radius:4px;padding:2px 5px">
             <span style="display:flex;flex-direction:column;gap:0">
-              <button class="order-btn" onclick="profilItemMove('${tid}',${ai},${ii},-1${branchArg})" ${ii===0?'disabled':''}>▲</button>
-              <button class="order-btn" onclick="profilItemMove('${tid}',${ai},${ii},1${branchArg})" ${ii===a.profilItems.length-1?'disabled':''}>▼</button>
+              <button class="order-btn" onclick="profilItemMove('${tid}',${AI},${ii},-1${branchArg})" ${ii===0?'disabled':''}>▲</button>
+              <button class="order-btn" onclick="profilItemMove('${tid}',${AI},${ii},1${branchArg})" ${ii===a.profilItems.length-1?'disabled':''}>▼</button>
             </span>
             <span style="color:var(--text3);min-width:20px">${ii+1}.</span>
             <span style="flex:1;color:var(--text2)">${escHtml(it.group||'?')}/<b>${escHtml(it.asset||'?')}</b>${it.lock?' 🔒':''}</span>
@@ -1910,10 +2188,10 @@ function renderAct(tid, a, ai, branch) {
     const _entfList = Array.isArray(a.gruppen) ? a.gruppen : (a.gruppe ? [a.gruppe] : []);
     const _entfGroups = _botItemGroups();
     const _entfChips = _entfList.length
-      ? _entfList.map((g,gi)=>`<span style="display:inline-flex;align-items:center;gap:4px;background:var(--pd);color:var(--pl);padding:2px 8px;border-radius:11px;font-size:.65rem;margin:2px 3px 0 0">${escHtml(g)}<button onclick="actEntfRemoveGruppe('${tid}',${ai},${gi}${branchArg})" style="background:none;border:none;color:var(--pl);cursor:pointer;font-size:.7rem;padding:0 1px;line-height:1">✕</button></span>`).join('')
+      ? _entfList.map((g,gi)=>`<span style="display:inline-flex;align-items:center;gap:4px;background:var(--pd);color:var(--pl);padding:2px 8px;border-radius:11px;font-size:.65rem;margin:2px 3px 0 0">${escHtml(g)}<button onclick="actEntfRemoveGruppe('${tid}',${AI},${gi}${branchArg})" style="background:none;border:none;color:var(--pl);cursor:pointer;font-size:.7rem;padding:0 1px;line-height:1">✕</button></span>`).join('')
       : `<span style="font-size:.62rem;color:var(--text3)">– noch keine Gruppe gewählt –</span>`;
     extra = `<div style="margin-top:4px">
-      <select class="cf" style="width:100%" onchange="if(this.value){actEntfAddGruppe('${tid}',${ai},this.value${branchArg});this.value='';}">
+      <select class="cf" style="width:100%" onchange="if(this.value){actEntfAddGruppe('${tid}',${AI},this.value${branchArg});this.value='';}">
         <option value="">➕ Gruppe hinzufügen …</option>
         ${_entfGroups.map(g=>`<option value="${escHtml(g)}">${escHtml(g)}</option>`).join('')}
       </select>
@@ -1926,22 +2204,22 @@ function renderAct(tid, a, ai, branch) {
       return `<div class="tp-slot-row" id="tpslot-${tid}-${ai}-${si}">
         <span class="tp-slot-badge ${si===0?'primary':'fallback'}">${si===0?'Primär':'Fallback '+(si)}</span>
         <span style="font-size:.63rem;color:var(--text3)">X</span>
-        <input class="cf" type="number" style="width:54px" value="${s.x??0}" oninput="tpSlotField('${tid}',${ai},${si},'x',+this.value${branchArg})" placeholder="X">
+        <input class="cf" type="number" style="width:54px" value="${s.x??0}" oninput="tpSlotField('${tid}',${AI},${si},'x',+this.value${branchArg})" placeholder="X">
         <span style="font-size:.63rem;color:var(--text3)">Y</span>
-        <input class="cf" type="number" style="width:54px" value="${s.y??0}" oninput="tpSlotField('${tid}',${ai},${si},'y',+this.value${branchArg})" placeholder="Y">
-        <button onclick="tpSlotSetPos('${tid}',${ai},${si}${branchArg})" style="font-size:.62rem;padding:1px 7px;background:var(--pd);border:none;color:var(--pl);border-radius:4px;cursor:pointer" title="Aktuelle Spielerposition übernehmen">📍 Set</button>
+        <input class="cf" type="number" style="width:54px" value="${s.y??0}" oninput="tpSlotField('${tid}',${AI},${si},'y',+this.value${branchArg})" placeholder="Y">
+        <button onclick="tpSlotSetPos('${tid}',${AI},${si}${branchArg})" style="font-size:.62rem;padding:1px 7px;background:var(--pd);border:none;color:var(--pl);border-radius:4px;cursor:pointer" title="Aktuelle Spielerposition übernehmen">📍 Set</button>
         <button class="tp-slot-valid ${gueltig?'zählt':'zählt-nicht'}"
-          onclick="tpSlotField('${tid}',${ai},${si},'gueltig',!${gueltig}${branchArg});actRerender('${tid}',${ai}${branchArg})"
+          onclick="tpSlotField('${tid}',${AI},${si},'gueltig',!${gueltig}${branchArg});actRerender('${tid}',${AI}${branchArg})"
           title="${gueltig?'Dieser Slot zählt als Erfolg – klicken um zu ändern':'Dieser Slot gilt als Fehler (bei_fehler greift) – klicken um zu ändern'}">
           ${gueltig?'✅ Gültig':'❌ Fehler'}
         </button>
-        <button onclick="tpSlotRemove('${tid}',${ai},${si}${branchArg})" style="margin-left:auto;background:none;border:none;color:var(--red);cursor:pointer;font-size:.7rem;padding:1px 4px" title="Entfernen">✕</button>
+        <button onclick="tpSlotRemove('${tid}',${AI},${si}${branchArg})" style="margin-left:auto;background:none;border:none;color:var(--red);cursor:pointer;font-size:.7rem;padding:1px 4px" title="Entfernen">✕</button>
       </div>`;
     }).join('');
     const tpMode = a.tpMode || 'punkte';
     const modeSel = `<div style="display:flex;gap:8px;align-items:center;margin-top:5px;flex-wrap:wrap">
       <span style="font-size:.63rem;color:var(--text3)">Modus:</span>
-      <select class="cf" style="width:200px" onchange="actField('${tid}',${ai},'tpMode',this.value${branchArg});actRerender('${tid}',${ai}${branchArg})">
+      <select class="cf" style="width:200px" onchange="actField('${tid}',${AI},'tpMode',this.value${branchArg});actRerender('${tid}',${AI}${branchArg})">
         <option value="punkte" ${tpMode==='punkte'?'selected':''}>📍 Punkte (Primär + Fallbacks)</option>
         <option value="bereich" ${tpMode==='bereich'?'selected':''}>⬛ Bereich (zufälliger freier Punkt)</option>
       </select>
@@ -1951,15 +2229,15 @@ function renderAct(tid, a, ai, branch) {
         <div style="font-size:.63rem;color:var(--text3);margin-top:5px">🌀 Teleportiert auf einen zufälligen freien Punkt im Rechteck A→B. Alles belegt → Fehler.</div>
         <div class="tp-slot-row" style="margin-top:4px">
           <span class="tp-slot-badge primary">Ecke A</span>
-          <span style="font-size:.63rem;color:var(--text3)">X</span><input class="cf" type="number" style="width:54px" value="${a.tpAx??0}" oninput="actField('${tid}',${ai},'tpAx',+this.value${branchArg})">
-          <span style="font-size:.63rem;color:var(--text3)">Y</span><input class="cf" type="number" style="width:54px" value="${a.tpAy??0}" oninput="actField('${tid}',${ai},'tpAy',+this.value${branchArg})">
-          <button onclick="tpAreaSetPos('${tid}',${ai},'A'${branchArg})" style="font-size:.62rem;padding:1px 7px;background:var(--pd);border:none;color:var(--pl);border-radius:4px;cursor:pointer" title="Ecke A = aktuelle Position">📍 Set A</button>
+          <span style="font-size:.63rem;color:var(--text3)">X</span><input class="cf" type="number" style="width:54px" value="${a.tpAx??0}" oninput="actField('${tid}',${AI},'tpAx',+this.value${branchArg})">
+          <span style="font-size:.63rem;color:var(--text3)">Y</span><input class="cf" type="number" style="width:54px" value="${a.tpAy??0}" oninput="actField('${tid}',${AI},'tpAy',+this.value${branchArg})">
+          <button onclick="tpAreaSetPos('${tid}',${AI},'A'${branchArg})" style="font-size:.62rem;padding:1px 7px;background:var(--pd);border:none;color:var(--pl);border-radius:4px;cursor:pointer" title="Ecke A = aktuelle Position">📍 Set A</button>
         </div>
         <div class="tp-slot-row" style="margin-top:3px">
           <span class="tp-slot-badge fallback">Ecke B</span>
-          <span style="font-size:.63rem;color:var(--text3)">X</span><input class="cf" type="number" style="width:54px" value="${a.tpBx??2}" oninput="actField('${tid}',${ai},'tpBx',+this.value${branchArg})">
-          <span style="font-size:.63rem;color:var(--text3)">Y</span><input class="cf" type="number" style="width:54px" value="${a.tpBy??2}" oninput="actField('${tid}',${ai},'tpBy',+this.value${branchArg})">
-          <button onclick="tpAreaSetPos('${tid}',${ai},'B'${branchArg})" style="font-size:.62rem;padding:1px 7px;background:var(--pd);border:none;color:var(--pl);border-radius:4px;cursor:pointer" title="Ecke B = aktuelle Position">📍 Set B</button>
+          <span style="font-size:.63rem;color:var(--text3)">X</span><input class="cf" type="number" style="width:54px" value="${a.tpBx??2}" oninput="actField('${tid}',${AI},'tpBx',+this.value${branchArg})">
+          <span style="font-size:.63rem;color:var(--text3)">Y</span><input class="cf" type="number" style="width:54px" value="${a.tpBy??2}" oninput="actField('${tid}',${AI},'tpBy',+this.value${branchArg})">
+          <button onclick="tpAreaSetPos('${tid}',${AI},'B'${branchArg})" style="font-size:.62rem;padding:1px 7px;background:var(--pd);border:none;color:var(--pl);border-radius:4px;cursor:pointer" title="Ecke B = aktuelle Position">📍 Set B</button>
         </div>`;
     } else {
       extra = modeSel + `
@@ -1967,19 +2245,19 @@ function renderAct(tid, a, ai, branch) {
           🌀 Teleportiert den Auslöser. Wenn alle Positionen belegt sind → gilt als Fehler.
         </div>
         <div class="tp-slot-list" id="tpslots-${tid}-${ai}">${slotsHtml}</div>
-        <button class="tp-slot-add-btn" onclick="tpSlotAdd('${tid}',${ai}${branchArg})">+ Position / Fallback hinzufügen</button>`;
+        <button class="tp-slot-add-btn" onclick="tpSlotAdd('${tid}',${AI}${branchArg})">+ Position / Fallback hinzufügen</button>`;
     }
   } else if (a.typ === 'money') {
     const moneyName = _money?.settings?.name || 'Gold';
     const mop = a.money_op ?? 'add';
     extra = `<div style="display:flex;gap:8px;align-items:center;margin-top:5px;flex-wrap:wrap">
-      <select class="cf" style="width:130px" onchange="actField('${tid}',${ai},'money_op',this.value${branchArg});actRerender('${tid}',${ai}${branchArg})">
+      <select class="cf" style="width:130px" onchange="actField('${tid}',${AI},'money_op',this.value${branchArg});actRerender('${tid}',${AI}${branchArg})">
         <option value="add"   ${mop==='add'?'selected':''}>➕ Hinzufügen</option>
         <option value="sub"   ${mop==='sub'?'selected':''}>➖ Abziehen</option>
         <option value="set"   ${mop==='set'?'selected':''}>= Setzen auf</option>
         <option value="reset" ${mop==='reset'?'selected':''}>🔄 Zurücksetzen (0)</option>
       </select>
-      ${mop!=='reset'?`<input class="cf cf-w80" type="number" value="${a.money_val??1}" oninput="actField('${tid}',${ai},'money_val',+this.value${branchArg})">
+      ${mop!=='reset'?`<input class="cf cf-w80" type="number" value="${a.money_val??1}" oninput="actField('${tid}',${AI},'money_val',+this.value${branchArg})">
       <span style="font-size:.68rem;color:var(--text3)">${escHtml(moneyName)}</span>`:''}
       <span style="font-size:.62rem;color:var(--text3)">Ziel: Auslöser</span>
     </div>`;
@@ -1987,13 +2265,13 @@ function renderAct(tid, a, ai, branch) {
     const rop = a.rang_op ?? 'setzen';
     const ranks = _rankSorted();
     extra = `<div style="display:flex;gap:8px;align-items:center;margin-top:5px;flex-wrap:wrap">
-      <select class="cf" style="width:155px" onchange="actField('${tid}',${ai},'rang_op',this.value${branchArg});actRerender('${tid}',${ai}${branchArg})">
+      <select class="cf" style="width:155px" onchange="actField('${tid}',${AI},'rang_op',this.value${branchArg});actRerender('${tid}',${AI}${branchArg})">
         <option value="setzen"    ${rop==='setzen'?'selected':''}>🏆 Rang setzen</option>
         <option value="entfernen" ${rop==='entfernen'?'selected':''}>❌ Rang entfernen</option>
         <option value="naechster" ${rop==='naechster'?'selected':''}>⬆️ Nächster Rang</option>
         <option value="vorheriger"${rop==='vorheriger'?'selected':''}>⬇️ Vorheriger Rang</option>
       </select>
-      ${rop==='setzen'?`<select class="cf" style="flex:1;min-width:140px" onchange="actField('${tid}',${ai},'rang_id',this.value${branchArg})">
+      ${rop==='setzen'?`<select class="cf" style="flex:1;min-width:140px" onchange="actField('${tid}',${AI},'rang_id',this.value${branchArg})">
         <option value="">– Rang wählen –</option>
         ${ranks.map(r=>`<option value="${r.id}" ${a.rang_id===r.id?'selected':''}>${escHtml(r.icon+' '+r.name)} (Lv.${r.level})</option>`).join('')}
       </select>`:''}
@@ -2002,45 +2280,62 @@ function renderAct(tid, a, ai, branch) {
   } else if (a.typ === 'szene') {
     extra = `<div style="display:flex;gap:8px;align-items:center;margin-top:5px;flex-wrap:wrap">
       <span style="font-size:.65rem;color:var(--text3)">📖 Szene:</span>
-      <select class="cf" style="flex:1;min-width:170px" onchange="actField('${tid}',${ai},'szeneId',this.value${branchArg})">
+      <select class="cf" style="flex:1;min-width:170px" onchange="actField('${tid}',${AI},'szeneId',this.value${branchArg})">
         <option value="">– Szene wählen –</option>
         ${_szenen(b).map(sz=>`<option value="${sz.id}" ${a.szeneId===sz.id?'selected':''}>${escHtml(sz.name||sz.id)}</option>`).join('')}
       </select>
     </div>`;
   } else if (a.typ === 'variable') {
     extra = `<div style="display:flex;gap:6px;align-items:center;margin-top:5px;flex-wrap:wrap">
-      <input class="cf" style="width:130px" value="${escHtml(a.varName||'')}" placeholder="Variablen-Name" oninput="actField('${tid}',${ai},'varName',this.value${branchArg})">
-      <select class="cf" style="width:104px" onchange="actField('${tid}',${ai},'varOp',this.value${branchArg})">
+      <input class="cf" style="width:130px" value="${escHtml(a.varName||'')}" placeholder="Variablen-Name" oninput="actField('${tid}',${AI},'varName',this.value${branchArg})">
+      <select class="cf" style="width:104px" onchange="actField('${tid}',${AI},'varOp',this.value${branchArg})">
         <option value="set" ${(!a.varOp||a.varOp==='set')?'selected':''}>= Setzen</option>
         <option value="add" ${a.varOp==='add'?'selected':''}>➕ Plus</option>
         <option value="sub" ${a.varOp==='sub'?'selected':''}>➖ Minus</option>
         <option value="toggle" ${a.varOp==='toggle'?'selected':''}>🔁 Umschalten</option>
       </select>
-      <input class="cf" style="width:90px" value="${escHtml(a.varWert||'')}" placeholder="Wert" oninput="actField('${tid}',${ai},'varWert',this.value${branchArg})">
+      <input class="cf" style="width:90px" value="${escHtml(a.varWert||'')}" placeholder="Wert" oninput="actField('${tid}',${AI},'varWert',this.value${branchArg})">
       <span style="font-size:.6rem;color:var(--text3)">Ziel: Auslöser</span>
     </div>`;
+  } else if (a.typ === 'inventar_geben') {
+    const _defs = (typeof _quelleItemDefs === 'function') ? _quelleItemDefs() : [];
+    const _liste = _defs.map(([id,lab])=>`<option value="${escHtml(id)}" ${a.itemDefId===id?'selected':''}>${escHtml(lab)}</option>`).join('');
+    const _fehlt = (a.itemDefId && !_defs.some(x=>x[0]===a.itemDefId))
+      ? `<option value="${escHtml(a.itemDefId)}" selected>\u26A0 nicht mehr im Katalog</option>` : '';
+    extra = `<div style="display:flex;gap:6px;align-items:center;margin-top:5px;flex-wrap:wrap">
+      <select class="cf" style="width:180px" onchange="actField('${tid}',${AI},'itemDefId',this.value${branchArg})">
+        <option value="">\u2013 Gegenstand w\u00e4hlen \u2013</option>${_fehlt}${_liste}
+      </select>
+      <select class="cf" style="width:104px" onchange="actField('${tid}',${AI},'invOp',this.value${branchArg})">
+        <option value="geben" ${a.invOp!=='nehmen'?'selected':''}>\u2795 geben</option>
+        <option value="nehmen" ${a.invOp==='nehmen'?'selected':''}>\u2796 wegnehmen</option>
+      </select>
+      <input class="cf" type="number" min="1" style="width:70px" value="${a.invAnzahl??1}" oninput="actField('${tid}',${AI},'invAnzahl',+this.value${branchArg})">
+      <span style="font-size:.6rem;color:var(--text3)">St\u00fcck</span>
+    </div>
+    <div style="font-size:.59rem;color:var(--text3);margin-top:3px">Die Gegenst\u00e4nde kommen aus dem <b>Items</b>-Tab. Wer sie bekommt, legst du unten bei \u{1F3AF} Ziel fest.</div>`;
   } else if (a.typ === 'erregung') {
     const eop = a.erregOp||'set';
     extra = `<div style="display:flex;gap:6px;align-items:center;margin-top:5px;flex-wrap:wrap">
-      <select class="cf" style="width:170px" onchange="actField('${tid}',${ai},'erregOp',this.value${branchArg});actRerender('${tid}',${ai}${branchArg})">
+      <select class="cf" style="width:170px" onchange="actField('${tid}',${AI},'erregOp',this.value${branchArg});actRerender('${tid}',${AI}${branchArg})">
         <option value="set" ${eop==='set'?'selected':''}>= Erregung setzen</option>
         <option value="add" ${eop==='add'?'selected':''}>➕ Erregung erhöhen</option>
         <option value="sub" ${eop==='sub'?'selected':''}>➖ Erregung senken</option>
         <option value="orgasm" ${eop==='orgasm'?'selected':''}>💥 Orgasmus erzwingen</option>
         <option value="stop" ${eop==='stop'?'selected':''}>🛑 Orgasmus stoppen</option>
       </select>
-      ${(eop==='set'||eop==='add'||eop==='sub')?`<input class="cf cf-w70" type="number" min="0" max="100" value="${a.erregVal??50}" oninput="actField('${tid}',${ai},'erregVal',+this.value${branchArg})"> %`:''}
+      ${(eop==='set'||eop==='add'||eop==='sub')?`<input class="cf cf-w70" type="number" min="0" max="100" value="${a.erregVal??50}" oninput="actField('${tid}',${AI},'erregVal',+this.value${branchArg})"> %`:''}
       <span style="font-size:.6rem;color:var(--text3)">wirkt zuverlässig auf dich selbst (BC synct nur eigene Erregung)</span>
     </div>`;
   } else if (a.typ === 'mapkey') {
     const mop = a.mapKeyOp||'geben';
     const mk  = a.mapKey||'bronze';
     extra = `<div style="display:flex;gap:6px;align-items:center;margin-top:5px;flex-wrap:wrap">
-      <select class="cf" style="width:150px" onchange="actField('${tid}',${ai},'mapKeyOp',this.value${branchArg})">
+      <select class="cf" style="width:150px" onchange="actField('${tid}',${AI},'mapKeyOp',this.value${branchArg})">
         <option value="geben" ${mop==='geben'?'selected':''}>🔑 Key geben</option>
         <option value="wegnehmen" ${mop==='wegnehmen'?'selected':''}>🔒 Key wegnehmen</option>
       </select>
-      <select class="cf" style="width:130px" onchange="actField('${tid}',${ai},'mapKey',this.value${branchArg})">
+      <select class="cf" style="width:130px" onchange="actField('${tid}',${AI},'mapKey',this.value${branchArg})">
         <option value="bronze" ${mk==='bronze'?'selected':''}>🥉 Bronze</option>
         <option value="silver" ${mk==='silver'?'selected':''}>🥈 Silver</option>
         <option value="gold" ${mk==='gold'?'selected':''}>🥇 Gold</option>
@@ -2061,14 +2356,14 @@ function renderAct(tid, a, ai, branch) {
     const ba = branch ? `,'${branch}'` : '';
     return `<div style="display:flex;gap:5px;align-items:center;margin-top:4px">
       <span style="font-size:.62rem;font-weight:600;color:${color};white-space:nowrap;min-width:42px">${label}</span>
-      <select class="cf" style="width:86px;font-size:.62rem" onchange="actField('${tid}',${ai},'${typField}',this.value${ba});actRerender('${tid}',${ai}${ba})">
+      <select class="cf" style="width:86px;font-size:.62rem" onchange="actField('${tid}',${AI},'${typField}',this.value${ba});actRerender('${tid}',${AI}${ba})">
         <option value="nichts"   ${mt==='nichts'?'selected':''}>– nichts</option>
         <option value="chat"    ${mt==='chat'?'selected':''}>💬 Chat</option>
         <option value="emote"   ${mt==='emote'?'selected':''}>✨ Emote</option>
         <option value="whisper" ${mt==='whisper'?'selected':''}>🤫 Whisper</option>
       </select>
       ${mt!=='nichts'?`<input class="cf cf-flex" style="font-size:.68rem" value="${escHtml(val)}"
-        oninput="actField('${tid}',${ai},'${field}',this.value${ba})"
+        oninput="actField('${tid}',${AI},'${field}',this.value${ba})"
         placeholder="${placeholder}">`:''}
     </div>`;
   }
@@ -2085,7 +2380,7 @@ function renderAct(tid, a, ai, branch) {
   const ba2 = branch ? `,'${branch}'` : '';
   const bfRow = canBranch ? `<div style="display:flex;gap:6px;align-items:center;margin-top:4px">
     <span style="font-size:.6rem;color:var(--text3);white-space:nowrap">Wenn fehlschlägt:</span>
-    <select class="cf" style="flex:1;color:${bfColors[bf]??'var(--text3)'}" onchange="actField('${tid}',${ai},'bei_fehler',this.value${ba2});actRerender('${tid}',${ai}${ba2})">
+    <select class="cf" style="flex:1;color:${bfColors[bf]??'var(--text3)'}" onchange="actField('${tid}',${AI},'bei_fehler',this.value${ba2});actRerender('${tid}',${AI}${ba2})">
       <option value="ignorieren"        ${bf==='ignorieren'?'selected':''}>⬇️ Weiter mit nächster Aktion</option>
       <option value="kette_stoppen"     ${bf==='kette_stoppen'?'selected':''}>⏹ Kette stoppen (Trigger zählt)</option>
       <option value="trigger_ungueltig" ${bf==='trigger_ungueltig'?'selected':''}>❌ Trigger ungültig (Fallback läuft)</option>
@@ -2098,16 +2393,17 @@ function renderAct(tid, a, ai, branch) {
     <div style="flex:1">
       <div style="display:flex;gap:4px;align-items:center">
         <span style="display:flex;flex-direction:column;gap:1px;flex-shrink:0">
-          <button class="order-btn" onclick="actMoveUp('${tid}',${ai}${branchArg})" ${ai===0?'disabled':''}>▲</button>
-          <button class="order-btn" onclick="actMoveDown('${tid}',${ai}${branchArg})" ${ai===tot-1?'disabled':''}>▼</button>
+          <button class="order-btn" onclick="actMoveUp('${tid}',${AI}${branchArg})" ${lok===0?'disabled':''}>▲</button>
+          <button class="order-btn" onclick="actMoveDown('${tid}',${AI}${branchArg})" ${lok===tot-1?'disabled':''}>▼</button>
+          <button class="order-btn" onclick="aktInGruppe('${tid}',${AI}${branchArg})" title="In die Klammer darüber verschieben">⤵</button>
         </span>
-        <span class="trig-order-num" style="margin-right:2px">${ai+1}</span>
-        <select class="cf" style="flex:1" onchange="actChangeType('${tid}',${ai},this.value${branchArg})">${typeOpts}</select>
-        <input class="cf cf-w80" type="number" value="${a.delay??0}" oninput="actField('${tid}',${ai},'delay',+this.value${branchArg})" title="Delay nach vorheriger Aktion (ms)"> ms
+        <span class="trig-order-num" style="margin-right:2px">${lok+1}</span>
+        <select class="cf" style="flex:1" onchange="actChangeType('${tid}',${AI},this.value${branchArg})">${typeOpts}</select>
+        <input class="cf cf-w80" type="number" value="${a.delay??0}" oninput="actField('${tid}',${AI},'delay',+this.value${branchArg})" title="Delay nach vorheriger Aktion (ms)"> ms
       </div>
       <div style="display:flex;gap:6px;align-items:center;margin-top:5px;padding:5px 8px;background:rgba(96,165,250,0.05);border:1px solid rgba(96,165,250,0.12);border-radius:6px;flex-wrap:wrap">
         <span style="font-size:.62rem;font-weight:700;color:#60a5fa;white-space:nowrap">🎯 Ziel</span>
-        <select class="cf" style="width:230px;font-size:.68rem" onchange="actField('${tid}',${ai},'aktZiel',this.value${branchArg});actRerender('${tid}',${ai}${branchArg})">
+        <select class="cf" style="width:230px;font-size:.68rem" onchange="actField('${tid}',${AI},'aktZiel',this.value${branchArg});actRerender('${tid}',${AI}${branchArg})">
           <option value="ausloeser" ${(!a.aktZiel||a.aktZiel==='ausloeser')?'selected':''}>👤 Die Person, die ausgelöst hat</option>
           <option value="ausser_ausloeser" ${a.aktZiel==='ausser_ausloeser'?'selected':''}>👥 Alle außer der auslösenden Person</option>
           <option value="alle"      ${a.aktZiel==='alle'?'selected':''}>👥 Alle im Raum</option>
@@ -2116,19 +2412,19 @@ function renderAct(tid, a, ai, branch) {
           <option value="zufall"    ${a.aktZiel==='zufall'?'selected':''}>🎲 Eine zufällige Person im Raum</option>
           <option value="shop_kaeufer" ${a.aktZiel==='shop_kaeufer'?'selected':''}>💳 Wer im Shop gekauft hat</option>
         </select>
-        ${a.aktZiel==='rang'?`<select class="cf" style="width:190px;font-size:.68rem" onchange="actField('${tid}',${ai},'aktZielRangId',this.value${branchArg})">
+        ${a.aktZiel==='rang'?`<select class="cf" style="width:190px;font-size:.68rem" onchange="actField('${tid}',${AI},'aktZielRangId',this.value${branchArg})">
           <option value="">– Rang wählen –</option>
           ${_quelleRaenge().map(r=>`<option value="${escHtml(r[0])}" ${a.aktZielRangId===r[0]?'selected':''}>${escHtml(r[1])}</option>`).join('')}
         </select><span style="font-size:.6rem;color:var(--text3)" title="Gilt für diesen Rang und alle höheren">ⓘ ab dieser Stufe aufwärts</span>`:''}
         ${a.aktZiel==='whitelist'?`<input class="cf" style="flex:1;min-width:150px;font-size:.68rem" value="${escHtml((a.aktZielNummern||[]).join(', '))}"
-          oninput="actField('${tid}',${ai},'aktZielNummern',this.value.split(',').map(x=>+x.trim()).filter(x=>x>0)${branchArg})"
+          oninput="actField('${tid}',${AI},'aktZielNummern',this.value.split(',').map(x=>+x.trim()).filter(x=>x>0)${branchArg})"
           placeholder="MemberNummer, z.B. 12345, 67890">`:''}
       </div>
       ${extra}
       ${branchSection}
       ${bfRow}
     </div>
-    <button class="rm-btn" onclick="actRemove('${tid}',${ai}${branchArg})">✕</button>
+    <button class="rm-btn" onclick="actRemove('${tid}',${AI}${branchArg})">✕</button>
   </div>`;
 }
 
@@ -2336,11 +2632,9 @@ function trigAddAct(tid, branch) {
   const t = b.triggers.find(x=>x.id===tid); if (!t) return;
   const arr = branch === 'sonst' ? 'aktionen_sonst' : 'aktionen';
   t[arr] = t[arr] ?? [];
-  t[arr].push({typ:'chat', delay:0, text:''});
+  t[arr].push(_aktVorgabe('chat', 0));
   _saveBots();
-  const listId = branch === 'sonst' ? 'acts-sonst-'+tid : 'acts-'+tid;
-  const el = document.getElementById(listId);
-  if (el) el.innerHTML = t[arr].map((a,ai)=>renderAct(tid,a,ai,branch)).join('');
+  _aktListeNeu(tid, branch);
   document.getElementById('tb-'+tid)?.classList.add('open');
 }
 
@@ -2365,76 +2659,162 @@ function _setActArr(t, branch, arr) {
 function actField(tid, ai, field, val, branch) {
   const b = _selBot(); if (!b) return;
   const t = b.triggers.find(x=>x.id===tid); if (!t) return;
-  const arr = _getActArr(t, branch);
-  if (!arr[ai]) return;
-  arr[ai][field] = val; _saveBots();
+  const { arr, idx } = _aktOrt(t, branch, ai);
+  if (!arr[idx]) return;
+  arr[idx][field] = val; _saveBots();
 }
 
 function actRerender(tid, ai, branch) {
   const b = _selBot(); if (!b) return;
   const t = b.triggers.find(x=>x.id===tid); if (!t) return;
-  const arr = _getActArr(t, branch);
-  if (!arr[ai]) return;
+  const { arr, idx } = _aktOrt(t, branch, ai);
+  if (!arr[idx]) return;
   const actId = branch === 'sonst' ? 'act-sonst-'+tid+'-'+ai : 'act-'+tid+'-'+ai;
   const el = document.getElementById(actId);
-  if (el) { const tmp=document.createElement('div'); tmp.innerHTML=renderAct(tid,arr[ai],ai,branch); el.replaceWith(tmp.firstElementChild); }
+  if (el) { const tmp=document.createElement('div'); tmp.innerHTML=renderAct(tid,arr[idx],ai,branch); el.replaceWith(tmp.firstElementChild); }
+  else _aktListeNeu(tid, branch);
 }
 
 function actChangeType(tid, ai, typ, branch) {
   const b = _selBot(); if (!b) return;
   const t = b.triggers.find(x=>x.id===tid); if (!t) return;
-  const arr = _getActArr(t, branch);
-  const delay = arr[ai]?.delay ?? 0;
-  arr[ai] = {typ, delay};
-  if (typ === 'teleport') {
-    arr[ai].tpSlots = [{ x: 0, y: 0 }];
-    arr[ai].keinFallbackMsg = '';
-  }
+  const { arr, idx } = _aktOrt(t, branch, ai);
+  if (!arr[idx]) return;
+  const delay = arr[idx].delay ?? 0;
+  arr[idx] = _aktVorgabe(typ, delay);
   _saveBots();
   const actId = branch === 'sonst' ? 'act-sonst-'+tid+'-'+ai : 'act-'+tid+'-'+ai;
   const el = document.getElementById(actId);
-  if (el) { const tmp=document.createElement('div'); tmp.innerHTML=renderAct(tid,arr[ai],ai,branch); el.replaceWith(tmp.firstElementChild); }
+  if (el) { const tmp=document.createElement('div'); tmp.innerHTML=renderAct(tid,arr[idx],ai,branch); el.replaceWith(tmp.firstElementChild); }
+  else _aktListeNeu(tid, branch);
+}
+
+/* Vorgabewerte einer neuen Aktion - an einer Stelle. */
+function _aktVorgabe(typ, delay) {
+  if (typ === 'gruppe')
+    return { typ:'gruppe', verknuepfung:'und', bedingungen:[], kinder:[], aktZiel:'erben', delay: delay ?? 0 };
+  const a = { typ, delay: delay ?? 0 };
+  if (typ === 'chat' || typ === 'emote' || typ === 'whisper') a.text = '';
+  if (typ === 'teleport') { a.tpSlots = [{ x:0, y:0 }]; a.keinFallbackMsg = ''; }
+  return a;
 }
 
 function actRemove(tid, ai, branch) {
   const b = _selBot(); if (!b) return;
   const t = b.triggers.find(x=>x.id===tid); if (!t) return;
-  const arr = _getActArr(t, branch);
-  arr.splice(ai,1); _setActArr(t, branch, arr); _saveBots();
-  const listId = branch === 'sonst' ? 'acts-sonst-'+tid : 'acts-'+tid;
-  const el = document.getElementById(listId);
-  if (el) el.innerHTML = arr.map((a,ai2)=>renderAct(tid,a,ai2,branch)).join('');
+  const { arr, idx } = _aktOrt(t, branch, ai);
+  if (idx < 0 || !arr[idx]) return;
+  arr.splice(idx,1); _saveBots();
+  _aktListeNeu(tid, branch);
 }
 
 function actMoveUp(tid, ai, branch) {
   const b = _selBot(); if (!b) return;
-  const t = b.triggers.find(x=>x.id===tid); if (!t||ai<=0) return;
-  const arr = _getActArr(t, branch);
-  [arr[ai-1], arr[ai]] = [arr[ai], arr[ai-1]];
+  const t = b.triggers.find(x=>x.id===tid); if (!t) return;
+  const { arr, idx } = _aktOrt(t, branch, ai);
+  if (idx <= 0 || !arr[idx]) return;
+  [arr[idx-1], arr[idx]] = [arr[idx], arr[idx-1]];
   _saveBots();
-  const listId = branch === 'sonst' ? 'acts-sonst-'+tid : 'acts-'+tid;
-  const el = document.getElementById(listId);
-  if (el) el.innerHTML = arr.map((a,ai2)=>renderAct(tid,a,ai2,branch)).join('');
+  _aktListeNeu(tid, branch);
 }
 
 function actMoveDown(tid, ai, branch) {
   const b = _selBot(); if (!b) return;
   const t = b.triggers.find(x=>x.id===tid); if (!t) return;
-  const arr = _getActArr(t, branch);
-  if (ai >= arr.length-1) return;
-  [arr[ai], arr[ai+1]] = [arr[ai+1], arr[ai]];
+  const { arr, idx } = _aktOrt(t, branch, ai);
+  if (idx < 0 || idx >= arr.length-1) return;
+  [arr[idx], arr[idx+1]] = [arr[idx+1], arr[idx]];
   _saveBots();
-  const listId = branch === 'sonst' ? 'acts-sonst-'+tid : 'acts-'+tid;
-  const el = document.getElementById(listId);
-  if (el) el.innerHTML = arr.map((a,ai2)=>renderAct(tid,a,ai2,branch)).join('');
+  _aktListeNeu(tid, branch);
+}
+
+// ── Klammern im Aktionsteil ───────────────────────────────────────
+/* Eine neue Klammer ans Ende der Liste. */
+function trigAddAktGruppe(tid, branch) {
+  const b = _selBot(); if (!b) return;
+  const t = b.triggers.find(x=>x.id===tid); if (!t) return;
+  const arr = _getActArr(t, branch);
+  arr.push(_aktVorgabe('gruppe', 0));
+  _setActArr(t, branch, arr);
+  _saveBots(); _aktListeNeu(tid, branch);
+  document.getElementById('tb-'+tid)?.classList.add('open');
+}
+/* Eine Aktion oder Klammer INNERHALB einer Klammer anlegen. */
+function aktGruppeAddKind(tid, pfad, typ, branch) {
+  const b = _selBot(); if (!b) return;
+  const t = b.triggers.find(x=>x.id===tid); if (!t) return;
+  const { arr, idx } = _aktOrt(t, branch, pfad);
+  const g = arr[idx]; if (!g) return;
+  (g.kinder = g.kinder || []).push(_aktVorgabe(typ, 0));
+  _saveBots(); _aktListeNeu(tid, branch);
+}
+function aktGruppeFeld(tid, pfad, key, wert, branch) {
+  const b = _selBot(); if (!b) return;
+  const t = b.triggers.find(x=>x.id===tid); if (!t) return;
+  const { arr, idx } = _aktOrt(t, branch, pfad);
+  if (!arr[idx]) return;
+  arr[idx][key] = wert; _saveBots();
+}
+function aktGruppeBedAdd(tid, pfad, typ, branch) {
+  const b = _selBot(); if (!b) return;
+  const t = b.triggers.find(x=>x.id===tid); if (!t) return;
+  const { arr, idx } = _aktOrt(t, branch, pfad);
+  const g = arr[idx]; if (!g) return;
+  (g.bedingungen = g.bedingungen || []).push(_condVorgabe(typ));
+  _saveBots(); _aktListeNeu(tid, branch);
+}
+function aktGruppeBedRemove(tid, pfad, ci, branch) {
+  const b = _selBot(); if (!b) return;
+  const t = b.triggers.find(x=>x.id===tid); if (!t) return;
+  const { arr, idx } = _aktOrt(t, branch, pfad);
+  const g = arr[idx]; if (!g || !g.bedingungen) return;
+  g.bedingungen.splice(ci, 1);
+  _saveBots(); _aktListeNeu(tid, branch);
+}
+/* Feldaenderung an einer Bedingung IN einer Aktions-Klammer.
+   Die Reihenfolge der Parameter ist durch _condInner vorgegeben: erst die
+   args aus dem Ziel, dann Schluessel und Wert. */
+function aktGruppeBedFeld(tid, pfad, ci, branch, key, wert) {
+  const b = _selBot(); if (!b) return;
+  const t = b.triggers.find(x=>x.id===tid); if (!t) return;
+  const { arr, idx } = _aktOrt(t, branch || undefined, pfad);
+  const g = arr[idx]; if (!g) return;
+  const c = (g.bedingungen || [])[ci]; if (!c) return;
+  c[key] = wert; _saveBots();
+}
+/* Eine Aktion in die naechste Klammer DARUEBER schieben. */
+function aktInGruppe(tid, pfad, branch) {
+  const b = _selBot(); if (!b) return;
+  const t = b.triggers.find(x=>x.id===tid); if (!t) return;
+  const { arr, idx } = _aktOrt(t, branch, pfad);
+  if (idx < 0 || !arr[idx]) return;
+  let zi = -1;
+  for (let i = idx - 1; i >= 0; i--) if (arr[i] && arr[i].typ === 'gruppe') { zi = i; break; }
+  if (zi < 0) { showStatus('Keine Klammer darüber – erst eine anlegen', 'info'); return; }
+  const [a] = arr.splice(idx, 1);
+  (arr[zi].kinder = arr[zi].kinder || []).push(a);
+  _saveBots(); _aktListeNeu(tid, branch);
+}
+/* Eine Aktion eine Ebene nach aussen holen. */
+function aktAusGruppe(tid, pfad, branch) {
+  const b = _selBot(); if (!b) return;
+  const t = b.triggers.find(x=>x.id===tid); if (!t) return;
+  const elternPfad = _aktEltern(pfad);
+  if (!elternPfad) { showStatus('Diese Aktion liegt nicht in einer Klammer', 'info'); return; }
+  const { arr, idx } = _aktOrt(t, branch, pfad);
+  if (idx < 0 || !arr[idx]) return;
+  const [a] = arr.splice(idx, 1);
+  const ziel = _aktOrt(t, branch, elternPfad);
+  ziel.arr.splice(ziel.idx + 1, 0, a);
+  _saveBots(); _aktListeNeu(tid, branch);
 }
 
 // ── TP Slot helpers ───────────────────────────────────────────────
 function tpSlotAdd(tid, ai, branch) {
   const b = _selBot(); if (!b) return;
   const t = b.triggers.find(x=>x.id===tid); if (!t) return;
-  const arr = _getActArr(t, branch);
-  const a = arr[ai]; if (!a) return;
+  const { arr, idx } = _aktOrt(t, branch, ai);
+  const a = arr[idx]; if (!a) return;
   a.tpSlots = a.tpSlots ?? [];
   a.tpSlots.push({ x: 0, y: 0 });
   _saveBots();
@@ -2444,8 +2824,8 @@ function tpSlotAdd(tid, ai, branch) {
 function tpSlotRemove(tid, ai, si, branch) {
   const b = _selBot(); if (!b) return;
   const t = b.triggers.find(x=>x.id===tid); if (!t) return;
-  const arr = _getActArr(t, branch);
-  const a = arr[ai]; if (!a) return;
+  const { arr, idx } = _aktOrt(t, branch, ai);
+  const a = arr[idx]; if (!a) return;
   a.tpSlots = a.tpSlots ?? [];
   a.tpSlots.splice(si, 1);
   _saveBots();
@@ -2455,8 +2835,8 @@ function tpSlotRemove(tid, ai, si, branch) {
 function tpSlotField(tid, ai, si, field, val, branch) {
   const b = _selBot(); if (!b) return;
   const t = b.triggers.find(x=>x.id===tid); if (!t) return;
-  const arr = _getActArr(t, branch);
-  const a = arr[ai]; if (!a) return;
+  const { arr, idx } = _aktOrt(t, branch, ai);
+  const a = arr[idx]; if (!a) return;
   a.tpSlots = a.tpSlots ?? [];
   if (!a.tpSlots[si]) return;
   a.tpSlots[si][field] = val;
@@ -2469,8 +2849,8 @@ function ipickerOpenForAct(tid, ai, branch) {
   ipickerOpen('item', v => {
     const b = _selBot(); if (!b) return;
     const t = b.triggers.find(x=>x.id===tid); if (!t) return;
-    const arr = branch === 'sonst' ? (t.aktionen_sonst ?? []) : t.aktionen;
-    const a = arr[ai]; if (!a) return;
+    const { arr, idx } = _aktOrt(t, branch, ai);
+    const a = arr[idx]; if (!a) return;
     // Clear old type data
     delete a.item; delete a.gruppe; delete a.farbe;
     delete a.curseKey; delete a.curseName; delete a.curseEntry;
@@ -2503,8 +2883,8 @@ function ipickerOpenForActAntiStrip(tid, ai, branch) {
   ipickerOpen('item', v => {
     const b = _selBot(); if (!b) return;
     const t = b.triggers.find(x=>x.id===tid); if (!t) return;
-    const arr = branch === 'sonst' ? (t.aktionen_sonst ?? []) : t.aktionen;
-    const a = arr[ai]; if (!a) return;
+    const { arr, idx } = _aktOrt(t, branch, ai);
+    const a = arr[idx]; if (!a) return;
     delete a.antiStrip_ersatz; delete a.antiStrip_gruppe; delete a.antiStrip_farbe;
     delete a.antiStrip_itemConfig; delete a.antiStrip_curseName; delete a.antiStrip_curseEntry;
     if (v.type === 'item') {

@@ -27,7 +27,7 @@ let _shop = {
   if (btn) btn.textContent = '🛒 Shop (' + _shop.items.filter(i => i.aktiv).length + ')';
 })();
 
-function _saveShop() { idbSet(SHOP_KEY, _shop); }
+function _saveShop() { idbSet(SHOP_KEY, _shop); if(typeof _autoSync==='function')_autoSync(); }
 function _shopById(id) { return _shop.items.find(i=>i.id===id)??null; }
 
 // Editor aus dem Vollbild-Overlay in den Shop-Tab verschieben (Inline statt Popup)
@@ -67,6 +67,12 @@ function renderShopTab() {
   // Update tab badge
   const btn = document.getElementById('tab-shop-btn');
   if (btn) btn.textContent = '🛒 Shop (' + _shop.items.filter(i=>i.aktiv).length + ')';
+}
+
+/* Der Katalog kann sich geaendert haben, waehrend der Editor offen war. */
+function _shopKatalogAuffrischen(){
+  const el=document.getElementById('shop-modal-itemdef');
+  if(el&&el.offsetParent!==null) _shopFillItemDefSelect(el.value||'');
 }
 
 function renderShopItems() {
@@ -170,6 +176,7 @@ function shopItemNew() {
   { const _vw=document.getElementById('shop-modal-varwert'); if(_vw)_vw.value=''; }
   { const _vm=document.getElementById('shop-modal-varmodus'); if(_vm)_vm.value='voraussetzung'; }
   _shopKaufItem=null; _shopKaufItemLabel(); { const _ka=document.getElementById('shop-modal-kaufitem-aktiv'); if(_ka)_ka.checked=false; }
+  _shopFillItemDefSelect(''); _shopFillKaufZiel('tragen');
   _shopMountEditor();
   document.getElementById('shop-modal-overlay').style.display = 'block';
   _shopNostripHint(); // FIX: nostrip
@@ -197,6 +204,8 @@ function _shopSaveFormState(){
     reqrank:(g('shop-modal-reqrank')||{}).value||'', reqgroup:(g('shop-modal-reqgroup')||{}).value||'',
     hidelocked:!!(g('shop-modal-hidelocked')||{}).checked,
     varname:(g('shop-modal-varname')||{}).value||'', varwert:(g('shop-modal-varwert')||{}).value||'', varmodus:(g('shop-modal-varmodus')||{}).value||'voraussetzung',
+    itemdef:(g('shop-modal-itemdef')||{}).value||'',
+    kaufziel:(g('shop-modal-kaufziel')||{}).value||'tragen',
     kaufItem:_shopKaufItem
   };
 }
@@ -214,6 +223,7 @@ function _shopRestoreFormState(){
   { const vw=g('shop-modal-varwert'); if(vw)vw.value=s.varwert||''; }
   { const vm=g('shop-modal-varmodus'); if(vm)vm.value=s.varmodus||'voraussetzung'; }
   _shopKaufItemLabel();
+  _shopFillItemDefSelect(s.itemdef||''); _shopFillKaufZiel(s.kaufziel||'tragen');
   { const a=g('shop-modal-kaufitem-aktiv'); if(a)a.checked=true; }
   _shopMountEditor();
   g('shop-modal-overlay').style.display='block';
@@ -233,6 +243,22 @@ function shopPickKaufItem(){
   });
 }
 function shopClearKaufItem(){ _shopKaufItem=null; _shopKaufItemLabel(); const a=document.getElementById('shop-modal-kaufitem-aktiv'); if(a)a.checked=false; }
+/* Auswahlliste der Katalog-Gegenstaende. Bewusst als Liste und nicht als
+   Auswahl-Dialog: der Katalog ist vom Nutzer gepflegt und damit kurz. */
+function _shopFillItemDefSelect(sel){
+  const el=document.getElementById('shop-modal-itemdef'); if(!el) return;
+  const defs=(typeof _itemDefs!=='undefined'&&_itemDefs&&Array.isArray(_itemDefs.items))
+    ? _itemDefs.items.filter(d=>d.aktiv!==false) : [];
+  el.innerHTML='<option value="">\u2013 keiner (Auswahl unten benutzen) \u2013</option>'+
+    defs.map(d=>'<option value="'+escHtml(d.id)+'" '+(sel===d.id?'selected':'')+'>'+
+      escHtml((d.icon||'\u{1F381}')+' '+d.name)+'</option>').join('');
+  if(sel&&!defs.some(d=>d.id===sel))
+    el.insertAdjacentHTML('beforeend','<option value="'+escHtml(sel)+'" selected>\u26A0 nicht mehr im Katalog</option>');
+}
+function _shopFillKaufZiel(sel){
+  const el=document.getElementById('shop-modal-kaufziel'); if(!el) return;
+  el.value=sel||'tragen';
+}
 function _shopFillGroupSelect(sel){
   const el=document.getElementById('shop-modal-reqgroup'); if(!el) return;
   const defs=(typeof _rankData!=='undefined'&&_rankData&&_rankData.defs)?_rankData.defs:[];
@@ -268,6 +294,7 @@ function shopItemEdit(id) {
   { const _vw=document.getElementById('shop-modal-varwert'); if(_vw)_vw.value=item.varWert||''; }
   { const _vm=document.getElementById('shop-modal-varmodus'); if(_vm)_vm.value=item.varModus==='abziehen'?'abziehen':'voraussetzung'; }
   _shopKaufItem=item.kaufItem||null; _shopKaufItemLabel(); { const _ka=document.getElementById('shop-modal-kaufitem-aktiv'); if(_ka)_ka.checked=!!item.kaufItemAktiv; }
+  _shopFillItemDefSelect(item.itemDefId||''); _shopFillKaufZiel(item.kaufZiel||'tragen');
   _shopMountEditor();
   document.getElementById('shop-modal-overlay').style.display = 'block';
   _shopScrollToEditor();
@@ -300,6 +327,8 @@ function shopModalSave() {
     varModus: ((document.getElementById('shop-modal-varmodus')||{}).value==='abziehen')?'abziehen':'voraussetzung',
     kaufItem: _shopKaufItem||null,
     kaufItemAktiv: !!(document.getElementById('shop-modal-kaufitem-aktiv')||{}).checked,
+    itemDefId: ((document.getElementById('shop-modal-itemdef')||{}).value||''),
+    kaufZiel: ((document.getElementById('shop-modal-kaufziel')||{}).value||'tragen'),
   };
   if (id) {
     const item = _shopById(id); if (item) Object.assign(item, data);

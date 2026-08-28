@@ -30,7 +30,7 @@ let _money = {
 })();
 
 function _saveMoney() {
-  idbSet(MONEY_KEY, _money);
+  idbSet(MONEY_KEY, _money); if(typeof _autoSync==='function')_autoSync();
 }
 
 function renderMoneyTab() {

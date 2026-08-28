@@ -2571,6 +2571,8 @@ button { cursor: pointer; }
   <button class="tab-btn"        id="tab-money-btn"  onclick="switchTab('money')">💰 Money</button>
   <button class="tab-btn"        id="tab-log-btn"    onclick="switchTab('log')">📋 Logs</button>
   <button class="tab-btn"        id="tab-spieler-btn"       onclick="switchTab('spieler')">👤 Spieler</button>
+  <button class="tab-btn"        id="tab-itemdefs-btn"      onclick="switchTab('itemdefs')">🎁 Items</button>
+  <button class="tab-btn"        id="tab-inventar-btn"      onclick="switchTab('inventar')">🎒 Inventar</button>
   <button class="tab-btn"        id="tab-variablen-btn"     onclick="switchTab('variablen')">🔢 Variablen</button>
 </div>
 </div>
@@ -3500,6 +3502,15 @@ document.write('<scr'+'ipt src="items.js?_='+_cbv+'"><\/scr'+'ipt>');
       </select>
     </div>
     <div style="font-size:.59rem;color:var(--text3);margin-top:2px">Leer = aus. „Voraussetzung" prüft nur; „Bezahlen" zieht den Wert beim Kauf ab.</div>
+    <label>🎁 Gegenstand aus dem Katalog (empfohlen)</label>
+    <select class="cf" id="shop-modal-itemdef"></select>
+    <div style="font-size:.59rem;color:var(--text3);margin-top:2px">Wird hier etwas gew&auml;hlt, gilt das statt der Auswahl darunter. Nur ein Katalog-Gegenstand kann ins <b>Inventar</b> gelegt werden.</div>
+    <label>Was passiert beim Kauf?</label>
+    <select class="cf" id="shop-modal-kaufziel">
+      <option value="tragen">Sofort anziehen</option>
+      <option value="inventar">Ins Inventar legen</option>
+      <option value="beides">Anziehen und ins Inventar</option>
+    </select>
     <label>📦 Item / Curse / Outfit beim Kauf anlegen (optional – kein Trigger nötig)</label>
     <div style="display:flex;gap:6px;align-items:center">
       <span id="shop-modal-kaufitem-label" style="flex:1;font-size:.72rem;color:var(--text2)">– nichts gewählt –</span>
@@ -3554,6 +3565,7 @@ document.write('<scr'+'ipt src="items.js?_='+_cbv+'"><\/scr'+'ipt>');
 document.write('<scr'+'ipt src="money.js?_='+_cbv+'"><\/scr'+'ipt>');
 document.write('<scr'+'ipt src="rank.js?_='+_cbv+'"><\/scr'+'ipt>');
 document.write('<scr'+'ipt src="shop.js?_='+_cbv+'"><\/scr'+'ipt>');
+document.write('<scr'+'ipt src="inventar.js?_='+_cbv+'"><\/scr'+'ipt>');
 document.write('<scr'+'ipt src="bot-data.js?_='+_cbv+'"><\/scr'+'ipt>');
 document.write('<scr'+'ipt src="bot-ui.js?_='+_cbv+'"><\/scr'+'ipt>');
 document.write('<scr'+'ipt src="bot-engine.js?_='+_cbv+'"><\/scr'+'ipt>');
@@ -3834,6 +3846,106 @@ document.write('<scr'+'ipt src="bc-autobackup.js?_='+_cbv+'"><\/scr'+'ipt>');
 </div>
 
 <!-- Variablen-Tab (Bot-Variablen pro Spieler) -->
+
+<!-- Item-Katalog -->
+<div id="tab-itemdefs" class="tab-pane">
+  <div style="padding:16px 18px">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+      <span class="pane-title" style="font-size:.95rem;font-weight:800;color:var(--text1)">&#127873; Items &ndash; Katalog</span>
+      <button class="btn btn-primary" style="margin-left:auto" onclick="itemDefNew()">+ Neuer Gegenstand</button>
+    </div>
+    <div style="font-size:.65rem;color:var(--text3);margin-bottom:14px;line-height:1.5">
+      Hier bekommt ein Gegenstand einen <b>Namen</b> und wird mit dem verbunden, was in BC passieren soll &ndash;
+      ein einzelnes Item, ein Outfit oder ein Curse. Auf diese Eintr&auml;ge greifen der <b>Shop</b>, das
+      <b>Inventar</b> und die Bot-Bedingungen zu. Vorhandene Shop-Artikel wurden automatisch &uuml;bernommen.
+    </div>
+
+    <div id="itemdef-editor" style="display:none;border:1px solid rgba(255,255,255,0.12);border-radius:9px;padding:12px 14px;margin-bottom:14px;background:rgba(255,255,255,0.02)">
+      <div id="itemdef-titel" style="font-size:.8rem;font-weight:700;margin-bottom:10px">&#127873; Neuer Gegenstand</div>
+      <input type="hidden" id="itemdef-id">
+      <div style="display:grid;grid-template-columns:1fr 70px;gap:8px;margin-bottom:8px">
+        <div><label style="font-size:.62rem;color:var(--text3);display:block;margin-bottom:3px">Name</label><input id="itemdef-name" type="text" placeholder="z. B. Rotes Halsband" style="background:var(--bg3,#1a1a24);border:1px solid rgba(255,255,255,0.1);border-radius:6px;color:var(--text1);font-size:.7rem;padding:5px 8px;width:100%"></div>
+        <div><label style="font-size:.62rem;color:var(--text3);display:block;margin-bottom:3px">Symbol</label><input id="itemdef-icon" type="text" value="&#127873;" style="background:var(--bg3,#1a1a24);border:1px solid rgba(255,255,255,0.1);border-radius:6px;color:var(--text1);font-size:.7rem;padding:5px 8px;width:100%"></div>
+      </div>
+      <div style="margin-bottom:8px"><label style="font-size:.62rem;color:var(--text3);display:block;margin-bottom:3px">Beschreibung (optional)</label><input id="itemdef-desc" type="text" style="background:var(--bg3,#1a1a24);border:1px solid rgba(255,255,255,0.1);border-radius:6px;color:var(--text1);font-size:.7rem;padding:5px 8px;width:100%"></div>
+      <div style="margin-bottom:8px">
+        <label style="font-size:.62rem;color:var(--text3);display:block;margin-bottom:3px">Was passiert damit in BC?</label>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span id="itemdef-inhalt-label" style="flex:1;font-size:.68rem;color:var(--text2);border:1px dashed rgba(255,255,255,0.14);border-radius:6px;padding:5px 8px">&ndash; nichts gew&auml;hlt &ndash;</span>
+          <button onclick="itemDefPickInhalt()" style="background:none;border:1px solid rgba(255,255,255,0.14);border-radius:6px;color:var(--text2);font-size:.66rem;padding:5px 10px;cursor:pointer">&#128230; W&auml;hlen</button>
+          <button onclick="itemDefClearInhalt()" style="background:none;border:none;color:var(--red);font-size:.75rem;cursor:pointer;padding:2px 6px">&times;</button>
+        </div>
+      </div>
+      <div style="display:flex;gap:16px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
+        <label style="font-size:.66rem;color:var(--text2);display:flex;align-items:center;gap:6px;cursor:pointer">
+          <input type="checkbox" id="itemdef-unendlich"> unbegrenzt vorhanden (&infin;)
+        </label>
+        <label style="font-size:.66rem;color:var(--text2);display:flex;align-items:center;gap:6px;cursor:pointer">
+          <input type="checkbox" id="itemdef-aktiv" checked> aktiv
+        </label>
+      </div>
+      <div style="font-size:.6rem;color:var(--text3);margin-bottom:10px;line-height:1.5">
+        <b>Unbegrenzt</b> bedeutet: der Gegenstand wird beim Anziehen nicht verbraucht und kann mehrfach
+        gleichzeitig genutzt werden. Ohne diesen Haken wandert er beim Anziehen aus dem Inventar und kommt
+        beim Ausziehen zur&uuml;ck.
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-primary" onclick="itemDefSave()">&#128190; Speichern</button>
+        <button onclick="itemDefClose()" style="background:none;border:1px solid rgba(255,255,255,0.12);border-radius:6px;color:var(--text2);font-size:.7rem;padding:5px 12px;cursor:pointer">Abbrechen</button>
+      </div>
+    </div>
+
+    <div id="itemdefs-list"></div>
+  </div>
+</div>
+<!-- /tab-itemdefs -->
+
+<!-- Inventar -->
+<div id="tab-inventar" class="tab-pane">
+  <div style="padding:16px 18px">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+      <span class="pane-title" style="font-size:.95rem;font-weight:800;color:var(--text1)">&#127890; Inventar</span>
+      <button style="margin-left:auto;background:none;border:1px solid rgba(255,255,255,0.12);border-radius:6px;color:var(--text2);font-size:.66rem;padding:4px 10px;cursor:pointer" onclick="renderInventarTab()">&#8635; Aktualisieren</button>
+    </div>
+    <div style="font-size:.65rem;color:var(--text3);margin-bottom:14px;line-height:1.5">
+      Was jeder Spieler besitzt. Gegenst&auml;nde kommen aus dem <b>Shop</b> oder &uuml;ber eine Bot-Aktion ins Inventar.
+      Ein Eintrag verschwindet nie &ndash; ist gerade nichts da, steht <b>Anzahl 0</b>.
+    </div>
+
+    <div style="border:1px solid rgba(255,255,255,0.1);border-radius:9px;padding:12px 14px;margin-bottom:16px;background:rgba(255,255,255,0.02)">
+      <div style="font-size:.75rem;font-weight:700;margin-bottom:10px">&#9881;&#65039; Befehle &amp; Regeln</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+        <div>
+          <label style="font-size:.62rem;color:var(--text3);display:block;margin-bottom:3px">Anziehen</label>
+          <input id="inv-wear-cmd" type="text" style="background:var(--bg3,#1a1a24);border:1px solid rgba(255,255,255,0.1);border-radius:6px;color:var(--text1);font-size:.7rem;padding:5px 8px;width:100%" oninput="invSet('wearCmd', this.value)">
+        </div>
+        <div>
+          <label style="font-size:.62rem;color:var(--text3);display:block;margin-bottom:3px">Inventar zeigen</label>
+          <input id="inv-list-cmd" type="text" style="background:var(--bg3,#1a1a24);border:1px solid rgba(255,255,255,0.1);border-radius:6px;color:var(--text1);font-size:.7rem;padding:5px 8px;width:100%" oninput="invSet('listCmd', this.value)">
+        </div>
+      </div>
+      <div style="font-size:.6rem;color:var(--text3);margin-bottom:12px;line-height:1.5">
+        Im Chat: <code>!wear Rotes Halsband</code> zieht es dir selbst an,
+        <code>!wear Rotes Halsband Anna</code> jemand anderem im Raum.
+      </div>
+      <label style="font-size:.66rem;color:var(--text2);display:flex;align-items:center;gap:6px;cursor:pointer;margin-bottom:8px">
+        <input type="checkbox" id="inv-fremd" onchange="invSet('fremdErlaubt', this.checked)"> anderen Personen etwas anziehen erlauben
+      </label>
+      <div>
+        <label style="font-size:.62rem;color:var(--text3);display:block;margin-bottom:3px">&hellip; und zwar erst ab Rang</label>
+        <select id="inv-fremd-rang" style="background:var(--bg3,#1a1a24);border:1px solid rgba(255,255,255,0.1);border-radius:6px;color:var(--text1);font-size:.7rem;padding:5px 8px;width:100%" onchange="invSet('fremdRangId', this.value)"></select>
+      </div>
+    </div>
+
+    <div style="font-size:.75rem;font-weight:700;margin-bottom:8px">&#128230; Bestand</div>
+    <div id="inv-spieler-liste" style="margin-bottom:16px"></div>
+
+    <div style="font-size:.75rem;font-weight:700;margin-bottom:8px">&#128260; Gerade getragen</div>
+    <div id="inv-ausleihe-liste"></div>
+  </div>
+</div>
+<!-- /tab-inventar -->
+
 <div id="tab-variablen" class="tab-pane">
   <div style="padding:16px 18px">
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">

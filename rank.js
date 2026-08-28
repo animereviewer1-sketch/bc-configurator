@@ -26,7 +26,7 @@ let _rankData = {
   }
 })();
 
-function _saveRank() { idbSet(RANK_KEY, _rankData); }
+function _saveRank() { idbSet(RANK_KEY, _rankData); if(typeof _autoSync==='function')_autoSync(); }
 function _rankById(id) { return _rankData.defs.find(r=>r.id===id)??null; }
 function _rankSorted() { return [..._rankData.defs].sort((a,b)=>a.level-b.level); }
 
