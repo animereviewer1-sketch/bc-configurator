@@ -18,9 +18,14 @@
   const get = async k => { try { return await idbGet(k); } catch { return null; } };
   const ls  = k => { try { return JSON.parse(localStorage.getItem(k) || '[]'); } catch { return []; } };
 
+  // Dieses Skript laeuft, wenn der Bestand bereits beschaedigt ist – ein Wert,
+  // der wider Erwarten kein Array ist, darf die Rettung nicht abbrechen.
+  const alsListe = v => (Array.isArray(v) ? v : []);
+  const beides = async k => [...new Set([...alsListe(await get(k)), ...alsListe(ls(k))])];
+
   const shots = (await get('BC_MBS_WHEEL_SS_v1')) || {};
-  const favs  = [...new Set([...((await get('BC_MBS_WHEEL_FAVS_v1'))  || []), ...ls('BC_MBS_WHEEL_FAVS_v1')])];
-  const ofavs = [...new Set([...((await get('BC_MBS_WHEEL_OFAVS_v1')) || []), ...ls('BC_MBS_WHEEL_OFAVS_v1')])];
+  const favs  = await beides('BC_MBS_WHEEL_FAVS_v1');
+  const ofavs = await beides('BC_MBS_WHEEL_OFAVS_v1');
 
   const outfits = Object.keys(shots).map(fp => ({
     fingerprint: fp,

@@ -103,7 +103,8 @@ Sie sind an Browser *und* Domain gebunden — ein Wechsel erfordert Export/Impor
 
 **Einstellungen** (Zahnrad oben rechts) → Abschnitt **Komplett-Backup** → **⬇️ Alles**
 schreibt eine JSON-Datei mit allem: Profile, Curse-Datenbank, LSCG- und Wheel-Daten,
-Favoriten und Screenshots.
+Favoriten und Screenshots, dazu Bots samt Triggern, Events und Szenen, Shop, Rang,
+Money, Spieler-Variablen und Bot-Logs.
 
 > **Regelmäßig sichern.** Die Wheel- und Curse-Bestände wachsen über Monate und lassen sich
 > nicht nachscannen — sie entstehen nur, während die betreffenden Spieler mit dir im Raum sind.

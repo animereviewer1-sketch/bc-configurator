@@ -515,8 +515,22 @@ function _oiRunNext() {
   }
 
   const item = OI_LIST[_oiSeqIdx];
-  bcSend({ type: 'EXEC', code: _oiBuildExecCode(item.code) });
-  showStatus('▶ [' + (_oiSeqIdx + 1) + '/' + OI_LIST.length + '] "' + (item.label || 'Outfit') + '"', 'info');
+  // Ein einzelner unbrauchbarer Eintrag darf den Stapellauf nicht abbrechen:
+  // ohne diese Absicherung wirft _oiBuildExecCode mitten in der Schleife, der
+  // Folge-Timer wird nie gesetzt und der Lauf haengt in "laeuft" fest.
+  let _code = null;
+  try {
+    _code = _oiBuildExecCode(item.code);
+  } catch (e) {
+    console.error('[OI] Übersprungen – Code-Fehler bei #' + (_oiSeqIdx + 1) + ':', e);
+  }
+  if (_code) {
+    bcSend({ type: 'EXEC', code: _code });
+    showStatus('▶ [' + (_oiSeqIdx + 1) + '/' + OI_LIST.length + '] "' + (item.label || 'Outfit') + '"', 'info');
+  } else {
+    showStatus('⚠️ [' + (_oiSeqIdx + 1) + '/' + OI_LIST.length + '] "' + (item.label || 'Outfit')
+      + '" übersprungen (fehlerhafter Code)', 'error');
+  }
 
   // Scroll to current row
   const row = document.getElementById('oir_' + _oiSeqIdx);

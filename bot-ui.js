@@ -230,10 +230,17 @@ function renderBotEditor() {
       <div style="margin:14px 0 6px;font-size:.72rem;font-weight:700;color:var(--purple);border-top:1px solid var(--border2);padding-top:10px">📖 Szenen / Story</div>
       <div id="szene-list">${_szenen(bot).map((s,i)=>renderSzeneCard(bot,s,i)).join('')}</div>
       <button class="be-addtrig" onclick="szeneNew()">+ Szene hinzufügen</button>
+      <!-- Events: renderEventsTab() fuellt diesen Container samt eigener
+           Ueberschrift und Hinzufuegen-Knopf. Er fehlte bisher komplett,
+           wodurch die gesamte Events-Oberflaeche unerreichbar war, obwohl
+           Engine, Datenhaltung und CSS dafuer vorhanden sind. -->
+      <div id="events-container" style="border-top:1px solid var(--border2);margin-top:14px;padding-top:10px"></div>
     </div>`;
   document.getElementById('botEditor').innerHTML = html;
   // Offene Trigger-Bodies wiederherstellen
   openTids.forEach(tid => document.getElementById('tb-'+tid)?.classList.add('open'));
+  // Erst jetzt – vorher wuerde das innerHTML oben den Container wieder leeren
+  if (typeof renderEventsTab === 'function') renderEventsTab();
 }
 
 function botField(field, val) {
@@ -804,7 +811,10 @@ function renderVariablenTab(){
     const vars=bv[n]||{};
     const keys=Object.keys(vars).sort();
     const rows=keys.map(k=>{
-      const ek=k.replace(/['"\\]/g,'');
+      // Frueher wurden Anfuehrungszeichen aus dem Namen gestrichen, damit das
+      // JS-Literal haelt – dann trafen _varSet/_varDelete aber einen anderen
+      // Schluessel als den angezeigten. Richtig escapen statt verstuemmeln.
+      const ek=escJsAttr(k);
       const v=vars[k];
       if(k==='letzterBesuch'){
         const disp=v?new Date(v).toLocaleString('de-DE'):'';
@@ -1591,20 +1601,20 @@ function condMoveUp(tid, ci) {
   const b = _selBot(); if (!b) return;
   const t = b.triggers.find(x=>x.id===tid); if (!t || ci<=0) return;
   [t.bedingungen[ci-1], t.bedingungen[ci]] = [t.bedingungen[ci], t.bedingungen[ci-1]];
-  _saveBots(); condRerender(tid);
+  _normLogik(t.bedingungen); _saveBots(); condRerender(tid);
 }
 
 function condMoveDown(tid, ci) {
   const b = _selBot(); if (!b) return;
   const t = b.triggers.find(x=>x.id===tid); if (!t || ci>=t.bedingungen.length-1) return;
   [t.bedingungen[ci], t.bedingungen[ci+1]] = [t.bedingungen[ci+1], t.bedingungen[ci]];
-  _saveBots(); condRerender(tid);
+  _normLogik(t.bedingungen); _saveBots(); condRerender(tid);
 }
 
 function condRemove(tid, ci) {
   const b = _selBot(); if (!b) return;
   const t = b.triggers.find(x=>x.id===tid); if (!t) return;
-  t.bedingungen.splice(ci,1); _saveBots();
+  t.bedingungen.splice(ci,1); _normLogik(t.bedingungen); _saveBots();
   document.getElementById('conds-'+tid).innerHTML = t.bedingungen.map((c,ci2)=>renderCond(b,tid,c,ci2)).join('');
 }
 
@@ -1659,18 +1669,18 @@ function ifCondMoveUp(tid, ci) {
   const b = _selBot(); if (!b) return;
   const t = b.triggers.find(x=>x.id===tid); if (!t || ci<=0) return;
   [t.ifBedingungen[ci-1], t.ifBedingungen[ci]] = [t.ifBedingungen[ci], t.ifBedingungen[ci-1]];
-  _saveBots(); ifCondRerender(tid);
+  _normLogik(t.ifBedingungen); _saveBots(); ifCondRerender(tid);
 }
 function ifCondMoveDown(tid, ci) {
   const b = _selBot(); if (!b) return;
   const t = b.triggers.find(x=>x.id===tid); if (!t || ci>=(t.ifBedingungen?.length??0)-1) return;
   [t.ifBedingungen[ci], t.ifBedingungen[ci+1]] = [t.ifBedingungen[ci+1], t.ifBedingungen[ci]];
-  _saveBots(); ifCondRerender(tid);
+  _normLogik(t.ifBedingungen); _saveBots(); ifCondRerender(tid);
 }
 function ifCondRemove(tid, ci) {
   const b = _selBot(); if (!b) return;
   const t = b.triggers.find(x=>x.id===tid); if (!t) return;
-  t.ifBedingungen.splice(ci,1); _saveBots();
+  t.ifBedingungen.splice(ci,1); _normLogik(t.ifBedingungen); _saveBots();
   document.getElementById('ifconds-'+tid).innerHTML = (t.ifBedingungen||[]).map((c,ci2)=>renderIfCond(b,tid,c,ci2)).join('');
 }
 function ifCondRerender(tid) {

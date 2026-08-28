@@ -13,10 +13,10 @@ let _shop = {
   try {
     const saved = await idbGet(SHOP_KEY);
     if (saved) {
-      _shop = Object.assign(
-        { settings: { cmd: '!pay', listCmd: '!shop', confirmMsg: '', errorMsg: '', preisU: 0, preisNostrip: 0, announceNostripMsg: '' }, items: [], log: [] },
-        saved
-      );
+      const std = { cmd: '!pay', listCmd: '!shop', confirmMsg: '', errorMsg: '', preisU: 0, preisNostrip: 0, announceNostripMsg: '' };
+      _shop = Object.assign({ settings: std, items: [], log: [] }, saved);
+      // Fehlende (spaeter ergaenzte) Einstellungen aus den Defaults auffuellen
+      _shop.settings = Object.assign({}, std, _shop.settings || {});
     }
   } catch (err) {
     console.warn('[Shop] IDB load error:', err);

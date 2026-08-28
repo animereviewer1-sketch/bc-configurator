@@ -509,8 +509,14 @@ window.CurseScanner = (() => {
   let _hookInstalled = false;
   function installLSCGHook() {
     if (_hookInstalled) return;
+    // Der Merker oben liegt im IIFE-Scope. Beim erneuten Klick auf das
+    // Bookmarklet laeuft loader.js in einem NEUEN Scope – er steht dann wieder
+    // auf false. Ohne den window-Merker liefe nach jedem Klick ein weiteres
+    // Polling-Interval mit, das alle Raum-Charaktere durchgeht. Gleiches
+    // Muster wie __BCK_LISTENER_FN__ und __BCK_BCX_FILTER__.
+    if (window.__BCK_LSCG_POLL) clearInterval(window.__BCK_LSCG_POLL);
     // Poll alle 6s – kein CharacterRefresh-Override (kein BCX-Warning)
-    setInterval(() => {
+    window.__BCK_LSCG_POLL = setInterval(() => {
       try { [Player, ...(ChatRoomCharacter ?? [])].forEach(_snapshotAllLSCG); } catch {}
     }, 6000);
     _hookInstalled = true;
@@ -1425,6 +1431,17 @@ window.CurseScanner = (() => {
 
   (function _installOutfitScan() {
     if (typeof ServerSocket === 'undefined') { setTimeout(_installOutfitScan, 1000); return; }
+    // Alte Listener vom vorherigen Bookmarklet-Aufruf entfernen – wie beim
+    // CurseTestMonitor weiter unten. Die Run-ID macht sie zwar wirkungslos,
+    // aber ohne off() haengt nach jedem Klick ein weiteres totes Paar am
+    // Socket und wird bei jedem Raum-Sync mit aufgerufen.
+    if (window.__BCK_outfitDebounceH) {
+      try {
+        ServerSocket.off('ChatRoomSync',           window.__BCK_outfitDebounceH);
+        ServerSocket.off('ChatRoomSyncMemberJoin', window.__BCK_outfitDebounceH);
+      } catch (e) {}
+    }
+    window.__BCK_outfitDebounceH = _outfitDebounce;
     ServerSocket.on('ChatRoomSync',           _outfitDebounce);
     ServerSocket.on('ChatRoomSyncMemberJoin', _outfitDebounce);
     BCK.ok('[OutfitScan] Auto-Scan aktiv (Run-ID: ' + _outfitRunId + ')');

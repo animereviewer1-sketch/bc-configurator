@@ -10,10 +10,9 @@ let _rankData = {
   try {
     const saved = await idbGet(RANK_KEY);
     if (saved) {
-      _rankData = Object.assign(
-        { settings: { queryCmd: '!rang', queryCmdTyp: 'whisper', queryCmdText: '{name} hat Rang: {rang_icon} {rang}' }, defs: [], players: {} },
-        saved
-      );
+      const std = { queryCmd: '!rang', queryCmdTyp: 'whisper', queryCmdText: '{name} hat Rang: {rang_icon} {rang}' };
+      _rankData = Object.assign({ settings: std, defs: [], players: {} }, saved);
+      _rankData.settings = Object.assign({}, std, _rankData.settings || {});
     }
   } catch (err) {
     console.warn('[Rank] IDB load error:', err);
@@ -45,27 +44,27 @@ function renderRankDefs() {
     el.innerHTML = '<div style="color:var(--text3);font-size:.72rem;text-align:center;padding:18px 0">Noch keine Raenge. Fuege deinen ersten Rang hinzu!</div>';
     return;
   }
-  const sortedAll = _rankSorted();
-  const gIdx = id => sortedAll.findIndex(r=>r.id===id);
-  const card = r => { const i=gIdx(r.id); return `
+  // i / anz beziehen sich auf die Gruppe, in der die Karte angezeigt wird –
+  // sonst waere nur beim global ersten/letzten Rang ein Pfeil ausgegraut.
+  const card = (r, i, anz) => `
     <div class="rank-def-card" id="rdef-${r.id}">
       <span style="display:flex;flex-direction:column;gap:1px">
         <button class="order-btn" onclick="rankDefMoveUp('${r.id}')" ${i===0?'disabled':''}>&#9650;</button>
-        <button class="order-btn" onclick="rankDefMoveDown('${r.id}')" ${i===sortedAll.length-1?'disabled':''}>&#9660;</button>
+        <button class="order-btn" onclick="rankDefMoveDown('${r.id}')" ${i===anz-1?'disabled':''}>&#9660;</button>
       </span>
       <span class="rank-def-badge" style="background:${r.farbe}22;color:${r.farbe};border-color:${r.farbe}55">${escHtml(r.icon||'\uD83C\uDFC5')} ${escHtml(r.name)}</span>
       <span class="rank-def-level">Lv.${r.level}</span>
       <span style="flex:1"></span>
       <button onclick="rankDefEdit('${r.id}')" style="background:none;border:1px solid rgba(255,255,255,0.1);border-radius:5px;color:var(--text3);font-size:.62rem;padding:2px 7px;cursor:pointer">&#9999;&#65039;</button>
       <button onclick="rankDefDelete('${r.id}')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.75rem;padding:2px 5px">&#x2715;</button>
-    </div>`; };
+    </div>`;
   const groups = {};
   defs.forEach(r=>{ const g=r.group||''; (groups[g]=groups[g]||[]).push(r); });
   const order = Object.keys(groups).sort((a,b)=>{ if(a===''&&b!=='')return -1; if(b===''&&a!=='')return 1; return a.localeCompare(b); });
   el.innerHTML = order.map(g=>{
     const items = groups[g].slice().sort((a,b)=>a.level-b.level);
     const title = g ? ('\uD83D\uDC65 '+escHtml(g)) : '\u26AA Ohne Gruppe';
-    return `<div style="margin-bottom:12px"><div style="font-size:.62rem;font-weight:700;color:var(--pl,#c4b5fd);text-transform:uppercase;letter-spacing:.5px;margin:2px 0 5px 2px;border-bottom:1px solid rgba(139,92,246,0.2);padding-bottom:3px">${title} <span style="color:var(--text3);font-weight:400">(${items.length})</span></div>${items.map(card).join('')}</div>`;
+    return `<div style="margin-bottom:12px"><div style="font-size:.62rem;font-weight:700;color:var(--pl,#c4b5fd);text-transform:uppercase;letter-spacing:.5px;margin:2px 0 5px 2px;border-bottom:1px solid rgba(139,92,246,0.2);padding-bottom:3px">${title} <span style="color:var(--text3);font-weight:400">(${items.length})</span></div>${items.map((r,i)=>card(r,i,items.length)).join('')}</div>`;
   }).join('');
 }
 
@@ -155,16 +154,39 @@ function rankDefDelete(id) {
   _saveRank(); renderRankDefs(); _rankUpdateFilterSelect(); renderRankPlayers();
 }
 
-function _rankRelevel() { _rankSorted().forEach((r,i)=>{ const d=_rankById(r.id); if(d) d.level=i+1; }); _saveRank(); }
+// (_rankRelevel entfernt – wurde nur von den beiden Pfeil-Funktionen benutzt,
+//  die das Neu-Nummerieren jetzt selbst in _rankTausche erledigen.)
+
+/* Die Liste ist nach Gruppen aufgeteilt dargestellt, die Pfeile arbeiteten
+   aber auf der globalen Reihenfolge – ein Rang sprang dadurch sichtbar in eine
+   fremde Gruppe. Verschoben wird jetzt innerhalb der eigenen Gruppe. */
+function _rankInGruppe(id) {
+  const r = _rankById(id); if(!r) return null;
+  const g = r.group || '';
+  const liste = (_rankData.defs||[]).filter(x=>(x.group||'')===g).sort((a,b)=>a.level-b.level);
+  return { liste, i: liste.findIndex(x=>x.id===id) };
+}
+
+/* Nicht die Level-Zahlen tauschen, sondern die Plaetze: haben zwei Raenge
+   dasselbe Level (moeglich per JSON-Import), waere ein Zahlentausch wirkungslos
+   und der Pfeil taete sichtbar nichts. */
+function _rankTausche(a, b) {
+  const alle = _rankSorted();
+  const ia = alle.indexOf(a), ib = alle.indexOf(b);
+  if (ia < 0 || ib < 0) return;
+  alle[ia] = b; alle[ib] = a;
+  alle.forEach((r,n)=>{ r.level = n+1; });
+  _saveRank(); renderRankDefs();
+}
 
 function rankDefMoveUp(id) {
-  const s=_rankSorted(); const i=s.findIndex(r=>r.id===id); if(i<=0) return;
-  [s[i].level,s[i-1].level]=[s[i-1].level,s[i].level]; _rankRelevel(); renderRankDefs();
+  const g=_rankInGruppe(id); if(!g||g.i<=0) return;
+  _rankTausche(g.liste[g.i], g.liste[g.i-1]);
 }
 
 function rankDefMoveDown(id) {
-  const s=_rankSorted(); const i=s.findIndex(r=>r.id===id); if(i<0||i>=s.length-1) return;
-  [s[i].level,s[i+1].level]=[s[i+1].level,s[i].level]; _rankRelevel(); renderRankDefs();
+  const g=_rankInGruppe(id); if(!g||g.i<0||g.i>=g.liste.length-1) return;
+  _rankTausche(g.liste[g.i], g.liste[g.i+1]);
 }
 
 function rankSetPlayerDirect(memberNum, rankId) {

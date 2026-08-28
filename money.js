@@ -13,10 +13,9 @@ let _money = {
     const saved = await idbGet(MONEY_KEY);
     if (saved) {
       const pending = Object.assign({}, _money.balances);
-      _money = Object.assign(
-        { settings: { name: 'Gold', queryCmd: '!gold', queryTyp: 'whisper' }, balances: {} },
-        saved
-      );
+      const std = { name: 'Gold', queryCmd: '!gold', queryTyp: 'whisper' };
+      _money = Object.assign({ settings: std, balances: {} }, saved);
+      _money.settings = Object.assign({}, std, _money.settings || {});
       for (const [id, e] of Object.entries(pending)) {
         if (!_money.balances[id]) _money.balances[id] = e;
       }
@@ -55,7 +54,7 @@ function renderMoneyTab() {
         <input class="cf" type="number" id="madj-${id}" value="0" style="width:64px">
         <button class="money-plus" onclick="moneyAdj('${id}',+1)">+</button>
         <button class="money-minus" onclick="moneyAdj('${id}',-1)">−</button>
-        <button onclick="moneySet('${id}',prompt('Genauen Wert setzen für ${escHtml(p.name||id)}:',${p.balance??0}))" style="font-size:.62rem;padding:3px 7px;background:var(--bg3);border:1px solid var(--border2);color:var(--text3);border-radius:4px;cursor:pointer">= Setzen</button>
+        <button onclick="moneyPromptSet('${id}')" style="font-size:.62rem;padding:3px 7px;background:var(--bg3);border:1px solid var(--border2);color:var(--text3);border-radius:4px;cursor:pointer">= Setzen</button>
         <button onclick="moneyRemovePlayer('${id}')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.75rem;padding:2px 6px">✕</button>
       </div>
     </div>`).join('');
@@ -72,6 +71,15 @@ function moneyAdj(id, sign) {
   const p = _money.balances[id]; if (!p) return;
   p.balance = (p.balance??0) + sign*amt;
   _saveMoney(); renderMoneyTab();
+}
+
+/* Den Namen nicht in ein verschachteltes JS-String-Literal im Attribut
+   schreiben – ein Apostroph im Spielernamen hat den Button dort zerlegt.
+   Der Prompt gehoert ohnehin in die Funktion, nicht ins onclick. */
+function moneyPromptSet(id) {
+  const p = _money.balances[id]; if (!p) return;
+  const val = prompt('Genauen Wert setzen für ' + (p.name || id) + ':', p.balance ?? 0);
+  moneySet(id, val);
 }
 
 function moneySet(id, val) {

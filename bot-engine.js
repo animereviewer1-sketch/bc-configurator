@@ -371,14 +371,21 @@ function _ok(trig,rohText,typKey,C){
     return true;
   }
   // Split into OR-groups (oder + und_oder both split groups)
+  // logik verbindet eine Bedingung mit der VORHERIGEN – die erste hat keine.
+  // Steht dort trotzdem etwas (durch Verschieben/Loeschen in der UI oder per
+  // JSON-Import), wird es ignoriert, genau wie die Oberflaeche es anzeigt.
+  // Sonst entstuende bei 'oder' eine leere erste Gruppe, und [].every() ist
+  // true → saemtliche Bedingungen waeren ausgehebelt.
   const groups=[[]];
-  for(const c of beds){
-    if(c.logik==='oder'||c.logik==='und_oder')groups.push([]);
+  beds.forEach((c,i)=>{
+    if(i>0&&(c.logik==='oder'||c.logik==='und_oder'))groups.push([]);
     groups[groups.length-1].push(c);
-  }
+  });
   // At least one group (OR) must be fully satisfied (AND within group)
   // und_nicht: Bedingung muss FALSCH sein
-  return groups.some(g=>g.every(c=>c.logik==='und_nicht'?!checkOne(c):checkOne(c)));
+  // Aus demselben Grund gilt 'und_nicht' erst ab der zweiten Bedingung.
+  const _erste=beds[0];
+  return groups.some(g=>g.every(c=>(c!==_erste&&c.logik==='und_nicht')?!checkOne(c):checkOne(c)));
 }
 
 // ── IF-Bedingungen Check (entscheidet DANN vs. SONST wenn ifElse aktiv) ──
@@ -429,12 +436,19 @@ function _okIf(trig,rohText,typKey,C){
     }
     return true;
   }
+  // logik verbindet eine Bedingung mit der VORHERIGEN – die erste hat keine.
+  // Steht dort trotzdem etwas (durch Verschieben/Loeschen in der UI oder per
+  // JSON-Import), wird es ignoriert, genau wie die Oberflaeche es anzeigt.
+  // Sonst entstuende bei 'oder' eine leere erste Gruppe, und [].every() ist
+  // true → saemtliche Bedingungen waeren ausgehebelt.
   const groups=[[]];
-  for(const c of beds){
-    if(c.logik==='oder'||c.logik==='und_oder')groups.push([]);
+  beds.forEach((c,i)=>{
+    if(i>0&&(c.logik==='oder'||c.logik==='und_oder'))groups.push([]);
     groups[groups.length-1].push(c);
-  }
-  return groups.some(g=>g.every(c=>c.logik==='und_nicht'?!checkOne(c):checkOne(c)));
+  });
+  // Aus demselben Grund gilt 'und_nicht' erst ab der zweiten Bedingung.
+  const _erste=beds[0];
+  return groups.some(g=>g.every(c=>(c!==_erste&&c.logik==='und_nicht')?!checkOne(c):checkOne(c)));
 }
 function _istBesetzt(x,y,ausschliessen){
   // Ignore target positions at 0,0 — BC hasn't synced position yet
@@ -1032,12 +1046,19 @@ function _okEv(ev,C,rohText,typKey){
     }
     return true;
   }
+  // logik verbindet eine Bedingung mit der VORHERIGEN – die erste hat keine.
+  // Steht dort trotzdem etwas (durch Verschieben/Loeschen in der UI oder per
+  // JSON-Import), wird es ignoriert, genau wie die Oberflaeche es anzeigt.
+  // Sonst entstuende bei 'oder' eine leere erste Gruppe, und [].every() ist
+  // true → saemtliche Bedingungen waeren ausgehebelt.
   const groups=[[]];
-  for(const c of beds){
-    if(c.logik==='oder'||c.logik==='und_oder')groups.push([]);
+  beds.forEach((c,i)=>{
+    if(i>0&&(c.logik==='oder'||c.logik==='und_oder'))groups.push([]);
     groups[groups.length-1].push(c);
-  }
-  return groups.some(g=>g.every(c=>c.logik==='und_nicht'?!checkOne(c):checkOne(c)));
+  });
+  // Aus demselben Grund gilt 'und_nicht' erst ab der zweiten Bedingung.
+  const _erste=beds[0];
+  return groups.some(g=>g.every(c=>(c!==_erste&&c.logik==='und_nicht')?!checkOne(c):checkOne(c)));
 }
 
 function _fireEv(ev){
@@ -2463,15 +2484,32 @@ function _botSetZone(botId, zoneName, slot, x, y){
   return true;
 }
 
+/* Baut die EXEC-Nutzlast fuer einen Bot.
+
+   Base64-kodiert, damit kein Sonderzeichen den Uebertragungsweg bricht.
+   BC-Seite: new Function(decodeURIComponent(escape(atob(encoded))))()
+
+   Davor wird eine eventuell noch laufende Instanz gestoppt. Grund: b.laufend
+   ist reiner Popup-Zustand und wird beim Neuladen des Konfigurators auf false
+   gesetzt – der Bot im BC-Tab laeuft dann aber weiter. Ein Klick auf "Starten"
+   lief bisher in den Doppelstart-Schutz im erzeugten Code, meldete im Popup
+   trotzdem Erfolg, und weiter lief die ALTE Konfiguration. Das Stoppen steht
+   in derselben Nutzlast und damit im selben synchronen Durchlauf – kein
+   Zeitfenster zwischen Stopp und Start. */
+function _botExecCode(bot) {
+  const safeId = bot.id.replace(/\W/g,'_');
+  const encoded = btoa(unescape(encodeURIComponent(_buildBotCode(bot))));
+  return `(function(){`
+    + `var _alt=window['_BCBot_${safeId}'];`
+    + `if(_alt&&_alt.stop){try{_alt.stop();}catch(e){console.warn('[Bot] Stopp der Vorgaengerinstanz:',e);}}`
+    + `return (new Function(decodeURIComponent(escape(atob('${encoded}'))))());`
+    + `})()`;
+}
+
 function botDeployById(id) {
   const b = _bots.find(x=>x.id===id); if (!b) return;
   if (!_connected) { showStatus('❌ Nicht mit BC verbunden','error'); return; }
-  const _code = _buildBotCode(b);
-  // Base64-kodiert senden → kein Sonderzeichen kann den Übertragungsweg brechen
-  // BC-Seite: new Function(decodeURIComponent(escape(atob(encoded))))()
-  const _encoded = btoa(unescape(encodeURIComponent(_code)));
-  const _wrapper = `(new Function(decodeURIComponent(escape(atob('${_encoded}'))))())`;
-  bcSend({ type:'EXEC', code: _wrapper });
+  bcSend({ type:'EXEC', code: _botExecCode(b) });
   b.laufend = true; _saveBots(); renderBotList();
   if (_selBotId === id) {
     const bar = document.getElementById('bot-status-bar');
@@ -2512,10 +2550,7 @@ function botSync() {
   setTimeout(() => {
     const latest = _selBot();
     if (!latest) return;
-    const _syncCode = _buildBotCode(latest);
-    const _syncEncoded = btoa(unescape(encodeURIComponent(_syncCode)));
-    const _syncWrapper = `(new Function(decodeURIComponent(escape(atob('${_syncEncoded}'))))())`;
-    bcSend({ type:'EXEC', code: _syncWrapper });
+    bcSend({ type:'EXEC', code: _botExecCode(latest) });
     latest.laufend = true; _saveBots(); renderBotList(); renderBotEditor();
     showStatus('✅ Bot synchronisiert und neu gestartet', 'success');
   }, 700);

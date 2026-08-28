@@ -48,7 +48,8 @@
     'mbsWheelShots'];
   /* Alles Uebrige ist klein bzw. schlecht teilbar und wandert jedes Mal komplett mit. */
   var KOMPLETT = ['curseFavourites', 'profileFavs', 'mbsWheel', 'mbsWheelFavs',
-    'mbsWheelOutfitFavs', 'rangDaten', 'moneyDaten', 'botLogs', 'defaultOutfit'];
+    'mbsWheelOutfitFavs', 'rangDaten', 'moneyDaten', 'botLogs', 'defaultOutfit',
+    'bots', 'botGroups', 'botVars', 'playerKeys', 'shopDaten'];
 
   /* Kalendertag als Schluessel – die Sicherung laeuft einmal pro Tag,
      beim ersten Start. */
@@ -199,6 +200,13 @@
       rangDaten:          g(null, function () { return _rankData; }),
       moneyDaten:         g(null, function () { return _money; }),
       botLogs:            g(null, function () { return window._BCBotLog; }),
+      // Bot- und Shop-Bestand: fehlten hier komplett, obwohl Trigger, Events,
+      // Szenen und der Kaufverlauf nur an dieser einen Stelle liegen.
+      bots:               g([],   function () { return _bots; }),
+      botGroups:          g([],   function () { return _botGroups; }),
+      botVars:            g({},   function () { return _botVars; }),
+      playerKeys:         g({},   function () { return _playerKeys; }),
+      shopDaten:          g(null, function () { return _shop; }),
       defaultOutfit:      g(null, function () {
         return CURSE_DEFAULT_OUTFIT_CODE
           ? { code: CURSE_DEFAULT_OUTFIT_CODE, date: CURSE_DEFAULT_OUTFIT_DATE } : null;
@@ -210,24 +218,27 @@
   async function schreibeDatei(name, inhalt) {
     var datei = await ordner.getFileHandle(name, { create: true });
     var strom = await datei.createWritable();
-    var bytes = 0, bloecke = 0, puffer = '';
+    // zeichen zaehlt UTF-16-Codeeinheiten – die tatsaechliche Dateigroesse in
+    // Bytes steht danach im FileHandle. Frueher wurde die Zeichenzahl als
+    // "bytes" gemeldet, was bei Umlauten und Emojis zu niedrig lag.
+    var zeichen = 0, bloecke = 0, puffer = '';
     try {
       for (var stueck of teile(inhalt)) {
         puffer += stueck;
         if (puffer.length >= 4 * 1024 * 1024) {
           await strom.write(puffer);
-          bytes += puffer.length;
+          zeichen += puffer.length;
           puffer = '';
           if (++bloecke % 8 === 0) await new Promise(function (r) { setTimeout(r, 0); });
         }
       }
-      if (puffer) { await strom.write(puffer); bytes += puffer.length; }
+      if (puffer) { await strom.write(puffer); zeichen += puffer.length; }
       await strom.close();
     } catch (e) {
       try { await strom.abort(); } catch (e2) {}
       throw e;
     }
-    return bytes;
+    try { return (await datei.getFile()).size; } catch (e) { return zeichen; }
   }
 
   // Millisekunden mit im Namen: sonst wuerden zwei Sicherungen in derselben
@@ -296,7 +307,7 @@
         var gen = stempel();
         name = P_VOLL + gen + '.json';
         bytes = await schreibeDatei(name, {
-          _meta: { exportedAt: new Date().toISOString(), version: 2, tool: 'BC Konfigurator',
+          _meta: { exportedAt: new Date().toISOString(), version: 3, tool: 'BC Konfigurator',
                    art: 'voll', generation: gen },
           daten: daten
         });
@@ -308,7 +319,7 @@
         for (var i = 0; i < KOMPLETT.length; i++) komplett[KOMPLETT[i]] = daten[KOMPLETT[i]];
         name = P_INKR + stempel() + '__' + stand.basis + '.json';
         bytes = await schreibeDatei(name, {
-          _meta: { exportedAt: new Date().toISOString(), version: 2, tool: 'BC Konfigurator',
+          _meta: { exportedAt: new Date().toISOString(), version: 3, tool: 'BC Konfigurator',
                    art: 'inkrement', generation: stand.basis, nummer: stand.zaehler + 1 },
           geaendert: d.geaendert,
           geloescht: d.geloescht,
@@ -379,7 +390,7 @@
 
     // Im Format des normalen Komplett-Backups ablegen, damit "⬆️ Restore" es liest
     var ausgabe = Object.assign({
-      _meta: { exportedAt: new Date().toISOString(), version: 2, tool: 'BC Konfigurator',
+      _meta: { exportedAt: new Date().toISOString(), version: 3, tool: 'BC Konfigurator',
                art: 'rekonstruiert', generation: ziel, inkremente: inkr.length }
     }, daten);
     var name = 'BC_Wiederhergestellt_' + ziel + '.json';
@@ -476,16 +487,22 @@
   async function start() {
     await ladeCfg();
     if (!ordner) return;
+    // Der stuendliche Takt muss in BEIDEN Faellen laufen: frueher kehrte der
+    // Berechtigungs-Zweig vorzeitig zurueck, dann sicherte eine ueber
+    // Mitternacht offene Sitzung nie wieder.
+    var takt = function () {
+      setInterval(function () { sichern(false); }, 60 * 60e3);    // Sitzung ueber Mitternacht
+    };
     if (!(await darfSchreiben(false))) {
       var einmal = function () {
         document.removeEventListener('click', einmal, true);
-        darfSchreiben(true).then(function (ok) { if (ok) sichern(false); });
+        darfSchreiben(true).then(function (ok) { if (ok) { sichern(false); takt(); } });
       };
       document.addEventListener('click', einmal, true);
       return;
     }
     setTimeout(function () { sichern(false); }, 20000);           // erster Start des Tages
-    setInterval(function () { sichern(false); }, 60 * 60e3);      // Sitzung ueber Mitternacht
+    takt();
   }
 
   if (document.readyState === 'loading') addEventListener('DOMContentLoaded', start);

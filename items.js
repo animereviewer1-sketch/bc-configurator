@@ -32,6 +32,13 @@ async function idbGet(key) {
   } catch (err) { console.warn('[IDB] get:', err); return null; }
 }
 
+/* Gibt true zurueck, wenn wirklich geschrieben wurde. Wirft nicht – die
+   meisten Aufrufer speichern nebenbei und warten das Ergebnis nicht ab.
+   Ein Fehler ist hier aber nichts zum Verschlucken: bei vollem Speicher
+   (QuotaExceededError) laeuft das Tool sonst weiter, als waere gesichert,
+   und der naechste Neustart faengt bei den Defaults an. Darum zusaetzlich
+   ein sichtbarer Hinweis in der Statuszeile. */
+let _idbFehlerGemeldet = 0;
 async function idbSet(key, value) {
   try {
     const db = await _idbOpen();
@@ -40,8 +47,21 @@ async function idbSet(key, value) {
       const req = tx.objectStore(_IDB_STORE).put(value, key);
       req.onsuccess = () => resolve();
       req.onerror   = e => reject(e.target.error);
+      tx.onabort    = e => reject(tx.error || e.target.error);
     });
-  } catch (err) { console.warn('[IDB] set:', err); }
+    return true;
+  } catch (err) {
+    console.error('[IDB] Schreiben fehlgeschlagen:', key, err);
+    const voll = err && (err.name === 'QuotaExceededError' || /quota/i.test(err.name || ''));
+    // Nicht bei jedem Tastendruck erneut aufpoppen
+    if (Date.now() - _idbFehlerGemeldet > 10000 && typeof showStatus === 'function') {
+      _idbFehlerGemeldet = Date.now();
+      showStatus(voll
+        ? '❌ Speicher voll – "' + key + '" wurde NICHT gesichert. Backup anlegen und aufräumen!'
+        : '❌ Speichern fehlgeschlagen (' + key + '): ' + (err?.message || err), 'error');
+    }
+    return false;
+  }
 }
 
 // Migration localStorage → IDB (einmalig)
@@ -53,7 +73,12 @@ async function idbSet(key, value) {
       const raw = localStorage.getItem(key);
       if (!raw) continue;
       if ((await idbGet(key)) === null) {
-        await idbSet(key, JSON.parse(raw));
+        // Die Quelle erst loeschen, wenn die Kopie wirklich liegt – sonst
+        // vernichtet ein fehlgeschlagener Schreibvorgang die Daten.
+        if (!(await idbSet(key, JSON.parse(raw)))) {
+          console.warn('[IDB] Migration verschoben, localStorage bleibt:', key);
+          continue;
+        }
         console.info('[IDB] Migriert:', key);
       }
       localStorage.removeItem(key);
@@ -458,7 +483,13 @@ let baselinePropVals = {};
 let PROFILES = {};
 try { PROFILES = JSON.parse(localStorage.getItem('BC_PROFILES_v11') || '{}'); } catch {}
 // IDB-Migration: überschreibt localStorage-Fallback beim Start
-idbGet('BC_PROFILES_v12').then(d => { if (d && typeof d === 'object' && Object.keys(d).length) { PROFILES = d; } });
+// Zusammenfuehren statt ersetzen: das Laden ist asynchron, ein in der
+// Zwischenzeit angelegtes Profil darf nicht verlorengehen. Bei gleichem
+// Namen gewinnt die IndexedDB – sie ist der Primaerspeicher, der Wert im
+// Arbeitsspeicher stammt an dieser Stelle nur aus dem localStorage-Spiegel.
+idbGet('BC_PROFILES_v12').then(d => {
+  if (d && typeof d === 'object' && Object.keys(d).length) PROFILES = { ...PROFILES, ...d };
+});
 // Speichert Profile in IDB (primär) + localStorage (Fallback)
 function _saveProfiles() {
   idbSet('BC_PROFILES_v12', PROFILES);
@@ -559,40 +590,13 @@ try {
 // ══════════════════════════════════════════════════════
 //  CACHE
 // ══════════════════════════════════════════════════════
-function showImport() {
-  document.getElementById('importBox').classList.remove('hidden');
-}
+/* Entfernt: showImport() / pasteClipboard() / loadCache().
 
-async function pasteClipboard() {
-  try { document.getElementById('importArea').value = await navigator.clipboard.readText(); }
-  catch { alert('Clipboard verweigert – manuell einfügen.'); }
-}
-
-function loadCache() {
-  const raw   = document.getElementById('importArea').value.trim();
-  const errEl = document.getElementById('importError');
-  try {
-    const data  = JSON.parse(raw);
-    const items = Object.values(data).reduce((s,g) => s + Object.keys(g).length, 0);
-    if (items === 0) throw new Error('Kein gültiger BC-Cache');
-    CACHE = data;
-    try { localStorage.setItem('BC_CACHE_v11', raw); } catch {}
-    errEl.classList.add('hidden');
-    document.getElementById('importBox').classList.add('hidden');
-    document.getElementById('importArea').value = '';
-    const modCount = Object.values(data).flatMap(g => Object.values(g)).filter(i => i.isModular).length;
-    document.getElementById('cacheInfo').textContent =
-      `${items} Items | ${Object.keys(data).length} Gruppen${modCount ? ` | 🧩 ${modCount} Modular` : ''}`;
-    document.getElementById('clearBtn').classList.remove('hidden');
-    document.getElementById('outfitBtn')?.classList.remove('hidden');
-    document.getElementById('profileBtn')?.classList.remove('hidden');
-    renderGroups();
-    showEmpty();
-  } catch(e) {
-    errEl.textContent = '❌ ' + e.message;
-    errEl.classList.remove('hidden');
-  }
-}
+   Die drei bauten auf den Elementen #importBox, #importArea und #importError
+   fuer ein manuelles Einfuegen des Item-Katalogs. Diese Elemente gibt es in
+   index.html nicht (mehr), und aufgerufen wurden die Funktionen von nirgends –
+   die Oberflaeche laedt ueber loadCacheFromBC() direkt aus dem Spiel. Ein
+   Aufruf haette sofort eine TypeError geworfen. */
 
 // clearCache defined in BC comms block
 
@@ -1927,6 +1931,9 @@ function saveProfile() {
   if (!OUTFIT.length) { showStatus('❌ Erst Outfit-Items hinzufügen!', 'error'); return; }
   const name = document.getElementById('profileNameInput').value.trim();
   if (!name) { showStatus('❌ Profilname eingeben!', 'error'); return; }
+  // Wie in allen anderen Speicherwegen nachfragen, statt ein vorhandenes
+  // Profil stillschweigend zu ersetzen.
+  if (PROFILES[name] && !confirm('Profil "' + name + '" existiert bereits. Überschreiben?')) return;
 
   // Nur die nötigen Felder speichern – cfg/propCode/craftStr sind zu groß (localStorage-Limit)
   const SAVE_KEYS = ['group','asset','colors','tr','trStr','typeStr','tightCode','lock','lockParams','isOther','memberNum','label'];
@@ -2042,6 +2049,14 @@ function _getProfileDuplicates() {
 function removeProfileDuplicates() {
   const dupeGroups = _getProfileDuplicates();
   if (!dupeGroups.size) { showStatus('✅ Keine Duplikate gefunden', 'success'); return; }
+  // Vorher fragen – die Funktion loeschte bisher ohne jede Rueckfrage. Die
+  // Eintraege haben zwar dieselbe Item-Zusammensetzung, aber eigene Namen.
+  const _weg = [];
+  dupeGroups.forEach(names => { names.slice(1).forEach(n => _weg.push(n)); });
+  if (!confirm(_weg.length + ' doppelte Profile löschen?\n\n'
+      + _weg.slice(0, 12).join('\n')
+      + (_weg.length > 12 ? '\n… und ' + (_weg.length - 12) + ' weitere' : '')
+      + '\n\nDas lässt sich nicht rückgängig machen.')) return;
   let removed = 0;
   dupeGroups.forEach(names => {
     // Ersten behalten, Rest löschen
@@ -4105,7 +4120,6 @@ function deleteProfileByIdx(idx) {
       const data = JSON.parse(s);
       const items = Object.values(data).reduce((n,g)=>n+Object.keys(g).length,0);
       if (items > 0) {
-        document.getElementById('profileBtn')?.classList.remove('hidden');
       }
     } catch {}
   }
@@ -4290,7 +4304,11 @@ let CURSE_CACHE_LSCG = {}; // from lscgCache
 // ownerNum (string) → { room: string, time: string }
 // Wird bei jedem Scan für die aktuell im Raum anwesenden Personen aktualisiert.
 let CURSE_SCAN_META = {};
-idbGet('BC_CURSE_SCAN_META_v1').then(function(d) { if (d && typeof d === 'object') CURSE_SCAN_META = d; });
+idbGet('BC_CURSE_SCAN_META_v1').then(function(d) {
+  // Gespeichertes fuellt nur Luecken – ein waehrend des Ladens eingetroffener
+  // Scan ist aktueller und behaelt Vorrang.
+  if (d && typeof d === 'object') CURSE_SCAN_META = Object.assign({}, d, CURSE_SCAN_META);
+});
 function _saveCurseScanMeta() { idbSet('BC_CURSE_SCAN_META_v1', CURSE_SCAN_META); }
 
 // Comments: persisted in IndexedDB
@@ -4413,8 +4431,14 @@ function _handleCurseData(data) {
     if (data.lscgTable) CURSE_LSCG       = data.lscgTable;
     if (data.lscgCache) CURSE_CACHE_LSCG = data.lscgCache;
   } else {
-    // ── Full-Sync: komplette DB ersetzen (erster Scan nach Connect/Reload) ──
-    // ZuletztGescannt-Timestamps aus dem alten CURSE_DB retten BEVOR wir überschreiben.
+    // ── Full-Sync (erster Scan nach Connect/Reload) ──
+    // Je Schluessel gewinnt die BC-Sicht (sie ist aktueller, etwa wenn ein Curse
+    // entfernt wurde), aber Eintraege, die es nur lokal gibt, bleiben stehen.
+    // Frueher wurde hier komplett ersetzt – kannte BC den ueber Monate
+    // gewachsenen Bestand nicht, war er damit weg. _pushCurseDBToBC() sorgt
+    // dafuer, dass BC ihn kennt; dies hier ist die zweite Sicherung fuer den
+    // Fall, dass der Push nicht durchkam.
+    // ZuletztGescannt-Timestamps aus dem alten CURSE_DB retten.
     const _prevTs = {};
     const _prevKeys = new Set(Object.keys(CURSE_DB));
     for (const k of _prevKeys) {
@@ -4422,9 +4446,9 @@ function _handleCurseData(data) {
       if (ts) _prevTs[k] = ts;
     }
 
-    CURSE_DB         = data.database    ?? {};
-    CURSE_LSCG       = data.lscgTable   ?? {};
-    CURSE_CACHE_LSCG = data.lscgCache   ?? {};
+    CURSE_DB         = Object.assign({}, CURSE_DB, data.database ?? {});
+    CURSE_LSCG       = data.lscgTable   ?? {};   // reine BC-Ableitung, wird nirgends gelesen
+    CURSE_CACHE_LSCG = Object.assign({}, CURSE_CACHE_LSCG, data.lscgCache ?? {});
     _curseFullReceived = true;
 
     // Timestamps setzen: nur cursed Items, nur einmal über CURSE_DB iterieren (O(n))
@@ -5230,6 +5254,40 @@ function _applyBundleWithSync(lzCode) {
 }
 
 // 🔄 Ursprung – Ursprungs-Outfit genau wie ein normales Profil ausführen
+/* Safewort – fuehrt /safeworditem im BC-Chat aus.
+
+   Bewusst OHNE Rueckfrage: ein Safewort muss sofort greifen, ein
+   Bestaetigungsdialog wuerde genau den Zweck aushebeln.
+
+   Der Befehl darf nicht ueber ServerSend('ChatRoomChat', ...) gehen – das
+   landet direkt beim Server und BCs Befehls-Parser sieht ihn nie, der Slash-
+   Befehl erschiene dann als blosser Text im Raum. Stattdessen genau der Weg,
+   den BC beim Tippen selbst nimmt: Text in #InputChat legen und
+   ChatRoomSendChat() aufrufen. Ein bereits angefangener Chat-Text wird vorher
+   gesichert und danach zurueckgeschrieben. */
+function curseSafewordItem() {
+  if (!_connected) { showStatus('❌ Nicht verbunden', 'error'); return; }
+  const code = '(function(){'
+    + 'var _befehl="/safeworditem";'
+    + 'try{'
+    +   'var _inp=document.getElementById("InputChat");'
+    +   'if(_inp&&typeof ChatRoomSendChat==="function"){'
+    +     'var _vorher=_inp.value;'                       // angefangene Nachricht retten
+    +     '_inp.value=_befehl;'
+    +     'try{ChatRoomSendChat();}finally{'
+    +       'if(_inp.value===_befehl||_inp.value==="")_inp.value=_vorher;'
+    +     '}'
+    +   '}'
+    +   'else if(typeof CommandParse==="function"){CommandParse(_befehl);}'
+    +   'else if(typeof ChatRoomSendChat==="function"){ChatRoomSendChat(_befehl);}'
+    +   'else{throw new Error("Weder InputChat noch CommandParse verfügbar");}'
+    +   'console.log("[BCU] Safewort gesendet:",_befehl);'
+    + '}catch(e){console.error("[BCU] Safewort fehlgeschlagen:",e.message);}'
+    + '})();';
+  bcSend({ type: 'EXEC', code });
+  showStatus('🛟 Safewort gesendet: /safeworditem', 'success');
+}
+
 function curseRestoreUrsprung() {
   if (!_connected) { showStatus('❌ Nicht verbunden', 'error'); return; }
   if (!_preCurseSnapshotCode || !PROFILES[_URSPRUNG_PROFILE_KEY]) {
@@ -5500,15 +5558,24 @@ function curseImport() {
     r.onload = ev => {
       try {
         const d = JSON.parse(ev.target.result);
-        CURSE_DB   = d.database  ?? d;
-        CURSE_LSCG = d.lscgTable ?? {};
-        CURSE_CACHE_LSCG = d.lscgCache ?? {};
+        // Ergaenzen statt ersetzen. Frueher stand hier  CURSE_DB = d.database ,
+        // womit eine Teil-Datei den gesamten ueber Monate gewachsenen Bestand
+        // geloescht hat – ohne Warnung und ohne Weg zurueck.
+        const _vorher = Object.keys(CURSE_DB).length;
+        const _neueDb = d.database ?? d;
+        let _dazu = 0;
+        for (const [k, v] of Object.entries(_neueDb || {})) {
+          if (!CURSE_DB[k]) { CURSE_DB[k] = v; _dazu++; }
+        }
+        if (d.lscgTable) Object.assign(CURSE_LSCG, d.lscgTable);
+        if (d.lscgCache) Object.assign(CURSE_CACHE_LSCG, d.lscgCache);
         if (d.comments) Object.assign(CURSE_COMMENTS, d.comments);
         _saveCurseComments();
         _saveCurseDB();
         if (d.favourites) { d.favourites.forEach(k => CURSE_FAVOURITES.add(k)); _saveCurseFavourites(); }
         // Daten gespeichert -> Erfolg melden BEVOR Render (Render-Fehler sollen Import nicht blockieren)
-        showStatus('✅ Import: ' + Object.keys(CURSE_DB).length + ' Crafts', 'success');
+        showStatus('✅ Import: ' + _dazu + ' neue Crafts ergänzt (vorher ' + _vorher
+          + ', jetzt ' + Object.keys(CURSE_DB).length + ')', 'success');
         // BC updaten
         if (_connected && Object.keys(CURSE_DB).length > 0) {
           bcSend({ type: 'LOAD_CURSE_DB', database: CURSE_DB }, true);
@@ -5630,17 +5697,19 @@ function curseClearAndScan() {
       const lsRaw = localStorage.getItem(key);
       if (lsRaw) {
         const existing = await idbGet(key);
-        if (!existing) await idbSet(key, JSON.parse(lsRaw));
-        localStorage.removeItem(key);
+        // Nur aufraeumen, wenn der Bestand auch wirklich in der IDB liegt
+        if (existing || await idbSet(key, JSON.parse(lsRaw))) localStorage.removeItem(key);
+        else console.warn('[IDB] Migration verschoben, localStorage bleibt:', key);
       }
     }
     const d = await idbGet('BC_CURSE_DB_v1');
     if (d) {
       // Guard: if BC already sent live CURSE_DATA before IDB resolved, don't overwrite it
       if (!_curseDBFresh) {
-        CURSE_DB         = d.database  ?? {};
-        CURSE_LSCG       = d.lscgTable ?? {};
-        CURSE_CACHE_LSCG = d.lscgCache ?? {};
+        // Ergaenzend, nicht ersetzend – falls doch schon etwas im Speicher steht
+        CURSE_DB         = Object.assign({}, d.database  ?? {}, CURSE_DB);
+        CURSE_LSCG       = Object.assign({}, d.lscgTable ?? {}, CURSE_LSCG);
+        CURSE_CACHE_LSCG = Object.assign({}, d.lscgCache ?? {}, CURSE_CACHE_LSCG);
         _updateCurseStats();
         console.log('[BCK-Popup] Curse DB geladen: ' + Object.keys(CURSE_DB).length + ' Crafts, ' + Object.keys(CURSE_OUTFIT_FLAGS).length + ' Outfit-Flags');
       } else {
@@ -5662,6 +5731,10 @@ function curseClearAndScan() {
     if (gruppeOverrides && typeof gruppeOverrides === 'object') Object.assign(CURSE_GRUPPE_OVERRIDES, gruppeOverrides);
     // Erst rendern nachdem ALLE Daten geladen sind
     if (document.getElementById('curseBody') && Object.keys(CURSE_DB).length) renderCurseTab();
+    // War die Verbindung schneller als dieses Laden, ging der Push beim PONG
+    // mit leerer CURSE_DB raus – jetzt nachholen, bevor der erste Full-Sync
+    // den Bestand durch die kleinere BC-Sicht ersetzt.
+    if (_pushCurseDBToBC()) console.info('[BCK-Popup] Curse-DB nach IDB-Load nachgereicht');
   } catch(e) { console.warn('[BCK-Popup] Curse IDB load error:', e); }
 })();
 
@@ -5712,10 +5785,17 @@ setInterval(function() {
 // ── Spieler-Check: nur mit dem zuletzt bekannten Account verbinden ────────────
 const _LAST_MEMBER_KEY = 'BC_LAST_MEMBER_v1';
 let _playerChecked = false;
+/* Wurde die Verbindung wegen eines anderen BC-Accounts abgelehnt, schiebt der
+   Loader im BC-Tab trotzdem weiter Daten herueber (Auto-Scan bei Raumwechsel,
+   LSCG-Schnappschuesse). Die kamen bisher normal durch und landeten in der
+   Datenbank – also genau die Daten des Accounts, den der Nutzer abgelehnt hat.
+   Bis zu einem bewussten "Neu verbinden" wird alles verworfen. */
+let _playerAbgelehnt = false;
 
 function manualReconnect() {
   _connected = false;
   _playerChecked = false;
+  _playerAbgelehnt = false;
   stopRoomScan();
   document.getElementById('connStatus').textContent = 'Nicht verbunden';
   document.getElementById('connStatus').dataset.conn = 'off';
@@ -5743,14 +5823,44 @@ function bcSend(msg, silent) {
   }
 }
 
+/* Den lokalen Curse-Bestand in den Loader schieben.
+
+   Wichtig fuer mehr als nur "Wear nach Browserwechsel": ein Full-Sync ersetzt
+   CURSE_DB spaeter komplett durch das, was BC zurueckschickt. Was BC nicht
+   kennt, faellt dabei weg. Der Bestand MUSS also drueben liegen, bevor der
+   erste vollstaendige Scan laeuft.
+
+   Darum wird das hier an zwei Stellen aufgerufen: beim PONG und noch einmal,
+   sobald die IndexedDB fertig geladen hat. Beides ist noetig, weil beides um
+   die Wette laeuft – ist der PONG zuerst da (der Regelfall, ein
+   postMessage-Umlauf ist schneller als das Lesen einer grossen IDB), war
+   CURSE_DB beim Push noch leer und der ueber Monate gewachsene Craft-Bestand
+   waere beim ersten Full-Sync verschwunden. Ein doppelter Push schadet nicht:
+   CurseScanner.loadDatabase fuegt nur zusammen. */
+function _pushCurseDBToBC() {
+  if (!_connected) return false;
+  if (Object.keys(CURSE_DB).length === 0) return false;
+  bcSend({ type: 'LOAD_CURSE_DB', database: CURSE_DB }, true);
+  // Nur der LSCG-Cache geht separat – Craft-Eintraege stecken schon in CURSE_DB
+  if (Object.keys(CURSE_CACHE_LSCG).length > 0) {
+    bcSend({ type: 'LOAD_LSCG_CACHE', cache: CURSE_CACHE_LSCG }, true);
+  }
+  return true;
+}
+
 window.addEventListener('message', function(ev) {
   if (!ev.data || ev.data.app !== APP) return;
   // Sicherheit: nur Nachrichten vom BC-Fenster (opener) akzeptieren.
   // Verhindert, dass fremde Fenster/Tabs gef\u00e4lschte CURSE_DATA/EXEC_OK etc. einschleusen.
-  if (window.opener && ev.source !== window.opener) {
+  // Ohne opener gibt es keine legitime Gegenstelle \u2013 frueher entfiel die Pruefung
+  // in dem Fall komplett, und jedes Fenster mit einem Handle auf dieses hier
+  // konnte Daten einschleusen.
+  if (!window.opener || ev.source !== window.opener) {
     console.warn('[BCK-Popup] message von fremder Quelle ignoriert');
     return;
   }
+  // Abgelehnter Account: nichts annehmen bis der Nutzer neu verbindet
+  if (_playerAbgelehnt) return;
   // BC-Origin lernen/aktuell halten (BC l\u00e4uft auf mehreren Domains)
   if (ev.origin && ev.origin !== 'null') _bcOrigin = ev.origin;
   _lastMsgTs = Date.now();
@@ -5770,14 +5880,7 @@ window.addEventListener('message', function(ev) {
         document.getElementById('connStatus').dataset.conn = 'on';
         document.getElementById('connectHint')?.classList.add('hidden');
         // Curse-DB an Loader pushen → Wear nach Browserwechsel/Neustart möglich
-        if (Object.keys(CURSE_DB).length > 0) {
-          bcSend({ type: 'LOAD_CURSE_DB', database: CURSE_DB }, true);
-          // FIX: was incorrectly sending CURSE_DB as craft cache - craft entries are already in CURSE_DB
-          // Only send LSCG cache separately as it uses a different table
-          if (Object.keys(CURSE_CACHE_LSCG).length > 0) {
-            bcSend({ type: 'LOAD_LSCG_CACHE', cache: CURSE_CACHE_LSCG }, true);
-          }
-        }
+        _pushCurseDBToBC();
         // Sofort Raum scannen + Interval starten
         bcSend({ type: 'GET_PLAYER' }, true);
         startRoomScan();
@@ -5828,8 +5931,6 @@ window.addEventListener('message', function(ev) {
       const _mc = Object.values(_data).flatMap(g => Object.values(g)).filter(i => i.archetype === 'modular').length;
       document.getElementById('cacheInfo').textContent = '\u2705 ' + _items + ' Items \u00b7 ' + Object.keys(_data).length + ' Gruppen \u00b7 \ud83e\udde9 ' + _mc + ' modular';
       document.getElementById('clearBtn').classList.remove('hidden');
-      document.getElementById('outfitBtn')?.classList.remove('hidden');
-      document.getElementById('profileBtn')?.classList.remove('hidden');
       document.getElementById('connectHint')?.classList.add('hidden');
       renderGroups();
       showEmpty();
@@ -5853,6 +5954,7 @@ window.addEventListener('message', function(ev) {
                 + '\nZuletzt: #' + last + '\n\nTrotzdem verbinden?')) {
               _connected = false;
               _playerChecked = false;
+              _playerAbgelehnt = true;
               stopRoomScan();
               const cs = document.getElementById('connStatus');
               if (cs) { cs.textContent = 'Falscher Spieler – nicht verbunden'; cs.dataset.conn = 'off'; }
@@ -6085,8 +6187,6 @@ function clearCache() {
   try { localStorage.removeItem('BC_CACHE_v12'); } catch {}
   document.getElementById('cacheInfo').textContent = 'Kein Cache';
   document.getElementById('clearBtn').classList.add('hidden');
-  document.getElementById('outfitBtn')?.classList.add('hidden');
-  document.getElementById('profileBtn')?.classList.add('hidden');
   document.getElementById('connectHint')?.classList.remove('hidden');
   document.getElementById('groupsList').innerHTML = '';
   showEmpty();
@@ -6334,8 +6434,25 @@ function setOutfitTarget(num) {
   // FIX: removed duplicate _autoOutfitCode() call that was here
 }
 
+/* Fuer HTML-Text und Attributwerte. Das Apostroph muss mit: der Browser
+   dekodiert Entities BEVOR er den Inhalt eines onclick-Attributs als JS liest –
+   ein Name wie  O'Brien  wuerde sonst das umgebende String-Literal beenden. */
 function escHtml(s) {
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+                  .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+/* Fuer Werte, die INNERHALB eines JS-String-Literals in einem Inline-Handler
+   stehen, also  onclick="f('<hier>')" . Zwei Ebenen: erst JS-Escaping, damit
+   das Literal nicht bricht, dann HTML-Escaping, damit das Attribut nicht
+   bricht. Der Browser dreht beides in genau dieser Reihenfolge wieder auf.
+   escHtml allein genuegt hier NICHT – dessen &#39; wuerde vom HTML-Parser zu
+   einem echten Apostroph und damit wieder zum Problem. */
+function escJsAttr(s) {
+  return String(s)
+    .replace(/\\/g, '\\\\').replace(/'/g, "\\'")
+    .replace(/\r/g, '\\r').replace(/\n/g, '\\n')
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
 function selectRoomMember(num) {
@@ -6410,9 +6527,9 @@ function renderRoomDropdown() {
     if (inLeiste)  cls += ' in-leiste';
     const favCls = 'room-dd-fav' + (isFav ? ' on' : '');
     const check  = inLeiste ? '<span class="room-dd-check">✓</span>' : '';
-    const nameClick = isSelf ? '' : 'onclick="toggleLeisteMember(' + m.num + ',\'' + escHtml(m.name).replace(/'/g,"\\'") + '\')"';
+    const nameClick = isSelf ? '' : 'onclick="toggleLeisteMember(' + m.num + ',\'' + escJsAttr(m.name) + '\')"';
     return '<div class="' + cls + '">'
-      + '<button class="' + favCls + '" onclick="toggleFavMember(' + m.num + ',\'' + escHtml(m.name).replace(/'/g,"\\'") + '\')" title="Favorit">⭐</button>'
+      + '<button class="' + favCls + '" onclick="toggleFavMember(' + m.num + ',\'' + escJsAttr(m.name) + '\')" title="Favorit">⭐</button>'
       + '<div class="room-dd-name" ' + nameClick + ' title="' + (isSelf ? 'Du selbst' : (inLeiste ? 'Aus Leiste entfernen' : 'Zur Leiste hinzufügen')) + '">'
       + escHtml(m.name) + ' <span class="room-num">#' + m.num + '</span>' + check
       + '</div>'
@@ -6517,8 +6634,6 @@ function renderLeiste() {
         const mc = Object.values(CACHE).flatMap(g => Object.values(g)).filter(i => i.archetype === 'modular').length;
         document.getElementById('cacheInfo').textContent = '\u2705 ' + items + ' Items (lokal gecacht) \u00b7 \ud83e\udde9 ' + mc + ' modular';
         document.getElementById('clearBtn').classList.remove('hidden');
-        document.getElementById('outfitBtn')?.classList.remove('hidden');
-        document.getElementById('profileBtn')?.classList.remove('hidden');
         document.getElementById('connectHint')?.classList.add('hidden');
         renderGroups(); showEmpty(); renderProfileList();
         console.log('[BCK-Popup] Cache aus localStorage: ' + items + ' Items');
@@ -6588,7 +6703,14 @@ function enrichProfileNamesWithIDs() {
   const newProfiles = {};
 
   for (const key of oldKeys) {
-    const newKey = _enrichOne(key);
+    let newKey = _enrichOne(key);
+    // Trifft der angereicherte Name auf ein bereits vergebenes Profil, wuerde
+    // das eine das andere ueberschreiben. Lieber durchnummerieren.
+    if (newKey !== key && newProfiles[newKey]) {
+      let n = 2;
+      while (newProfiles[newKey + ' (' + n + ')']) n++;
+      newKey = newKey + ' (' + n + ')';
+    }
     const profile = PROFILES[key];
     newProfiles[newKey] = { ...profile, name: newKey };
     if (newKey !== key) changes.push({ from: key, to: newKey });
@@ -6743,20 +6865,202 @@ function _jsonParts(value, parts) {
   return parts;
 }
 
+/* ── Verlustfreies Zusammenfuehren ────────────────────────────────────────
+   Beide Funktionen fuegen nur hinzu und ueberschreiben nie einen bestehenden
+   Eintrag. Sie werden an zwei Sorten von Stellen gebraucht:
+
+     · beim Einspielen eines Backups
+     · beim Laden aus der IndexedDB direkt nach dem Start
+
+   Der zweite Fall ist der unauffaellige: das Laden ist asynchron, waehrend
+   BC ueber die Bruecke schon Scan-Ergebnisse schicken kann. Ein  X = geladen
+   haette dann genau das weggeworfen, was in der Zwischenzeit hereinkam. */
+
+/* LSCG: Spieler ueber die MemberNumber, Outfits ueber den Fingerprint
+   (ersatzweise den Code, falls ein alter Eintrag keinen hat). */
+function _lscgMerge(ziel, quelle) {
+  let neu = 0;
+  for (const [mk, entry] of Object.entries(quelle || {})) {
+    if (!entry) continue;
+    const cur = ziel[mk];
+    if (!cur) { ziel[mk] = entry; neu += (entry.versions || []).length; continue; }
+    if (!Array.isArray(cur.versions)) cur.versions = [];
+    const bekannt = new Set(cur.versions.map(v => v.fingerprint ?? v.code));
+    for (const v of (entry.versions || [])) {
+      const id = v.fingerprint ?? v.code;
+      if (id != null && bekannt.has(id)) continue;
+      cur.versions.push(v);
+      if (id != null) bekannt.add(id);
+      neu++;
+    }
+    if (!cur.name && entry.name) cur.name = entry.name;
+    if (!cur.nickname && entry.nickname) cur.nickname = entry.nickname;
+  }
+  return neu;
+}
+
+/* MBS-Wheel: Spieler ueber die MemberNumber, Outfits ueber den Fingerprint.
+   Name und Raum uebernimmt nur der neuere Zeitstempel. */
+function _mbsMerge(ziel, quelle) {
+  let neu = 0;
+  for (const r of (quelle || [])) {
+    if (!r) continue;
+    const mn = _mbsNum(r.memberNumber);
+    const idx = ziel.findIndex(x => _mbsNum(x.memberNumber) === mn);
+    if (idx < 0) { r.memberNumber = mn; ziel.push(r); neu += (r.outfits || []).length; continue; }
+    const cur = ziel[idx];
+    if (!Array.isArray(cur.outfits)) cur.outfits = [];
+    const bekannt = new Set(cur.outfits.map(o => _mbsOutfitFp(o)));
+    for (const o of (r.outfits || [])) {
+      const fp = _mbsOutfitFp(o);
+      if (bekannt.has(fp)) continue;
+      cur.outfits.push(o); bekannt.add(fp); neu++;
+    }
+    if ((r.ts || 0) > (cur.ts || 0)) {
+      cur.ts = r.ts;
+      if (r.name) cur.name = r.name;
+      if (r.room) cur.room = r.room;
+    }
+  }
+  return neu;
+}
+
+/* Bot-, Shop-, Rang- und Money-Bestand einsammeln. Jede Quelle einzeln
+   abgesichert: die Dateien werden per document.write nachgeladen, eine davon
+   kann fehlen, ohne dass deshalb das ganze Backup ausfaellt. Die Feldnamen
+   sind mit bc-autobackup.js abgestimmt. */
+function _backupNebenDaten() {
+  const g = (fallback, fn) => { try { const v = fn(); return v === undefined ? fallback : v; } catch (e) { return fallback; } };
+  return {
+    bots:       g([],   () => _bots),
+    botGroups:  g([],   () => _botGroups),
+    botVars:    g({},   () => _botVars),
+    playerKeys: g({},   () => _playerKeys),
+    botLogs:    g([],   () => window._BCBotLog),
+    shopDaten:  g(null, () => _shop),
+    rangDaten:  g(null, () => _rankData),
+    moneyDaten: g(null, () => _money),
+  };
+}
+
+/* Gegenstueck zum Import: fuehrt die Nebendaten mit dem Bestand zusammen.
+   Wie beim Rest des Restores gilt "nur ergaenzen" – vorhandene Eintraege
+   werden nie ueberschrieben. Gibt zurueck, was tatsaechlich dazukam. */
+function _backupNebenDatenImport(d) {
+  const dazu = { bots: 0, botGroups: 0, shopItems: 0, raenge: 0, konten: 0, logs: 0 };
+
+  // Bots + Gruppen: Identitaet ist die id
+  if (Array.isArray(d.bots) && typeof _bots !== 'undefined') {
+    const da = new Set(_bots.map(b => b.id));
+    for (const b of d.bots) {
+      if (!b || da.has(b.id)) continue;
+      _bots.push({ ...b, laufend: false });   // ein importierter Bot laeuft nicht
+      da.add(b.id); dazu.bots++;
+    }
+    if (dazu.bots) _saveBots();
+  }
+  if (Array.isArray(d.botGroups) && typeof _botGroups !== 'undefined') {
+    const da = new Set(_botGroups.map(x => x.id));
+    for (const gr of d.botGroups) {
+      if (!gr || da.has(gr.id)) continue;
+      _botGroups.push(gr); da.add(gr.id); dazu.botGroups++;
+    }
+    if (dazu.botGroups) _saveBotGroups();
+  }
+  if (d.botVars && typeof _botVars !== 'undefined') {
+    let n = 0;
+    for (const [mk, vars] of Object.entries(d.botVars)) {
+      const ziel = (_botVars[mk] = _botVars[mk] || {});
+      for (const [k, v] of Object.entries(vars || {})) if (!(k in ziel)) { ziel[k] = v; n++; }
+    }
+    if (n) _saveBotVars();
+  }
+  if (d.playerKeys && typeof _playerKeys !== 'undefined') {
+    let n = 0;
+    for (const [mk, rec] of Object.entries(d.playerKeys)) if (!_playerKeys[mk]) { _playerKeys[mk] = rec; n++; }
+    if (n) _savePlayerKeys();
+  }
+
+  // Logs: ueber Zeitstempel + Trigger entdoppeln, danach chronologisch
+  if (Array.isArray(d.botLogs) && window._BCBotLog) {
+    const da = new Set(window._BCBotLog.map(e => e.ts + '|' + (e.trigId ?? '') + '|' + (e.memberNum ?? '')));
+    for (const e of d.botLogs) {
+      if (!e) continue;
+      const k = e.ts + '|' + (e.trigId ?? '') + '|' + (e.memberNum ?? '');
+      if (da.has(k)) continue;
+      window._BCBotLog.push(e); da.add(k); dazu.logs++;
+    }
+    if (dazu.logs) {
+      window._BCBotLog.sort((a, b) => (b.ts || 0) - (a.ts || 0));
+      if (typeof _saveLogsToStorage === 'function') _saveLogsToStorage();
+    }
+  }
+
+  // Shop: Artikel nach id ergaenzen, Kaufverlauf entdoppeln, Einstellungen
+  // nur fuellen wo noch nichts steht
+  if (d.shopDaten && typeof _shop !== 'undefined') {
+    _shop.items = _shop.items || [];
+    const da = new Set(_shop.items.map(i => i.id));
+    for (const it of (d.shopDaten.items || [])) {
+      if (!it || da.has(it.id)) continue;
+      _shop.items.push(it); da.add(it.id); dazu.shopItems++;
+    }
+    _shop.log = _shop.log || [];
+    const logDa = new Set(_shop.log.map(e => e.ts + '|' + (e.buyerNum ?? '')));
+    for (const e of (d.shopDaten.log || [])) {
+      if (!e || logDa.has(e.ts + '|' + (e.buyerNum ?? ''))) continue;
+      _shop.log.push(e); logDa.add(e.ts + '|' + (e.buyerNum ?? ''));
+    }
+    _shop.log.sort((a, b) => (a.ts || 0) - (b.ts || 0));
+    _shop.settings = Object.assign({}, d.shopDaten.settings || {}, _shop.settings || {});
+    _saveShop();
+  }
+
+  // Rang: Definitionen nach id, Spieler nach MemberNumber
+  if (d.rangDaten && typeof _rankData !== 'undefined') {
+    _rankData.defs = _rankData.defs || [];
+    const da = new Set(_rankData.defs.map(r => r.id));
+    for (const r of (d.rangDaten.defs || [])) {
+      if (!r || da.has(r.id)) continue;
+      _rankData.defs.push(r); da.add(r.id); dazu.raenge++;
+    }
+    _rankData.players = _rankData.players || {};
+    for (const [mk, p] of Object.entries(d.rangDaten.players || {})) {
+      if (!_rankData.players[mk]) _rankData.players[mk] = p;
+    }
+    _rankData.settings = Object.assign({}, d.rangDaten.settings || {}, _rankData.settings || {});
+    _saveRank();
+  }
+
+  // Money: Konten nach MemberNumber
+  if (d.moneyDaten && typeof _money !== 'undefined') {
+    _money.balances = _money.balances || {};
+    for (const [mk, b] of Object.entries(d.moneyDaten.balances || {})) {
+      if (!_money.balances[mk]) { _money.balances[mk] = b; dazu.konten++; }
+    }
+    _money.settings = Object.assign({}, d.moneyDaten.settings || {}, _money.settings || {});
+    _saveMoney();
+  }
+
+  return dazu;
+}
+
 function exportAllData() {
   try {
     const profileCount = Object.keys(PROFILES).length;
     const curseCount   = Object.keys(CURSE_DB).length;
     const wheelCount   = _mbsWheelData.length;
     const lscgCount    = Object.keys(LSCG_DB).length;
-    if (!profileCount && !curseCount && !wheelCount && !lscgCount) {
+    const botCount   = (typeof _bots !== 'undefined' ? _bots.length : 0);
+    const shopCount  = (typeof _shop !== 'undefined' ? (_shop.items || []).length : 0);
+    if (!profileCount && !curseCount && !wheelCount && !lscgCount && !botCount && !shopCount) {
       showStatus('⚠️ Keine Daten zum Exportieren', 'info');
       return;
     }
     const payload = {
       _meta: {
         exportedAt: new Date().toISOString(),
-        version:    2,
+        version:    3,
         tool:       'BC Konfigurator',
         counts: {
           profiles:  profileCount,
@@ -6782,6 +7086,10 @@ function exportAllData() {
       mbsWheelOutfitFavs: [..._mbsWheelOutfitFavs],
       mbsWheelShots:      _mbsWheelShots,
       defaultOutfit:      CURSE_DEFAULT_OUTFIT_CODE ? { code: CURSE_DEFAULT_OUTFIT_CODE, date: CURSE_DEFAULT_OUTFIT_DATE } : null,
+      // v3: Bot, Shop, Rang, Money – lagen vorher in keinem der beiden Backups.
+      // Namen identisch zu bc-autobackup.js, damit bcBackupRekonstruieren()
+      // eine Datei erzeugt, die importAllData() lesen kann.
+      ..._backupNebenDaten(),
     };
     // Stueckweise serialisieren statt JSON.stringify(payload) am Stueck:
     // Bei grossen Screenshot-Speichern sprengt ein einzelner String das
@@ -6798,22 +7106,180 @@ function exportAllData() {
     setTimeout(() => URL.revokeObjectURL(a.href), 60000);
     const mb = (blob.size / 1048576).toFixed(1);
     showStatus('✅ Backup: ' + profileCount + ' Profile, ' + curseCount + ' Curse-Eintraege, '
-      + wheelCount + ' Wheel-Spieler (' + mb + ' MB)', 'success');
+      + wheelCount + ' Wheel-Spieler, ' + botCount + ' Bots, ' + shopCount + ' Shop-Artikel ('
+      + mb + ' MB)', 'success');
   } catch(err) {
     showStatus('❌ Export fehlgeschlagen: ' + err.message, 'error');
     console.error('[exportAllData]', err);
   }
 }
 
+/* Backup-Datei einlesen, ohne sie als einen einzigen String zu halten.
+
+   exportAllData() serialisiert bewusst stueckweise, weil ein einzelner String
+   am V8-Limit (~512 MB) scheitert – beim Import fehlte das Gegenstueck: genau
+   die grossen Backups liessen sich nicht mehr zurueckspielen.
+
+   Der Parser laeuft ueber den Datei-Stream und baut dasselbe Objekt auf, das
+   JSON.parse liefern wuerde. Werte auf oberster Ebene, die selbst Objekte sind
+   (Screenshot-Sammlungen), werden Feld fuer Feld gelesen; damit bleibt jeder
+   Einzelwert so klein wie das, was er enthaelt – ein Bild statt aller Bilder. */
+async function _backupDateiParsen(file, aufFortschritt) {
+  const leser = file.stream().pipeThrough(new TextDecoderStream()).getReader();
+  let buf = '', i = 0, ende = false, gelesen = 0, seitPause = 0;
+
+  // Sorgt dafuer, dass buf[i] existiert. false = Datei zu Ende.
+  async function nachfuellen() {
+    while (i >= buf.length) {
+      if (ende) return false;
+      const { value, done } = await leser.read();
+      if (done) { ende = true; return false; }
+      gelesen += buf.length; buf = value; i = 0;
+    }
+    return true;
+  }
+  // Naechstes Zeichen ohne Leerraum – wird nicht verbraucht.
+  async function ws() {
+    for (;;) {
+      if (!(await nachfuellen())) return null;
+      const c = buf[i];
+      if (c === ' ' || c === '\n' || c === '\r' || c === '\t') { i++; continue; }
+      return c;
+    }
+  }
+  // Zeichenkette ab buf[i] === '"' roh einlesen (mit Anfuehrungszeichen).
+  async function leseStringRoh() {
+    const teile = []; let start = i, escape = false;
+    i++;                                   // oeffnendes "
+    for (;;) {
+      while (i < buf.length) {
+        const c = buf[i]; i++;
+        if (escape)          { escape = false; continue; }
+        if (c === '\\')      { escape = true;  continue; }
+        if (c === '"')       { teile.push(buf.slice(start, i)); return teile.join(''); }
+      }
+      teile.push(buf.slice(start, i));
+      if (!(await nachfuellen())) throw new Error('Datei endet mitten in einer Zeichenkette');
+      start = i;
+    }
+  }
+  // Objekt/Array ab buf[i] === '{' oder '[' roh einlesen.
+  async function leseKlammerRoh() {
+    const teile = []; let start = i, tiefe = 0, imString = false, escape = false;
+    for (;;) {
+      while (i < buf.length) {
+        const c = buf[i]; i++;
+        if (imString) {
+          if (escape) escape = false;
+          else if (c === '\\') escape = true;
+          else if (c === '"') imString = false;
+          continue;
+        }
+        if (c === '"') { imString = true; continue; }
+        if (c === '{' || c === '[') { tiefe++; continue; }
+        if (c === '}' || c === ']') {
+          if (--tiefe === 0) { teile.push(buf.slice(start, i)); return teile.join(''); }
+        }
+      }
+      teile.push(buf.slice(start, i));
+      if (!(await nachfuellen())) throw new Error('Datei endet mitten in einer Klammer');
+      start = i;
+    }
+  }
+  // Einen vollstaendigen JSON-Wert roh einlesen.
+  async function leseRohwert() {
+    const c = await ws();
+    if (c === null) throw new Error('Datei endet, wo ein Wert stehen muesste');
+    if (c === '"') return leseStringRoh();
+    if (c === '{' || c === '[') return leseKlammerRoh();
+    const teile = [];                      // Zahl / true / false / null
+    for (;;) {
+      if (!(await nachfuellen())) break;
+      const start = i;
+      while (i < buf.length && ',}] \n\r\t'.indexOf(buf[i]) < 0) i++;
+      teile.push(buf.slice(start, i));
+      if (i < buf.length) break;           // Abschlusszeichen bleibt stehen
+    }
+    return teile.join('');
+  }
+  // Gelegentlich die Kontrolle abgeben, sonst friert die Oberflaeche ein.
+  async function vielleichtPause() {
+    if (++seitPause < 400) return;
+    seitPause = 0;
+    if (aufFortschritt) aufFortschritt(gelesen + i, file.size);
+    await new Promise(r => setTimeout(r, 0));
+  }
+  // Schluessel/Doppelpunkt-Paar einlesen; gibt den Schluessel zurueck.
+  async function leseSchluessel(wo) {
+    const k = JSON.parse(await leseStringRoh());
+    if (await ws() !== ':') throw new Error('":" erwartet in ' + wo);
+    i++;
+    return k;
+  }
+
+  try {
+    if (await ws() !== '{') throw new Error('Die Datei beginnt nicht mit einem JSON-Objekt');
+    i++;
+    const ergebnis = {};
+    for (;;) {
+      const c = await ws();
+      if (c === null) throw new Error('Datei unvollstaendig – vermutlich abgebrochener Download');
+      if (c === '}') { i++; break; }
+      if (c === ',') { i++; continue; }
+      if (c !== '"') throw new Error('Unerwartetes Zeichen "' + c + '" auf oberster Ebene');
+      const schluessel = await leseSchluessel('oberster Ebene');
+
+      if (await ws() === '{') {
+        i++;                               // Sammlung Feld fuer Feld lesen
+        const obj = {};
+        for (;;) {
+          const d = await ws();
+          if (d === null) throw new Error('Datei unvollstaendig in "' + schluessel + '"');
+          if (d === '}') { i++; break; }
+          if (d === ',') { i++; continue; }
+          if (d !== '"') throw new Error('Unerwartetes Zeichen "' + d + '" in "' + schluessel + '"');
+          const k2 = await leseSchluessel('"' + schluessel + '"');
+          obj[k2] = JSON.parse(await leseRohwert());
+          await vielleichtPause();
+        }
+        ergebnis[schluessel] = obj;
+      } else {
+        ergebnis[schluessel] = JSON.parse(await leseRohwert());
+      }
+      if (aufFortschritt) aufFortschritt(gelesen + i, file.size);
+    }
+    return ergebnis;
+  } finally {
+    try { await leser.cancel(); } catch (e) {}
+  }
+}
+
+/* Waehlt den Weg: kleine Dateien direkt (schnell), grosse ueber den Stream.
+   Scheitert JSON.parse doch an der Stringlaenge, wird umgeschaltet. */
+async function _backupDateiLesen(file, aufFortschritt) {
+  const GRENZE = 100 * 1024 * 1024;
+  if (file.size > GRENZE) return _backupDateiParsen(file, aufFortschritt);
+  try {
+    return JSON.parse(await file.text());
+  } catch (err) {
+    if (!(err instanceof RangeError)) throw err;
+    console.warn('[Import] Datei zu gross für JSON.parse – lese stückweise');
+    return _backupDateiParsen(file, aufFortschritt);
+  }
+}
+
 function importAllData() {
   const inp = document.createElement('input');
   inp.type = 'file'; inp.accept = '.json';
-  inp.onchange = e => {
-    const r = new FileReader();
-    r.onload = ev => {
-      try {
-        const d = JSON.parse(ev.target.result);
-        if (!d._meta) {
+  inp.onchange = async e => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+        showStatus('⏳ Backup wird gelesen…', 'info');
+        const d = await _backupDateiLesen(file, (fertig, gesamt) => {
+          if (gesamt) showStatus('⏳ Backup wird gelesen… ' + Math.floor(fertig / gesamt * 100) + '%', 'info');
+        });
+        if (!d || !d._meta) {
           showStatus('❌ Keine gültige Backup-Datei', 'error');
           return;
         }
@@ -6843,52 +7309,13 @@ function importAllData() {
         if (d.curseDatabase) _saveCurseDB();
 
         // v2-Felder: LSCG-DB, Wheel-DB, Screenshots, Favoriten, Standard-Outfit
-        if (d.lscgDB) {
-          // Versionen zusammenfuehren statt den ganzen Eintrag zu verwerfen:
-          // Frueher gewann ein bereits vorhandener Spieler komplett, wodurch ein
-          // Backup fehlende Outfit-Versionen nicht zurueckbringen konnte.
-          for (const [mk, entry] of Object.entries(d.lscgDB)) {
-            const cur = LSCG_DB[mk];
-            if (!cur) { LSCG_DB[mk] = entry; continue; }
-            if (!Array.isArray(cur.versions)) cur.versions = [];
-            const bekannt = new Set(cur.versions.map(v => v.fingerprint ?? v.code));
-            for (const v of (entry.versions || [])) {
-              const id = v.fingerprint ?? v.code;
-              if (id != null && bekannt.has(id)) continue;
-              cur.versions.push(v);
-              if (id != null) bekannt.add(id);
-            }
-            if (!cur.name && entry.name) cur.name = entry.name;
-            if (!cur.nickname && entry.nickname) cur.nickname = entry.nickname;
-          }
-          _saveLscgDB();
-        }
+        if (d.lscgDB) { _lscgMerge(LSCG_DB, d.lscgDB); _saveLscgDB(); }
         if (d.lscgSlots)          { Object.assign(_lscgSlots, d.lscgSlots); _saveLscgSlots(); }
         if (d.lscgScreenshots)    { Object.assign(LSCG_SCREENSHOTS, d.lscgScreenshots); _saveLscgScreenshots(); }
         if (d.profileScreenshots) { Object.assign(PROFILE_SCREENSHOTS, d.profileScreenshots); _saveProfileScreenshots(); }
         if (d.profileFavs)        { d.profileFavs.forEach(k => PROFILE_FAVS.add(k)); try { localStorage.setItem('BC_PROFILE_FAVS_v1', JSON.stringify([...PROFILE_FAVS])); } catch {} }
         if (Array.isArray(d.mbsWheel)) {
-          // Outfits je Spieler zusammenfuehren. Vorher ersetzte der neuere
-          // Zeitstempel den ganzen Eintrag – hatte der Spieler beim Export
-          // weniger Outfits, gingen die uebrigen dabei verloren.
-          for (const r of d.mbsWheel) {
-            r.memberNumber = _mbsNum(r.memberNumber);
-            const idx = _mbsWheelData.findIndex(x => _mbsNum(x.memberNumber) === r.memberNumber);
-            if (idx < 0) { _mbsWheelData.push(r); continue; }
-            const cur = _mbsWheelData[idx];
-            if (!Array.isArray(cur.outfits)) cur.outfits = [];
-            const bekannt = new Set(cur.outfits.map(o => _mbsOutfitFp(o)));
-            for (const o of (r.outfits || [])) {
-              const fp = _mbsOutfitFp(o);
-              if (bekannt.has(fp)) continue;
-              cur.outfits.push(o); bekannt.add(fp);
-            }
-            if ((r.ts || 0) > (cur.ts || 0)) {
-              cur.ts = r.ts;
-              if (r.name) cur.name = r.name;
-              if (r.room) cur.room = r.room;
-            }
-          }
+          _mbsMerge(_mbsWheelData, d.mbsWheel);
           _saveMbsWheelData();
           _updateWheelTabBadge();
         }
@@ -6902,17 +7329,35 @@ function importAllData() {
           _updateCurseDefaultOutfitBtn();
         }
 
+        // v3: Bot, Shop, Rang, Money. Aeltere Backups haben diese Felder nicht –
+        // dann passiert hier schlicht nichts.
+        const neben = _backupNebenDatenImport(d);
+
         renderProfileList();
         if (_activeTab === 'curse') renderCurseTab();
         if (_activeTab === 'outfit-scan') renderOutfitScanTab();
         if (_activeTab === 'lscg-wheel') _renderMbsWheelTab();
+        // Die Nebendaten-Tabs zeichnen sich nicht von selbst neu
+        if (neben.bots || neben.botGroups) { try { renderBotTab(); } catch (e) {} }
+        if (neben.shopItems)               { try { renderShopTab(); } catch (e) {} }
+        if (neben.raenge)                  { try { renderRankTab(); } catch (e) {} }
+        if (neben.konten)                  { try { renderMoneyTab(); } catch (e) {} }
+        if (neben.logs)                    { try { renderLogTab(); } catch (e) {} }
 
+        const nebenText = [
+          neben.bots      ? neben.bots + ' Bots'             : '',
+          neben.shopItems ? neben.shopItems + ' Shop-Artikel': '',
+          neben.raenge    ? neben.raenge + ' Ränge'          : '',
+          neben.konten    ? neben.konten + ' Konten'         : '',
+        ].filter(Boolean).join(', ');
         showStatus('✅ Backup eingespielt: '
           + Object.keys(PROFILES).length + ' Profile, '
-          + Object.keys(CURSE_DB).length + ' Curse-Einträge', 'success');
-      } catch(err) { showStatus('❌ Import fehlgeschlagen: ' + err.message, 'error'); }
-    };
-    r.readAsText(e.target.files[0]);
+          + Object.keys(CURSE_DB).length + ' Curse-Einträge'
+          + (nebenText ? ', neu: ' + nebenText : ''), 'success');
+      } catch(err) {
+        console.error('[importAllData]', err);
+        showStatus('❌ Import fehlgeschlagen: ' + err.message, 'error');
+    }
   };
   inp.click();
 }
@@ -7734,25 +8179,18 @@ function _buildApplyCode(code) {
 }
 
 // ── Outfit anwenden (Run-Button) ─────────────────────────────
-function _oiBuildExecCode(code) {
-  if (!code) return '/* kein Code */';
-  return '(function(){'
-    + 'try{'
-    + _buildApplyCode(code)
-    + '  setTimeout(function(){'
-    + '    if(typeof ServerPlayerAppearanceSync==="function")ServerPlayerAppearanceSync();'
-    + '    else if(typeof ServerSend==="function")ServerSend("AccountUpdate",{Appearance:Player.Appearance});'
-    + '  },200);'
-    + '}catch(e){console.error("[BCU] Outfit-Apply Fehler:",e.message);}'
-    + '})();';
-}
+// _oiBuildExecCode steht in outfit-import.js. Hier lag frueher eine zweite,
+// gleichnamige Fassung – da index.html outfit-import.js NACH items.js laedt,
+// hat sie diese hier immer ueberschrieben und war toter Code. Die Fassungen
+// waren nicht gleichwertig (outfit-import.js dekomprimiert LZString und stellt
+// die Koerper-Basis wieder her), also ist die tote entfernt statt der aktiven.
 
 function osApplyOutfit(mk, vIdx) {
   if (!_connected) { showStatus('❌ Nicht verbunden', 'error'); return; }
   const v = LSCG_DB[mk]?.versions?.[vIdx];
   if (!v?.code) { showStatus('❌ Kein Code', 'error'); return; }
   bcSend({ type: 'EXEC', code: _oiBuildExecCode(v.code) });
-  showStatus('▶ Outfit von ' + escHtml(LSCG_DB[mk]?.name ?? mk) + ' wird angewendet…', 'info');
+  showStatus('▶ Outfit von ' + (LSCG_DB[mk]?.name ?? mk) + ' wird angewendet…', 'info');
 }
 
 // ── Outfit-Code in Zwischenablage kopieren ───────────────────
@@ -7811,19 +8249,24 @@ function toggleOsChar(mk, hdrEl) {
   if (Array.isArray(favSaved)) _osFavs = new Set(favSaved);
   const ssSaved = await idbGet(LSCG_SCREENSHOTS_KEY);
   if (ssSaved && typeof ssSaved === 'object') {
-    LSCG_SCREENSHOTS = ssSaved;
+    // Gespeicherte Bilder fuellen auf; waehrend des Ladens neu aufgenommene
+    // behalten Vorrang. Kein Ersetzen – sonst waeren sie weg.
+    LSCG_SCREENSHOTS = Object.assign({}, ssSaved, LSCG_SCREENSHOTS);
     console.log('[BCU] LSCG Screenshots geladen:', Object.keys(LSCG_SCREENSHOTS).length);
   }
   // Gespeicherte LSCG-Outfit-Slots laden (persistierte Slot-Namen + Codes)
   const slotsSaved = await idbGet(LSCG_SLOTS_KEY);
   if (slotsSaved && typeof slotsSaved === 'object') {
-    _lscgSlots = slotsSaved;
+    _lscgSlots = Object.assign({}, slotsSaved, _lscgSlots);
     _rebuildFpMapFromSlots();
     console.log('[BCU] LSCG Slots geladen:', Object.keys(_lscgSlots).length);
   }
   const saved = await idbGet(LSCG_IDB_KEY);
   if (saved && typeof saved === 'object' && Object.keys(saved).length) {
-    LSCG_DB = saved;
+    // Versionsweise zusammenfuehren. Ein  LSCG_DB = saved  haette Outfits
+    // verworfen, die waehrend des Ladens vom Scanner hereinkamen.
+    const _neu = _lscgMerge(LSCG_DB, saved);
+    console.log('[BCU] LSCG-DB geladen:', Object.keys(LSCG_DB).length, 'Spieler,', _neu, 'Versionen ergaenzt');
   }
   if (Object.keys(LSCG_DB).length) {
     // Fingerprints werden NICHT mehr synchron neu berechnet (blockiert UI bei großer DB).
@@ -8147,7 +8590,7 @@ function _buildLockCardHtml(mk, lock, isPlayer) {
     + '<div class="lk-card-hdr">'
     + '<span class="lk-badge">' + meta.icon + '</span>'
     + '<span class="lk-lock-label">' + escHtml(meta.label) + '</span>'
-    + '<button class="lk-edit-btn" onclick="toggleLockEdit(\'' + mk + '\',\'' + escHtml(lock.group) + '\')" title="Bearbeiten">✏️</button>'
+    + '<button class="lk-edit-btn" onclick="toggleLockEdit(\'' + mk + '\',\'' + escJsAttr(lock.group) + '\')" title="Bearbeiten">✏️</button>'
     + '</div>'
     + '<div class="lk-slot">' + slotLabel + craftLabel + '</div>'
     + '<div class="lk-row"><span class="lk-row-lbl">👤 Von</span><span class="lk-val">' + lockerStr + '</span></div>'
@@ -8205,8 +8648,8 @@ function _buildLockEditHtml(mk, lock, meta, isPlayer) {
   return '<div class="lk-edit-panel" id="lockEdit-' + mk + '-' + escHtml(lock.group) + '">'
     + fields
     + '<div class="lk-edit-actions">'
-    + '<button class="btn btn-primary lk-edit-btn-sm" onclick="applyLockEdit(\'' + mk + '\',\'' + escHtml(lock.group) + '\')">✅ Anwenden</button>'
-    + '<button class="btn lk-edit-btn-sm" onclick="toggleLockEdit(\'' + mk + '\',\'' + escHtml(lock.group) + '\')">✕</button>'
+    + '<button class="btn btn-primary lk-edit-btn-sm" onclick="applyLockEdit(\'' + mk + '\',\'' + escJsAttr(lock.group) + '\')">✅ Anwenden</button>'
+    + '<button class="btn lk-edit-btn-sm" onclick="toggleLockEdit(\'' + mk + '\',\'' + escJsAttr(lock.group) + '\')">✕</button>'
     + '</div>'
     + '</div>';
 }
@@ -8237,7 +8680,7 @@ function _buildLockableItemHtml(mk, li) {
     + '<div class="lk-lockable-top">'
     + '<span class="lk-lockable-name">🔓 ' + label + craft + '</span>'
     + '<span class="lk-lockable-grp">' + escHtml(li.group) + '</span>'
-    + '<button class="lk-apply-btn" onclick="toggleApplyLock(\'' + mk + '\',\'' + escHtml(li.group) + '\')">'
+    + '<button class="lk-apply-btn" onclick="toggleApplyLock(\'' + mk + '\',\'' + escJsAttr(li.group) + '\')">'
     + (isApply ? '✕' : '+ Schloss') + '</button>'
     + '</div>'
     + applyPanel
@@ -8281,7 +8724,7 @@ function _buildLockApplyPanelHtml(mk, li) {
   return '<div class="lk-apply-panel" id="lockApply-' + mk + '-' + escHtml(li.group) + '">'
     + '<div class="lk-edit-row">'
     + '<span class="lk-edit-lbl">🔒 Typ</span>'
-    + '<select class="lk-apply-type" onchange="_onLockTypeChange(\'' + mk + '\',\'' + escHtml(li.group) + '\')">'
+    + '<select class="lk-apply-type" onchange="_onLockTypeChange(\'' + mk + '\',\'' + escJsAttr(li.group) + '\')">'
     + opts + '</select>'
     + '</div>'
     + '<div class="lk-edit-row lk-apply-timer-row" style="display:' + (defMeta.hasTimer ? '' : 'none') + '">'
@@ -8303,8 +8746,8 @@ function _buildLockApplyPanelHtml(mk, li) {
     + '<input type="text" class="lk-input lk-apply-combo" maxlength="4" placeholder="0000">'
     + '</div>'
     + '<div class="lk-edit-actions">'
-    + '<button class="btn btn-primary lk-edit-btn-sm" onclick="applyNewLock(\'' + mk + '\',\'' + escHtml(li.group) + '\')">🔒 Sperren</button>'
-    + '<button class="btn lk-edit-btn-sm" onclick="toggleApplyLock(\'' + mk + '\',\'' + escHtml(li.group) + '\')">✕</button>'
+    + '<button class="btn btn-primary lk-edit-btn-sm" onclick="applyNewLock(\'' + mk + '\',\'' + escJsAttr(li.group) + '\')">🔒 Sperren</button>'
+    + '<button class="btn lk-edit-btn-sm" onclick="toggleApplyLock(\'' + mk + '\',\'' + escJsAttr(li.group) + '\')">✕</button>'
     + '</div>'
     + '</div>';
 }
@@ -8616,7 +9059,10 @@ let _mbsWheelLoaded = false;   // erst nach dem IDB-Load darf gespeichert werden
 idbGet(_MBS_WHEEL_IDB_KEY).then(function(d) {
   try {
     if (Array.isArray(d) && d.length) {
-      _mbsWheelData = _mbsNormRecords(d);
+      // Zusammenfuehren statt ersetzen: kam waehrend des Ladens schon ein
+      // Wheel-Scan herein, wuerde  _mbsWheelData = ...  ihn wegwerfen – und
+      // gespeichert war er wegen _mbsWheelLoaded auch noch nicht.
+      _mbsMerge(_mbsWheelData, _mbsNormRecords(d));
       _mbsWheelLoaded = true;
       // Rueckwirkend aufraeumen: Outfits, die schon unter einem echten
       // Spieler stehen, muessen nicht zusaetzlich im Platzhalter liegen.
@@ -8782,7 +9228,11 @@ const _MBS_WHEEL_SS_KEY = 'BC_MBS_WHEEL_SS_v1';
 let _mbsWheelShots = {};   // fp → dataUrl
 const _pendingWheelShot = {}; // reqId → fp
 idbGet(_MBS_WHEEL_SS_KEY).then(function(d) {
-  if (d && typeof d === 'object') { _mbsWheelShots = d; if (_activeTab === 'lscg-wheel') _renderMbsWheelTab(); }
+  // Gespeicherte Bilder auffuellen, waehrend des Ladens neu aufgenommene behalten
+  if (d && typeof d === 'object') {
+    _mbsWheelShots = Object.assign({}, d, _mbsWheelShots);
+    if (_activeTab === 'lscg-wheel') _renderMbsWheelTab();
+  }
 });
 function _saveMbsWheelShots() { idbSet(_MBS_WHEEL_SS_KEY, _mbsWheelShots); }
 
@@ -8836,6 +9286,15 @@ function _mbsOutfitIsNew(o) {
 
 function mbsWheelDeletePlayer(mn) {
   mn = _mbsNum(mn);
+  // Wheel-Outfits lassen sich nicht nachscannen – sie entstehen nur, solange
+  // der Spieler mit dir im Raum ist. Darum vor dem Loeschen nachfragen.
+  const _rec = _mbsWheelData.find(x => _mbsNum(x.memberNumber) === mn);
+  if (_rec) {
+    const _anz = (_rec.outfits || []).length;
+    if (!confirm('⚠️ ' + (_rec.name || ('#' + mn)) + ' mit ' + _anz + ' Outfit'
+        + (_anz === 1 ? '' : 's') + ' löschen?\n\nDiese Outfits lassen sich nicht'
+        + ' erneut scannen – das geht nur, solange der Spieler mit dir im Raum ist.')) return;
+  }
   _mbsWheelData = _mbsWheelData.filter(x => _mbsNum(x.memberNumber) !== mn);
   _mbsWheelFavs.delete(mn);
   for (const k of [..._mbsWheelOutfitFavs]) {

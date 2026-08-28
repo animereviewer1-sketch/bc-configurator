@@ -10,6 +10,37 @@ let _trigPending = null;
 let _ipickerForActContext = null;
 let _botGroups = [];
 
+// Das logik-Feld verbindet eine Bedingung mit der vorherigen; die erste hat
+// keine. Die Oberflaeche blendet den Schalter bei Index 0 aus – bleibt dort
+// nach Verschieben/Loeschen ein altes 'oder' stehen, sieht der Nutzer es nie,
+// die Engine wuerde aber eine leere Gruppe bilden und alle Bedingungen
+// ueberspringen. Darum nach jeder Umsortierung normalisieren.
+function _normLogik(arr) {
+  if (Array.isArray(arr) && arr[0]) arr[0].logik = 'und';
+  return arr;
+}
+
+/* Einmalige Bereinigung beim Laden: Bots, die vor dem Fix gespeichert wurden,
+   koennen an erster Stelle noch ein 'oder'/'und_oder'/'und_nicht' tragen. Die
+   Engine ignoriert es inzwischen, aber solange es in den Daten steht, zeigt
+   die Trigger-Zusammenfassung etwas anderes an als tatsaechlich geprueft wird. */
+function _migriereLogik() {
+  let n = 0;
+  const pruefe = arr => {
+    if (!Array.isArray(arr) || !arr[0]) return;
+    if (arr[0].logik && arr[0].logik !== 'und') { arr[0].logik = 'und'; n++; }
+  };
+  for (const b of _bots) {
+    for (const t of (b.triggers || [])) { pruefe(t.bedingungen); pruefe(t.ifBedingungen); }
+    for (const e of (b.events   || [])) { pruefe(e.bedingungen); }
+  }
+  if (n) {
+    _saveBots();
+    console.info('[bot-data] Logik-Feld der ersten Bedingung bereinigt:', n, 'Stelle(n)');
+  }
+  return n;
+}
+
 function _saveBots()      { idbSet(BOT_KEY,      _bots);      }
 function _saveBotGroups() { idbSet(BOT_GROUP_KEY, _botGroups); }
 
@@ -49,14 +80,19 @@ function _selBot() { return _bots.find(b => b.id === _selBotId) ?? null; }
       const idbVal = await idbGet(key);
       const source = (idbVal && Array.isArray(idbVal) && idbVal.length > 0)
         ? idbVal
-        : (() => { // Migration aus localStorage
+        : await (async () => { // Migration aus localStorage
             const raw2 = localStorage.getItem(key);
             if (!raw2) return [];
             const parsed = JSON.parse(raw2);
             if (parsed.length > 0) {
-              idbSet(key, parsed);
-              localStorage.removeItem(key);
-              console.info('[bot-data] Migriert aus localStorage:', key, parsed.length, 'Eintraege');
+              // Auf das Schreiben warten und die Quelle nur loeschen, wenn es
+              // geklappt hat – sonst waeren die Bots bei vollem Speicher weg.
+              if (await idbSet(key, parsed)) {
+                localStorage.removeItem(key);
+                console.info('[bot-data] Migriert aus localStorage:', key, parsed.length, 'Eintraege');
+              } else {
+                console.warn('[bot-data] Migration verschoben, localStorage bleibt:', key);
+              }
             }
             return parsed;
           })();
@@ -69,6 +105,7 @@ function _selBot() { return _bots.find(b => b.id === _selBotId) ?? null; }
       }
     }
     _bots.forEach(b => { b.laufend = false; });
+    _migriereLogik();
   } catch(err) { console.warn('[bot-data] IDB init:', err); }
   // Immer re-rendern nach async init (nicht nur wenn Tab aktiv).
   // bot-data.js wird vor bot-ui.js geladen; der await oben kann früher
@@ -733,7 +770,7 @@ function evAddCond(eid, typ) {
 function evCondRemove(eid, ci) {
   const b = _selBot(); if (!b) return;
   const e = b.events?.find(x=>x.id===eid); if (!e) return;
-  e.bedingungen.splice(ci,1); _saveBots(); evCondRerender(eid);
+  e.bedingungen.splice(ci,1); _normLogik(e.bedingungen); _saveBots(); evCondRerender(eid);
 }
 function evCondField(eid, ci, key, val) {
   const b = _selBot(); if (!b) return;
