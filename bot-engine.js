@@ -675,6 +675,14 @@ function _handleInvListCmd(C){
    traegt, auch eine Ebene tiefer, und ersatzweise eine Liste. Findet sich
    nichts, sagt der Bot das EINMAL deutlich - ein stilles Nichtstun waere
    schlimmer als gar keine Wache.                                        */
+/* BC erwartet den Key-Namen GROSS geschrieben: 'Silver', nicht 'silver'.
+   Im Spiel nachgemessen - mit Kleinschreibung passiert schlicht nichts.
+   Alle vier Sendestellen liefen bisher mit Kleinschreibung, die
+   Map-Key-Aktion hat also nie gewirkt. Intern bleibt alles klein. */
+function _keyGross(k){
+  const s=String(k||'').toLowerCase();
+  return s.charAt(0).toUpperCase()+s.slice(1);
+}
 let _keyOrtGemeldet=false;
 let _keyOrtName='';
 function _keyStand(C){
@@ -745,7 +753,7 @@ function _tickKeys(chars){
       }
       try{
         ServerSend('ChatRoomChat',{Content:'ChatRoomMapViewChangeKey',Type:'Hidden',
-          Dictionary:[{Tag:'MapViewChangeKey',Key:k,Bool:false}],Target:C.MemberNumber});
+          Dictionary:[{Tag:'MapViewChangeKey',Key:_keyGross(k),Bool:false}],Target:C.MemberNumber});
       }catch(e){}
       _log('\u{1F6A8} '+C.Name+' hatte den '+k+'-Key ohne Berechtigung \u2013 entzogen');
       try{
@@ -1591,7 +1599,7 @@ function _execAct(a,C,vars){
       try{
         var _mk=(a.mapKey||'bronze').toLowerCase();
         var _has=(a.mapKeyOp||'geben')==='geben';
-        ServerSend('ChatRoomChat',{Content:'ChatRoomMapViewChangeKey',Type:'Hidden',Dictionary:[{Tag:'MapViewChangeKey',Key:_mk,Bool:_has}],Target:C.MemberNumber});
+        ServerSend('ChatRoomChat',{Content:'ChatRoomMapViewChangeKey',Type:'Hidden',Dictionary:[{Tag:'MapViewChangeKey',Key:_keyGross(_mk),Bool:_has}],Target:C.MemberNumber});
         // Persistent merken (für Rejoin-Neuvergabe) – lokal + an Popup
         try{ _cfg.playerKeys=_cfg.playerKeys||{}; var _pk=_cfg.playerKeys[C.MemberNumber]||{name:'',bronze:false,silver:false,gold:false}; _pk.name=C.Name; _pk[_mk]=_has; _cfg.playerKeys[C.MemberNumber]=_pk; }catch(e){}
         window.__BCK_popupRef?.postMessage({app:'BCKonfigurator',type:'BOT_MAPKEY',memberNum:C.MemberNumber,name:C.Name,key:_mk,has:_has},'*');
@@ -2615,7 +2623,7 @@ function _processJoinQueue(){
       if(_ks.length){
         setTimeout(function(){
           _ks.forEach(function(k){
-            ServerSend('ChatRoomChat',{Content:'ChatRoomMapViewChangeKey',Type:'Hidden',Dictionary:[{Tag:'MapViewChangeKey',Key:k,Bool:true}],Target:C.MemberNumber});
+            ServerSend('ChatRoomChat',{Content:'ChatRoomMapViewChangeKey',Type:'Hidden',Dictionary:[{Tag:'MapViewChangeKey',Key:_keyGross(k),Bool:true}],Target:C.MemberNumber});
           });
           _log('\u{1F511} Keys neu vergeben an '+C.Name+': '+_ks.join(', '));
         },1500);
@@ -3170,7 +3178,7 @@ window['_BCBot_'+_BID]={
       pk[k]=!!an;
       _cfg.playerKeys[mn]=pk;
       ServerSend('ChatRoomChat',{Content:'ChatRoomMapViewChangeKey',Type:'Hidden',
-        Dictionary:[{Tag:'MapViewChangeKey',Key:k,Bool:!!an}],Target:Number(mn)});
+        Dictionary:[{Tag:'MapViewChangeKey',Key:_keyGross(k),Bool:!!an}],Target:Number(mn)});
       _log('\u{1F511} Key '+k+' '+(an?'gegeben':'entzogen')+' bei #'+mn);
     }catch(e){console.warn('[Bot] setKey:',e);}
   },
