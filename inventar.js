@@ -329,6 +329,20 @@ function _invSpieler(mn, name) {
   if (!s.eintraege) s.eintraege = {};
   return s;
 }
+/* Der Name einer Person kann in vier Speichern stehen. Wer nur Keys hat,
+   ist im Inventar sonst nur eine Nummer. */
+function _invName(mn) {
+  const k = String(mn);
+  const q = [
+    (_inventar.spieler[k] || {}).name,
+    (typeof _playerKeys !== 'undefined' && _playerKeys[k]) ? _playerKeys[k].name : '',
+    (typeof _rankData !== 'undefined' && _rankData.players && _rankData.players[k]) ? _rankData.players[k].name : '',
+    (typeof _money !== 'undefined' && _money.balances && _money.balances[k]) ? _money.balances[k].name : ''
+  ];
+  for (const n of q) if (n) return n;
+  return '#' + k;
+}
+
 function _invAnzahl(mn, itemDefId) {
   const s = _inventar.spieler[String(mn)];
   return (s && s.eintraege && s.eintraege[itemDefId]) ? (s.eintraege[itemDefId].anzahl || 0) : 0;
@@ -426,6 +440,39 @@ function invSpielerAusblenden(mn, versteckt) {
   _saveInventar();
   renderInventarTab();
 }
+/* Map-Keys. Es gibt genau drei Arten, und je Art hoechstens einen -
+   deshalb ein Schalter je Art statt einer Stueckzahl.
+
+   Die Keys lagen bisher im Spieler-Tab. Sie gehoeren aber zum Besitz einer
+   Person, darum stehen sie jetzt hier neben dem Inventar. */
+const INV_KEYS = [['bronze', 'Bronze', '#b08d57'], ['silver', 'Silver', '#b9bcc2'], ['gold', 'Gold', '#d9b44a']];
+
+function invKeyUm(mn, art) {
+  const k = String(art || '').toLowerCase();
+  if (!INV_KEYS.some(x => x[0] === k)) return;
+  const pk = (typeof _playerKeys !== 'undefined' && _playerKeys) ? _playerKeys : null;
+  if (!pk) return;
+  const rec = pk[String(mn)] || { name: '', bronze: false, silver: false, gold: false };
+  const neu = !rec[k];
+  const name = (_inventar.spieler[String(mn)] || {}).name || rec.name || '';
+  // _playerKeyApply speichert und zeichnet den Spieler-Tab neu
+  if (typeof _playerKeyApply === 'function') _playerKeyApply(mn, name, k, neu);
+  // Und der laufende Bot bekommt es mit - sonst vergibt er beim naechsten
+  // Rejoin wieder den alten Stand.
+  try {
+    if (typeof _connected !== 'undefined' && _connected && typeof _selBot === 'function') {
+      const b = _selBot();
+      if (b && b.laufend) {
+        const safeId = b.id.replace(/\W/g, '_');
+        bcSend({ type: 'EXEC', code:
+          'try{window[' + JSON.stringify('_BCBot_' + safeId) + '].setKey('
+          + JSON.stringify(String(mn)) + ',' + JSON.stringify(k) + ',' + (neu ? 'true' : 'false') + ');}catch(e){}' });
+      }
+    }
+  } catch (e) {}
+  renderInventarTab();
+}
+
 let _invZeigeVersteckte = false;
 function invZeigeVersteckte(an) { _invZeigeVersteckte = !!an; renderInventarTab(); }
 
@@ -456,9 +503,12 @@ function renderInventarTab() {
   // ── Bestand je Spieler ──
   const el = g('inv-spieler-liste');
   if (el) {
-    const alle = Object.keys(_inventar.spieler || {});
-    const versteckt = alle.filter(mn => _inventar.spieler[mn].versteckt);
-    const mns = _invZeigeVersteckte ? alle : alle.filter(mn => !_inventar.spieler[mn].versteckt);
+    /* Auch wer nur Keys hat, soll hier auftauchen - sonst waeren die
+       Keys mancher Leute unerreichbar. */
+    const mitKeys = (typeof _playerKeys !== 'undefined' && _playerKeys) ? Object.keys(_playerKeys) : [];
+    const alle = [...new Set(Object.keys(_inventar.spieler || {}).concat(mitKeys))];
+    const versteckt = alle.filter(mn => (_inventar.spieler[mn] || {}).versteckt);
+    const mns = _invZeigeVersteckte ? alle : alle.filter(mn => !(_inventar.spieler[mn] || {}).versteckt);
     const kopf = versteckt.length
       ? '<label style="display:flex;align-items:center;gap:6px;font-size:.63rem;color:var(--text3);margin-bottom:6px;cursor:pointer">'
         + '<input type="checkbox" ' + (_invZeigeVersteckte ? 'checked' : '') + ' onchange="invZeigeVersteckte(this.checked)">'
@@ -472,7 +522,9 @@ function renderInventarTab() {
       el.innerHTML = kopf + '<div style="font-size:.7rem;color:var(--text3);text-align:center;padding:14px 0">Alle Spieler sind ausgeblendet.</div>';
     } else {
       el.innerHTML = kopf + mns.map(mn => {
-        const sp = _inventar.spieler[mn];
+        // Beim Zeichnen wird nichts angelegt - sonst entstuenden allein
+        // durch das Ansehen neue Inventar-Eintraege.
+        const sp = _inventar.spieler[mn] || { eintraege: {} };
         const eintraege = Object.entries(sp.eintraege || {});
         const zeilen = eintraege.length ? eintraege.map(([did, e]) => {
           const d = _itemDefById(did);
@@ -506,17 +558,33 @@ function renderInventarTab() {
             + '</select></div>'
           : '';
 
+        // ── Map-Keys, hoechstens einer je Art ──
+        const pk = (typeof _playerKeys !== 'undefined' && _playerKeys && _playerKeys[mn]) || {};
+        const keys = '<div style="display:flex;align-items:center;gap:5px;margin-top:6px;padding-top:6px;'
+          + 'border-top:1px solid rgba(255,255,255,.06)">'
+          + '<span style="font-size:.62rem;color:var(--text3);margin-right:2px">🔑 Keys</span>'
+          + INV_KEYS.map(([k, lbl, c]) => {
+              const an = !!pk[k];
+              return '<button title="' + (an ? 'wegnehmen' : 'geben') + '"'
+                + ' onclick="invKeyUm(\'' + escJsAttr(mn) + '\',\'' + k + '\')"'
+                + ' style="font-size:.62rem;padding:2px 9px;border-radius:5px;cursor:pointer;'
+                + 'border:1px solid ' + (an ? c : 'rgba(255,255,255,0.1)') + ';'
+                + 'background:' + (an ? c + '1f' : 'transparent') + ';'
+                + 'color:' + (an ? c : 'var(--text3)') + '">' + lbl + (an ? ' ✓' : '') + '</button>';
+            }).join('')
+          + '</div>';
+
         return '<div style="border:1px solid rgba(255,255,255,.08);border-radius:7px;padding:8px 10px;margin-bottom:6px;'
           + (sp.versteckt ? 'opacity:.6' : '') + '">'
           + '<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">'
-            + '<span style="font-size:.72rem;font-weight:600">' + escHtml(sp.name || ('#' + mn))
+            + '<span style="font-size:.72rem;font-weight:600">' + escHtml(_invName(mn))
             + ' <span style="color:var(--text3);font-weight:400">#' + escHtml(mn) + '</span></span>'
             + '<button title="' + (sp.versteckt ? 'wieder anzeigen' : 'ausblenden – die Daten bleiben erhalten') + '"'
             + ' onclick="invSpielerAusblenden(\'' + escJsAttr(mn) + '\',' + (sp.versteckt ? 'false' : 'true') + ')"'
             + ' style="margin-left:auto;background:none;border:1px solid rgba(255,255,255,0.12);border-radius:5px;'
             + 'color:var(--text3);font-size:.6rem;padding:2px 7px;cursor:pointer">'
             + (sp.versteckt ? '👁 einblenden' : '🙈 ausblenden') + '</button>'
-          + '</div>' + zeilen + geben + '</div>';
+          + '</div>' + zeilen + geben + keys + '</div>';
       }).join('');
     }
   }
@@ -530,8 +598,8 @@ function renderInventarTab() {
       : a.map(x => {
           const d = _itemDefById(x.itemDefId);
           const nm = d ? ((d.icon || '🎁') + ' ' + d.name) : ('❓ ' + x.itemDefId);
-          const besitzer = (_inventar.spieler[String(x.ownerMn)] || {}).name || ('#' + x.ownerMn);
-          const traeger  = (_inventar.spieler[String(x.wearerMn)] || {}).name || ('#' + x.wearerMn);
+          const besitzer = _invName(x.ownerMn);
+          const traeger  = _invName(x.wearerMn);
           const selbst = String(x.ownerMn) === String(x.wearerMn);
           return '<div style="display:flex;align-items:center;gap:8px;font-size:.66rem;padding:4px 0;border-bottom:1px solid rgba(255,255,255,.05)">' +
             '<span style="flex:1">' + escHtml(nm) + ' — ' + escHtml(besitzer) +

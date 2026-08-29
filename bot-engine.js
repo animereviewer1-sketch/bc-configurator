@@ -3044,6 +3044,22 @@ window['_BCBot_'+_BID]={
   storyReset(mn){ _storyEnde(Number(mn)); _log('\u{1F4D6} Geschichte von #'+mn+' zurueckgesetzt'); },
   feuereJetzt(trigId,mn){try{_feuereJetzt(trigId,mn);}catch(e){console.warn('[Bot] Handausloeser:',e);}},
   setVar(mn,name,val){try{_vset(mn,String(name),val);}catch(e){console.warn(e);}},
+  /* Einen Map-Key von aussen setzen und sofort im Spiel vergeben bzw.
+     wegnehmen. Ohne diesen Weg wuesste der laufende Bot nichts davon und
+     wuerde beim naechsten Rejoin den alten Stand wieder vergeben. */
+  setKey(mn,art,an){
+    try{
+      const k=String(art||'').toLowerCase();
+      if(['bronze','silver','gold'].indexOf(k)<0)return;
+      _cfg.playerKeys=_cfg.playerKeys||{};
+      const pk=_cfg.playerKeys[mn]||{name:'',bronze:false,silver:false,gold:false};
+      pk[k]=!!an;
+      _cfg.playerKeys[mn]=pk;
+      ServerSend('ChatRoomChat',{Content:'ChatRoomMapViewChangeKey',Type:'Hidden',
+        Dictionary:[{Tag:'MapViewChangeKey',Key:k,Bool:!!an}],Target:Number(mn)});
+      _log('\u{1F511} Key '+k+' '+(an?'gegeben':'entzogen')+' bei #'+mn);
+    }catch(e){console.warn('[Bot] setKey:',e);}
+  },
   stop(){
     clearInterval(_botTakt);   // ein Takt fuer alle Teilaufgaben
     _modAblegen(_mod);

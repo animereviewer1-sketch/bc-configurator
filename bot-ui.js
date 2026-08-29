@@ -746,15 +746,8 @@ function renderSpielerTab(){
     return nameOf(a).localeCompare(nameOf(b));
   });
 
-  // Medaillen-Stufen unterscheiden sich nicht mehr über die Emoji-Farbe,
-  // sondern über ein Medaillen-Icon plus Textlabel und einen Farbrand je Stufe.
-  const KEY_TIER = { Bronze:'#b08d57', Silver:'#b9bcc2', Gold:'#d9b44a' };
-  const keyBadge = (on,lbl)=>{
-    const c = KEY_TIER[lbl] || '#b9bcc2';
-    const ico = typeof bcIcon==='function' ? bcIcon('medal',11) : '';
-    return `<span style="display:inline-flex;align-items:center;gap:4px;font-size:.62rem;padding:2px 7px;border-radius:5px;border:1px solid ${on?c:'rgba(255,255,255,0.08)'};background:${on?c+'1f':'transparent'};color:${on?c:'var(--text3)'}">${ico}${lbl}${on?' ✓':''}</span>`;
-  };
-
+  // Die Map-Keys stehen jetzt im Inventar-Tab, wo sie sachlich hingehoeren -
+  // hier zaehlt nur noch, wie viele jemand hat.
   let lastInRoom = null;
   host.innerHTML = arr.map(n=>{
     const inRoom = roomNums.has(n);
@@ -769,14 +762,146 @@ function renderSpielerTab(){
     const rankStr = rdef ? `${escHtml((rdef.icon||'')+' '+rdef.name)}${rdef.group?` <span style="color:var(--text3)">[${escHtml(rdef.group)}]</span>`:''}` : '<span style="color:var(--text3)">– kein Rang –</span>';
     const bal = money.balances?.[n]?.balance ?? 0;
     const pk = pkeys?.[n]||{};
+    const keyN = ['bronze','silver','gold'].filter(k=>pk[k]).length;
+    const items = (typeof _inventar!=='undefined' && _inventar.spieler?.[n]?.eintraege)
+      ? Object.values(_inventar.spieler[n].eintraege).filter(e=>(e.anzahl||0)>0).length : 0;
     const dot = inRoom ? '<span title="im Raum" style="color:var(--green);font-size:.7rem">●</span> ' : '';
-    return sep + `<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:${inRoom?'rgba(52,211,153,0.06)':'rgba(255,255,255,0.03)'};border:1px solid ${inRoom?'rgba(52,211,153,0.22)':'rgba(255,255,255,0.07)'};border-radius:10px;padding:10px 14px;margin-bottom:8px">
+    return sep + `<div onclick="spielerDetail('${escJsAttr(n)}')" title="Gesamtübersicht öffnen"
+      style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;cursor:pointer;background:${inRoom?'rgba(52,211,153,0.06)':'rgba(255,255,255,0.03)'};border:1px solid ${inRoom?'rgba(52,211,153,0.22)':'rgba(255,255,255,0.07)'};border-radius:10px;padding:10px 14px;margin-bottom:8px">
       <span style="font-size:.85rem;font-weight:700;color:var(--text1);min-width:150px">${dot}${escHtml(nm)} <span style="font-size:.66rem;color:var(--text3);font-weight:400">#${escHtml(n)}</span></span>
       <span style="font-size:.72rem;color:var(--text2)">🏆 ${rankStr}</span>
       <span style="font-size:.72rem;color:var(--text2)">💰 ${bal} ${escHtml(cur)}</span>
-      <span style="display:flex;gap:5px;margin-left:auto">${keyBadge(!!pk.bronze,'Bronze')}${keyBadge(!!pk.silver,'Silver')}${keyBadge(!!pk.gold,'Gold')}</span>
+      <span style="font-size:.72rem;color:var(--text3)">🎒 ${items}</span>
+      <span style="font-size:.72rem;color:var(--text3)">🔑 ${keyN}/3</span>
+      <span style="margin-left:auto;font-size:.66rem;color:var(--text3)">Übersicht ›</span>
     </div>`;
   }).join('');
+}
+
+/* ── Gesamtuebersicht eines Spielers ─────────────────────────────────
+   Traegt alles zusammen, was ueber eine Person bekannt ist. Die Daten
+   liegen in fuenf getrennten Speichern; hier werden sie nur gelesen,
+   nicht veraendert. */
+function spielerDetail(num){
+  const n = String(num);
+  const host = document.getElementById('spieler-detail');
+  if (!host) return;
+  const rankData = (typeof _rankData!=='undefined'&&_rankData)?_rankData:{players:{},defs:[]};
+  const money    = (typeof _money!=='undefined'&&_money)?_money:{balances:{},settings:{}};
+  const pkeys    = (typeof _playerKeys!=='undefined'&&_playerKeys)?_playerKeys:{};
+  const vars     = (typeof _botVars!=='undefined'&&_botVars)?(_botVars[n]||{}):{};
+  const inv      = (typeof _inventar!=='undefined'&&_inventar)?_inventar:{spieler:{},ausleihe:[]};
+  const cur      = (money.settings&&money.settings.name) || 'Gold';
+  const imRaum   = _spielerRoomMembers.some(m=>m.num===n);
+  const nm = _spielerRoomMembers.find(m=>m.num===n)?.name
+          || rankData.players?.[n]?.name || money.balances?.[n]?.name || pkeys?.[n]?.name || ('#'+n);
+
+  const block = (titel, inhalt) =>
+    `<div style="border:1px solid rgba(255,255,255,0.08);border-radius:9px;padding:10px 12px;margin-bottom:8px">
+       <div style="font-size:.66rem;font-weight:700;color:var(--text2);margin-bottom:6px">${titel}</div>${inhalt}</div>`;
+  const leer = t => `<div style="font-size:.66rem;color:var(--text3)">${t}</div>`;
+
+  // ── Rang ──
+  const rp = rankData.players?.[n];
+  const rdef = rp?.rankId ? (rankData.defs||[]).find(d=>d.id===rp.rankId) : null;
+  let rangHtml = rdef
+    ? `<div style="font-size:.78rem">${escHtml((rdef.icon||'')+' '+rdef.name)}`
+      + (rdef.group?` <span style="color:var(--text3)">[${escHtml(rdef.group)}]</span>`:'')
+      + ` <span style="color:var(--text3);font-size:.66rem">Stufe ${rdef.level}</span></div>`
+    : leer('kein Rang vergeben');
+  const hist = (rp&&Array.isArray(rp.history))?rp.history.slice(-4).reverse():[];
+  if (hist.length) rangHtml += '<div style="margin-top:5px">' + hist.map(h=>{
+      const hd=(rankData.defs||[]).find(d=>d.id===h.rankId);
+      return `<div style="font-size:.62rem;color:var(--text3)">${escHtml(hd?((hd.icon||'')+' '+hd.name):'–')}`
+        + (h.ts?` · ${new Date(h.ts).toLocaleDateString()}`:'')
+        + (h.by?` · ${escHtml(h.by)}`:'') + `</div>`;
+    }).join('') + '</div>';
+
+  // ── Geld ──
+  const bal = money.balances?.[n]?.balance ?? 0;
+  const geldHtml = `<div style="font-size:.9rem;font-weight:700">${bal} <span style="font-size:.7rem;font-weight:400;color:var(--text3)">${escHtml(cur)}</span></div>`;
+
+  // ── Keys ──
+  const KEY_FARBE = { bronze:'#b08d57', silver:'#b9bcc2', gold:'#d9b44a' };
+  const KEY_NAME  = { bronze:'Bronze', silver:'Silver', gold:'Gold' };
+  const pk = pkeys?.[n]||{};
+  const keyHtml = '<div style="display:flex;gap:6px;flex-wrap:wrap">' +
+    ['bronze','silver','gold'].map(k=>{
+      const an=!!pk[k], c=KEY_FARBE[k];
+      return `<span style="font-size:.64rem;padding:3px 9px;border-radius:5px;border:1px solid ${an?c:'rgba(255,255,255,0.08)'};`
+        + `background:${an?c+'1f':'transparent'};color:${an?c:'var(--text3)'}">${KEY_NAME[k]}${an?' ✓':' –'}</span>`;
+    }).join('') + '</div>'
+    + `<div style="font-size:.6rem;color:var(--text3);margin-top:4px">Ändern im Tab 🎒 Inventar</div>`;
+
+  // ── Inventar ──
+  const eintraege = Object.entries(inv.spieler?.[n]?.eintraege || {});
+  const invHtml = eintraege.length ? eintraege.map(([did,e])=>{
+      const d = (typeof _itemDefById==='function') ? _itemDefById(did) : null;
+      const name = d ? ((d.icon||'🎁')+' '+d.name) : ('❓ '+did);
+      const anz = (d&&d.unendlich) ? '∞' : (e.anzahl||0);
+      const grau = (!(d&&d.unendlich) && !(e.anzahl>0)) ? 'opacity:.5;' : '';
+      return `<div style="display:flex;justify-content:space-between;font-size:.68rem;padding:1px 0;${grau}">`
+        + `<span>${escHtml(name)}</span><span style="color:var(--text3)">${anz}</span></div>`;
+    }).join('') : leer('nichts im Inventar');
+
+  // ── Verliehen / getragen ──
+  const alsBesitzer = (inv.ausleihe||[]).filter(x=>String(x.ownerMn)===n);
+  const alsTraeger  = (inv.ausleihe||[]).filter(x=>String(x.wearerMn)===n && String(x.ownerMn)!==n);
+  const nameVon = mn => (inv.spieler?.[String(mn)]?.name) || ('#'+mn);
+  const defName = id => { const d=(typeof _itemDefById==='function')?_itemDefById(id):null; return d?((d.icon||'🎁')+' '+d.name):('❓ '+id); };
+  const leihHtml = (alsBesitzer.length||alsTraeger.length)
+    ? alsBesitzer.map(x=>`<div style="font-size:.66rem">${escHtml(defName(x.itemDefId))} → getragen von <b>${escHtml(nameVon(x.wearerMn))}</b></div>`).join('')
+      + alsTraeger.map(x=>`<div style="font-size:.66rem;color:var(--text3)">trägt ${escHtml(defName(x.itemDefId))} von ${escHtml(nameVon(x.ownerMn))}</div>`).join('')
+    : leer('nichts verliehen oder geliehen');
+
+  // ── Fortschritt (Variablen) ──
+  const vKeys = Object.keys(vars).filter(k=>k!=='letzterBesuch').sort();
+  const varHtml = vKeys.length ? vKeys.map(k=>
+      `<div style="display:flex;justify-content:space-between;font-size:.68rem;padding:1px 0">`
+      + `<span>${escHtml(k)}</span><span style="color:var(--text3)">${escHtml(String(vars[k]))}</span></div>`).join('')
+    : leer('noch kein Fortschritt gespeichert');
+
+  // ── Letzte Käufe ──
+  const log = (typeof _shop!=='undefined'&&Array.isArray(_shop.log))?_shop.log:[];
+  const meine = log.filter(x=>String(x.buyerNum)===n||String(x.targetNum)===n).slice(-6).reverse();
+  const kaufHtml = meine.length ? meine.map(x=>{
+      const fuer = String(x.targetNum)!==String(x.buyerNum) ? ' für '+escHtml(x.targetName||('#'+x.targetNum)) : '';
+      return `<div style="font-size:.64rem;color:var(--text3)">${escHtml(x.itemName||'?')}${fuer} · ${x.preis||0} ${escHtml(cur)}`
+        + (x.ts?` · ${new Date(x.ts).toLocaleDateString()}`:'') + `</div>`;
+    }).join('') : leer('noch nichts gekauft');
+
+  // ── Besuche ──
+  const besuchHtml = vars.letzterBesuch
+    ? `<div style="font-size:.66rem;color:var(--text3)">Zuletzt gesehen: ${escHtml(String(vars.letzterBesuch))}</div>`
+    : leer('kein Besuch vermerkt');
+
+  host.innerHTML = `
+    <div style="position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:900" onclick="spielerDetailZu()"></div>
+    <div style="position:fixed;z-index:901;top:50%;left:50%;transform:translate(-50%,-50%);width:min(720px,92vw);
+                max-height:86vh;overflow:auto;background:var(--bg2,#15151d);border:1px solid rgba(255,255,255,0.12);
+                border-radius:12px;padding:16px 18px;box-shadow:0 20px 60px rgba(0,0,0,.5)">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+        <span style="font-size:1rem;font-weight:800">${imRaum?'<span style="color:var(--green)">●</span> ':''}${escHtml(nm)}</span>
+        <span style="font-size:.7rem;color:var(--text3)">#${escHtml(n)}${imRaum?' · im Raum':''}</span>
+        <button onclick="spielerDetailZu()" style="margin-left:auto;background:none;border:1px solid rgba(255,255,255,0.12);
+          border-radius:6px;color:var(--text2);font-size:.7rem;padding:4px 12px;cursor:pointer">Schließen</button>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        ${block('🏆 Rang', rangHtml)}
+        ${block('💰 Geld', geldHtml)}
+        ${block('🔑 Map-Keys', keyHtml)}
+        ${block('👣 Besuche', besuchHtml)}
+        ${block('🎒 Inventar', invHtml)}
+        ${block('🔄 Verliehen &amp; geliehen', leihHtml)}
+        ${block('📈 Fortschritt', varHtml)}
+        ${block('🛒 Letzte Käufe', kaufHtml)}
+      </div>
+    </div>`;
+  host.style.display = 'block';
+}
+function spielerDetailZu(){
+  const host = document.getElementById('spieler-detail');
+  if (host) { host.innerHTML = ''; host.style.display = 'none'; }
 }
 
 // ── Variablen-Tab: Bot-Variablen pro Spieler ansehen + bearbeiten ──

@@ -3837,9 +3837,10 @@ document.write('<scr'+'ipt src="bc-autobackup.js?_='+_cbv+'"><\/scr'+'ipt>');
       <button onclick="renderSpielerTab()" style="margin-left:auto;background:none;border:1px solid rgba(255,255,255,0.12);border-radius:6px;color:var(--text2);font-size:.66rem;padding:4px 10px;cursor:pointer">⟳ Aktualisieren</button>
     </div>
     <div style="font-size:.65rem;color:var(--text3);margin-bottom:14px;line-height:1.5">
-      Alle bekannten Spieler mit Rang, Money und Map-Keys (🥉🥈🥇). Keys werden pro Spieler gespeichert und beim <b>Rejoin automatisch neu vergeben</b> (Bot muss laufen).
+      Alle bekannten Spieler. <b>Klick auf eine Zeile</b> &ouml;ffnet die Gesamt&uuml;bersicht &ndash; Rang, Geld, Keys, Inventar, Fortschritt und die letzten K&auml;ufe auf einen Blick.
     </div>
     <div id="spieler-list"></div>
+    <div id="spieler-detail" style="display:none"></div>
   </div>
 </div>
 
@@ -3914,6 +3915,8 @@ document.write('<scr'+'ipt src="bc-autobackup.js?_='+_cbv+'"><\/scr'+'ipt>');
     <div style="font-size:.65rem;color:var(--text3);margin-bottom:14px;line-height:1.5">
       Was jeder Spieler besitzt. Gegenst&auml;nde kommen aus dem <b>Shop</b> oder &uuml;ber eine Bot-Aktion ins Inventar.
       Ein Eintrag verschwindet nie &ndash; ist gerade nichts da, steht <b>Anzahl 0</b>.
+      Unten bei jedem Spieler stehen auch die <b>Map-Keys</b> (h&ouml;chstens einer je Art). Sie werden beim
+      <b>Rejoin automatisch neu vergeben</b>, solange der Bot l&auml;uft.
     </div>
 
     <div style="border:1px solid rgba(255,255,255,0.1);border-radius:9px;padding:12px 14px;margin-bottom:16px;background:rgba(255,255,255,0.02)">
