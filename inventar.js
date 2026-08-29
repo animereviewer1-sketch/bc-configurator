@@ -458,19 +458,28 @@ function invKeyUm(mn, art) {
   const name = (_inventar.spieler[String(mn)] || {}).name || rec.name || '';
   // _playerKeyApply speichert und zeichnet den Spieler-Tab neu
   if (typeof _playerKeyApply === 'function') _playerKeyApply(mn, name, k, neu);
-  // Und der laufende Bot bekommt es mit - sonst vergibt er beim naechsten
-  // Rejoin wieder den alten Stand.
+  /* Der Key muss im SPIEL gesetzt werden - der Eintrag hier ist nur die
+     Buchhaltung. Geht das gerade nicht, wird das deutlich gesagt: sonst
+     legt man den Schalter um, im Spiel passiert nichts, und man sucht den
+     Fehler an der falschen Stelle. */
+  let imSpiel = false;
   try {
-    if (typeof _connected !== 'undefined' && _connected && typeof _selBot === 'function') {
-      const b = _selBot();
-      if (b && b.laufend) {
-        const safeId = b.id.replace(/\W/g, '_');
-        bcSend({ type: 'EXEC', code:
-          'try{window[' + JSON.stringify('_BCBot_' + safeId) + '].setKey('
-          + JSON.stringify(String(mn)) + ',' + JSON.stringify(k) + ',' + (neu ? 'true' : 'false') + ');}catch(e){}' });
-      }
+    const b = (typeof _selBot === 'function') ? _selBot() : null;
+    if (typeof _connected !== 'undefined' && _connected && b && b.laufend) {
+      const safeId = b.id.replace(/\W/g, '_');
+      imSpiel = bcSend({ type: 'EXEC', code:
+        'try{window[' + JSON.stringify('_BCBot_' + safeId) + '].setKey('
+        + JSON.stringify(String(mn)) + ',' + JSON.stringify(k) + ',' + (neu ? 'true' : 'false') + ');}catch(e){}' }) !== false;
     }
-  } catch (e) {}
+  } catch (e) { imSpiel = false; }
+  if (imSpiel) {
+    showStatus((neu ? '🔑 ' : '🔒 ') + k + ' ' + (neu ? 'gegeben' : 'entzogen'), 'success');
+  } else {
+    const b = (typeof _selBot === 'function') ? _selBot() : null;
+    const grund = (typeof _connected === 'undefined' || !_connected) ? 'keine Verbindung zum Spiel'
+                : (!b || !b.laufend) ? 'es läuft kein Bot' : 'unbekannt';
+    showStatus('⚠️ Nur vorgemerkt – im Spiel nicht gesetzt (' + grund + ')', 'error');
+  }
   renderInventarTab();
 }
 

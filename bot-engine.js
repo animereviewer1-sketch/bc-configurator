@@ -680,6 +680,23 @@ let _keyOrtName='';
 function _keyStand(C){
   const md=C&&C.MapData;
   if(!md||typeof md!=='object')return null;
+  /* Der Normalfall, im Spiel nachgemessen: BC legt die Keys als
+     HasKeyBronze / HasKeySilver / HasKeyGold in MapData.PrivateState ab -
+     auch fuer FREMDE Charaktere, sonst waere die Wache nicht moeglich.
+     Ein leeres PrivateState heisst schlicht: keine Keys. */
+  const ps=md.PrivateState;
+  if(ps&&typeof ps==='object'&&!Array.isArray(ps)){
+    // Beide Schreibweisen annehmen, damit eine andere BC-Fassung die
+    // Wache nicht stillschweigend lahmlegt.
+    const g=n=>{
+      if(ps['HasKey'+n]!==undefined)return !!ps['HasKey'+n];
+      const kl=n.toLowerCase();
+      if(ps[kl]!==undefined)return !!ps[kl];
+      return false;
+    };
+    return {bronze:g('Bronze'), silver:g('Silver'), gold:g('Gold'), _ort:'MapData.PrivateState'};
+  }
+  // Ab hier nur noch Rueckfallebenen, falls eine Fassung es anders haelt.
   const passt=o=>o&&typeof o==='object'&&(('bronze' in o)||('silver' in o)||('gold' in o));
   const bau=(o,ort)=>({bronze:!!o.bronze,silver:!!o.silver,gold:!!o.gold,_ort:ort});
   if(passt(md))return bau(md,'MapData');
