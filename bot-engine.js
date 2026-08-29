@@ -547,32 +547,57 @@ function _invFluester(C,text){
   try{ ServerSend('ChatRoomChat',{Content:text,Type:'Whisper',Target:C.MemberNumber}); }catch(e){}
 }
 
-/* Den laengsten passenden Katalognamen am Anfang des Textes finden.
-   Genau wie im Shop, damit mehrteilige Namen ("Rotes Halsband") gehen. */
+/* Den Gegenstand im Text finden - am Anfang UND am Ende.
+
+   Dadurch gehen beide Reihenfolgen: "Halsband Yuuki" und "Yuuki Halsband".
+   Vorher wurde nur der Anfang geprueft, weshalb "!wear 998 pet" den ganzen
+   Text als unbekannten Gegenstand meldete. Die laengste Uebereinstimmung
+   gewinnt, damit ein mehrteiliger Name nicht von einem kuerzeren verdeckt
+   wird. */
 function _invDefAusText(text){
-  const lc=String(text||'').trim().toLowerCase();
-  let treffer=null, rest='';
+  const roh=String(text||'').trim();
+  const lc=roh.toLowerCase();
+  let treffer=null, rest='', laenge=-1;
   Object.values(_invDefs).forEach(d=>{
     if(d.aktiv===false)return;
     const n=String(d.name||'').trim().toLowerCase();
-    if(!n)return;
-    if(lc===n||lc.startsWith(n+' ')){
-      if(!treffer||n.length>String(treffer.name).trim().length){
-        treffer=d; rest=String(text).trim().slice(n.length).trim();
-      }
-    }
+    if(!n||n.length<=laenge)return;
+    if(lc===n){ treffer=d; rest=''; laenge=n.length; return; }
+    if(lc.startsWith(n+' ')){ treffer=d; rest=roh.slice(n.length).trim(); laenge=n.length; return; }
+    if(lc.endsWith(' '+n)){ treffer=d; rest=roh.slice(0,roh.length-n.length).trim(); laenge=n.length; return; }
   });
   return {def:treffer,rest:rest};
+}
+
+/* Was diese Person gerade tragen koennte - fuer hilfreiche Meldungen. */
+function _invMeineListe(C){
+  const da=Object.values(_invDefs)
+    .filter(d=>d.aktiv!==false&&(d.unendlich||_invAnz(C.MemberNumber,d.id)>0))
+    .map(d=>d.name);
+  if(!da.length)return 'Du hast gerade nichts im Inventar.';
+  return 'Du hast: '+da.slice(0,12).join(', ')+(da.length>12?' \u2026':'')+'.';
 }
 
 /* !wear <Gegenstand> [Person] */
 function _handleWearCmd(rohText,C){
   const cmd=_invCfg.wearCmd;
   const text=String(rohText).trim().slice(cmd.length).trim();
-  if(!text){ _invFluester(C,'\u{1F392} So geht es: '+cmd+' <Gegenstand> [Person]'); return; }
+  if(!text){
+    _invFluester(C,'\u{1F392} So geht es: '+cmd+' <Gegenstand> [Person] \u2013 die Reihenfolge ist egal. '+_invMeineListe(C));
+    return;
+  }
   const gefunden=_invDefAusText(text);
   const def=gefunden.def;
-  if(!def){ _invFluester(C,'\u26A0\uFE0F "'+text+'" kenne ich nicht. Mit '+_invCfg.listCmd+' siehst du, was du hast.'); return; }
+  if(!def){
+    // Ist der Text eine Person? Dann fehlt nur der Gegenstand - das sagen
+    // wir auch so, statt den Namen als unbekannten Gegenstand zu melden.
+    const alsPerson=_charNachName(text,null);
+    if(alsPerson.C&&alsPerson.C.MemberNumber!==C.MemberNumber)
+      _invFluester(C,'\u2753 Welchen Gegenstand soll '+alsPerson.C.Name+' bekommen? '+_invMeineListe(C));
+    else
+      _invFluester(C,'\u26A0\uFE0F "'+text+'" kenne ich nicht. '+_invMeineListe(C));
+    return;
+  }
 
   let ziel=C;
   if(gefunden.rest){
@@ -2994,6 +3019,27 @@ window['_BCBot_'+_BID]={
       window.__BCK_popupRef?.postMessage({app:'BCKonfigurator',type:'BOT_STORY',botId:_BOTID,stand:raus},'*');
     }catch(e){console.warn('[Bot] storyStand:',e);}
   },
+  /* Bestand von aussen setzen - wenn im Konfigurator von Hand geaendert
+     wird. Ohne diesen Weg wuerde die Kopie im Bot die Aenderung beim
+     naechsten Vorgang wieder ueberschreiben. */
+  invSetzen(mn,itemDefId,anzahl){
+    try{
+      const k=String(mn);
+      const sp=_invBestand[k]=_invBestand[k]||{name:'#'+k,eintraege:{}};
+      sp.eintraege=sp.eintraege||{};
+      sp.eintraege[itemDefId]=sp.eintraege[itemDefId]||{anzahl:0};
+      sp.eintraege[itemDefId].anzahl=Math.max(0,Number(anzahl)||0);
+      _log('\u{1F392} Bestand gesetzt: #'+k+' '+itemDefId+' = '+sp.eintraege[itemDefId].anzahl);
+    }catch(e){console.warn('[Bot] invSetzen:',e);}
+  },
+  /* Eine Ausleihe aus der Liste nehmen, ohne erneut gutzuschreiben -
+     die Gutschrift hat der Konfigurator bereits vorgenommen. */
+  leiheLoeschen(id){
+    try{
+      const i=_invAusleihe.findIndex(x=>x.id===id);
+      if(i>=0){ _invAusleihe.splice(i,1); _log('\u{1F392} Ausleihe '+id+' von Hand aufgeloest'); }
+    }catch(e){console.warn('[Bot] leiheLoeschen:',e);}
+  },
   /* Geschichte einer Person von vorn beginnen lassen */
   storyReset(mn){ _storyEnde(Number(mn)); _log('\u{1F4D6} Geschichte von #'+mn+' zurueckgesetzt'); },
   feuereJetzt(trigId,mn){try{_feuereJetzt(trigId,mn);}catch(e){console.warn('[Bot] Handausloeser:',e);}},
@@ -3141,6 +3187,14 @@ function botSync(still) {
   if (!_connected) { if(!still) showStatus('❌ Nicht mit BC verbunden', 'error'); return; }
   if (!b.laufend)  { if(!still) showStatus('ℹ️ Bot läuft nicht – einfach Starten klicken', 'info'); return; }
 
+  /* Ein Sync haelt den Bot an, wartet 700 ms und spielt ihn komplett neu
+     ein - im Spiel deutlich spuerbar. Aendert sich am erzeugten Code gar
+     nichts, entfaellt der Neustart. Das faengt alle Speichervorgaenge ab,
+     die den Bot nicht betreffen (Shop-Protokoll, Kontostaende, Notizen). */
+  const _neuerCode = _botExecCode(b);
+  window.__BCK_letzterBotCode = window.__BCK_letzterBotCode || {};
+  if (still && window.__BCK_letzterBotCode[b.id] === _neuerCode) return;
+
   const btn = document.getElementById('syncBtn');
   if (btn && !still) { btn.disabled = true; btn.textContent = '⏳ Sync…'; }
 
@@ -3152,7 +3206,9 @@ function botSync(still) {
   setTimeout(() => {
     const latest = _selBot();
     if (!latest) return;
-    bcSend({ type:'EXEC', code: _botExecCode(latest) });
+    const _code = _botExecCode(latest);
+    bcSend({ type:'EXEC', code: _code });
+    window.__BCK_letzterBotCode[latest.id] = _code;
     latest.laufend = true;
     // Kein _saveBots() hier: das wuerde den automatischen Sync erneut
     // ausloesen und den Bot in einer Schleife immer wieder neu starten.

@@ -65,6 +65,19 @@ function _itemDefInhaltText(k) {
   return '– nichts gewählt –';
 }
 
+/* Alle je vergebenen Kategorien, alphabetisch. Es gibt bewusst keine
+   getrennte Verwaltung: eine Kategorie entsteht durch Tippen und
+   verschwindet, sobald sie niemand mehr benutzt. */
+function _itemKategorien() {
+  const s = new Set();
+  (_itemDefs.items || []).forEach(d => (d.kategorien || []).forEach(k => { if (k) s.add(k); }));
+  return [...s].sort((a, b) => a.localeCompare(b, 'de'));
+}
+function _katListe(text) {
+  return String(text || '').split(',').map(x => x.trim()).filter(Boolean)
+    .filter((x, i, a) => a.indexOf(x) === i);
+}
+
 // ══ Shop-Umstellung ═══════════════════════════════════════════════════
 /* Legt fuer jeden Shop-Artikel mit hinterlegtem Kauf-Item einen Katalog-
    Eintrag an und verweist per itemDefId darauf.
@@ -121,7 +134,57 @@ function renderItemDefsTab() {
       'ins Inventar legen und in Bedingungen darauf verweisen.</div>';
     return;
   }
-  el.innerHTML = items.map(d => {
+
+  // ── Filterleiste ──
+  const kats = _itemKategorien();
+  const knopf = (wert, text, aktiv) =>
+    '<button onclick="itemDefFilter(\'' + escJsAttr(wert) + '\')" style="font-size:.62rem;padding:3px 9px;border-radius:11px;cursor:pointer;' +
+    (aktiv ? 'background:var(--pd,#3a2a6a);border:1px solid #8b5cf6;color:var(--pl,#cbb6ff)'
+           : 'background:none;border:1px solid rgba(255,255,255,0.12);color:var(--text3)') + '">' + escHtml(text) + '</button>';
+  const filter = _itemDefFilterKat;
+  const leiste = kats.length
+    ? '<div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:10px">'
+      + knopf('', 'Alle', !filter)
+      + kats.map(k => knopf(k, k, filter === k)).join('')
+      + knopf('__ohne__', 'ohne Kategorie', filter === '__ohne__')
+      + '</div>'
+    : '';
+
+  // ── Nach Kategorie gruppieren. Ein Gegenstand mit mehreren Kategorien
+  //    erscheint unter jeder davon. ──
+  const gruppen = new Map();
+  const einsortieren = (name, d) => {
+    if (!gruppen.has(name)) gruppen.set(name, []);
+    gruppen.get(name).push(d);
+  };
+  items.forEach(d => {
+    const ks = (d.kategorien || []).filter(Boolean);
+    if (!ks.length) einsortieren('__ohne__', d);
+    else ks.forEach(k => einsortieren(k, d));
+  });
+
+  const reihenfolge = [...gruppen.keys()].filter(k => k !== '__ohne__').sort((a, b) => a.localeCompare(b, 'de'));
+  if (gruppen.has('__ohne__')) reihenfolge.push('__ohne__');
+  const sichtbar = reihenfolge.filter(k => !filter || k === filter);
+
+  el.innerHTML = leiste + (sichtbar.length ? sichtbar.map(k =>
+    (reihenfolge.length > 1 || k !== '__ohne__'
+      ? '<div style="font-size:.66rem;font-weight:700;color:var(--text2);margin:10px 0 4px">'
+        + escHtml(k === '__ohne__' ? '– ohne Kategorie –' : k)
+        + ' <span style="color:var(--text3);font-weight:400">(' + gruppen.get(k).length + ')</span></div>'
+      : '')
+    + _itemDefKarten(gruppen.get(k))).join('')
+    : '<div style="font-size:.7rem;color:var(--text3);text-align:center;padding:14px 0">In dieser Kategorie ist nichts.</div>');
+}
+
+let _itemDefFilterKat = '';
+function itemDefFilter(k) {
+  _itemDefFilterKat = (_itemDefFilterKat === k) ? '' : k;
+  renderItemDefsTab();
+}
+
+function _itemDefKarten(items) {
+  return items.map(d => {
     const imShop = (typeof _shop !== 'undefined' && _shop && Array.isArray(_shop.items))
       ? _shop.items.filter(a => a.itemDefId === d.id).length : 0;
     return '<div class="shop-item-card ' + (d.aktiv === false ? 'shop-item-inactive' : '') + '">' +
@@ -133,10 +196,11 @@ function renderItemDefsTab() {
         '<div style="font-size:.62rem;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' +
           escHtml(_itemDefInhaltText(d.inhalt)) +
           (imShop ? ' · im Shop (' + imShop + ')' : '') +
+          ((d.kategorien || []).length > 1 ? ' · ' + escHtml((d.kategorien || []).join(', ')) : '') +
         '</div>' +
       '</div>' +
-      '<button onclick="itemDefEdit(' + JSON.stringify(d.id) + ')" style="background:none;border:1px solid rgba(255,255,255,0.1);border-radius:5px;color:var(--text3);font-size:.62rem;padding:2px 7px;cursor:pointer">✏️</button>' +
-      '<button onclick="itemDefDelete(' + JSON.stringify(d.id) + ')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.75rem;padding:2px 5px">✕</button>' +
+      '<button onclick="itemDefEdit(\'' + escJsAttr(d.id) + '\')" style="background:none;border:1px solid rgba(255,255,255,0.1);border-radius:5px;color:var(--text3);font-size:.62rem;padding:2px 7px;cursor:pointer">✏️</button>' +
+      '<button onclick="itemDefDelete(\'' + escJsAttr(d.id) + '\')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.75rem;padding:2px 5px">✕</button>' +
     '</div>';
   }).join('');
 }
@@ -156,6 +220,8 @@ function itemDefNew() {
   g('itemdef-desc').value = '';
   g('itemdef-unendlich').checked = false;
   g('itemdef-aktiv').checked = true;
+  g('itemdef-kats').value = '';
+  _itemDefKatVorschlaege();
   _itemDefInhalt = null; _itemDefInhaltLabel();
   g('itemdef-titel').textContent = '🎁 Neuer Gegenstand';
   g('itemdef-editor').style.display = 'block';
@@ -171,10 +237,19 @@ function itemDefEdit(id) {
   g('itemdef-desc').value = d.beschreibung || '';
   g('itemdef-unendlich').checked = !!d.unendlich;
   g('itemdef-aktiv').checked = d.aktiv !== false;
+  g('itemdef-kats').value = (d.kategorien || []).join(', ');
+  _itemDefKatVorschlaege();
   _itemDefInhalt = d.inhalt || null; _itemDefInhaltLabel();
   g('itemdef-titel').textContent = '✏️ Gegenstand bearbeiten';
   g('itemdef-editor').style.display = 'block';
   try { g('itemdef-editor').scrollIntoView({ behavior: 'smooth', block: 'nearest' }); } catch (e) {}
+}
+
+/* Bereits vergebene Kategorien als Vorschlagsliste anbieten. */
+function _itemDefKatVorschlaege() {
+  const dl = document.getElementById('itemdef-kat-liste');
+  if (!dl) return;
+  dl.innerHTML = _itemKategorien().map(k => '<option value="' + escHtml(k) + '"></option>').join('');
 }
 
 function itemDefClose() {
@@ -192,6 +267,7 @@ function itemDefSave() {
     icon: (g('itemdef-icon').value || '🎁').trim() || '🎁',
     beschreibung: (g('itemdef-desc').value || '').trim(),
     inhalt: _itemDefInhalt,
+    kategorien: _katListe(g('itemdef-kats').value),
     unendlich: !!g('itemdef-unendlich').checked,
     aktiv: !!g('itemdef-aktiv').checked
   };
@@ -277,6 +353,82 @@ function _invApply(d) {
   if (typeof _activeTab !== 'undefined' && _activeTab === 'inventar') renderInventarTab();
 }
 
+// ══ Inventar von Hand aendern ════════════════════════════════════════
+/* Den LAUFENDEN Bot mitziehen.
+
+   Der Bot fuehrt eine eigene Kopie des Bestands. Ohne diesen Anstoss waere
+   eine Aenderung von Hand beim naechsten Vorgang des Bots wieder
+   ueberschrieben. Laeuft kein Bot, passiert schlicht nichts. */
+function _invBotMitziehen(mn, itemDefId, anzahl) {
+  try {
+    if (typeof _connected === 'undefined' || !_connected) return;
+    const b = (typeof _selBot === 'function') ? _selBot() : null;
+    if (!b || !b.laufend) return;
+    const safeId = b.id.replace(/\W/g, '_');
+    bcSend({ type: 'EXEC', code:
+      'try{window[' + JSON.stringify('_BCBot_' + safeId) + '].invSetzen('
+      + JSON.stringify(String(mn)) + ',' + JSON.stringify(String(itemDefId)) + ',' + Number(anzahl) + ');}catch(e){}' });
+  } catch (e) { /* darf die Bedienung nie stoeren */ }
+}
+
+/* Anzahl setzen. Negatives gibt es nicht, und der Eintrag bleibt auch bei
+   0 stehen - so verschwindet nichts aus der Uebersicht. */
+function invAnzahlSetzen(mn, itemDefId, wert) {
+  const n = Math.max(0, Math.floor(Number(wert) || 0));
+  const sp = _invSpieler(mn);
+  sp.eintraege[itemDefId] = sp.eintraege[itemDefId] || { anzahl: 0 };
+  sp.eintraege[itemDefId].anzahl = n;
+  _saveInventar();
+  _invBotMitziehen(mn, itemDefId, n);
+  renderInventarTab();
+}
+function invAnzahlUm(mn, itemDefId, delta) {
+  invAnzahlSetzen(mn, itemDefId, _invAnzahl(mn, itemDefId) + Number(delta || 0));
+}
+/* Einem Spieler einen Gegenstand geben, den er noch gar nicht hat. */
+function invGeben(mn, itemDefId) {
+  if (!itemDefId) return;
+  invAnzahlSetzen(mn, itemDefId, _invAnzahl(mn, itemDefId) + 1);
+  const d = _itemDefById(itemDefId);
+  showStatus('✅ ' + ((d && d.name) || itemDefId) + ' gegeben', 'success');
+}
+/* Eine haengengebliebene Ausleihe von Hand zurueckbuchen. */
+function invAusleiheAufloesen(id) {
+  const i = (_inventar.ausleihe || []).findIndex(x => x.id === id);
+  if (i < 0) return;
+  const l = _inventar.ausleihe[i];
+  const d = _itemDefById(l.itemDefId);
+  if (!confirm('„' + ((d && d.name) || l.itemDefId) + '" an den Besitzer zurückbuchen?')) return;
+  _inventar.ausleihe.splice(i, 1);
+  const neu = _invAnzahl(l.ownerMn, l.itemDefId) + 1;
+  const sp = _invSpieler(l.ownerMn);
+  sp.eintraege[l.itemDefId] = sp.eintraege[l.itemDefId] || { anzahl: 0 };
+  sp.eintraege[l.itemDefId].anzahl = neu;
+  _saveInventar();
+  _invBotMitziehen(l.ownerMn, l.itemDefId, neu);
+  // Auch die Ausleihliste im laufenden Bot bereinigen
+  try {
+    if (typeof _connected !== 'undefined' && _connected) {
+      const b = _selBot();
+      if (b && b.laufend) {
+        const safeId = b.id.replace(/\W/g, '_');
+        bcSend({ type: 'EXEC', code:
+          'try{window[' + JSON.stringify('_BCBot_' + safeId) + '].leiheLoeschen(' + JSON.stringify(id) + ');}catch(e){}' });
+      }
+    }
+  } catch (e) {}
+  renderInventarTab();
+}
+/* Nur ausblenden - die Daten bleiben vollstaendig erhalten. */
+function invSpielerAusblenden(mn, versteckt) {
+  const sp = _invSpieler(mn);
+  sp.versteckt = !!versteckt;
+  _saveInventar();
+  renderInventarTab();
+}
+let _invZeigeVersteckte = false;
+function invZeigeVersteckte(an) { _invZeigeVersteckte = !!an; renderInventarTab(); }
+
 // ══ Inventar-Oberflaeche ══════════════════════════════════════════════
 function invSet(feld, wert) {
   _inventar.settings[feld] = wert;
@@ -304,24 +456,67 @@ function renderInventarTab() {
   // ── Bestand je Spieler ──
   const el = g('inv-spieler-liste');
   if (el) {
-    const mns = Object.keys(_inventar.spieler || {});
-    if (!mns.length) {
+    const alle = Object.keys(_inventar.spieler || {});
+    const versteckt = alle.filter(mn => _inventar.spieler[mn].versteckt);
+    const mns = _invZeigeVersteckte ? alle : alle.filter(mn => !_inventar.spieler[mn].versteckt);
+    const kopf = versteckt.length
+      ? '<label style="display:flex;align-items:center;gap:6px;font-size:.63rem;color:var(--text3);margin-bottom:6px;cursor:pointer">'
+        + '<input type="checkbox" ' + (_invZeigeVersteckte ? 'checked' : '') + ' onchange="invZeigeVersteckte(this.checked)">'
+        + versteckt.length + ' ausgeblendete anzeigen</label>'
+      : '';
+    // Auswahlliste zum Geben - nur aktive Gegenstaende
+    const katalog = _itemDefAktive();
+    if (!alle.length) {
       el.innerHTML = '<div style="font-size:.7rem;color:var(--text3);text-align:center;padding:14px 0">Noch niemand besitzt etwas.</div>';
+    } else if (!mns.length) {
+      el.innerHTML = kopf + '<div style="font-size:.7rem;color:var(--text3);text-align:center;padding:14px 0">Alle Spieler sind ausgeblendet.</div>';
     } else {
-      el.innerHTML = mns.map(mn => {
+      el.innerHTML = kopf + mns.map(mn => {
         const sp = _inventar.spieler[mn];
         const eintraege = Object.entries(sp.eintraege || {});
         const zeilen = eintraege.length ? eintraege.map(([did, e]) => {
           const d = _itemDefById(did);
           const nm = d ? ((d.icon || '🎁') + ' ' + d.name) : ('❓ ' + did + ' (nicht mehr im Katalog)');
-          const anz = (d && d.unendlich) ? '∞' : ('Anzahl ' + (e.anzahl || 0));
-          const grau = (!(d && d.unendlich) && !(e.anzahl > 0)) ? 'opacity:.5;' : '';
-          return '<div style="display:flex;justify-content:space-between;gap:8px;font-size:.66rem;padding:2px 0;' + grau + '">' +
-                 '<span>' + escHtml(nm) + '</span><span style="color:var(--text3)">' + anz + '</span></div>';
-        }).join('') : '<div style="font-size:.62rem;color:var(--text3)">– leer –</div>';
-        return '<div style="border:1px solid rgba(255,255,255,.08);border-radius:7px;padding:8px 10px;margin-bottom:6px">' +
-          '<div style="font-size:.72rem;font-weight:600;margin-bottom:4px">' + escHtml(sp.name || ('#' + mn)) +
-          ' <span style="color:var(--text3);font-weight:400">#' + escHtml(mn) + '</span></div>' + zeilen + '</div>';
+          const unbegrenzt = !!(d && d.unendlich);
+          const grau = (!unbegrenzt && !(e.anzahl > 0)) ? 'opacity:.55;' : '';
+          const knopf = (zeichen, delta, titel) =>
+            '<button title="' + titel + '" onclick="invAnzahlUm(\'' + escJsAttr(mn) + '\',\'' + escJsAttr(did) + '\',' + delta + ')"'
+            + ' style="background:none;border:1px solid rgba(255,255,255,0.12);border-radius:4px;color:var(--text2);'
+            + 'font-size:.66rem;width:20px;height:20px;line-height:1;cursor:pointer;padding:0">' + zeichen + '</button>';
+          const rechts = unbegrenzt
+            ? '<span style="font-size:.63rem;color:#a78bfa;min-width:96px;text-align:right">∞ unbegrenzt</span>'
+            : knopf('−', -1, 'eins weniger')
+              + '<input type="number" min="0" value="' + (e.anzahl || 0) + '"'
+              + ' onchange="invAnzahlSetzen(\'' + escJsAttr(mn) + '\',\'' + escJsAttr(did) + '\',this.value)"'
+              + ' style="width:52px;text-align:center;background:var(--bg3,#1a1a24);border:1px solid rgba(255,255,255,0.1);'
+              + 'border-radius:4px;color:var(--text1);font-size:.66rem;padding:2px 4px">'
+              + knopf('+', 1, 'eins mehr');
+          return '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:.66rem;padding:3px 0;' + grau + '">'
+            + '<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escHtml(nm) + '</span>'
+            + '<span style="display:flex;align-items:center;gap:4px">' + rechts + '</span></div>';
+        }).join('') : '<div style="font-size:.62rem;color:var(--text3);padding:3px 0">– noch nichts –</div>';
+
+        const geben = katalog.length
+          ? '<div style="display:flex;gap:6px;margin-top:6px">'
+            + '<select onchange="if(this.value){invGeben(\'' + escJsAttr(mn) + '\',this.value);this.value=\'\';}"'
+            + ' style="flex:1;background:var(--bg3,#1a1a24);border:1px solid rgba(255,255,255,0.1);border-radius:5px;'
+            + 'color:var(--text2);font-size:.64rem;padding:3px 6px">'
+            + '<option value="">+ Gegenstand geben …</option>'
+            + katalog.map(d => '<option value="' + escHtml(d.id) + '">' + escHtml((d.icon || '🎁') + ' ' + d.name) + '</option>').join('')
+            + '</select></div>'
+          : '';
+
+        return '<div style="border:1px solid rgba(255,255,255,.08);border-radius:7px;padding:8px 10px;margin-bottom:6px;'
+          + (sp.versteckt ? 'opacity:.6' : '') + '">'
+          + '<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">'
+            + '<span style="font-size:.72rem;font-weight:600">' + escHtml(sp.name || ('#' + mn))
+            + ' <span style="color:var(--text3);font-weight:400">#' + escHtml(mn) + '</span></span>'
+            + '<button title="' + (sp.versteckt ? 'wieder anzeigen' : 'ausblenden – die Daten bleiben erhalten') + '"'
+            + ' onclick="invSpielerAusblenden(\'' + escJsAttr(mn) + '\',' + (sp.versteckt ? 'false' : 'true') + ')"'
+            + ' style="margin-left:auto;background:none;border:1px solid rgba(255,255,255,0.12);border-radius:5px;'
+            + 'color:var(--text3);font-size:.6rem;padding:2px 7px;cursor:pointer">'
+            + (sp.versteckt ? '👁 einblenden' : '🙈 ausblenden') + '</button>'
+          + '</div>' + zeilen + geben + '</div>';
       }).join('');
     }
   }
@@ -338,10 +533,13 @@ function renderInventarTab() {
           const besitzer = (_inventar.spieler[String(x.ownerMn)] || {}).name || ('#' + x.ownerMn);
           const traeger  = (_inventar.spieler[String(x.wearerMn)] || {}).name || ('#' + x.wearerMn);
           const selbst = String(x.ownerMn) === String(x.wearerMn);
-          return '<div style="font-size:.66rem;padding:4px 0;border-bottom:1px solid rgba(255,255,255,.05)">' +
-            escHtml(nm) + ' — ' + escHtml(besitzer) +
+          return '<div style="display:flex;align-items:center;gap:8px;font-size:.66rem;padding:4px 0;border-bottom:1px solid rgba(255,255,255,.05)">' +
+            '<span style="flex:1">' + escHtml(nm) + ' — ' + escHtml(besitzer) +
             (selbst ? ' <span style="color:var(--text3)">trägt selbst</span>'
-                    : ' → getragen von <b>' + escHtml(traeger) + '</b>') + '</div>';
+                    : ' → getragen von <b>' + escHtml(traeger) + '</b>') + '</span>' +
+            '<button title="Von Hand an den Besitzer zurückbuchen" onclick="invAusleiheAufloesen(\'' + escJsAttr(x.id) + '\')"' +
+            ' style="background:none;border:1px solid rgba(255,255,255,0.12);border-radius:5px;color:var(--text3);' +
+            'font-size:.6rem;padding:2px 8px;cursor:pointer">↩ zurückbuchen</button></div>';
         }).join('');
   }
 }

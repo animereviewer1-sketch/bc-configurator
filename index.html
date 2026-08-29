@@ -3502,22 +3502,20 @@ document.write('<scr'+'ipt src="items.js?_='+_cbv+'"><\/scr'+'ipt>');
       </select>
     </div>
     <div style="font-size:.59rem;color:var(--text3);margin-top:2px">Leer = aus. „Voraussetzung" prüft nur; „Bezahlen" zieht den Wert beim Kauf ab.</div>
-    <label>🎁 Gegenstand aus dem Katalog (empfohlen)</label>
-    <select class="cf" id="shop-modal-itemdef"></select>
-    <div style="font-size:.59rem;color:var(--text3);margin-top:2px">Wird hier etwas gew&auml;hlt, gilt das statt der Auswahl darunter. Nur ein Katalog-Gegenstand kann ins <b>Inventar</b> gelegt werden.</div>
+    <label>🎁 Gegenstand</label>
+    <div style="display:flex;gap:6px;align-items:center">
+      <select class="cf" id="shop-modal-itemdef" style="flex:1" onchange="_shopItemDefHinweis()"></select>
+      <button type="button" onclick="shopNeuerGegenstand()" title="Legt einen neuen Gegenstand im Items-Tab an" style="font-size:.7rem;padding:4px 10px;background:var(--pd,#3a2a6a);border:none;color:var(--pl,#cbb6ff);border-radius:5px;cursor:pointer;white-space:nowrap">+ Neuer Gegenstand</button>
+    </div>
+    <div style="font-size:.59rem;color:var(--text3);margin-top:2px">Gegenst&auml;nde werden im Tab <b>&#127873; Items</b> angelegt und hier nur ausgew&auml;hlt.</div>
+    <div id="shop-modal-itemdef-hinweis"></div>
     <label>Was passiert beim Kauf?</label>
     <select class="cf" id="shop-modal-kaufziel">
       <option value="tragen">Sofort anziehen</option>
       <option value="inventar">Ins Inventar legen</option>
       <option value="beides">Anziehen und ins Inventar</option>
     </select>
-    <label>📦 Item / Curse / Outfit beim Kauf anlegen (optional – kein Trigger nötig)</label>
-    <div style="display:flex;gap:6px;align-items:center">
-      <span id="shop-modal-kaufitem-label" style="flex:1;font-size:.72rem;color:var(--text2)">– nichts gewählt –</span>
-      <button type="button" onclick="shopPickKaufItem()" style="font-size:.7rem;padding:4px 10px;background:var(--pd,#3a2a6a);border:none;color:var(--pl,#cbb6ff);border-radius:5px;cursor:pointer">📂 Wählen</button>
-      <button type="button" onclick="shopClearKaufItem()" style="font-size:.7rem;padding:4px 8px;background:none;border:1px solid rgba(255,255,255,0.1);color:var(--text3);border-radius:5px;cursor:pointer">✕</button>
-    </div>
-    <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:400;margin-top:4px"><input type="checkbox" id="shop-modal-kaufitem-aktiv"> beim Kauf automatisch anlegen (Ziel = Kaufziel)</label>
+    <div id="shop-modal-altitem"></div>
     <label>Bestätigungsnachricht (leer = Standard)</label>
     <input class="cf" id="shop-modal-confirm" placeholder="Leer = Standard-Nachricht">
     <label>Fremdkauf-Ankündigung (öffentlicher Chat, leer = Standard)</label>
@@ -3869,6 +3867,12 @@ document.write('<scr'+'ipt src="bc-autobackup.js?_='+_cbv+'"><\/scr'+'ipt>');
       </div>
       <div style="margin-bottom:8px"><label style="font-size:.62rem;color:var(--text3);display:block;margin-bottom:3px">Beschreibung (optional)</label><input id="itemdef-desc" type="text" style="background:var(--bg3,#1a1a24);border:1px solid rgba(255,255,255,0.1);border-radius:6px;color:var(--text1);font-size:.7rem;padding:5px 8px;width:100%"></div>
       <div style="margin-bottom:8px">
+        <label style="font-size:.62rem;color:var(--text3);display:block;margin-bottom:3px">Kategorien &ndash; mehrere mit Komma trennen</label>
+        <input id="itemdef-kats" type="text" list="itemdef-kat-liste" placeholder="z. B. Halsb&auml;nder, Strafen" style="background:var(--bg3,#1a1a24);border:1px solid rgba(255,255,255,0.1);border-radius:6px;color:var(--text1);font-size:.7rem;padding:5px 8px;width:100%">
+        <datalist id="itemdef-kat-liste"></datalist>
+        <div style="font-size:.59rem;color:var(--text3);margin-top:2px">Einfach tippen &ndash; eine neue Kategorie entsteht dadurch von selbst. Bereits vergebene werden vorgeschlagen.</div>
+      </div>
+      <div style="margin-bottom:8px">
         <label style="font-size:.62rem;color:var(--text3);display:block;margin-bottom:3px">Was passiert damit in BC?</label>
         <div style="display:flex;align-items:center;gap:8px">
           <span id="itemdef-inhalt-label" style="flex:1;font-size:.68rem;color:var(--text2);border:1px dashed rgba(255,255,255,0.14);border-radius:6px;padding:5px 8px">&ndash; nichts gew&auml;hlt &ndash;</span>
@@ -3925,8 +3929,10 @@ document.write('<scr'+'ipt src="bc-autobackup.js?_='+_cbv+'"><\/scr'+'ipt>');
         </div>
       </div>
       <div style="font-size:.6rem;color:var(--text3);margin-bottom:12px;line-height:1.5">
-        Im Chat: <code>!wear Rotes Halsband</code> zieht es dir selbst an,
-        <code>!wear Rotes Halsband Anna</code> jemand anderem im Raum.
+        Im Chat: <code>!wear Rotes Halsband</code> zieht es dir selbst an.
+        Mit einem Namen oder einer Nummer bekommt es jemand anderes im Raum &ndash;
+        die Reihenfolge ist dabei egal: <code>!wear Rotes Halsband Anna</code> und
+        <code>!wear Anna Rotes Halsband</code> tun dasselbe.
       </div>
       <label style="font-size:.66rem;color:var(--text2);display:flex;align-items:center;gap:6px;cursor:pointer;margin-bottom:8px">
         <input type="checkbox" id="inv-fremd" onchange="invSet('fremdErlaubt', this.checked)"> anderen Personen etwas anziehen erlauben

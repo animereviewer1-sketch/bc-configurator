@@ -42,6 +42,9 @@ function _shopScrollToEditor(){
 }
 
 function renderShopTab() {
+  // Alt-Artikel ohne Katalog-Verweis nachziehen. Ergaenzt nur, loescht nie.
+  try { if (typeof _itemDefsMigriereShop === 'function') _itemDefsMigriereShop(); } catch (e) {}
+
   // Sync settings inputs
   const cmdEl = document.getElementById('shop-cmd-inp');
   if (cmdEl) cmdEl.value = _shop.settings.cmd ?? '!pay';
@@ -175,8 +178,8 @@ function shopItemNew() {
   { const _vn=document.getElementById('shop-modal-varname'); if(_vn)_vn.value=''; }
   { const _vw=document.getElementById('shop-modal-varwert'); if(_vw)_vw.value=''; }
   { const _vm=document.getElementById('shop-modal-varmodus'); if(_vm)_vm.value='voraussetzung'; }
-  _shopKaufItem=null; _shopKaufItemLabel(); { const _ka=document.getElementById('shop-modal-kaufitem-aktiv'); if(_ka)_ka.checked=false; }
-  _shopFillItemDefSelect(''); _shopFillKaufZiel('tragen');
+  _shopKaufItem=null; _shopKaufItemAktiv=false; _shopKaufItemLabel();
+  _shopFillItemDefSelect(''); _shopFillKaufZiel('tragen'); _shopItemDefHinweis();
   _shopMountEditor();
   document.getElementById('shop-modal-overlay').style.display = 'block';
   _shopNostripHint(); // FIX: nostrip
@@ -184,14 +187,45 @@ function shopItemNew() {
 }
 
 let _shopKaufItem=null;
+/* Die eigene Item-Auswahl gibt es in der Bedienung nicht mehr - Gegenstaende
+   entstehen im Items-Tab. Die DATEN bleiben aber erhalten: _shopKaufItem und
+   dieser Merker werden beim Bearbeiten geladen und beim Speichern
+   unveraendert zurueckgeschrieben. Ohne den Merker haette jedes Speichern
+   kaufItemAktiv auf false gesetzt und damit die Rueckfallebene alter
+   Artikel zerstoert. */
+let _shopKaufItemAktiv=false;
 function _shopKaufItemLabel(){
-  const el=document.getElementById('shop-modal-kaufitem-label'); if(!el) return;
+  const el=document.getElementById('shop-modal-altitem'); if(!el) return;
   const k=_shopKaufItem;
-  el.textContent = !k ? '– nichts gewählt –'
-    : k.itemConfig ? ('📦 '+k.itemConfig.group+'/'+k.itemConfig.asset)
+  const hat=!!(k&&(k.itemConfig||k.profilName||k.curseName||k.item));
+  // Nur bei Alt-Artikeln ueberhaupt etwas anzeigen - und nur als Hinweis.
+  if(!hat||!_shopKaufItemAktiv){ el.innerHTML=''; return; }
+  const txt = k.itemConfig ? ('📦 '+k.itemConfig.group+'/'+k.itemConfig.asset)
     : k.profilName ? ('👗 '+k.profilName)
     : k.curseName  ? ('🔮 '+k.curseName)
-    : k.item       ? ('📦 '+(k.gruppe||'?')+'/'+k.item) : '– nichts gewählt –';
+    : ('📦 '+(k.gruppe||'?')+'/'+k.item);
+  el.innerHTML='<div style="margin-top:6px;font-size:.61rem;color:var(--text3);border:1px dashed rgba(255,255,255,0.14);'
+    +'border-radius:6px;padding:5px 8px">↩ Alte Einstellung dieses Artikels: <b>'+escHtml(txt)+'</b>'
+    +'<br>Sie greift nur, solange oben kein Gegenstand gewählt ist. Bleibt erhalten, wird aber nicht mehr bearbeitet.</div>';
+}
+
+/* Hinweis, wenn ein Artikel gar keinen Gegenstand hat. */
+function _shopItemDefHinweis(){
+  const el=document.getElementById('shop-modal-itemdef-hinweis'); if(!el) return;
+  const sel=(document.getElementById('shop-modal-itemdef')||{}).value||'';
+  const hatAlt=!!(_shopKaufItemAktiv&&_shopKaufItem);
+  el.innerHTML=(!sel&&!hatAlt)
+    ? '<div style="margin-top:4px;font-size:.61rem;color:#fbbf24">⚠️ Ohne Gegenstand kostet der Artikel nur Geld – es passiert nichts weiter.</div>'
+    : '';
+}
+
+/* Springt in den Items-Tab und oeffnet dort gleich das Formular. */
+function shopNeuerGegenstand(){
+  try{
+    switchTab('itemdefs');
+    if(typeof itemDefNew==='function') itemDefNew();
+    showStatus('🎁 Gegenstand anlegen – danach im Shop auswählen','info');
+  }catch(e){}
 }
 let _shopFormState=null;
 function _shopSaveFormState(){
@@ -204,6 +238,7 @@ function _shopSaveFormState(){
     reqrank:(g('shop-modal-reqrank')||{}).value||'', reqgroup:(g('shop-modal-reqgroup')||{}).value||'',
     hidelocked:!!(g('shop-modal-hidelocked')||{}).checked,
     varname:(g('shop-modal-varname')||{}).value||'', varwert:(g('shop-modal-varwert')||{}).value||'', varmodus:(g('shop-modal-varmodus')||{}).value||'voraussetzung',
+    kaufItemAktiv:_shopKaufItemAktiv,
     itemdef:(g('shop-modal-itemdef')||{}).value||'',
     kaufziel:(g('shop-modal-kaufziel')||{}).value||'tragen',
     kaufItem:_shopKaufItem
@@ -222,27 +257,13 @@ function _shopRestoreFormState(){
   { const vn=g('shop-modal-varname'); if(vn)vn.value=s.varname||''; }
   { const vw=g('shop-modal-varwert'); if(vw)vw.value=s.varwert||''; }
   { const vm=g('shop-modal-varmodus'); if(vm)vm.value=s.varmodus||'voraussetzung'; }
+  _shopKaufItemAktiv=!!s.kaufItemAktiv;
   _shopKaufItemLabel();
-  _shopFillItemDefSelect(s.itemdef||''); _shopFillKaufZiel(s.kaufziel||'tragen');
-  { const a=g('shop-modal-kaufitem-aktiv'); if(a)a.checked=true; }
+  _shopFillItemDefSelect(s.itemdef||''); _shopFillKaufZiel(s.kaufziel||'tragen'); _shopItemDefHinweis();
   _shopMountEditor();
   g('shop-modal-overlay').style.display='block';
   if(typeof _shopNostripHint==='function')_shopNostripHint();
 }
-function shopPickKaufItem(){
-  _shopSaveFormState();
-  window._shopPickActive=true;
-  shopModalClose();                 // Shop-Overlay schließen, damit der Picker/Item-Manager sichtbar ist
-  ipickerOpen('item', v=>{
-    if(v.type==='item') _shopKaufItem = v.itemConfig ? {itemConfig:v.itemConfig,item:v.itemConfig.asset,gruppe:v.itemConfig.group} : {item:v.name,gruppe:v.group,farbe:'#ffffff'};
-    else if(v.type==='curse') _shopKaufItem={curseKey:v.key,curseName:v.name,curseEntry:v.entry};
-    else if(v.type==='profil') _shopKaufItem={profilName:v.name,profilItems:(typeof PROFILES!=='undefined'&&PROFILES[v.name]&&PROFILES[v.name].items)||[]};
-    window._shopPickActive=false;
-    if(_shopFormState) _shopFormState.kaufItem=_shopKaufItem;
-    _shopRestoreFormState();        // Shop-Modal mit allen Eingaben wieder öffnen
-  });
-}
-function shopClearKaufItem(){ _shopKaufItem=null; _shopKaufItemLabel(); const a=document.getElementById('shop-modal-kaufitem-aktiv'); if(a)a.checked=false; }
 /* Auswahlliste der Katalog-Gegenstaende. Bewusst als Liste und nicht als
    Auswahl-Dialog: der Katalog ist vom Nutzer gepflegt und damit kurz. */
 function _shopFillItemDefSelect(sel){
@@ -293,8 +314,8 @@ function shopItemEdit(id) {
   { const _vn=document.getElementById('shop-modal-varname'); if(_vn)_vn.value=item.varName||''; }
   { const _vw=document.getElementById('shop-modal-varwert'); if(_vw)_vw.value=item.varWert||''; }
   { const _vm=document.getElementById('shop-modal-varmodus'); if(_vm)_vm.value=item.varModus==='abziehen'?'abziehen':'voraussetzung'; }
-  _shopKaufItem=item.kaufItem||null; _shopKaufItemLabel(); { const _ka=document.getElementById('shop-modal-kaufitem-aktiv'); if(_ka)_ka.checked=!!item.kaufItemAktiv; }
-  _shopFillItemDefSelect(item.itemDefId||''); _shopFillKaufZiel(item.kaufZiel||'tragen');
+  _shopKaufItem=item.kaufItem||null; _shopKaufItemAktiv=!!item.kaufItemAktiv; _shopKaufItemLabel();
+  _shopFillItemDefSelect(item.itemDefId||''); _shopFillKaufZiel(item.kaufZiel||'tragen'); _shopItemDefHinweis();
   _shopMountEditor();
   document.getElementById('shop-modal-overlay').style.display = 'block';
   _shopScrollToEditor();
@@ -325,8 +346,9 @@ function shopModalSave() {
     varName: ((document.getElementById('shop-modal-varname')||{}).value||'').trim(),
     varWert: parseInt((document.getElementById('shop-modal-varwert')||{}).value)||0,
     varModus: ((document.getElementById('shop-modal-varmodus')||{}).value==='abziehen')?'abziehen':'voraussetzung',
+    // Unveraendert uebernommen - siehe _shopKaufItemAktiv
     kaufItem: _shopKaufItem||null,
-    kaufItemAktiv: !!(document.getElementById('shop-modal-kaufitem-aktiv')||{}).checked,
+    kaufItemAktiv: _shopKaufItemAktiv,
     itemDefId: ((document.getElementById('shop-modal-itemdef')||{}).value||''),
     kaufZiel: ((document.getElementById('shop-modal-kaufziel')||{}).value||'tragen'),
   };

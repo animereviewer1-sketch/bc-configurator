@@ -1413,6 +1413,34 @@ window.CurseScanner = (() => {
   const _outfitRunId = Date.now();
   window.__BCK_OutfitRunId = _outfitRunId;
 
+  /* Ein billiger Vergleichsschluessel: nur was sich beim Umziehen aendert.
+     Gemessen ~0,4 ms je Person - gegenueber ~4 ms fuer den vollen Scan,
+     davon 2,4 ms allein das Miniaturbild (JPEG-Kodierung des Charakter-
+     Canvas) und 1,2 ms die LZ-Kompression. */
+  function _BCU_schnellFp(C) {
+    let s = '';
+    for (const item of (C.Appearance ?? [])) {
+      const g = item.Asset?.Group?.Name, n = item.Asset?.Name;
+      if (!g || !n) continue;
+      const col = typeof item.Color === 'string' ? item.Color
+                : Array.isArray(item.Color) ? item.Color.join(',') : '';
+      s += g + ':' + n + ':' + col
+         + ':' + (item.Craft?.Name ?? '')
+         + ':' + (item.Property?.LockedBy ?? '')
+         + ':' + (item.Property?.Type ?? '') + ';';
+    }
+    return s;
+  }
+
+  /* Die teure Arbeit in Leerlaufpausen verteilen, eine Person je Abschnitt.
+     Sonst blockiert ein Scan mit 8 Personen rund 32 ms am Stueck - zwei
+     ausgelassene Bilder, und genau das war als Ruckeln in Chat und
+     Positions-Updates zu spueren. */
+  function _BCU_leerlauf(fn) {
+    if (typeof requestIdleCallback === 'function') requestIdleCallback(fn, { timeout: 1500 });
+    else setTimeout(fn, 16);
+  }
+
   function _outfitAutoScan() {
     if (window.__BCK_OutfitRunId !== _outfitRunId) return;
     const _popup = window.__BCK_popupRef;
@@ -1423,15 +1451,41 @@ window.CurseScanner = (() => {
       const _s = new Set();
       const _chars = [Player, ...(ChatRoomCharacter ?? [])]
         .filter(c => c?.MemberNumber && !_s.has(c.MemberNumber) && _s.add(c.MemberNumber));
-      const _results = _chars.map(window._BCU_serializeChar);
-      _popup.postMessage({ app: APP, type: 'OUTFIT_SCAN_DATA', results: _results, room: _room }, ALLOWED_ORIGIN);
+
+      /* ChatRoomSync feuert bei JEDER Bewegung im Raum. Bisher wurde daraufhin
+         das komplette Outfit aller Anwesenden gepackt und ein Miniaturbild
+         erzeugt - obwohl das Popup unveraenderte Outfits ohnehin verwirft.
+         Jetzt entscheidet der billige Schluessel, wer ueberhaupt drankommt. */
+      window.__BCK_outfitFp = window.__BCK_outfitFp || {};
+      const _neu = [];
+      for (const c of _chars) {
+        const fp = _BCU_schnellFp(c);
+        if (window.__BCK_outfitFp[c.MemberNumber] === fp) continue;
+        window.__BCK_outfitFp[c.MemberNumber] = fp;
+        _neu.push(c);
+      }
+      if (!_neu.length) return;
+
+      const _raus = [];
+      const _weiter = () => {
+        if (window.__BCK_OutfitRunId !== _outfitRunId) return;
+        const C = _neu.shift();
+        if (!C) {
+          if (_raus.length && _popup && !_popup.closed)
+            _popup.postMessage({ app: APP, type: 'OUTFIT_SCAN_DATA', results: _raus, room: _room }, ALLOWED_ORIGIN);
+          return;
+        }
+        try { _raus.push(window._BCU_serializeChar(C)); } catch (_) {}
+        _BCU_leerlauf(_weiter);
+      };
+      _BCU_leerlauf(_weiter);
     } catch(_) {}
   }
 
   function _outfitDebounce() {
     if (window.__BCK_OutfitRunId !== _outfitRunId) return;
     clearTimeout(window.__BCK_outfitTimer);
-    window.__BCK_outfitTimer = setTimeout(_outfitAutoScan, 2000);
+    window.__BCK_outfitTimer = setTimeout(_outfitAutoScan, 3000);
   }
 
   (function _installOutfitScan() {
