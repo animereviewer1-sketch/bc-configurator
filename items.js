@@ -6079,6 +6079,10 @@ window.addEventListener('message', function(ev) {
       break;
 
     // Der Bot meldet eine Inventar-Buchung oder den Stand der Ausleihen.
+    case 'BOT_KEYBERICHT':
+      if (typeof _keyBerichtZeigen === 'function') _keyBerichtZeigen(ev.data.bericht);
+      break;
+
     case 'BOT_INVENTAR':
       if (typeof _invApply === 'function') _invApply(ev.data);
       break;

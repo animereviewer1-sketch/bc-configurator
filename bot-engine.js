@@ -49,7 +49,7 @@ function _buildBotCode(bot) {
   const safeName = bot.name.replace(/\\/g,'\\\\').replace(/`/g,'\\`');
 
   // Alle User-Daten als Base64 kodieren → kein Zeichen kann das Template-Literal brechen
-  const _cfgRaw = JSON.stringify({hearChat:s.hearChat,hearEmote:s.hearEmote,hearWhisper:s.hearWhisper,nurEigene:s.nurEigene,logAktiv:s.logAktiv??true,modus:s.modus,moneyQueryCmd:_money?.settings?.queryCmd??'',moneyQueryTyp:_money?.settings?.queryTyp??'whisper',moneyName:_money?.settings?.name??'Gold',rankQueryCmd:_rankData?.settings?.queryCmd??'',rankQueryTyp:_rankData?.settings?.queryCmdTyp??'whisper',rankQueryText:_rankData?.settings?.queryCmdText??'{name} hat Rang: {rang_icon} {rang}',rankDefs:_rankData?.defs??[],rankPlayers:Object.fromEntries(Object.entries(_rankData?.players??{}).map(([k,v])=>[k,v.rankId??null])),shopCmd:_shop?.settings?.cmd??'!pay',shopListCmd:_shop?.settings?.listCmd??'!shop',shopAnnounceNostripMsg:_shop?.settings?.announceNostripMsg??'',shopConfirmMsg:_shop?.settings?.confirmMsg??'',shopAnnounceMsg:_shop?.settings?.announceMsg??'',shopAnnounceAllMsg:_shop?.settings?.announceAllMsg??'',shopErrorMsg:_shop?.settings?.errorMsg??'',shopPreisU:_shop?.settings?.preisU??0,shopPreisNostrip:_shop?.settings?.preisNostrip??0,shopItems:(_shop?.items??[]).filter(i=>i.aktiv!==false),moneyBalances:Object.fromEntries(Object.entries(_money?.balances??{}).map(([k,v])=>[k,{balance:v.balance??0,name:v.name??''}])),botVars:(typeof _botVars!=='undefined'&&_botVars)?_botVars:{},playerKeys:(typeof _playerKeys!=='undefined'&&_playerKeys)?_playerKeys:{},figurName:s.figurName??'',figurRede:s.figurRede??'[{figur}] {text}',figurErzaehler:s.figurErzaehler??'{text}',itemDefs:(typeof _itemDefs!=='undefined'&&_itemDefs&&Array.isArray(_itemDefs.items))?_itemDefs.items:[],invWearCmd:(typeof _inventar!=='undefined'&&_inventar?.settings?.wearCmd)??'!wear',invListCmd:(typeof _inventar!=='undefined'&&_inventar?.settings?.listCmd)??'!inventar',invFremdErlaubt:(typeof _inventar!=='undefined'&&_inventar?.settings?.fremdErlaubt)!==false,invFremdRangId:(typeof _inventar!=='undefined'&&_inventar?.settings?.fremdRangId)??'',invSpieler:(typeof _inventar!=='undefined'&&_inventar?.spieler)??{},invAusleihe:(typeof _inventar!=='undefined'&&_inventar?.ausleihe)??[]});
+  const _cfgRaw = JSON.stringify({hearChat:s.hearChat,hearEmote:s.hearEmote,hearWhisper:s.hearWhisper,nurEigene:s.nurEigene,logAktiv:s.logAktiv??true,modus:s.modus,moneyQueryCmd:_money?.settings?.queryCmd??'',moneyQueryTyp:_money?.settings?.queryTyp??'whisper',moneyName:_money?.settings?.name??'Gold',rankQueryCmd:_rankData?.settings?.queryCmd??'',rankQueryTyp:_rankData?.settings?.queryCmdTyp??'whisper',rankQueryText:_rankData?.settings?.queryCmdText??'{name} hat Rang: {rang_icon} {rang}',rankDefs:_rankData?.defs??[],rankPlayers:Object.fromEntries(Object.entries(_rankData?.players??{}).map(([k,v])=>[k,v.rankId??null])),shopCmd:_shop?.settings?.cmd??'!pay',shopListCmd:_shop?.settings?.listCmd??'!shop',shopAnnounceNostripMsg:_shop?.settings?.announceNostripMsg??'',shopConfirmMsg:_shop?.settings?.confirmMsg??'',shopAnnounceMsg:_shop?.settings?.announceMsg??'',shopAnnounceAllMsg:_shop?.settings?.announceAllMsg??'',shopErrorMsg:_shop?.settings?.errorMsg??'',shopPreisU:_shop?.settings?.preisU??0,shopPreisNostrip:_shop?.settings?.preisNostrip??0,shopItems:(_shop?.items??[]).filter(i=>i.aktiv!==false),moneyBalances:Object.fromEntries(Object.entries(_money?.balances??{}).map(([k,v])=>[k,{balance:v.balance??0,name:v.name??''}])),botVars:(typeof _botVars!=='undefined'&&_botVars)?_botVars:{},playerKeys:(typeof _playerKeys!=='undefined'&&_playerKeys)?_playerKeys:{},figurName:s.figurName??'',figurRede:s.figurRede??'[{figur}] {text}',figurErzaehler:s.figurErzaehler??'{text}',itemDefs:(typeof _itemDefs!=='undefined'&&_itemDefs&&Array.isArray(_itemDefs.items))?_itemDefs.items:[],invWearCmd:(typeof _inventar!=='undefined'&&_inventar?.settings?.wearCmd)??'!wear',invListCmd:(typeof _inventar!=='undefined'&&_inventar?.settings?.listCmd)??'!inventar',invFremdErlaubt:(typeof _inventar!=='undefined'&&_inventar?.settings?.fremdErlaubt)!==false,invFremdRangId:(typeof _inventar!=='undefined'&&_inventar?.settings?.fremdRangId)??'',invSpieler:(typeof _inventar!=='undefined'&&_inventar?.spieler)??{},invAusleihe:(typeof _inventar!=='undefined'&&_inventar?.ausleihe)??[],keyWacheAn:(typeof _inventar!=='undefined'&&_inventar?.settings?.keyWacheAn)!==false});
   const cfgJson  = btoa(unescape(encodeURIComponent(_cfgRaw)));
   const trigsJson = btoa(unescape(encodeURIComponent(JSON.stringify(triggers))));
   const events = (bot.events||[]).filter(e=>e.aktiv).map(e => ({
@@ -663,6 +663,100 @@ function _handleInvListCmd(C){
   });
   stuecke.push(akt);
   stuecke.forEach((txt,i)=>setTimeout(()=>_invFluester(C,txt),i*130));
+}
+
+/* ── Key-Wache ───────────────────────────────────────────────────────
+   Map-Keys lassen sich im Spiel selbst setzen. Wer sich einen erschleicht,
+   soll ihn sofort wieder los sein.
+
+   WO BC die Keys haelt, ist nicht dokumentiert und kann sich zwischen
+   Fassungen unterscheiden. Darum wird gesucht statt geraten: unter
+   C.MapData wird ein Objekt gesucht, das Felder namens bronze/silver/gold
+   traegt, auch eine Ebene tiefer, und ersatzweise eine Liste. Findet sich
+   nichts, sagt der Bot das EINMAL deutlich - ein stilles Nichtstun waere
+   schlimmer als gar keine Wache.                                        */
+let _keyOrtGemeldet=false;
+let _keyOrtName='';
+function _keyStand(C){
+  const md=C&&C.MapData;
+  if(!md||typeof md!=='object')return null;
+  const passt=o=>o&&typeof o==='object'&&(('bronze' in o)||('silver' in o)||('gold' in o));
+  const bau=(o,ort)=>({bronze:!!o.bronze,silver:!!o.silver,gold:!!o.gold,_ort:ort});
+  if(passt(md))return bau(md,'MapData');
+  for(const k of Object.keys(md)){
+    const v=md[k];
+    if(passt(v))return bau(v,'MapData.'+k);
+    if(v&&typeof v==='object'&&!Array.isArray(v)){
+      for(const k2 of Object.keys(v)) if(passt(v[k2]))return bau(v[k2],'MapData.'+k+'.'+k2);
+    }
+  }
+  const liste=md.Keys||md.HasKeys||md.keys;
+  if(Array.isArray(liste)){
+    const s=liste.map(x=>String(x).toLowerCase());
+    return {bronze:s.indexOf('bronze')>=0,silver:s.indexOf('silver')>=0,gold:s.indexOf('gold')>=0,_ort:'MapData-Liste'};
+  }
+  return null;
+}
+
+/* Wie oft schon versucht wurde, einen Key zu entziehen. Greift der Entzug
+   nicht, wird nach drei Anlaeufen aufgegeben - sonst liefe die Wache
+   endlos und schickte im Sekundentakt versteckte Nachrichten. */
+const _keyVersuche={};
+function _tickKeys(chars){
+  if(!_cfg.keyWacheAn)return;
+  chars.forEach(C=>{
+    if(!C||C.MemberNumber==null)return;
+    const ist=_keyStand(C);
+    if(!ist){
+      if(!_keyOrtGemeldet){
+        _keyOrtGemeldet=true;
+        _log('\u26A0 Key-Wache: BC haelt die Map-Keys an einer unbekannten Stelle - die Wache kann nichts pruefen. bcFeatures() im Konfigurator zeigt Naeheres.');
+      }
+      return;
+    }
+    if(!_keyOrtName){ _keyOrtName=ist._ort; _log('\u{1F511} Key-Wache aktiv (gefunden unter '+ist._ort+')'); }
+    const soll=(_cfg.playerKeys||{})[C.MemberNumber]||{};
+    ['bronze','silver','gold'].forEach(k=>{
+      if(!ist[k]||soll[k])
+        { delete _keyVersuche[C.MemberNumber+'_'+k]; return; }   // in Ordnung
+      const vk=C.MemberNumber+'_'+k;
+      const n=(_keyVersuche[vk]||0)+1;
+      _keyVersuche[vk]=n;
+      if(n>3){
+        if(n===4)_log('\u26A0 Key-Wache: '+C.Name+' behaelt den '+k+'-Key trotz Entzug - aufgegeben.');
+        return;
+      }
+      try{
+        ServerSend('ChatRoomChat',{Content:'ChatRoomMapViewChangeKey',Type:'Hidden',
+          Dictionary:[{Tag:'MapViewChangeKey',Key:k,Bool:false}],Target:C.MemberNumber});
+      }catch(e){}
+      _log('\u{1F6A8} '+C.Name+' hatte den '+k+'-Key ohne Berechtigung \u2013 entzogen');
+      try{
+        _pushLog({status:'key_entzogen', trigName:'Key-Wache', trigId:'__system__',
+          player:C.Name, memberNum:C.MemberNumber, x:C.X??0, y:C.Y??0,
+          msg:'Unberechtigter '+k+'-Key entzogen'},
+          {name:C.Name,x:C.X??0,y:C.Y??0,C:C}, {name:'System',id:'__system__'});
+      }catch(e){}
+    });
+  });
+}
+
+/* Was die Wache gerade sieht - fuer bcFeatures() im Konfigurator. */
+function _keyBericht(){
+  // Den Fundort hier selbst ermitteln statt auf den ersten Wach-Durchlauf
+  // zu warten - sonst meldet der Bericht direkt nach dem Start "unbekannt",
+  // obwohl die Ablage laengst erkennbar waere.
+  const raus={aktiv:!!_cfg.keyWacheAn, ort:_keyOrtName||null, spieler:{}};
+  [Player,...(ChatRoomCharacter||[])].forEach(C=>{
+    if(!C||C.MemberNumber==null||raus.spieler[C.MemberNumber])return;
+    const ist=_keyStand(C);
+    if(ist&&!raus.ort)raus.ort=ist._ort;
+    const soll=(_cfg.playerKeys||{})[C.MemberNumber]||{};
+    raus.spieler[C.MemberNumber]={name:C.Name,
+      ist:ist?{bronze:ist.bronze,silver:ist.silver,gold:ist.gold}:null,
+      soll:{bronze:!!soll.bronze,silver:!!soll.silver,gold:!!soll.gold}};
+  });
+  return raus;
 }
 
 /* Alle vier Rueckgabegruende laufen ueber dieselbe Pruefung: der Traeger
@@ -2764,6 +2858,7 @@ const _botTakt=setInterval(()=>{
   if(_taktNr%4===0){
     try{ _tickErregung(chars); }catch(e){ _log('⚠ Takt/Erregung:',e.message); }
     try{ _tickInventar(chars); }catch(e){ _log('⚠ Takt/Inventar:',e.message); }
+    try{ _tickKeys(chars); }    catch(e){ _log('⚠ Takt/Keys:',e.message); }
   }
   try{ _tickBeitritt(); }     catch(e){ _log('⚠ Takt/Beitritt:',e.message); }
   try{ _tickZonen(chars); }   catch(e){ _log('⚠ Takt/Zonen:',e.message); }
@@ -3047,6 +3142,8 @@ window['_BCBot_'+_BID]={
   /* Einen Map-Key von aussen setzen und sofort im Spiel vergeben bzw.
      wegnehmen. Ohne diesen Weg wuesste der laufende Bot nichts davon und
      wuerde beim naechsten Rejoin den alten Stand wieder vergeben. */
+  /* Was die Key-Wache sieht - liest nur, aendert nichts. */
+  keyBericht(){ try{ return _keyBericht(); }catch(e){ return {fehler:e.message}; } },
   setKey(mn,art,an){
     try{
       const k=String(art||'').toLowerCase();

@@ -904,6 +904,145 @@ function spielerDetailZu(){
   if (host) { host.innerHTML = ''; host.style.display = 'none'; }
 }
 
+/* ── bcFeatures() ────────────────────────────────────────────────────
+   Zeigt in der Konsole, was sich mit anderen Spielern anstellen laesst -
+   mit den TATSAECHLICH eingestellten Befehlsnamen, nicht mit den Vorgaben.
+   Gedacht zum Nachschlagen und zum Weitergeben an Mitspieler.
+
+   Aufruf im Konfigurator-Fenster:  bcFeatures()
+   Nur die Chat-Befehle:            bcFeatures('befehle')                */
+function bcFeatures(nur) {
+  const shop   = (typeof _shop     !== 'undefined' && _shop)     ? _shop     : { settings: {}, items: [] };
+  const money  = (typeof _money    !== 'undefined' && _money)    ? _money    : { settings: {}, balances: {} };
+  const rang   = (typeof _rankData !== 'undefined' && _rankData) ? _rankData : { settings: {}, defs: [] };
+  const inv    = (typeof _inventar !== 'undefined' && _inventar) ? _inventar : { settings: {} };
+  const defs   = (typeof _itemDefs !== 'undefined' && _itemDefs && Array.isArray(_itemDefs.items)) ? _itemDefs.items : [];
+  const bot    = (typeof _selBot === 'function') ? _selBot() : null;
+  const laeuft = !!(bot && bot.laufend);
+  const waehr  = money.settings?.name || 'Gold';
+
+  const artikel = (shop.items || []).filter(i => i.aktiv !== false);
+  const katalog = defs.filter(d => d.aktiv !== false);
+
+  // ── Chat-Befehle, wie sie gerade heissen ──
+  const befehle = [];
+  const b = (cmd, syntax, was, wer, bereit) => { if (cmd) befehle.push({ Befehl: syntax, Wirkung: was, 'Wer darf': wer, Einsatzbereit: bereit }); };
+
+  b(shop.settings?.listCmd, shop.settings?.listCmd,
+    'Zeigt den Laden (' + artikel.length + ' Artikel)', 'jeder', artikel.length > 0 ? 'ja' : 'keine Artikel');
+  b(shop.settings?.cmd, shop.settings?.cmd + ' <Artikel> [Person|Nummer|all]',
+    'Kauft etwas – auch für jemand anderen', 'jeder mit Guthaben', artikel.length > 0 ? 'ja' : 'keine Artikel');
+  b(inv.settings?.listCmd, inv.settings?.listCmd,
+    'Zeigt das eigene Inventar', 'jeder', 'ja');
+  b(inv.settings?.wearCmd, inv.settings?.wearCmd + ' <Gegenstand> [Person] – Reihenfolge egal',
+    'Zieht einen Gegenstand an – sich selbst oder jemand anderem',
+    inv.settings?.fremdErlaubt === false ? 'nur bei sich selbst'
+      : (inv.settings?.fremdRangId ? 'für andere erst ab Rang' : 'jeder'),
+    katalog.length > 0 ? 'ja' : 'keine Gegenstände im Katalog');
+  b(money.settings?.queryCmd, money.settings?.queryCmd, 'Fragt den eigenen Kontostand', 'jeder', 'ja');
+  b(rang.settings?.queryCmd,  rang.settings?.queryCmd,  'Fragt den eigenen Rang', 'jeder', 'ja');
+  b('!set', '!set <Zone> X | X1 | X2', 'Legt eine Zone auf die eigene Position', 'nur du selbst', 'ja');
+
+  // ── Was der Bot mit anderen TUN kann ──
+  const tun = [
+    ['📦 Item / Curse / Outfit anlegen', 'Zieht jemandem etwas an'],
+    ['🗑️ Item entfernen',               'Nimmt etwas wieder ab'],
+    ['🎒 Gegenstand ins Inventar',       'Gibt oder nimmt Besitz'],
+    ['🌀 Teleport',                      'Setzt jemanden an eine Position (Bot muss Raum-Admin sein)'],
+    ['💰 Money ändern',                  'Bucht ' + waehr + ' auf oder ab'],
+    ['🏆 Rang setzen',                   'Befördert oder stuft zurück'],
+    ['🔑 Map-Key geben/wegnehmen',       'Vergibt Bronze, Silver oder Gold'],
+    ['💗 Erregung / Orgasmus',           'Setzt Erregung, löst aus oder blockiert'],
+    ['🔢 Variable setzen',               'Merkt sich Fortschritt zu einer Person'],
+    ['📖 Szene starten',                 'Startet eine Geschichte bei jemandem'],
+    ['💬 Chat / ✨ Emote / 🤫 Whisper',  'Sagt etwas – Whisper gezielt an eine Person'],
+  ];
+
+  // ── Wen eine Aktion treffen kann ──
+  const ziele = [
+    ['👤 Die auslösende Person',        'Standard'],
+    ['👥 Alle außer der auslösenden',   'für Ansagen an die Runde'],
+    ['👥 Alle im Raum',                 ''],
+    ['✅ Nur diese Personen',           'nach MemberNummer'],
+    ['🏆 Alle ab einem Rang',           'gilt aufwärts'],
+    ['🎲 Eine zufällige Person',        ''],
+    ['💳 Wer im Shop gekauft hat',      'nur nach einem Kauf'],
+  ];
+
+  // ── Was der Bot über andere WISSEN kann ──
+  const wissen = [];
+  try {
+    for (const [typ, d] of Object.entries(COND_DEFS)) wissen.push([(d.icon || '') + ' ' + d.label, d.hinweis || '']);
+  } catch (e) {}
+  try {
+    for (const [typ, d] of Object.entries(_COND_ALT)) if (!COND_DEFS[typ]) wissen.push([d[0] + ' ' + d[1], '']);
+  } catch (e) {}
+  wissen.push(['👥 Sind alle da', 'zusammen_im_raum – mehrere Personen gleichzeitig']);
+  wissen.push(['🔢 Variable einer anderen Person', 'andere_variable']);
+  wissen.push(['📖 Szenen-Stand einer anderen Person', 'andere_szene']);
+
+  // ── Ausgabe ──
+  const T = (x) => { try { console.table(x); } catch (e) { console.log(x); } };
+  console.log('%c🤖 Was geht mit anderen Spielern?', 'font-size:14px;font-weight:bold');
+  console.log(laeuft ? '%cBot „' + bot.name + '" läuft – alles unten ist aktiv.'
+                     : '%cKein Bot läuft. Die Chat-Befehle wirken erst, wenn du einen Bot startest.',
+              'color:' + (laeuft ? '#34d399' : '#fbbf24'));
+
+  if (!nur || nur === 'befehle') { console.group('💬 Chat-Befehle (aktuelle Namen)'); T(befehle); console.groupEnd(); }
+  if (!nur || nur === 'tun')     { console.group('🎬 Was der Bot mit jemandem tun kann'); T(tun.map(x => ({ Aktion: x[0], Wirkung: x[1] }))); console.groupEnd(); }
+  if (!nur || nur === 'ziele')   { console.group('🎯 Wen eine Aktion treffen kann'); T(ziele.map(x => ({ Ziel: x[0], Hinweis: x[1] }))); console.groupEnd(); }
+  if (!nur || nur === 'wissen')  { console.group('🔎 Was der Bot über jemanden prüfen kann (' + wissen.length + ')'); T(wissen.map(x => ({ Bedingung: x[0], Hinweis: x[1] }))); console.groupEnd(); }
+
+  if (!nur) {
+    console.group('🎁 Gegenstände im Katalog (' + katalog.length + ')');
+    T(katalog.map(d => ({ Name: d.name, Kategorien: (d.kategorien || []).join(', ') || '–',
+                          Unbegrenzt: d.unendlich ? 'ja' : 'nein',
+                          'Im Shop': artikel.filter(a => a.itemDefId === d.id).length })));
+    console.groupEnd();
+    console.group('🛒 Artikel im Laden (' + artikel.length + ')');
+    T(artikel.map(a => ({ Name: a.name, Preis: a.preis + ' ' + waehr,
+                          Beim_Kauf: ({ tragen: 'anziehen', inventar: 'ins Inventar', beides: 'beides' })[a.kaufZiel || 'tragen'] })));
+    console.groupEnd();
+    console.log('%cNur ein Teil? bcFeatures(\'befehle\') · \'tun\' · \'ziele\' · \'wissen\'', 'color:#8b8b9a');
+    console.log('%cKey-Wache prüfen: bcKeys()', 'color:#8b8b9a');
+  }
+
+  return { befehle, tun: tun.length, ziele: ziele.length, wissen: wissen.length,
+           katalog: katalog.length, artikel: artikel.length, botLaeuft: laeuft };
+}
+
+/* Fragt den laufenden Bot, was die Key-Wache gerade sieht. Antwort kommt
+   asynchron in die Konsole - der Bot laeuft im anderen Fenster. */
+function bcKeys() {
+  const bot = (typeof _selBot === 'function') ? _selBot() : null;
+  if (!bot || !bot.laufend) { console.log('%cKein Bot läuft – die Key-Wache antwortet nicht.', 'color:#fbbf24'); return; }
+  if (typeof _connected === 'undefined' || !_connected) { console.log('%cNicht mit dem Spiel verbunden.', 'color:#fbbf24'); return; }
+  const sid = bot.id.replace(/\W/g, '_');
+  bcSend({ type: 'EXEC', code:
+    "try{var _b=window['_BCBot_" + sid + "'];var _r=_b&&_b.keyBericht?_b.keyBericht():{fehler:'keine Wache'};"
+    + "window.__BCK_popupRef&&window.__BCK_popupRef.postMessage({app:'BCKonfigurator',type:'BOT_KEYBERICHT',bericht:_r},'*');}catch(e){console.warn(e);}" });
+  console.log('%cAnfrage gesendet – die Antwort erscheint gleich hier.', 'color:#8b8b9a');
+}
+/* Antwort der Key-Wache anzeigen. */
+function _keyBerichtZeigen(r) {
+  if (!r) return;
+  if (r.fehler) { console.log('%cKey-Wache: ' + r.fehler, 'color:#f87171'); return; }
+  console.group('🔑 Key-Wache');
+  console.log(r.aktiv ? '%cAktiv' : '%cAusgeschaltet', 'color:' + (r.aktiv ? '#34d399' : '#fbbf24'));
+  // Getrennte Aufrufe: ein Farbargument ohne %c im Text wuerde sonst
+  // sichtbar hinter der Zeile kleben.
+  if (r.ort) console.log('Keys gefunden unter: ' + r.ort);
+  else console.log('%cBC hält die Keys an einer unbekannten Stelle – die Wache kann nichts prüfen.', 'color:#fbbf24');
+  const zeilen = Object.entries(r.spieler || {}).map(([mn, x]) => ({
+    Spieler: x.name + ' #' + mn,
+    Hat: x.ist ? ['bronze', 'silver', 'gold'].filter(k => x.ist[k]).join(', ') || '–' : 'unbekannt',
+    Soll: ['bronze', 'silver', 'gold'].filter(k => x.soll[k]).join(', ') || '–',
+    Erschlichen: x.ist ? (['bronze', 'silver', 'gold'].filter(k => x.ist[k] && !x.soll[k]).join(', ') || '–') : '?'
+  }));
+  try { console.table(zeilen); } catch (e) { console.log(zeilen); }
+  console.groupEnd();
+}
+
 // ── Variablen-Tab: Bot-Variablen pro Spieler ansehen + bearbeiten ──
 let _variablenTimer = null;
 function _startVariablenTimer(){ _stopVariablenTimer(); _variablenTimer = setInterval(()=>{ if(typeof _spielerRefreshRequest==='function') _spielerRefreshRequest(); renderVariablenTab(); }, 10000); }

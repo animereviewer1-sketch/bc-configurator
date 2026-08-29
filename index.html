@@ -3944,6 +3944,13 @@ document.write('<scr'+'ipt src="bc-autobackup.js?_='+_cbv+'"><\/scr'+'ipt>');
         <label style="font-size:.62rem;color:var(--text3);display:block;margin-bottom:3px">&hellip; und zwar erst ab Rang</label>
         <select id="inv-fremd-rang" style="background:var(--bg3,#1a1a24);border:1px solid rgba(255,255,255,0.1);border-radius:6px;color:var(--text1);font-size:.7rem;padding:5px 8px;width:100%" onchange="invSet('fremdRangId', this.value)"></select>
       </div>
+      <label style="font-size:.66rem;color:var(--text2);display:flex;align-items:center;gap:6px;cursor:pointer;margin-top:10px">
+        <input type="checkbox" id="inv-keywache" onchange="invSet('keyWacheAn', this.checked)"> Key-Wache: unberechtigte Map-Keys sofort entziehen
+      </label>
+      <div style="font-size:.59rem;color:var(--text3);margin-top:2px;line-height:1.5">
+        Map-Keys lassen sich im Spiel selbst setzen. Mit der Wache pr&uuml;ft der Bot alle vier Sekunden,
+        wer welchen Key hat, und nimmt jeden weg, der oben nicht eingetragen ist. Der Vorgang steht danach im <b>Log</b>.
+      </div>
     </div>
 
     <div style="font-size:.75rem;font-weight:700;margin-bottom:8px">&#128230; Bestand</div>

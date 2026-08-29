@@ -22,6 +22,7 @@ const _INV_STD = {
   listCmd: '!inventar',
   fremdErlaubt: true,     // darf man anderen etwas anziehen?
   fremdRangId: '',        // wenn gesetzt: erst ab diesem Rang
+  keyWacheAn: true,      // erschlichene Map-Keys sofort wieder entziehen
   wearMsg: '', errorMsg: ''
 };
 let _inventar = { settings: Object.assign({}, _INV_STD), spieler: {}, ausleihe: [] };
@@ -490,6 +491,7 @@ function renderInventarTab() {
   if (document.activeElement !== g('inv-wear-cmd')) g('inv-wear-cmd').value = s.wearCmd || '!wear';
   if (document.activeElement !== g('inv-list-cmd')) g('inv-list-cmd').value = s.listCmd || '!inventar';
   g('inv-fremd').checked = s.fremdErlaubt !== false;
+  { const kw = g('inv-keywache'); if (kw) kw.checked = s.keyWacheAn !== false; }
   const rang = g('inv-fremd-rang');
   if (rang) {
     const defs = (typeof _rankData !== 'undefined' && _rankData && _rankData.defs) ? _rankData.defs.slice() : [];

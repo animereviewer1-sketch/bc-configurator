@@ -348,6 +348,7 @@ function renderLogTab() {
     // Ohne diese beiden stand im Log der rohe Schlüssel, z.B. "nicht_erfuellt"
     skip_cooldown:   '<span class="log-badge skip">⏳ Noch Pause</span>',
     nicht_erfuellt:  '<span class="log-badge skip" style="background:#1a1408;color:#d8a657;border:1px solid #4a3a1a">🔎 Bedingung nicht erfüllt</span>',
+    key_entzogen:    '<span class="log-badge skip" style="background:#2a1010;color:#f87171;border:1px solid #5a2020">🚨 Key entzogen</span>',
   };
 
   const html = entries.map((e, i) => {
