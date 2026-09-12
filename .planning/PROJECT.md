@@ -19,7 +19,8 @@ Gescannte Daten (Outfits, Versionen, Screenshots, Bots) gehen nie verloren — n
 - ✓ Bot-Editor: Trigger, Aktionen, Events, Bedingungen (AND/OR); Code-Generator (`bot-engine.js` 1.5.0) injiziert Base64-konfigurierten Spielcode über EXEC — existing
 - ✓ Feature-Module Shop, Inventar/Keywarden, Rang, Geld — existing
 - ✓ Automatische inkrementelle Backups ins Dateisystem (`bc-autobackup.js`) — existing
-- ✓ Stroke-Icon-Bibliothek, Tab-Gruppen (Items / Bots), Dark-Theme mit Kontrast-Überarbeitung (lokal in Arbeit) — existing
+- ✓ Stroke-Icon-Bibliothek, Tab-Gruppen (Items / Bots), Dark-Theme mit Kontrast-Überarbeitung — existing
+- ✓ Vitest-Testfundament: `npm test` (devDependencies only, kein Build), vm-Sandbox-Loader für Global-Scope-Dateien, fake-indexeddb-Canary, Tests für IDB-Round-Trip, `_normLogik`/`_migriereLogik`, Outfit-Parser, Code-Generator-Escaping — Phase 1
 
 ### Active
 
@@ -28,7 +29,8 @@ Gescannte Daten (Outfits, Versionen, Screenshots, Bots) gehen nie verloren — n
 - [ ] `idbSet()` erkennt `QuotaExceededError` und zeigt es dem Nutzer; kein stilles Fehlschlagen mehr
 - [ ] Löschen von Bildern und einzelnen Outfits/Versionen ist nur manuell und nur nach Bestätigungsdialog möglich — niemals als Nebeneffekt
 - [ ] `postMessage(..., "*")` im Tool und im injizierten Code durch origin-spezifische Targets ersetzt; EXEC-Aufrufe werden geloggt
-- [ ] Vitest-Testsuite für browserfreie Logik (IDB-Helfer, Bot-Validatoren in `bot-data.js`, Outfit-Import-Parser)
+- [ ] IDB-Quota-Fehlerpfad und Bridge-Protokoll unter Test (TEST-04, TEST-07)
+- [ ] Zwei latente Parser-Lücken in `outfit-import.js` (LZString-URI-Alphabet in `_oiDetectType`; Decoder-Reihenfolge in `_oiBuildExecCode`) — in Phase 1 als `it.fails` dokumentiert
 
 **Entflechtung**
 - [ ] Persistenz-Schicht (IDB/localStorage) aus `items.js` in eigenes Modul extrahiert
@@ -53,9 +55,9 @@ Gescannte Daten (Outfits, Versionen, Screenshots, Bots) gehen nie verloren — n
 - Codebase-Map liegt unter `.planning/codebase/` (STACK, ARCHITECTURE, STRUCTURE, CONVENTIONS, TESTING, INTEGRATIONS, CONCERNS).
 - Vanilla JS (ES6+), kein Framework, kein Build; einzige Abhängigkeit lz-string 1.5.0 per CDN. Hosting: GitHub Pages, Origin `https://animereviewer1-sketch.github.io`.
 - Größenverhältnisse: `items.js` 11.684 Zeilen (Core-Controller + Persistenz + Bridge + Tab-Rendering), `bot-ui.js` 3.548, `bot-engine.js` 3.356, `loader.js` 1.636.
-- Keine automatisierten Tests; bisher nur `node --check`.
+- Seit Phase 1: Vitest-Suite (`npm test`, 44 Tests + 2 Expected-Fails); Produktion weiterhin ohne Build-Schritt.
 - Bekannte Bugs und Sicherheitsfragen sind in `.planning/codebase/CONCERNS.md` mit Zeilenangaben dokumentiert.
-- Lokal liegen ~900 uncommittete Änderungen (Kontrast-/Theme-Durchgang in `index.html`, kleinere Anpassungen in Modulen). Sie sind noch in Arbeit und werden nicht durch das Planning committet; der Milestone baut auf ihnen auf.
+- Der frühere lokale WIP (Kontrast-/Theme-Durchgang) wurde vom Autor als `82a9daa "Big Update"` committet; Arbeitsbaum ist seitdem sauber.
 - Der Nutzer kann bei Bedarf Befehle in der Ingame-Browserkonsole ausführen und die Ausgabe zurückliefern — Research- und Scan-Phasen dürfen darauf bauen (konkrete Befehle vorgeben statt raten).
 - Mods, die das Spiel erweitern (LSCG, BCX, FBC/WCE, MBS …), hängen eigene Globals und Hooks ein und müssen beim Gamecode-Scan mit erfasst werden.
 
@@ -75,7 +77,11 @@ Gescannte Daten (Outfits, Versionen, Screenshots, Bots) gehen nie verloren — n
 | Löschen bleibt möglich, aber nur manuell mit Bestätigung | Nutzer will Bilder und einzelne Outfits entfernen können; die „nie löschen“-Regel richtet sich gegen automatische Verluste | — Pending |
 | Gamecode-Inventar zur Laufzeit über den Loader exportieren | Nutzt die vorhandene Bridge; kein Gamecode im Repo nötig; erfasst Mods automatisch | — Pending |
 | Vitest nur für browserfreie Logik, kein E2E in diesem Milestone | Schnellster Weg zu einem Sicherheitsnetz vor dem Refactoring | — Pending |
-| Kein Bundler | Static-Hosting-Deployment bleibt trivial; Modulschnitt über normale Script-Includes | — Pending |
+| Kein Bundler | Static-Hosting-Deployment bleibt trivial; Modulschnitt über normale Script-Includes | ✓ Good |
+| `safeName` in `_buildBotCode` escaped zusätzlich `'`, ``, `
+` (nicht nur `\`/`` ` ``) | `O'Brien` und mehrzeilige Namen erzeugten SyntaxError; gleiche Konvention wie `escJsAttr` | ✓ Good |
+| Executor laufen ohne Git-Worktrees (`workflow.use_worktrees=false`) | Arbeitsbaum trug uncommitteten WIP, gegen den Recherche und Pläne erstellt wurden | ✓ Good |
+| `tests/package.json` mit `type: module`; Root bleibt CommonJS | ESM-Loader-Helper importierbar, `node --check` auf Produktionsdateien bleibt möglich | ✓ Good |
 
 ## Evolution
 
@@ -95,4 +101,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-09-12 after initialization*
+*Last updated: 2026-09-13 after Phase 1*
