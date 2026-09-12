@@ -27,7 +27,7 @@ Requirements for this milestone. Each maps to roadmap phases.
 - [x] **TEST-03**: Ein Canary-Test schlägt fehl, wenn `fake-indexeddb` nicht aktiv ist (verhindert stilles Zurückfallen auf den localStorage-Pfad)
 - [ ] **TEST-04**: IDB-Helfer (`idbGet`/`idbSet`) sind getestet inkl. Quota-Fehlerpfad
 - [x] **TEST-05**: Bot-Validatoren aus `bot-data.js` und der Outfit-Import-Parser sind mit gültigen und ungültigen Eingaben getestet
-- [ ] **TEST-06**: Der Bot-Code-Generator erzeugt für Nutzerdaten mit Backticks, `${` und Sonderzeichen syntaktisch gültigen Code (Escaping-Test)
+- [x] **TEST-06**: Der Bot-Code-Generator erzeugt für Nutzerdaten mit Backticks, `${` und Sonderzeichen syntaktisch gültigen Code (Escaping-Test)
 - [ ] **TEST-07**: Das Bridge-Protokoll (Nachrichtentypen, Origin-Prüfung, Handler-Dispatch) ist mit simulierten Nachrichten getestet
 
 ### Entflechtung (SPLIT)
@@ -113,7 +113,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | TEST-03 | Phase 1 | Complete |
 | TEST-04 | Phase 2 | Pending |
 | TEST-05 | Phase 1 | Complete |
-| TEST-06 | Phase 1 | Pending |
+| TEST-06 | Phase 1 | Complete |
 | TEST-07 | Phase 3 | Pending |
 | SPLIT-01 | Phase 4 | Pending |
 | SPLIT-02 | Phase 4 | Pending |
