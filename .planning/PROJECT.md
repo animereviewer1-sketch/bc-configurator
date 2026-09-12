@@ -56,6 +56,7 @@ Gescannte Daten (Outfits, Versionen, Screenshots, Bots) gehen nie verloren — n
 - Keine automatisierten Tests; bisher nur `node --check`.
 - Bekannte Bugs und Sicherheitsfragen sind in `.planning/codebase/CONCERNS.md` mit Zeilenangaben dokumentiert.
 - Lokal liegen ~900 uncommittete Änderungen (Kontrast-/Theme-Durchgang in `index.html`, kleinere Anpassungen in Modulen). Sie sind noch in Arbeit und werden nicht durch das Planning committet; der Milestone baut auf ihnen auf.
+- Der Nutzer kann bei Bedarf Befehle in der Ingame-Browserkonsole ausführen und die Ausgabe zurückliefern — Research- und Scan-Phasen dürfen darauf bauen (konkrete Befehle vorgeben statt raten).
 - Mods, die das Spiel erweitern (LSCG, BCX, FBC/WCE, MBS …), hängen eigene Globals und Hooks ein und müssen beim Gamecode-Scan mit erfasst werden.
 
 ## Constraints
