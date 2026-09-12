@@ -31,7 +31,12 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. Entfernt man `fake-indexeddb` aus den `setupFiles`, schlägt genau ein Canary-Test mit klarer Meldung fehl — ein stilles Zurückfallen auf den localStorage-Pfad ist ausgeschlossen
   4. Bot-Validatoren aus `bot-data.js` und der Outfit-Import-Parser sind mit gültigen und ungültigen Eingaben getestet; ungültige Eingaben werden nachweislich abgelehnt
   5. Der Bot-Code-Generator erzeugt für Nutzerdaten mit Backticks, `${` und Sonderzeichen Code, den `new Function()` ohne SyntaxError akzeptiert
-**Plans**: TBD
+**Plans:** 3 plans
+
+Plans:
+- [ ] 01-01-PLAN.md — Vitest-Toolchain (package.json, .gitignore, vitest.config.js, Meta-Config) + IDB-Canary; Legitimitäts-Checkpoint vor `npm install` (TEST-01, TEST-03) — Wave 1
+- [ ] 01-02-PLAN.md — vm-Sandbox-Loader `tests/helpers/loadScript.js`, Ladetest + idbGet/idbSet-Round-Trip, Bot-Validatoren-Tests (`_normLogik`/`_migriereLogik`), Outfit-Import-Parser-Tests mit echtem lz-string (TEST-02, TEST-05) — Wave 2
+- [ ] 01-03-PLAN.md — Escaping-Test für `_buildBotCode` (RED) + minimaler Fix in bot-engine.js Zeile 49 (GREEN), chirurgischer Commit (TEST-06) — Wave 2, parallel zu 01-02
 
 ### Phase 2: Speicher-Sicherheit
 **Goal**: Jede Speicherung ist entweder erfolgreich oder sichtbar fehlgeschlagen, und gespeicherte Scan-Daten verschwinden nie als Nebeneffekt — der Kernwert ist im Code verankert und getestet.
