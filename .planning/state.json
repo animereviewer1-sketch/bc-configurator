@@ -1,0 +1,43 @@
+{
+  "contract": "1.0.0",
+  "flavor": "core",
+  "milestone": null,
+  "phases": [
+    {
+      "number": "1",
+      "name": "Testfundament",
+      "status": "pending"
+    },
+    {
+      "number": "2",
+      "name": "Speicher-Sicherheit",
+      "status": "pending"
+    },
+    {
+      "number": "3",
+      "name": "Bridge-Härtung",
+      "status": "pending"
+    },
+    {
+      "number": "4",
+      "name": "Entflechtung",
+      "status": "pending"
+    },
+    {
+      "number": "5",
+      "name": "Gamecode-Inventar",
+      "status": "pending"
+    },
+    {
+      "number": "6",
+      "name": "Scan-Tab & Analyse",
+      "status": "pending"
+    }
+  ],
+  "next": {
+    "command": "/gsd:progress --next",
+    "label": "Advance to the next step",
+    "reason": "Phase 1 of 6 · 0% · executing"
+  },
+  "updated_at": "2026-09-12T21:49:36.964Z"
+}
