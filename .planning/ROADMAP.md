@@ -13,7 +13,7 @@ Das Tool funktioniert, ist aber ein 11.700-Zeilen-Monolith ohne Tests, mit einer
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Testfundament** - Vitest-Harness mit Node-`vm`-Sandbox und fake-indexeddb-Canary läuft grün gegen den unveränderten Produktionscode; browserfreie Logik ist getestet
+- [x] **Phase 1: Testfundament** - Vitest-Harness mit Node-`vm`-Sandbox und fake-indexeddb-Canary läuft grün gegen den unveränderten Produktionscode; browserfreie Logik ist getestet (completed 2026-09-13)
 - [ ] **Phase 2: Speicher-Sicherheit** - Screenshot-Sync-Bug behoben, Quota-Fehler sichtbar, Speicherstand ablesbar, Löschen nur manuell mit Bestätigung und konsistent über alle Stores
 - [ ] **Phase 3: Bridge-Härtung** - Origin-gepinnte postMessage auf beiden Seiten und im injizierten Code, gemeinsame Origin-Konstante, Verbindungsverlust sichtbar, EXEC-Log
 - [ ] **Phase 4: Entflechtung** - `persistence.js` und `bridge.js` extrahiert, `items.js` nur noch Koordinator, Screenshots einzeln im eigenen Store mit additiver, verifizierter Migration
@@ -35,7 +35,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   4. Bot-Validatoren aus `bot-data.js` und der Outfit-Import-Parser sind mit gültigen und ungültigen Eingaben getestet; ungültige Eingaben werden nachweislich abgelehnt
   5. Der Bot-Code-Generator erzeugt für Nutzerdaten mit Backticks, `${` und Sonderzeichen Code, den `new Function()` ohne SyntaxError akzeptiert
 
-**Plans:** 3 plans
+**Plans:** 3/3 plans complete
 
 Plans:
 
@@ -127,7 +127,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Testfundament | 0/TBD | Not started | - |
+| 1. Testfundament | 3/3 | Complete    | 2026-09-13 |
 | 2. Speicher-Sicherheit | 0/TBD | Not started | - |
 | 3. Bridge-Härtung | 0/TBD | Not started | - |
 | 4. Entflechtung | 0/TBD | Not started | - |
