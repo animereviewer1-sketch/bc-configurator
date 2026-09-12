@@ -249,7 +249,7 @@ function renderBotGroupList() {
             <span class="bg-bot-name">${escHtml(b.name)}</span>
             <button class="bot-toggle ${b.laufend ? 'on' : 'off'}" onclick="event.stopPropagation();botToggleLaufend('${b.id}')" title="${b.laufend ? 'Läuft' : 'Gestoppt'}"></button>
             <button class="bg-rm-btn" onclick="event.stopPropagation();groupRemoveBot('${g.id}','${b.id}')" title="Aus Gruppe entfernen">✕</button>
-          </div>`).join('') : `<div style="padding:6px 14px;font-size:.69rem;color:var(--text3);font-style:italic">Keine Bots in dieser Gruppe</div>`}
+          </div>`).join('') : `<div style="padding:6px 14px;font-size:.75rem;color:var(--text3);font-style:italic">Keine Bots in dieser Gruppe</div>`}
         ${addOptions ? `
         <div class="bg-add-row">
           <select id="bg-add-sel-${g.id}">
@@ -359,7 +359,7 @@ function renderLogTab() {
     const isJoinLeave = ['join','join_rejoin','leave'].includes(e.status);
     const cls = e.status === 'ok' ? 'log-ok' : e.status === 'ungueltig' ? 'log-ungueltig' : isJoinLeave ? '' : 'log-skip';
     const realIdx = window._BCBotLog.indexOf(e);
-    const trigPart = isJoinLeave ? '' : `<span style="color:var(--text3);font-size:.65rem">→</span><span class="log-trig">🎯 ${escHtml(e.trigName||'')}</span><span style="color:var(--text3);font-size:.65rem">von</span>`;
+    const trigPart = isJoinLeave ? '' : `<span style="color:var(--text3);font-size:.6875rem">→</span><span class="log-trig">🎯 ${escHtml(e.trigName||'')}</span><span style="color:var(--text3);font-size:.6875rem">von</span>`;
     return `<div class="log-entry ${cls}" id="loge-${realIdx}">
       <span class="log-ts">${ts}</span>
       ${badge}
@@ -367,12 +367,12 @@ function renderLogTab() {
       ${trigPart}
       <span class="log-player">👤 ${escHtml(e.player||'')}</span>
       ${pos ? `<span class="log-pos">📍 ${pos}</span>` : ''}
-      ${e.msg ? `<span style="font-size:.62rem;color:var(--text3);font-style:italic">${escHtml(e.msg)}</span>` : ''}
-      <button onclick="logDeleteEntry(${realIdx})" style="margin-left:auto;background:none;border:none;color:var(--text3);cursor:pointer;font-size:.7rem;padding:1px 5px;opacity:.5" onmouseover="this.style.opacity=1;this.style.color='var(--red)'" onmouseout="this.style.opacity=.5;this.style.color='var(--text3)'">✕</button>
+      ${e.msg ? `<span style="font-size:.6875rem;color:var(--text3);font-style:italic">${escHtml(e.msg)}</span>` : ''}
+      <button onclick="logDeleteEntry(${realIdx})" style="margin-left:auto;background:none;border:none;color:var(--text3);cursor:pointer;font-size:.75rem;padding:1px 5px;opacity:.5" onmouseover="this.style.opacity=1;this.style.color='var(--red)'" onmouseout="this.style.opacity=.5;this.style.color='var(--text3)'">✕</button>
     </div>`;
   }).join('');
 
-  document.getElementById('log-entries').innerHTML = html || `<div style="color:var(--text3);font-size:.75rem;text-align:center;margin-top:40px">Noch keine Einträge</div>`;
+  document.getElementById('log-entries').innerHTML = html || `<div style="color:var(--text3);font-size:.8125rem;text-align:center;margin-top:40px">Noch keine Einträge</div>`;
 }
 
 function logDeleteEntry(idx) {
@@ -416,17 +416,17 @@ function renderEventsTab() {
   const container = document.getElementById('events-container');
   if (!container) return;
   if (!bot) {
-    container.innerHTML = `<div style="color:var(--text3);font-size:.75rem;text-align:center;margin-top:40px">Wähle zuerst einen Bot im 🤖 Bot-Tab.</div>`;
+    container.innerHTML = `<div style="color:var(--text3);font-size:.8125rem;text-align:center;margin-top:40px">Wähle zuerst einen Bot im 🤖 Bot-Tab.</div>`;
     return;
   }
   const events = bot.events ?? [];
   const html = `
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
-      <span style="font-weight:600;font-size:.85rem">⚡ Events — Bot: <span style="color:var(--pl)">${escHtml(bot.name)}</span></span>
+      <span style="font-weight:600;font-size:.875rem">⚡ Events — Bot: <span style="color:var(--pl)">${escHtml(bot.name)}</span></span>
       <button class="be-addevent" onclick="eventNew()" style="width:auto;padding:4px 14px;display:inline-block">+ Event hinzufügen</button>
     </div>
     ${events.map((e,i)=>renderEventCard(bot,e,i)).join('')}
-    ${events.length ? '' : '<div style="color:var(--text3);font-size:.73rem;text-align:center;margin-top:30px">Noch keine Events.<br>Events feuern Aktionen manuell oder automatisch auf Spieler im Raum.</div>'}
+    ${events.length ? '' : '<div style="color:var(--text3);font-size:.8125rem;text-align:center;margin-top:30px">Noch keine Events.<br>Events feuern Aktionen manuell oder automatisch auf Spieler im Raum.</div>'}
   `;
   container.innerHTML = html;
 }
@@ -451,7 +451,7 @@ function renderEventCard(bot, e, i) {
   const evVon = e.von ?? 'alle';
   const badge = _evBadge(e);
 
-  const vonHtml = `<label style="font-size:.65rem;color:var(--text3)">Von:
+  const vonHtml = `<label style="font-size:.6875rem;color:var(--text3)">Von:
     <select class="cf" style="margin-left:4px" onchange="evField('${e.id}','von',this.value);evRerender('${e.id}')">
       <option value="alle"   ${evVon==='alle'?'selected':''}>👥 Alle</option>
       <option value="bot"    ${evVon==='bot'?'selected':''}>🤖 Bot (ich)</option>
@@ -469,26 +469,26 @@ function renderEventCard(bot, e, i) {
       <span class="ev-type-badge ${badge.cls}">${badge.lbl}</span>
       <span class="ev-label">${escHtml(e.name||'Event')}</span>
       <span class="ev-meta">${condN} Bed. · ${actN} Akt.</span>
-      <button onclick="event.stopPropagation();evFireImmediate('${e.id}')" style="font-size:.62rem;padding:2px 9px;background:var(--pd);border:none;color:var(--pl);border-radius:4px;cursor:pointer" title="Sofort auslösen (ignoriert Timer/Wdh)">▶️ Feuern</button>
+      <button onclick="event.stopPropagation();evFireImmediate('${e.id}')" style="font-size:.6875rem;padding:2px 9px;background:var(--pd);border:none;color:var(--pl);border-radius:4px;cursor:pointer" title="Sofort auslösen (ignoriert Timer/Wdh)">▶️ Feuern</button>
       <button onclick="event.stopPropagation();evDelete('${e.id}')" class="rm-btn">✕</button>
     </div>
     <div class="event-body ${bodyOpen?'open':''}" id="evb-${e.id}">
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
-        <label style="font-size:.65rem;color:var(--text3)">Name:
+        <label style="font-size:.6875rem;color:var(--text3)">Name:
           <input class="cf cf-w160" style="margin-left:4px" value="${escHtml(e.name||'')}" oninput="evField('${e.id}','name',this.value)">
         </label>
         ${vonHtml}
-        <label style="font-size:.65rem;color:var(--text3)">Ziel:
+        <label style="font-size:.6875rem;color:var(--text3)">Ziel:
           <select class="cf" style="margin-left:4px" onchange="evField('${e.id}','ziel',this.value);evRerender('${e.id}')">
             <option value="ausloeser" ${ziel==='ausloeser'?'selected':''}>👤 Player (Auslöser/Random)</option>
             <option value="alle"      ${ziel==='alle'?'selected':''}>👥 Alle im Raum</option>
             <option value="liste"     ${ziel==='liste'?'selected':''}>📋 Liste</option>
           </select>
         </label>
-        ${ziel==='liste'?`<input class="cf" style="width:180px;font-size:.65rem" placeholder="MemberNr: 1234,5678"
+        ${ziel==='liste'?`<input class="cf" style="width:180px;font-size:.6875rem" placeholder="MemberNr: 1234,5678"
           value="${escHtml((e.zielListe||[]).join(','))}"
           oninput="evField('${e.id}','zielListe',this.value.split(',').map(x=>+x.trim()).filter(Boolean))">`:``}
-        <label style="font-size:.65rem;color:var(--text3)">🔁 Wdh.:
+        <label style="font-size:.6875rem;color:var(--text3)">🔁 Wdh.:
           <select class="cf" style="margin-left:4px" onchange="evField('${e.id}','wiederholung',this.value);evRerender('${e.id}')">
             <option value="immer"    ${wdh==='immer'?'selected':''}>∞ Unbegrenzt</option>
             <option value="einmalig" ${wdh==='einmalig'?'selected':''}>1× Einmalig</option>
@@ -545,10 +545,10 @@ function renderEvCond(bot, eid, c, ci) {
       <div class="cond-when-lbl">⏱ Timer</div>
       <div class="cond-card" style="background:#0a2a0a;border-color:#1a5a1a">
         <div class="card-fields">
-          <span style="font-size:.65rem;color:var(--text3)">Einmalig nach</span>
+          <span style="font-size:.6875rem;color:var(--text3)">Einmalig nach</span>
           <input class="cf cf-w80" type="number" min="0.1" step="0.1" value="${c.sek??10}"
             oninput="evCondField('${eid}',${ci},'sek',+this.value)">
-          <span style="font-size:.65rem;color:var(--text3)">Sek</span>
+          <span style="font-size:.6875rem;color:var(--text3)">Sek</span>
         </div>
         <button class="rm-btn" onclick="evCondRemove('${eid}',${ci})">✕</button>
       </div></div>`;
@@ -558,13 +558,13 @@ function renderEvCond(bot, eid, c, ci) {
       <div class="cond-when-lbl">🔁 Intervall</div>
       <div class="cond-card" style="background:#0a1a2a;border-color:#1a3a5a">
         <div class="card-fields">
-          <span style="font-size:.65rem;color:var(--text3)">Alle</span>
+          <span style="font-size:.6875rem;color:var(--text3)">Alle</span>
           <input class="cf cf-w70" type="number" min="1" value="${c.sek_min??20}"
             oninput="evCondField('${eid}',${ci},'sek_min',+this.value)">
-          <span style="font-size:.62rem;color:var(--text3)">–</span>
+          <span style="font-size:.6875rem;color:var(--text3)">–</span>
           <input class="cf cf-w70" type="number" min="1" value="${c.sek_max??60}"
             oninput="evCondField('${eid}',${ci},'sek_max',+this.value)">
-          <span style="font-size:.65rem;color:var(--text3)">Sek</span>
+          <span style="font-size:.6875rem;color:var(--text3)">Sek</span>
         </div>
         <button class="rm-btn" onclick="evCondRemove('${eid}',${ci})">✕</button>
       </div></div>`;
@@ -601,23 +601,23 @@ function renderEvCond(bot, eid, c, ci) {
       Y<input class="cf" style="width:46px" type="number" value="${c.y??0}" oninput="evCondField('${eid}',${ci},'y',+this.value)">
       ±<input class="cf" style="width:38px" type="number" value="${c.puffer??1}" oninput="evCondField('${eid}',${ci},'puffer',+this.value)">`;
   } else if (c.typ === 'zone_rect') {
-    inner = `<span style="font-size:.62rem;color:var(--text3)">Von</span>
+    inner = `<span style="font-size:.6875rem;color:var(--text3)">Von</span>
       X<input class="cf" style="width:44px" type="number" value="${c.x1??0}" oninput="evCondField('${eid}',${ci},'x1',+this.value)">
       Y<input class="cf" style="width:44px" type="number" value="${c.y1??0}" oninput="evCondField('${eid}',${ci},'y1',+this.value)">
-      <span style="font-size:.62rem;color:var(--text3)">Bis</span>
+      <span style="font-size:.6875rem;color:var(--text3)">Bis</span>
       X<input class="cf" style="width:44px" type="number" value="${c.x2??2}" oninput="evCondField('${eid}',${ci},'x2',+this.value)">
       Y<input class="cf" style="width:44px" type="number" value="${c.y2??2}" oninput="evCondField('${eid}',${ci},'y2',+this.value)">`;
   } else if (c.typ === 'item_traegt' || c.typ === 'item_traegt_nicht') {
-    const negLabel = c.typ === 'item_traegt_nicht' ? '<span style="color:#e55;font-size:.65rem;font-weight:600;margin-right:4px">🚫 NICHT</span>' : '';
-    inner = `${negLabel}<span style="font-size:.68rem;color:var(--text2)">${c.gruppe?escHtml(c.gruppe)+' / ':''}<b>${escHtml(c.item||'–')}</b></span>
-      <button onclick="ipickerOpen('item',v=>{evCondField('${eid}',${ci},'item',v.asset||v.name);evCondField('${eid}',${ci},'gruppe',v.group);evCondRerender('${eid}');})" style="font-size:.62rem;padding:2px 7px;background:var(--pd);border:none;color:var(--pl);border-radius:4px;cursor:pointer">📦 Wählen</button>`;
+    const negLabel = c.typ === 'item_traegt_nicht' ? '<span style="color:#e55;font-size:.6875rem;font-weight:600;margin-right:4px">🚫 NICHT</span>' : '';
+    inner = `${negLabel}<span style="font-size:.75rem;color:var(--text2)">${c.gruppe?escHtml(c.gruppe)+' / ':''}<b>${escHtml(c.item||'–')}</b></span>
+      <button onclick="ipickerOpen('item',v=>{evCondField('${eid}',${ci},'item',v.asset||v.name);evCondField('${eid}',${ci},'gruppe',v.group);evCondRerender('${eid}');})" style="font-size:.6875rem;padding:2px 7px;background:var(--pd);border:none;color:var(--pl);border-radius:4px;cursor:pointer">📦 Wählen</button>`;
   } else if (c.typ === 'trigger_war') {
     const trigs = bot?.triggers ?? [];
     const opts = trigs.map(t=>`<option value="${t.id}" ${c.trigId===t.id?'selected':''}>${escHtml(t.name||t.id)}</option>`).join('');
     inner = `<select class="cf cf-w160" onchange="evCondField('${eid}',${ci},'trigId',this.value)">
         <option value="">– Trigger wählen –</option>${opts}
       </select>
-      <span style="font-size:.62rem;color:var(--text3)">muss ausgelöst worden sein</span>`;
+      <span style="font-size:.6875rem;color:var(--text3)">muss ausgelöst worden sein</span>`;
   } else if (c.typ === 'rang') {
     const rop = c.rang_op ?? '=';
     const ranks = _rankSorted();
@@ -646,7 +646,7 @@ function renderEvCond(bot, eid, c, ci) {
     <div class="cond-card cond-op">
       <div class="card-fields">
         <span class="cond-num">${ci+1}</span>
-        <span style="font-size:.7rem;font-weight:600;color:var(--purple)">${icons[c.typ]??'❓'}</span>
+        <span style="font-size:.75rem;font-weight:600;color:var(--purple)">${icons[c.typ]??'❓'}</span>
         ${inner}
       </div>
       <button class="rm-btn" onclick="evCondRemove('${eid}',${ci})">✕</button>
@@ -667,13 +667,13 @@ function renderEvAct(eid, a, ai) {
   if (['chat','emote','whisper'].includes(a.typ)) {
     extra = `<textarea class="cf" style="width:100%;resize:vertical;min-height:38px;margin-top:4px" rows="2"
         oninput="evActField('${eid}',${ai},'text',this.value)">${escHtml(a.text||'')}</textarea>
-      <div style="font-size:.59rem;color:var(--text3);margin-top:2px">Variablen: {name} {wort} {x} {y}</div>`;
+      <div style="font-size:.6875rem;color:var(--text3);margin-top:2px">Variablen: {name} {wort} {x} {y}</div>`;
   } else if (a.typ === 'item') {
-    const cfgInfo = a.itemConfig ? ` <span style="font-size:.58rem;background:var(--gd);color:var(--green);padding:1px 4px;border-radius:3px">✓ Konfig</span>` : '';
+    const cfgInfo = a.itemConfig ? ` <span style="font-size:.6875rem;background:var(--gd);color:var(--green);padding:1px 4px;border-radius:3px">✓ Konfig</span>` : '';
     const label = a.itemConfig ? `📦 ${a.itemConfig.group}/${a.itemConfig.asset}` : a.profilName ? `👗 ${a.profilName}` : a.curseName ? `🔮 ${a.curseName}` : a.item ? `📦 ${a.gruppe||'?'}/${a.item}` : '– nichts gewählt –';
     extra = `<div style="display:flex;gap:6px;align-items:center;margin-top:4px;flex-wrap:wrap">
-        <span style="font-size:.7rem;color:var(--text2);flex:1">${escHtml(label)}${cfgInfo}</span>
-        <button onclick="ipickerOpenForEvAct('${eid}',${ai})" style="font-size:.63rem;padding:3px 9px;background:var(--pd);border:none;color:var(--pl);border-radius:5px;cursor:pointer">📂 Wählen</button>
+        <span style="font-size:.75rem;color:var(--text2);flex:1">${escHtml(label)}${cfgInfo}</span>
+        <button onclick="ipickerOpenForEvAct('${eid}',${ai})" style="font-size:.6875rem;padding:3px 9px;background:var(--pd);border:none;color:var(--pl);border-radius:5px;cursor:pointer">📂 Wählen</button>
       </div>`;
   } else if (a.typ === 'item_entf') {
     extra = `<input class="cf" style="width:100%;margin-top:4px" value="${escHtml(a.gruppe||'')}"
@@ -699,7 +699,7 @@ function renderEvAct(eid, a, ai) {
         <option value="reset" ${mop==='reset'?'selected':''}>🔄 Zurücksetzen</option>
       </select>
       ${mop!=='reset'?`<input class="cf cf-w80" type="number" value="${a.money_val??1}" oninput="evActField('${eid}',${ai},'money_val',+this.value)">
-        <span style="font-size:.68rem;color:var(--text3)">${escHtml(moneyName)}</span>`:''}
+        <span style="font-size:.75rem;color:var(--text3)">${escHtml(moneyName)}</span>`:''}
     </div>`;
   } else if (a.typ === 'rang') {
     const rop = a.rang_op ?? 'setzen';
@@ -726,14 +726,14 @@ function renderEvAct(eid, a, ai) {
         <input class="cf cf-w80" type="number" value="${a.delay??0}" oninput="evActField('${eid}',${ai},'delay',+this.value)"> ms
       </div>
       <div style="display:flex;gap:6px;align-items:center;margin-top:5px;padding:5px 8px;background:rgba(96,165,250,0.05);border:1px solid rgba(96,165,250,0.12);border-radius:6px;flex-wrap:wrap">
-        <span style="font-size:.62rem;font-weight:700;color:#60a5fa;white-space:nowrap">🎯 Ziel</span>
-        <select class="cf" style="width:150px;font-size:.68rem" onchange="evActField('${eid}',${ai},'aktZiel',this.value);document.getElementById('evacts-'+\`${eid}\`).innerHTML=((_selBot()?.events?.find(x=>x.id==='${eid}')?.aktionen)||[]).map((a2,ai2)=>renderEvAct('${eid}',a2,ai2)).join('')">
+        <span style="font-size:.6875rem;font-weight:700;color:#60a5fa;white-space:nowrap">🎯 Ziel</span>
+        <select class="cf" style="width:150px;font-size:.75rem" onchange="evActField('${eid}',${ai},'aktZiel',this.value);document.getElementById('evacts-'+\`${eid}\`).innerHTML=((_selBot()?.events?.find(x=>x.id==='${eid}')?.aktionen)||[]).map((a2,ai2)=>renderEvAct('${eid}',a2,ai2)).join('')">
           <option value="ausloeser" ${(!a.aktZiel||a.aktZiel==='ausloeser')?'selected':''}>👤 Auslöser</option>
           <option value="shop_kaeufer" ${a.aktZiel==='shop_kaeufer'?'selected':''}>💳 Käufer (bei Shop)</option>
           <option value="alle"      ${a.aktZiel==='alle'?'selected':''}>👥 Alle im Raum</option>
           <option value="whitelist" ${a.aktZiel==='whitelist'?'selected':''}>📋 Whitelist</option>
         </select>
-        ${a.aktZiel==='whitelist'?`<input class="cf" style="flex:1;min-width:150px;font-size:.68rem" value="${escHtml((a.aktZielNummern||[]).join(', '))}"
+        ${a.aktZiel==='whitelist'?`<input class="cf" style="flex:1;min-width:150px;font-size:.75rem" value="${escHtml((a.aktZielNummern||[]).join(', '))}"
           oninput="evActField('${eid}',${ai},'aktZielNummern',this.value.split(',').map(x=>+x.trim()).filter(x=>x>0))"
           placeholder="MemberNummer, z.B. 12345, 67890">`:''}
       </div>

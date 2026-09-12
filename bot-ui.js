@@ -20,7 +20,7 @@ function renderBotList() {
   const ungrouped = _bots.filter(b => !groupedIds.has(b.id));
 
   if (!_bots.length) {
-    el.innerHTML = '<div style="padding:20px;color:var(--text3);font-size:.71rem;text-align:center">Noch keine Bots.<br>Klicke + Neu.</div>';
+    el.innerHTML = '<div style="padding:20px;color:var(--text3);font-size:.75rem;text-align:center">Noch keine Bots.<br>Klicke + Neu.</div>';
     return;
   }
 
@@ -32,7 +32,7 @@ function renderBotList() {
     </div>`;
 
   if (!ungrouped.length) {
-    el.innerHTML = newGroupRow + (_botGroups.length ? '' : '<div style="padding:6px 16px 12px;color:var(--text3);font-size:.69rem;font-style:italic">Alle Bots in Gruppen</div>');
+    el.innerHTML = newGroupRow + (_botGroups.length ? '' : '<div style="padding:6px 16px 12px;color:var(--text3);font-size:.75rem;font-style:italic">Alle Bots in Gruppen</div>');
     return;
   }
 
@@ -44,7 +44,7 @@ function renderBotList() {
         <div class="bi-stat">${(b.triggers||[]).filter(t=>t.aktiv).length} Trigger aktiv</div>
       </div>
       <button class="bot-toggle ${b.laufend?'on':'off'}" onclick="event.stopPropagation();botToggleLaufend('${b.id}')" title="${b.laufend?'Läuft':'Gestoppt'}"></button>
-      <button onclick="event.stopPropagation();botDelete('${b.id}')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.75rem;padding:2px 4px">✕</button>
+      <button onclick="event.stopPropagation();botDelete('${b.id}')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.8125rem;padding:2px 4px">✕</button>
     </div>`).join('');
 }
 
@@ -175,12 +175,12 @@ function botDashboard(){
     const money=(mbl[m]&&mbl[m].balance!=null)?mbl[m].balance:0;
     const lb=v.letzterBesuch?new Date(v.letzterBesuch).toLocaleString('de-DE',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'–';
     const others=Object.keys(v).filter(k=>k!=='letzterBesuch').map(k=>escHtml(k)+'=<b>'+escHtml(String(v[k]))+'</b>').join(', ')||'–';
-    return `<tr style="border-top:1px solid var(--border2,#333)"><td style="padding:3px 6px">${escHtml(name)} <span style="color:var(--text3)">#${escHtml(m)}</span></td><td style="padding:3px 6px">${rank}</td><td style="padding:3px 6px;text-align:right">${money}</td><td style="padding:3px 6px;font-size:.62rem">${others}</td><td style="padding:3px 6px;font-size:.62rem;color:var(--text3)">${escHtml(lb)}</td></tr>`;
+    return `<tr style="border-top:1px solid var(--border2,#333)"><td style="padding:3px 6px">${escHtml(name)} <span style="color:var(--text3)">#${escHtml(m)}</span></td><td style="padding:3px 6px">${rank}</td><td style="padding:3px 6px;text-align:right">${money}</td><td style="padding:3px 6px;font-size:.6875rem">${others}</td><td style="padding:3px 6px;font-size:.6875rem;color:var(--text3)">${escHtml(lb)}</td></tr>`;
   }).join('');
   p=document.createElement('div');
   p.id='botDashPanel';
-  p.style.cssText='position:fixed;top:60px;right:20px;width:560px;max-height:78vh;overflow:auto;z-index:99999;background:var(--bg2,#1c1c1c);border:1px solid var(--purple,#8b5cf6);border-radius:10px;padding:12px;box-shadow:0 10px 36px rgba(0,0,0,.6);font-family:var(--mono,monospace);font-size:.68rem;color:var(--text,#ddd)';
-  p.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b style="color:var(--purple,#8b5cf6)">📊 Spieler-Profile (${members.size})</b><span><button onclick="botDashboard();botDashboard()" title="Aktualisieren" style="background:var(--pd,#3a2a6a);border:none;color:var(--pl,#cbb6ff);border-radius:5px;cursor:pointer;padding:2px 8px;margin-right:4px">🔄</button><button onclick="document.getElementById('botDashPanel').remove()" style="background:none;border:none;color:#e55;cursor:pointer;font-size:.9rem">✕</button></span></div>${members.size?`<table style="width:100%;border-collapse:collapse"><thead><tr style="color:var(--text3)"><th style="text-align:left;padding:2px 6px">Spieler</th><th style="text-align:left;padding:2px 6px">Rang</th><th style="text-align:right;padding:2px 6px">💰</th><th style="text-align:left;padding:2px 6px">Variablen</th><th style="text-align:left;padding:2px 6px">Letzter Besuch</th></tr></thead><tbody>${rows}</tbody></table>`:'<div style="color:var(--text3)">Noch keine Profile gespeichert.</div>'}`;
+  p.style.cssText='position:fixed;top:60px;right:20px;width:560px;max-height:78vh;overflow:auto;z-index:99999;background:var(--bg2,#1c1c1c);border:1px solid var(--purple,#8b5cf6);border-radius:10px;padding:12px;box-shadow:0 10px 36px rgba(0,0,0,.6);font-family:var(--mono,monospace);font-size:.75rem;color:var(--text,#ddd)';
+  p.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b style="color:var(--purple,#8b5cf6)">📊 Spieler-Profile (${members.size})</b><span><button onclick="botDashboard();botDashboard()" title="Aktualisieren" style="background:var(--pd,#3a2a6a);border:none;color:var(--pl,#cbb6ff);border-radius:5px;cursor:pointer;padding:2px 8px;margin-right:4px">🔄</button><button onclick="document.getElementById('botDashPanel').remove()" style="background:none;border:none;color:#e55;cursor:pointer;font-size:.875rem">✕</button></span></div>${members.size?`<table style="width:100%;border-collapse:collapse"><thead><tr style="color:var(--text3)"><th style="text-align:left;padding:2px 6px">Spieler</th><th style="text-align:left;padding:2px 6px">Rang</th><th style="text-align:right;padding:2px 6px">💰</th><th style="text-align:left;padding:2px 6px">Variablen</th><th style="text-align:left;padding:2px 6px">Letzter Besuch</th></tr></thead><tbody>${rows}</tbody></table>`:'<div style="color:var(--text3)">Noch keine Profile gespeichert.</div>'}`;
   document.body.appendChild(p);
 }
 
@@ -192,32 +192,32 @@ function renderBotEditor() {
   );
   const s = bot.settings;
   const statusCls = bot.laufend ? 'running' : 'stopped';
-  const statusTxt = bot.laufend ? '▶️ Bot läuft · <span style="font-size:.62rem;opacity:.7">Änderungen → 🔄 Sync klicken</span>' : '⏹ Nicht gestartet';
+  const statusTxt = bot.laufend ? '▶️ Bot läuft · <span style="font-size:.6875rem;opacity:.7">Änderungen → 🔄 Sync klicken</span>' : '⏹ Nicht gestartet';
 
   const html = `
     <div class="be-topbar">
-      <input value="${escHtml(bot.name)}" oninput="botField('name',this.value)" style="width:180px;font-size:.78rem;font-weight:600;background:var(--bg3);border:1px solid var(--border2);border-radius:5px;color:var(--text);padding:4px 10px;font-family:var(--mono)">
+      <input value="${escHtml(bot.name)}" oninput="botField('name',this.value)" style="width:180px;font-size:.8125rem;font-weight:600;background:var(--bg3);border:1px solid var(--border2);border-radius:5px;color:var(--text);padding:4px 10px;font-family:var(--mono)">
       <div style="flex:1"></div>
       <label class="bot-cfg-label" title="Normale Chatnachrichten"><input type="checkbox" ${s.hearChat?'checked':''} onchange="botSetting('hearChat',this.checked)"> Chat</label>
       <label class="bot-cfg-label" title="Emotes"><input type="checkbox" ${s.hearEmote?'checked':''} onchange="botSetting('hearEmote',this.checked)"> *Emote*</label>
       <label class="bot-cfg-label" title="Whisper"><input type="checkbox" ${s.hearWhisper?'checked':''} onchange="botSetting('hearWhisper',this.checked)"> Whisper</label>
       <label class="bot-cfg-label" title="Nur eigene Nachrichten überwachen"><input type="checkbox" ${s.nurEigene?'checked':''} onchange="botSetting('nurEigene',this.checked)"> Nur eigene</label>
       <label class="bot-cfg-label"><input type="checkbox" ${s.logAktiv?'checked':''} onchange="botSetting('logAktiv',this.checked)"> Log</label>
-      <select class="cf" onchange="botSetting('modus',this.value)" style="width:110px">
+      <select class="cf" onchange="botSetting('modus',this.value)" style="width:132px">
         <option value="chat"  ${s.modus==='chat'?'selected':''}>Nur Chat</option>
         <option value="zone"  ${s.modus==='zone'?'selected':''}>Nur Zone</option>
         <option value="both"  ${s.modus==='both'?'selected':''}>Chat + Zone</option>
       </select>
       ${bot.laufend
-        ? `<button class="btn btn-red" onclick="botStop()" style="font-size:.68rem;padding:4px 12px">⏹ Stoppen</button>
-           <button class="btn btn-sync" id="syncBtn" onclick="botSync()" title="Bot stoppen, Änderungen speichern und neu starten" style="font-size:.68rem;padding:4px 12px">🔄 Sync</button>`
-        : `<button class="btn btn-green" onclick="botDeploy()" style="font-size:.68rem;padding:4px 12px">▶️ Starten</button>`
+        ? `<button class="btn btn-red" onclick="botStop()" style="padding:7px 16px">⏹ Stoppen</button>
+           <button class="btn btn-sync" id="syncBtn" onclick="botSync()" title="Bot stoppen, Änderungen speichern und neu starten" style="padding:7px 16px">🔄 Sync</button>`
+        : `<button class="btn btn-green" onclick="botDeploy()" style="padding:7px 16px">▶️ Starten</button>`
       }
-      <button class="btn btn-primary" onclick="botDashboard()" title="Spieler-Profile: Punkte, Rang, Money, Besuche, letzter Besuch" style="font-size:.65rem;padding:4px 8px">📊</button>
-      <button class="btn btn-primary" onclick="botExportConfig()" title="Export" style="font-size:.65rem;padding:4px 8px">⬇️</button>
-      <button class="btn btn-primary" onclick="botImportConfig()" title="Import" style="font-size:.65rem;padding:4px 8px">⬆️</button>
-      <button class="btn btn-primary" onclick="jsonImportOpen('bot')" title="Trigger per JSON importieren (zum aktuellen Bot hinzufügen)" style="font-size:.65rem;padding:4px 8px">{ }📥</button>
-      <button class="btn btn-primary" onclick="botExportTriggersJSON()" title="Trigger dieses Bots als JSON exportieren" style="font-size:.65rem;padding:4px 8px">{ }📤</button>
+      <button class="btn btn-primary" onclick="botDashboard()" title="Spieler-Profile: Punkte, Rang, Money, Besuche, letzter Besuch" style="font-size:.6875rem;padding:4px 8px">📊</button>
+      <button class="btn btn-primary" onclick="botExportConfig()" title="Export" style="font-size:.6875rem;padding:4px 8px">⬇️</button>
+      <button class="btn btn-primary" onclick="botImportConfig()" title="Import" style="font-size:.6875rem;padding:4px 8px">⬆️</button>
+      <button class="btn btn-primary" onclick="jsonImportOpen('bot')" title="Trigger per JSON importieren (zum aktuellen Bot hinzufügen)" style="font-size:.6875rem;padding:4px 8px">{ }📥</button>
+      <button class="btn btn-primary" onclick="botExportTriggersJSON()" title="Trigger dieses Bots als JSON exportieren" style="font-size:.6875rem;padding:4px 8px">{ }📤</button>
     </div>
     <div class="bot-status ${statusCls}" id="bot-status-bar">${statusTxt}</div>
     <div class="be-body">
@@ -227,7 +227,7 @@ function renderBotEditor() {
         <option value="">📋 Vorlage einfügen …</option>
         ${Object.entries(BOT_TEMPLATES).map(([k,v])=>`<option value="${k}">${escHtml(v.label)}</option>`).join('')}
       </select>
-      <div style="margin:14px 0 6px;font-size:.72rem;font-weight:700;color:var(--purple);border-top:1px solid var(--border2);padding-top:10px">📖 Szenen / Story</div>
+      <div style="margin:14px 0 6px;font-size:.75rem;font-weight:700;color:var(--purple);border-top:1px solid var(--border2);padding-top:10px">📖 Szenen / Story</div>
       <div id="szene-list">${_szenen(bot).map((s,i)=>renderSzeneCard(bot,s,i)).join('')}</div>
       <button class="be-addtrig" onclick="szeneNew()">+ Szene hinzufügen</button>
       <!-- Events: renderEventsTab() fuellt diesen Container samt eigener
@@ -387,19 +387,19 @@ function renderStep(sid, s, st, idx){
           <option value="emote" ${st.msgTyp==='emote'?'selected':''}>✨ Emote</option>
           <option value="whisper" ${st.msgTyp==='whisper'?'selected':''}>🤫 Whisper</option>
         </select>
-        <span style="font-size:.62rem;color:var(--text3)">Pause danach:</span>
+        <span style="font-size:.6875rem;color:var(--text3)">Pause danach:</span>
         <input class="cf" type="number" min="0" step="0.5" value="${st.pause??0}" style="width:62px" oninput="stepField('${sid}','${st.id}','pause',+this.value)"> s
       </div>
       <textarea class="cf" style="width:100%;resize:vertical;min-height:40px;margin-top:4px" rows="2" placeholder="Was der Bot sagt … Variablen: {name}" oninput="stepField('${sid}','${st.id}','text',this.value)">${escHtml(st.text||'')}</textarea>`;
   } else if(st.typ==='warte'){
-    body=`<span style="font-size:.65rem;color:var(--text3)">Warte</span>
+    body=`<span style="font-size:.6875rem;color:var(--text3)">Warte</span>
       <input class="cf" type="number" min="0" step="0.5" value="${st.sek??3}" style="width:70px" oninput="stepField('${sid}','${st.id}','sek',+this.value)"> Sekunden, dann weiter`;
   } else if(st.typ==='frage'){
     const ant=(st.antworten||[]);
     const antRows=ant.map((a,ai)=>`<div style="display:flex;gap:5px;align-items:center;margin-top:3px">
-        <span style="font-size:.6rem;color:var(--text3)">wenn</span>
+        <span style="font-size:.6875rem;color:var(--text3)">wenn</span>
         <input class="cf" style="width:120px" value="${escHtml(a.wort||'')}" placeholder="Antwort-Wort" oninput="antwortField('${sid}','${st.id}',${ai},'wort',this.value)">
-        <span style="font-size:.6rem;color:var(--text3)">→</span>
+        <span style="font-size:.6875rem;color:var(--text3)">→</span>
         <select class="cf" style="flex:1;min-width:150px" onchange="antwortField('${sid}','${st.id}',${ai},'ziel',this.value)">${_stepZielOpts(s,a.ziel)}</select>
         <button class="rm-btn" onclick="antwortRemove('${sid}','${st.id}',${ai})">✕</button>
       </div>`).join('');
@@ -409,24 +409,24 @@ function renderStep(sid, s, st, idx){
           <option value="emote" ${st.msgTyp==='emote'?'selected':''}>✨ Emote</option>
           <option value="whisper" ${st.msgTyp==='whisper'?'selected':''}>🤫 Whisper</option>
         </select>
-        <span style="font-size:.6rem;color:var(--text3)">Frage-Text (optional)</span>
+        <span style="font-size:.6875rem;color:var(--text3)">Frage-Text (optional)</span>
       </div>
       <textarea class="cf" style="width:100%;resize:vertical;min-height:36px;margin-top:4px" rows="2" placeholder="Frage an den Spieler …" oninput="stepField('${sid}','${st.id}','text',this.value)">${escHtml(st.text||'')}</textarea>
       <div style="margin-top:4px;padding:5px 7px;background:rgba(139,92,246,0.05);border-radius:6px">
-        <div style="font-size:.6rem;color:var(--purple);font-weight:700">ANTWORTEN</div>
+        <div style="font-size:.6875rem;color:var(--purple);font-weight:700">ANTWORTEN</div>
         ${antRows}
-        <button onclick="antwortAdd('${sid}','${st.id}')" style="margin-top:4px;font-size:.62rem;padding:2px 8px;background:var(--pd);border:none;color:var(--pl);border-radius:4px;cursor:pointer">+ Antwort</button>
+        <button onclick="antwortAdd('${sid}','${st.id}')" style="margin-top:4px;font-size:.6875rem;padding:2px 8px;background:var(--pd);border:none;color:var(--pl);border-radius:4px;cursor:pointer">+ Antwort</button>
       </div>
       <div style="display:flex;gap:5px;align-items:center;margin-top:4px">
-        <span style="font-size:.6rem;color:var(--text3)">⏱ Timeout</span>
+        <span style="font-size:.6875rem;color:var(--text3)">⏱ Timeout</span>
         <input class="cf" type="number" min="0" value="${st.timeout??0}" style="width:62px" oninput="stepField('${sid}','${st.id}','timeout',+this.value)"> s (0 = aus) →
         <select class="cf" style="flex:1;min-width:150px" onchange="stepField('${sid}','${st.id}','timeoutZiel',this.value)">${_stepZielOpts(s,st.timeoutZiel)}</select>
       </div>`;
   } else if(st.typ==='sprung'){
-    body=`<span style="font-size:.65rem;color:var(--text3)">Springe zu</span>
+    body=`<span style="font-size:.6875rem;color:var(--text3)">Springe zu</span>
       <select class="cf" style="flex:1;min-width:170px" onchange="stepField('${sid}','${st.id}','ziel',this.value)">${_stepZielOpts(s,st.ziel)}</select>`;
   } else if(st.typ==='variable'){
-    body=`<span style="font-size:.62rem;color:var(--text3)">Variable</span>
+    body=`<span style="font-size:.6875rem;color:var(--text3)">Variable</span>
       <input class="cf" style="width:130px" value="${escHtml(st.varName||'')}" placeholder="Name (z.B. gehorsam)" oninput="stepField('${sid}','${st.id}','varName',this.value)">
       <select class="cf" style="width:104px" onchange="stepField('${sid}','${st.id}','varOp',this.value)">
         <option value="set" ${(!st.varOp||st.varOp==='set')?'selected':''}>= Setzen</option>
@@ -437,7 +437,7 @@ function renderStep(sid, s, st, idx){
       <input class="cf" style="width:90px" value="${escHtml(st.varWert||'')}" placeholder="Wert" oninput="stepField('${sid}','${st.id}','varWert',this.value)">`;
   } else if(st.typ==='wenn'){
     body=`<div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap">
-        <span style="font-size:.62rem;color:var(--text3)">wenn</span>
+        <span style="font-size:.6875rem;color:var(--text3)">wenn</span>
         <input class="cf" style="width:120px" value="${escHtml(st.varName||'')}" placeholder="Variable" oninput="stepField('${sid}','${st.id}','varName',this.value)">
         <select class="cf" style="width:96px" onchange="stepField('${sid}','${st.id}','varCmp',this.value)">
           ${['==','!=','>','<','>=','<=','gesetzt','leer'].map(o=>`<option value="${o}" ${(st.varCmp||'==')===o?'selected':''}>${o}</option>`).join('')}
@@ -445,15 +445,15 @@ function renderStep(sid, s, st, idx){
         <input class="cf" style="width:80px" value="${escHtml(st.varWert||'')}" placeholder="Wert" oninput="stepField('${sid}','${st.id}','varWert',this.value)">
       </div>
       <div style="display:flex;gap:5px;align-items:center;margin-top:4px">
-        <span style="font-size:.6rem;color:#5c5">✅ Ja →</span>
+        <span style="font-size:.6875rem;color:#5c5">✅ Ja →</span>
         <select class="cf" style="flex:1;min-width:140px" onchange="stepField('${sid}','${st.id}','zielJa',this.value)">${_stepZielOpts(s,st.zielJa)}</select>
       </div>
       <div style="display:flex;gap:5px;align-items:center;margin-top:3px">
-        <span style="font-size:.6rem;color:#e55">❌ Nein →</span>
+        <span style="font-size:.6875rem;color:#e55">❌ Nein →</span>
         <select class="cf" style="flex:1;min-width:140px" onchange="stepField('${sid}','${st.id}','zielNein',this.value)">${_stepZielOpts(s,st.zielNein)}</select>
       </div>`;
   } else if(st.typ==='ende'){
-    body=`<span style="font-size:.65rem;color:var(--text3)">🏁 Die Szene endet hier.</span>`;
+    body=`<span style="font-size:.6875rem;color:var(--text3)">🏁 Die Szene endet hier.</span>`;
   }
   return `<div class="act-card" id="szstep-${sid}-${st.id}">
     <div style="flex:1">
@@ -463,7 +463,7 @@ function renderStep(sid, s, st, idx){
           <button class="order-btn" onclick="stepMove('${sid}','${st.id}',1)" ${idx===tot-1?'disabled':''}>▼</button>
         </span>
         <span class="trig-order-num" style="margin-right:2px">${idx+1}</span>
-        <span style="font-size:.7rem;font-weight:600;color:var(--purple)">${icons[st.typ]||'•'} ${names[st.typ]||st.typ}</span>
+        <span style="font-size:.75rem;font-weight:600;color:var(--purple)">${icons[st.typ]||'•'} ${names[st.typ]||st.typ}</span>
         <button class="rm-btn" style="margin-left:auto" onclick="stepRemove('${sid}','${st.id}')">✕</button>
       </div>
       <div style="margin-top:4px;margin-left:6px">${body}</div>
@@ -488,14 +488,14 @@ function renderSzeneCard(b, s, i){
       </span>
       <span style="display:flex;flex-direction:column;gap:1px;flex:1;min-width:0">
         <span class="trig-label" id="szlabel-${s.id}">📖 ${escHtml(s.name||'Szene')}</span>
-        <span style="font-size:.62rem;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${_szeneSummary(s)}</span>
+        <span style="font-size:.6875rem;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${_szeneSummary(s)}</span>
       </span>
       <button onclick="event.stopPropagation();szeneTest('${s.id}')" class="rm-btn" title="Szene jetzt testen (Bot muss laufen)" style="color:var(--green)">▶</button>
       <button onclick="event.stopPropagation();szeneDelete('${s.id}')" class="rm-btn" title="Szene löschen">✕</button>
     </div>
     <div class="trig-body ${s.open?'open':''}" id="szbody-${s.id}">
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
-        <label style="font-size:.65rem;color:var(--text3)">Name:</label>
+        <label style="font-size:.6875rem;color:var(--text3)">Name:</label>
         <input class="cf cf-w160" value="${escHtml(s.name||'')}" oninput="szeneField('${s.id}','name',this.value);document.getElementById('szlabel-${s.id}').textContent='📖 '+this.value">
       </div>
       <div class="te-section">
@@ -736,7 +736,7 @@ function renderSpielerTab(){
 
   const cntEl = document.getElementById('spieler-count');
   if (cntEl) cntEl.textContent = arr.length + ' Spieler · ' + roomNums.size + ' im Raum';
-  if(!arr.length){ host.innerHTML = '<div style="font-size:.75rem;color:var(--text3);text-align:center;padding:24px 0">Noch keine Spieler bekannt. Sie erscheinen, sobald sie den Raum betreten (Bot läuft).</div>'; return; }
+  if(!arr.length){ host.innerHTML = '<div style="font-size:.8125rem;color:var(--text3);text-align:center;padding:24px 0">Noch keine Spieler bekannt. Sie erscheinen, sobald sie den Raum betreten (Bot läuft).</div>'; return; }
 
   const nameOf = n => roomName[n] || (rankData.players?.[n]?.name) || (money.balances?.[n]?.name) || (pkeys?.[n]?.name) || ('#'+n);
   // Sortierung: im Raum zuerst, dann nach Name
@@ -753,8 +753,8 @@ function renderSpielerTab(){
     const inRoom = roomNums.has(n);
     // Trenner zwischen "im Raum" und Rest
     let sep = '';
-    if (lastInRoom===true && inRoom===false) sep = '<div style="font-size:.6rem;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);margin:10px 2px 6px">Nicht im Raum</div>';
-    if (lastInRoom===null && inRoom===true) sep = '<div style="font-size:.6rem;text-transform:uppercase;letter-spacing:.06em;color:var(--green);margin:0 2px 6px">Aktuell im Raum</div>';
+    if (lastInRoom===true && inRoom===false) sep = '<div style="font-size:.6875rem;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);margin:10px 2px 6px">Nicht im Raum</div>';
+    if (lastInRoom===null && inRoom===true) sep = '<div style="font-size:.6875rem;text-transform:uppercase;letter-spacing:.06em;color:var(--green);margin:0 2px 6px">Aktuell im Raum</div>';
     lastInRoom = inRoom;
     const nm = nameOf(n);
     const rp = rankData.players?.[n];
@@ -765,15 +765,15 @@ function renderSpielerTab(){
     const keyN = ['bronze','silver','gold'].filter(k=>pk[k]).length;
     const items = (typeof _inventar!=='undefined' && _inventar.spieler?.[n]?.eintraege)
       ? Object.values(_inventar.spieler[n].eintraege).filter(e=>(e.anzahl||0)>0).length : 0;
-    const dot = inRoom ? '<span title="im Raum" style="color:var(--green);font-size:.7rem">●</span> ' : '';
+    const dot = inRoom ? '<span title="im Raum" style="color:var(--green);font-size:.75rem">●</span> ' : '';
     return sep + `<div onclick="spielerDetail('${escJsAttr(n)}')" title="Gesamtübersicht öffnen"
       style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;cursor:pointer;background:${inRoom?'rgba(52,211,153,0.06)':'rgba(255,255,255,0.03)'};border:1px solid ${inRoom?'rgba(52,211,153,0.22)':'rgba(255,255,255,0.07)'};border-radius:10px;padding:10px 14px;margin-bottom:8px">
-      <span style="font-size:.85rem;font-weight:700;color:var(--text1);min-width:150px">${dot}${escHtml(nm)} <span style="font-size:.66rem;color:var(--text3);font-weight:400">#${escHtml(n)}</span></span>
-      <span style="font-size:.72rem;color:var(--text2)">🏆 ${rankStr}</span>
-      <span style="font-size:.72rem;color:var(--text2)">💰 ${bal} ${escHtml(cur)}</span>
-      <span style="font-size:.72rem;color:var(--text3)">🎒 ${items}</span>
-      <span style="font-size:.72rem;color:var(--text3)">🔑 ${keyN}/3</span>
-      <span style="margin-left:auto;font-size:.66rem;color:var(--text3)">Übersicht ›</span>
+      <span style="font-size:.875rem;font-weight:700;color:var(--text1);min-width:150px">${dot}${escHtml(nm)} <span style="font-size:.75rem;color:var(--text3);font-weight:400">#${escHtml(n)}</span></span>
+      <span style="font-size:.75rem;color:var(--text2)">🏆 ${rankStr}</span>
+      <span style="font-size:.75rem;color:var(--text2)">💰 ${bal} ${escHtml(cur)}</span>
+      <span style="font-size:.75rem;color:var(--text3)">🎒 ${items}</span>
+      <span style="font-size:.75rem;color:var(--text3)">🔑 ${keyN}/3</span>
+      <span style="margin-left:auto;font-size:.75rem;color:var(--text3)">Übersicht ›</span>
     </div>`;
   }).join('');
 }
@@ -798,28 +798,28 @@ function spielerDetail(num){
 
   const block = (titel, inhalt) =>
     `<div style="border:1px solid rgba(255,255,255,0.08);border-radius:9px;padding:10px 12px;margin-bottom:8px">
-       <div style="font-size:.66rem;font-weight:700;color:var(--text2);margin-bottom:6px">${titel}</div>${inhalt}</div>`;
-  const leer = t => `<div style="font-size:.66rem;color:var(--text3)">${t}</div>`;
+       <div style="font-size:.75rem;font-weight:700;color:var(--text2);margin-bottom:6px">${titel}</div>${inhalt}</div>`;
+  const leer = t => `<div style="font-size:.75rem;color:var(--text3)">${t}</div>`;
 
   // ── Rang ──
   const rp = rankData.players?.[n];
   const rdef = rp?.rankId ? (rankData.defs||[]).find(d=>d.id===rp.rankId) : null;
   let rangHtml = rdef
-    ? `<div style="font-size:.78rem">${escHtml((rdef.icon||'')+' '+rdef.name)}`
+    ? `<div style="font-size:.8125rem">${escHtml((rdef.icon||'')+' '+rdef.name)}`
       + (rdef.group?` <span style="color:var(--text3)">[${escHtml(rdef.group)}]</span>`:'')
-      + ` <span style="color:var(--text3);font-size:.66rem">Stufe ${rdef.level}</span></div>`
+      + ` <span style="color:var(--text3);font-size:.75rem">Stufe ${rdef.level}</span></div>`
     : leer('kein Rang vergeben');
   const hist = (rp&&Array.isArray(rp.history))?rp.history.slice(-4).reverse():[];
   if (hist.length) rangHtml += '<div style="margin-top:5px">' + hist.map(h=>{
       const hd=(rankData.defs||[]).find(d=>d.id===h.rankId);
-      return `<div style="font-size:.62rem;color:var(--text3)">${escHtml(hd?((hd.icon||'')+' '+hd.name):'–')}`
+      return `<div style="font-size:.6875rem;color:var(--text3)">${escHtml(hd?((hd.icon||'')+' '+hd.name):'–')}`
         + (h.ts?` · ${new Date(h.ts).toLocaleDateString()}`:'')
         + (h.by?` · ${escHtml(h.by)}`:'') + `</div>`;
     }).join('') + '</div>';
 
   // ── Geld ──
   const bal = money.balances?.[n]?.balance ?? 0;
-  const geldHtml = `<div style="font-size:.9rem;font-weight:700">${bal} <span style="font-size:.7rem;font-weight:400;color:var(--text3)">${escHtml(cur)}</span></div>`;
+  const geldHtml = `<div style="font-size:.875rem;font-weight:700">${bal} <span style="font-size:.75rem;font-weight:400;color:var(--text3)">${escHtml(cur)}</span></div>`;
 
   // ── Keys ──
   const KEY_FARBE = { bronze:'#b08d57', silver:'#b9bcc2', gold:'#d9b44a' };
@@ -828,10 +828,10 @@ function spielerDetail(num){
   const keyHtml = '<div style="display:flex;gap:6px;flex-wrap:wrap">' +
     ['bronze','silver','gold'].map(k=>{
       const an=!!pk[k], c=KEY_FARBE[k];
-      return `<span style="font-size:.64rem;padding:3px 9px;border-radius:5px;border:1px solid ${an?c:'rgba(255,255,255,0.08)'};`
+      return `<span style="font-size:.6875rem;padding:3px 9px;border-radius:5px;border:1px solid ${an?c:'rgba(255,255,255,0.08)'};`
         + `background:${an?c+'1f':'transparent'};color:${an?c:'var(--text3)'}">${KEY_NAME[k]}${an?' ✓':' –'}</span>`;
     }).join('') + '</div>'
-    + `<div style="font-size:.6rem;color:var(--text3);margin-top:4px">Ändern im Tab 🎒 Inventar</div>`;
+    + `<div style="font-size:.6875rem;color:var(--text3);margin-top:4px">Ändern im Tab 🎒 Inventar</div>`;
 
   // ── Inventar ──
   const eintraege = Object.entries(inv.spieler?.[n]?.eintraege || {});
@@ -840,7 +840,7 @@ function spielerDetail(num){
       const name = d ? ((d.icon||'🎁')+' '+d.name) : ('❓ '+did);
       const anz = (d&&d.unendlich) ? '∞' : (e.anzahl||0);
       const grau = (!(d&&d.unendlich) && !(e.anzahl>0)) ? 'opacity:.5;' : '';
-      return `<div style="display:flex;justify-content:space-between;font-size:.68rem;padding:1px 0;${grau}">`
+      return `<div style="display:flex;justify-content:space-between;font-size:.75rem;padding:1px 0;${grau}">`
         + `<span>${escHtml(name)}</span><span style="color:var(--text3)">${anz}</span></div>`;
     }).join('') : leer('nichts im Inventar');
 
@@ -850,14 +850,14 @@ function spielerDetail(num){
   const nameVon = mn => (inv.spieler?.[String(mn)]?.name) || ('#'+mn);
   const defName = id => { const d=(typeof _itemDefById==='function')?_itemDefById(id):null; return d?((d.icon||'🎁')+' '+d.name):('❓ '+id); };
   const leihHtml = (alsBesitzer.length||alsTraeger.length)
-    ? alsBesitzer.map(x=>`<div style="font-size:.66rem">${escHtml(defName(x.itemDefId))} → getragen von <b>${escHtml(nameVon(x.wearerMn))}</b></div>`).join('')
-      + alsTraeger.map(x=>`<div style="font-size:.66rem;color:var(--text3)">trägt ${escHtml(defName(x.itemDefId))} von ${escHtml(nameVon(x.ownerMn))}</div>`).join('')
+    ? alsBesitzer.map(x=>`<div style="font-size:.75rem">${escHtml(defName(x.itemDefId))} → getragen von <b>${escHtml(nameVon(x.wearerMn))}</b></div>`).join('')
+      + alsTraeger.map(x=>`<div style="font-size:.75rem;color:var(--text3)">trägt ${escHtml(defName(x.itemDefId))} von ${escHtml(nameVon(x.ownerMn))}</div>`).join('')
     : leer('nichts verliehen oder geliehen');
 
   // ── Fortschritt (Variablen) ──
   const vKeys = Object.keys(vars).filter(k=>k!=='letzterBesuch').sort();
   const varHtml = vKeys.length ? vKeys.map(k=>
-      `<div style="display:flex;justify-content:space-between;font-size:.68rem;padding:1px 0">`
+      `<div style="display:flex;justify-content:space-between;font-size:.75rem;padding:1px 0">`
       + `<span>${escHtml(k)}</span><span style="color:var(--text3)">${escHtml(String(vars[k]))}</span></div>`).join('')
     : leer('noch kein Fortschritt gespeichert');
 
@@ -866,13 +866,13 @@ function spielerDetail(num){
   const meine = log.filter(x=>String(x.buyerNum)===n||String(x.targetNum)===n).slice(-6).reverse();
   const kaufHtml = meine.length ? meine.map(x=>{
       const fuer = String(x.targetNum)!==String(x.buyerNum) ? ' für '+escHtml(x.targetName||('#'+x.targetNum)) : '';
-      return `<div style="font-size:.64rem;color:var(--text3)">${escHtml(x.itemName||'?')}${fuer} · ${x.preis||0} ${escHtml(cur)}`
+      return `<div style="font-size:.6875rem;color:var(--text3)">${escHtml(x.itemName||'?')}${fuer} · ${x.preis||0} ${escHtml(cur)}`
         + (x.ts?` · ${new Date(x.ts).toLocaleDateString()}`:'') + `</div>`;
     }).join('') : leer('noch nichts gekauft');
 
   // ── Besuche ──
   const besuchHtml = vars.letzterBesuch
-    ? `<div style="font-size:.66rem;color:var(--text3)">Zuletzt gesehen: ${escHtml(String(vars.letzterBesuch))}</div>`
+    ? `<div style="font-size:.75rem;color:var(--text3)">Zuletzt gesehen: ${escHtml(String(vars.letzterBesuch))}</div>`
     : leer('kein Besuch vermerkt');
 
   host.innerHTML = `
@@ -882,9 +882,9 @@ function spielerDetail(num){
                 border-radius:12px;padding:16px 18px;box-shadow:0 20px 60px rgba(0,0,0,.5)">
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
         <span style="font-size:1rem;font-weight:800">${imRaum?'<span style="color:var(--green)">●</span> ':''}${escHtml(nm)}</span>
-        <span style="font-size:.7rem;color:var(--text3)">#${escHtml(n)}${imRaum?' · im Raum':''}</span>
+        <span style="font-size:.75rem;color:var(--text3)">#${escHtml(n)}${imRaum?' · im Raum':''}</span>
         <button onclick="spielerDetailZu()" style="margin-left:auto;background:none;border:1px solid rgba(255,255,255,0.12);
-          border-radius:6px;color:var(--text2);font-size:.7rem;padding:4px 12px;cursor:pointer">Schließen</button>
+          border-radius:6px;color:var(--text2);font-size:.75rem;padding:4px 12px;cursor:pointer">Schließen</button>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
         ${block('🏆 Rang', rangHtml)}
@@ -1091,7 +1091,7 @@ function renderVariablenTab(){
   roomNums.forEach(k=>nums.add(k));
   const arr=[...nums];
   const cntEl=document.getElementById('variablen-count'); if(cntEl) cntEl.textContent=arr.length+' Spieler · '+roomNums.size+' im Raum';
-  if(!arr.length){ host.innerHTML='<div style="font-size:.75rem;color:var(--text3);text-align:center;padding:24px 0">Noch keine Variablen. Sie entstehen durch Trigger-Aktionen (z.B. Variable +1) oder kannst du hier pro Spieler anlegen.</div>'; return; }
+  if(!arr.length){ host.innerHTML='<div style="font-size:.8125rem;color:var(--text3);text-align:center;padding:24px 0">Noch keine Variablen. Sie entstehen durch Trigger-Aktionen (z.B. Variable +1) oder kannst du hier pro Spieler anlegen.</div>'; return; }
   const nameOf=n=>roomName[n]||(rankData.players?.[n]?.name)||(money.balances?.[n]?.name)||('#'+n);
   arr.sort((a,b)=>{ const ra=roomNums.has(a),rb=roomNums.has(b); if(ra!==rb)return ra?-1:1; return nameOf(a).localeCompare(nameOf(b)); });
   host.innerHTML=arr.map(n=>{
@@ -1106,21 +1106,21 @@ function renderVariablenTab(){
       const v=vars[k];
       if(k==='letzterBesuch'){
         const disp=v?new Date(v).toLocaleString('de-DE'):'';
-        return '<div style="display:flex;align-items:center;gap:6px"><span style="font-size:.7rem;color:var(--text3);min-width:120px">'+escHtml(k)+'</span><span style="font-size:.7rem;color:var(--text3)">'+escHtml(disp)+'</span></div>';
+        return '<div style="display:flex;align-items:center;gap:6px"><span style="font-size:.75rem;color:var(--text3);min-width:120px">'+escHtml(k)+'</span><span style="font-size:.75rem;color:var(--text3)">'+escHtml(disp)+'</span></div>';
       }
       return '<div style="display:flex;align-items:center;gap:6px">'
-        +'<span style="font-size:.7rem;color:var(--text2);min-width:120px">'+escHtml(k)+'</span>'
-        +'<input class="cf" style="width:90px;font-size:.7rem" value="'+escHtml(String(v??''))+'" onchange="_varSet(\''+n+'\',\''+ek+'\',this.value)">'
-        +'<button onclick="_varDelete(\''+n+'\',\''+ek+'\')" title="Variable löschen" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.72rem">✕</button>'
+        +'<span style="font-size:.75rem;color:var(--text2);min-width:120px">'+escHtml(k)+'</span>'
+        +'<input class="cf" style="width:90px;font-size:.75rem" value="'+escHtml(String(v??''))+'" onchange="_varSet(\''+n+'\',\''+ek+'\',this.value)">'
+        +'<button onclick="_varDelete(\''+n+'\',\''+ek+'\')" title="Variable löschen" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.75rem">✕</button>'
         +'</div>';
     }).join('');
     return '<div style="background:'+(inRoom?'rgba(52,211,153,0.06)':'rgba(255,255,255,0.03)')+';border:1px solid '+(inRoom?'rgba(52,211,153,0.22)':'rgba(255,255,255,0.07)')+';border-radius:10px;padding:10px 14px;margin-bottom:8px">'
-      +'<div style="font-size:.82rem;font-weight:700;color:var(--text1);margin-bottom:6px">'+(inRoom?'<span style="color:var(--green)">●</span> ':'')+escHtml(nameOf(n))+' <span style="font-size:.66rem;color:var(--text3);font-weight:400">#'+escHtml(n)+'</span></div>'
-      +'<div style="display:flex;flex-direction:column;gap:4px">'+(rows||'<span style="font-size:.66rem;color:var(--text3)">– keine Variablen –</span>')+'</div>'
+      +'<div style="font-size:.875rem;font-weight:700;color:var(--text1);margin-bottom:6px">'+(inRoom?'<span style="color:var(--green)">●</span> ':'')+escHtml(nameOf(n))+' <span style="font-size:.75rem;color:var(--text3);font-weight:400">#'+escHtml(n)+'</span></div>'
+      +'<div style="display:flex;flex-direction:column;gap:4px">'+(rows||'<span style="font-size:.75rem;color:var(--text3)">– keine Variablen –</span>')+'</div>'
       +'<div style="display:flex;align-items:center;gap:6px;margin-top:8px">'
-        +'<input id="varadd-name-'+escHtml(n)+'" class="cf" style="width:120px;font-size:.66rem" placeholder="neue Variable">'
-        +'<input id="varadd-val-'+escHtml(n)+'" class="cf" style="width:80px;font-size:.66rem" placeholder="Wert">'
-        +'<button onclick="_varAdd(\''+n+'\')" style="font-size:.64rem;padding:3px 8px;background:var(--pd,#3a2a6a);border:none;color:var(--pl,#cbb6ff);border-radius:5px;cursor:pointer">+ setzen</button>'
+        +'<input id="varadd-name-'+escHtml(n)+'" class="cf" style="width:120px;font-size:.75rem" placeholder="neue Variable">'
+        +'<input id="varadd-val-'+escHtml(n)+'" class="cf" style="width:80px;font-size:.75rem" placeholder="Wert">'
+        +'<button onclick="_varAdd(\''+n+'\')" style="font-size:.6875rem;padding:3px 8px;background:var(--pd,#3a2a6a);border:none;color:var(--pl,#cbb6ff);border-radius:5px;cursor:pointer">+ setzen</button>'
       +'</div>'
     +'</div>';
   }).join('');
@@ -1155,18 +1155,18 @@ function renderTrigCard(bot, t, i) {
       <input type="checkbox" ${t.aktiv?'checked':''} onclick="event.stopPropagation();trigField('${t.id}','aktiv',this.checked)" style="accent-color:var(--purple)">
       <span style="display:flex;flex-direction:column;gap:1px;flex:1;min-width:0">
         <span class="trig-label" id="tlabel-${t.id}">${escHtml(t.name||'Trigger')}</span>
-        <span class="trig-summary" title="Klartext-Zusammenfassung" style="font-size:.62rem;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%">${_btTrigSummary(bot,t)}</span>
+        <span class="trig-summary" title="Klartext-Zusammenfassung" style="font-size:.6875rem;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%">${_btTrigSummary(bot,t)}</span>
       </span>
       <span class="trig-meta" style="flex-shrink:0">${condN} Bed. · ${actN} Akt. · <span style="color:${wdh_color}">${wdh_lbl}</span></span>
       <button onclick="event.stopPropagation();trigDelete('${t.id}')" class="rm-btn" title="Trigger löschen">✕</button>
     </div>
     <div class="trig-body" id="tb-${t.id}">
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
-        <label style="font-size:.65rem;color:var(--text3)">Name:</label>
+        <label style="font-size:.6875rem;color:var(--text3)">Name:</label>
         <input class="cf cf-w160" value="${escHtml(t.name||'')}" oninput="trigField('${t.id}','name',this.value)" placeholder="Trigger-Name">
-        <label style="font-size:.65rem;color:var(--text3)">Delay:</label>
+        <label style="font-size:.6875rem;color:var(--text3)">Delay:</label>
         <input class="cf cf-w80" type="number" value="${t.delay??0}" oninput="trigField('${t.id}','delay',+this.value)"> ms
-        <label style="font-size:.65rem;color:var(--text3)">🔁 Wie oft?</label>
+        <label style="font-size:.6875rem;color:var(--text3)">🔁 Wie oft?</label>
         <select class="cf" style="width:190px" onchange="trigField('${t.id}','wiederholung',this.value);trigRerender('${t.id}')">
           <option value="immer"      ${wdh==='immer'?'selected':''}>∞ So oft wie es passt</option>
           <option value="einmalig"   ${wdh==='einmalig'?'selected':''}>1× Nur ein einziges Mal</option>
@@ -1175,32 +1175,32 @@ function renderTrigCard(bot, t, i) {
           <option value="pro_besuch" ${wdh==='pro_besuch'?'selected':''}>🚪 Einmal pro Raumbesuch je Person</option>
         </select>
         ${wdh==='n_mal'?`<input class="cf cf-w80" type="number" min="1" value="${t.maxMal??2}" oninput="trigField('${t.id}','maxMal',+this.value)" title="Wie oft höchstens">× höchstens`:''}
-        ${wdh==='taeglich'?`<span style="font-size:.6rem;color:var(--text3)" title="Zählt ab Mitternacht neu – nach der Uhr deines Rechners">ⓘ zählt ab Mitternacht neu</span>`:''}
-        ${wdh==='pro_besuch'?`<span style="font-size:.6rem;color:var(--text3)" title="Sobald die Person den Raum verlässt und wiederkommt, geht es von vorn los">ⓘ neu ab dem nächsten Betreten</span>`:''}
-        <label style="font-size:.65rem;color:var(--text3);margin-left:8px" title="Mindestabstand zwischen zwei Auslösungen für dieselbe Person (0 = keine Pause)">⏳ Pause je Person:</label>
+        ${wdh==='taeglich'?`<span style="font-size:.6875rem;color:var(--text3)" title="Zählt ab Mitternacht neu – nach der Uhr deines Rechners">ⓘ zählt ab Mitternacht neu</span>`:''}
+        ${wdh==='pro_besuch'?`<span style="font-size:.6875rem;color:var(--text3)" title="Sobald die Person den Raum verlässt und wiederkommt, geht es von vorn los">ⓘ neu ab dem nächsten Betreten</span>`:''}
+        <label style="font-size:.6875rem;color:var(--text3);margin-left:8px" title="Mindestabstand zwischen zwei Auslösungen für dieselbe Person (0 = keine Pause)">⏳ Pause je Person:</label>
         <input class="cf cf-w80" type="number" min="0" value="${t.cooldownSek??0}" oninput="trigField('${t.id}','cooldownSek',+this.value)" title="Sekunden – gilt für jede Person einzeln"> s
-        <label style="font-size:.65rem;color:var(--text3)" title="Mindestabstand insgesamt, egal wer auslöst (0 = keine Pause)">⏳ Pause insgesamt:</label>
+        <label style="font-size:.6875rem;color:var(--text3)" title="Mindestabstand insgesamt, egal wer auslöst (0 = keine Pause)">⏳ Pause insgesamt:</label>
         <input class="cf cf-w80" type="number" min="0" value="${t.cooldownGlobalSek??0}" oninput="trigField('${t.id}','cooldownGlobalSek',+this.value)" title="Sekunden – gilt für alle zusammen"> s
-        <label style="font-size:.65rem;color:var(--text3);margin-left:8px" title="Passen mehrere Trigger auf dieselbe Nachricht, kommt der mit der höheren Zahl zuerst dran. Gleiche Zahl = Reihenfolge wie in der Liste.">⬆️ Vorrang:</label>
+        <label style="font-size:.6875rem;color:var(--text3);margin-left:8px" title="Passen mehrere Trigger auf dieselbe Nachricht, kommt der mit der höheren Zahl zuerst dran. Gleiche Zahl = Reihenfolge wie in der Liste.">⬆️ Vorrang:</label>
         <input class="cf cf-w80" type="number" value="${t.prioritaet??0}" oninput="trigField('${t.id}','prioritaet',+this.value);renderBotEditor()" title="Höhere Zahl kommt zuerst dran">
-        <label style="font-size:.65rem;color:var(--text3);display:flex;align-items:center;gap:4px;cursor:pointer" title="Wenn dieser Trigger auslöst, werden für dieselbe Nachricht keine weiteren Trigger mehr geprüft">
+        <label style="font-size:.6875rem;color:var(--text3);display:flex;align-items:center;gap:4px;cursor:pointer" title="Wenn dieser Trigger auslöst, werden für dieselbe Nachricht keine weiteren Trigger mehr geprüft">
           <input type="checkbox" ${t.stopptWeitere?'checked':''} onchange="trigField('${t.id}','stopptWeitere',this.checked)" style="accent-color:var(--purple)">
           <span>🛑 danach keine weiteren</span>
         </label>
-        <label style="font-size:.65rem;color:var(--text3);margin-left:8px">🔑 Als Vorbedingung:</label>
+        <label style="font-size:.6875rem;color:var(--text3);margin-left:8px">🔑 Als Vorbedingung:</label>
         <select class="cf" style="width:170px" title="Wie zählt dieser Trigger als Vorbedingung für andere Trigger?" onchange="trigField('${t.id}','charSpec',this.value==='true');trigRerender('${t.id}')">
           <option value="false" ${!t.charSpec?'selected':''}>🌐 Global – einmal gilt für alle</option>
           <option value="true"  ${t.charSpec?'selected':''}>👤 Pro Spieler – jeder selbst</option>
         </select>
-        ${t.charSpec?`<label style="font-size:.65rem;color:var(--text3);display:flex;align-items:center;gap:4px;cursor:pointer;margin-left:4px" title="Wenn aktiviert: Beim Verlassen des Raums wird der State zurückgesetzt – Rejoin-Vortrigger greifen dann nicht mehr">
+        ${t.charSpec?`<label style="font-size:.6875rem;color:var(--text3);display:flex;align-items:center;gap:4px;cursor:pointer;margin-left:4px" title="Wenn aktiviert: Beim Verlassen des Raums wird der State zurückgesetzt – Rejoin-Vortrigger greifen dann nicht mehr">
           <input type="checkbox" ${t.resetOnLeave?'checked':''} onchange="trigField('${t.id}','resetOnLeave',this.checked)" style="accent-color:var(--purple)">
           <span>↩️ Reset bei Verlassen</span>
         </label>`:''}
       </div>
 
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap;padding:7px 10px;background:rgba(139,92,246,0.04);border:1px solid rgba(139,92,246,0.12);border-radius:8px">
-        <span style="font-size:.65rem;font-weight:700;color:var(--purple)">🎯 Auslöser-Filter</span>
-        <label style="font-size:.65rem;color:var(--text3)">Wer darf feuern?</label>
+        <span style="font-size:.6875rem;font-weight:700;color:var(--purple)">🎯 Auslöser-Filter</span>
+        <label style="font-size:.6875rem;color:var(--text3)">Wer darf feuern?</label>
         <select class="cf" style="width:210px" onchange="trigField('${t.id}','von',this.value);trigRerender('${t.id}')">
           <option value="alle"      ${(!t.von||t.von==='alle')?'selected':''}>👥 Jeder</option>
           <option value="nicht_bot" ${t.von==='nicht_bot'?'selected':''}>👥 Jeder außer dem Bot selbst</option>
@@ -1213,19 +1213,19 @@ function renderTrigCard(bot, t, i) {
         ${(t.von==='rang')?`<select class="cf" style="width:200px" onchange="trigField('${t.id}','vonRangId',this.value)">
           <option value="">– Rang wählen –</option>
           ${_quelleRaenge().map(r=>`<option value="${escHtml(r[0])}" ${t.vonRangId===r[0]?'selected':''}>${escHtml(r[1])}</option>`).join('')}
-        </select><span style="font-size:.6rem;color:var(--text3)" title="Gilt für diesen Rang und alle höheren">ⓘ ab dieser Stufe aufwärts</span>`:''}
+        </select><span style="font-size:.6875rem;color:var(--text3)" title="Gilt für diesen Rang und alle höheren">ⓘ ab dieser Stufe aufwärts</span>`:''}
       </div>
 
       <div style="display:flex;gap:6px;align-items:center;margin-bottom:8px">
         <button onclick="trigProbe('${t.id}')" title="Zeigt für jede Person im Raum, welche Bedingung zutrifft – ohne etwas auszuführen"
-          style="font-size:.66rem;padding:4px 11px;background:rgba(52,211,153,0.12);border:1px solid rgba(52,211,153,0.35);color:#34d399;border-radius:6px;cursor:pointer">🧪 Prüfen</button>
-        <span style="font-size:.6rem;color:var(--text3)">Probelauf gegen die Personen im Raum – führt nichts aus</span>
+          style="font-size:.75rem;padding:4px 11px;background:rgba(52,211,153,0.12);border:1px solid rgba(52,211,153,0.35);color:#34d399;border-radius:6px;cursor:pointer">🧪 Prüfen</button>
+        <span style="font-size:.6875rem;color:var(--text3)">Probelauf gegen die Personen im Raum – führt nichts aus</span>
       </div>
       <div id="probe-${t.id}" style="display:none;margin-bottom:10px;padding:8px 11px;background:rgba(255,255,255,0.03);border:1px solid var(--border2);border-radius:8px">
         <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
-          <span style="font-size:.64rem;font-weight:700;color:var(--text2)">🧪 Probelauf</span>
+          <span style="font-size:.6875rem;font-weight:700;color:var(--text2)">🧪 Probelauf</span>
           <span style="flex:1"></span>
-          <button onclick="trigProbeSchliessen('${t.id}')" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:.7rem">✕</button>
+          <button onclick="trigProbeSchliessen('${t.id}')" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:.75rem">✕</button>
         </div>
         <div id="probe-inhalt-${t.id}"></div>
       </div>
@@ -1281,7 +1281,7 @@ function renderTrigCard(bot, t, i) {
           🔀 IF – diese Bedingungen entscheiden DANN vs. SONST
         </div>
         <div class="ifelse-if-body">
-          <div style="font-size:.61rem;color:var(--text3);margin-bottom:7px">
+          <div style="font-size:.6875rem;color:var(--text3);margin-bottom:7px">
             Nur wenn die <b style="color:var(--text2)">Auslöser-Bedingungen</b> oben bereits zugetroffen haben, wird hier geprüft:<br>
             ✅ <b style="color:#34d399">DANN</b> wenn alle IF-Bedingungen zutreffen &nbsp;·&nbsp; ❌ <b style="color:#fb7185">SONST</b> wenn eine nicht zutrifft.
             Ohne IF-Bedingungen läuft immer DANN.
@@ -1454,7 +1454,7 @@ function _renderGruppe(bot, tid, c, pfad) {
   const farbe = oder ? '#fbbf24' : '#8b5cf6';
   const kindZeilen = kinder.map((k, ki) => {
     const kp = pfad + '.' + ki;
-    const vor = `<span style="font-size:.6rem;color:${farbe};font-weight:700;min-width:26px">`
+    const vor = `<span style="font-size:.6875rem;color:${farbe};font-weight:700;min-width:26px">`
       + (ki === 0 ? '' : (oder ? 'ODER' : 'UND')) + `</span>`;
     // Eine Klammer in der Klammer wird rekursiv gezeichnet
     if (k.typ === 'gruppe')
@@ -1465,33 +1465,33 @@ function _renderGruppe(bot, tid, c, pfad) {
     const inner = _condInner(bot, tid, kp, k, { fn:'gruppeKindFeld', args:[tid, kp] });
     return `<div style="display:flex;align-items:center;gap:5px;padding:3px 0">`
       + vor
-      + `<span style="font-size:.7rem">${_condIcon(k.typ)}</span>`
+      + `<span style="font-size:.75rem">${_condIcon(k.typ)}</span>`
       + `<div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;flex:1">${inner}</div>`
       + `<button onclick="condAusGruppe('${tid}','${kp}')" title="Aus der Klammer herausnehmen"`
-      + ` style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:.7rem">⤴</button>`
+      + ` style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:.75rem">⤴</button>`
       + `<button onclick="gruppeCondRemove('${tid}','${kp}')" title="Löschen"`
-      + ` style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.7rem">✕</button>`
+      + ` style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.75rem">✕</button>`
       + `</div>`;
   }).join('');
 
   return `<div style="border:1px solid ${farbe}55;border-left:3px solid ${farbe};border-radius:7px;`
     + `padding:6px 9px;margin:3px 0 3px 12px;background:${farbe}0d">`
     + `<div style="display:flex;align-items:center;gap:6px;margin-bottom:2px">`
-    + `<span style="font-size:.62rem;font-weight:700;color:${farbe}">( Klammer )</span>`
-    + `<select class="cf" style="width:150px;font-size:.66rem" onchange="gruppeFeld('${tid}','${pfad}',this.value)">`
+    + `<span style="font-size:.6875rem;font-weight:700;color:${farbe}">( Klammer )</span>`
+    + `<select class="cf" style="width:150px;font-size:.75rem" onchange="gruppeFeld('${tid}','${pfad}',this.value)">`
     + `<option value="oder" ${oder?'selected':''}>eine davon genügt</option>`
     + `<option value="und" ${!oder?'selected':''}>alle davon nötig</option>`
     + `</select>`
-    + `<select class="cf" style="width:150px;font-size:.66rem" onchange="if(this.value){gruppeAddCond('${tid}','${pfad}',this.value);this.value='';}">`
+    + `<select class="cf" style="width:150px;font-size:.75rem" onchange="if(this.value){gruppeAddCond('${tid}','${pfad}',this.value);this.value='';}">`
     + `<option value="">+ Bedingung hinzufügen</option>`
     + _condTypOptionen()
     + `<option value="gruppe">( ) Klammer in der Klammer</option>`
     + `</select>`
     + `<span style="flex:1"></span>`
     + `<button onclick="gruppeCondRemove('${tid}','${pfad}')" title="Ganze Klammer löschen"`
-    + ` style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.75rem">✕</button>`
+    + ` style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.8125rem">✕</button>`
     + `</div>`
-    + (kindZeilen || `<div style="font-size:.64rem;color:var(--text3);padding:3px 0">noch leer – oben eine Bedingung hinzufügen</div>`)
+    + (kindZeilen || `<div style="font-size:.6875rem;color:var(--text3);padding:3px 0">noch leer – oben eine Bedingung hinzufügen</div>`)
     + `</div>`;
 }
 
@@ -1560,7 +1560,7 @@ const _VON_TEXT = {
 function _probeZeige(tid, d) {
   const el = document.getElementById('probe-inhalt-' + tid);
   if (!el) return;
-  const rahmen = inhalt => `<div style="font-size:.7rem;line-height:1.55">${inhalt}</div>`;
+  const rahmen = inhalt => `<div style="font-size:.75rem;line-height:1.55">${inhalt}</div>`;
 
   if (d.laeuft)  { el.innerHTML = rahmen('<span style="color:var(--text3)">⏳ Der Bot schaut nach…</span>'); return; }
   if (d.fehler)  { el.innerHTML = rahmen(`<span style="color:var(--yellow)">⚠️ ${escHtml(d.fehler)}</span>`); return; }
@@ -1576,7 +1576,7 @@ function _probeZeige(tid, d) {
   const bloecke = d.personen.map(pn => {
     const kopf = `<div style="font-weight:700;color:var(--text1);margin-top:6px">`
       + `${escHtml(pn.name || ('#'+pn.num))}`
-      + `<span style="font-weight:400;color:var(--text3);font-size:.64rem"> #${pn.num}`
+      + `<span style="font-weight:400;color:var(--text3);font-size:.6875rem"> #${pn.num}`
       + `${pn.istBot ? ' · der Bot selbst' : ''}</span></div>`;
 
     let zeilen = '';
@@ -1601,7 +1601,7 @@ function _probeZeige(tid, d) {
         || `<div style="color:var(--text3);margin-left:10px">keine Aktionen hinterlegt</div>`;
       zeilen += `<div style="color:var(--green);font-weight:600;margin-top:3px">→ Würde auslösen. Das passiert dann:</div>${akt}`
         + `<button onclick="trigFeuereJetzt('${tid}',${pn.num},${JSON.stringify(pn.name||('#'+pn.num))})"`
-        + ` style="margin-top:4px;font-size:.64rem;padding:3px 9px;background:rgba(248,113,113,0.14);`
+        + ` style="margin-top:4px;font-size:.6875rem;padding:3px 9px;background:rgba(248,113,113,0.14);`
         + `border:1px solid rgba(248,113,113,0.4);color:#f87171;border-radius:5px;cursor:pointer"`
         + ` title="Führt den Trigger wirklich aus – das wirkt im Spiel">▶ Jetzt wirklich auslösen</button>`;
     } else {
@@ -1700,11 +1700,11 @@ function _personenFeld(tid, feld, werte) {
   const chips = liste.map(n => {
     const nm = nameVon(n);
     return `<span style="display:inline-flex;align-items:center;gap:3px;background:var(--bg3);`
-      + `border:1px solid var(--border2);border-radius:10px;padding:1px 4px 1px 7px;font-size:.64rem">`
+      + `border:1px solid var(--border2);border-radius:10px;padding:1px 4px 1px 7px;font-size:.6875rem">`
       + escHtml(nm ? nm : '#' + n)
       + (nm ? `<span style="color:var(--text3)">#${n}</span>` : '')
       + `<button onclick="_personEntfernen('${tid}','${feld}',${n})" title="Entfernen"`
-      + ` style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.7rem;padding:0 2px">✕</button></span>`;
+      + ` style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.75rem;padding:0 2px">✕</button></span>`;
   }).join(' ');
   const offen = imRaum.filter(x => !liste.includes(Number(x[0])));
   const auswahl = offen.length
@@ -1712,7 +1712,7 @@ function _personenFeld(tid, feld, werte) {
       + `<option value="">+ Person aus dem Raum</option>`
       + offen.map(x => `<option value="${escHtml(x[0])}">${escHtml(x[1])}</option>`).join('')
       + `</select>`
-    : `<span style="font-size:.6rem;color:var(--text3)">niemand sonst im Raum</span>`;
+    : `<span style="font-size:.6875rem;color:var(--text3)">niemand sonst im Raum</span>`;
   return `<div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap;flex:1;min-width:200px">`
     + chips + auswahl
     + `<input class="cf" style="width:118px" placeholder="oder Nummer…"`
@@ -1885,7 +1885,7 @@ function _condFelder(tid, ci, c, def, ziel) {
   return (def.felder||[]).map(f => {
     const v = c[f.key];
     const br = f.breite ? `style="width:${f.breite}px"` : '';
-    const lbl = f.label ? `<span style="font-size:.66rem;color:var(--text3)">${escHtml(f.label)}</span>` : '';
+    const lbl = f.label ? `<span style="font-size:.75rem;color:var(--text3)">${escHtml(f.label)}</span>` : '';
     if (f.typ === 'select')
       return lbl+`<select class="cf" ${br} onchange="${setz(f.key,'this.value')};condRerender('${tid}')">`
         + f.werte.map(w=>`<option value="${escHtml(w[0])}" ${v===w[0]?'selected':''}>${escHtml(w[1])}</option>`).join('')
@@ -1896,14 +1896,14 @@ function _condFelder(tid, ci, c, def, ziel) {
       // in jeder Bedingungskarte machen den Editor sonst unbenutzbar.
       const argsJson = escHtml(JSON.stringify(ziel.args));
       return lbl
-        + `<span style="font-size:.68rem;color:var(--text2);min-width:90px">`
+        + `<span style="font-size:.75rem;color:var(--text2);min-width:90px">`
         + (v ? `<b>${escHtml(v)}</b>` : `<span style="color:var(--text3)">${escHtml(f.platzhalter||'nichts gewählt')}</span>`)
         + `</span>`
         + `<button onclick="_condPicker('${ziel.fn}','${argsJson}','${f.key}','${f.pickerTab||'item'}','${tid}')"`
-        + ` style="font-size:.62rem;padding:2px 7px;background:var(--pd);border:none;color:var(--pl);border-radius:4px;cursor:pointer"`
+        + ` style="font-size:.6875rem;padding:2px 7px;background:var(--pd);border:none;color:var(--pl);border-radius:4px;cursor:pointer"`
         + ` title="${escHtml(f.hilfe||'Aus der Liste wählen – mit Suchfeld')}">📦 Wählen</button>`
         + (v ? `<button onclick="${setz(f.key, "''")};condRerender('${tid}')" title="Auswahl löschen"`
-             + ` style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:.7rem">✕</button>` : '');
+             + ` style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:.75rem">✕</button>` : '');
     }
     if (f.typ === 'auswahl') {
       // Liste aus dem, was das Tool kennt. Ist sie leer (Katalog noch nicht
@@ -1917,7 +1917,7 @@ function _condFelder(tid, ci, c, def, ziel) {
         return lbl + `<input class="cf" ${br||'style="width:170px"'} value="${escHtml(v??'')}"`
           + ` placeholder="${escHtml(f.platzhalter||'')}" oninput="${setz(f.key,'this.value')}"`
           + ` title="${werte.length} Einträge – zu viele für eine Liste, bitte tippen">`
-          + `<span style="font-size:.6rem;color:var(--text3)">${werte.length} bekannt</span>`;
+          + `<span style="font-size:.6875rem;color:var(--text3)">${werte.length} bekannt</span>`;
       }
       if (!werte.length)
         return lbl+`<input class="cf" ${br||'style="width:150px"'} value="${escHtml(v??'')}"`
@@ -1945,7 +1945,7 @@ function _condFelder(tid, ci, c, def, ziel) {
       // Musste ueber den uebergebenen Setter laufen: der feste Aufruf
       // condTagUm(tid, ci, ...) schrieb bei einer Bedingung INNERHALB einer
       // Klammer auf die Klammer statt auf die Bedingung.
-      return namen.map((n,i)=>`<label style="font-size:.64rem;display:inline-flex;align-items:center;gap:2px;margin-right:4px">`
+      return namen.map((n,i)=>`<label style="font-size:.6875rem;display:inline-flex;align-items:center;gap:2px;margin-right:4px">`
         + `<input type="checkbox" ${an.indexOf(i)>=0?'checked':''} onchange="${setz(f.key,'_tageUm('+JSON.stringify(an)+','+i+',this.checked)')}">${n}</label>`).join('');
     }
     return lbl+`<input class="cf" ${br||'style="width:130px"'} value="${escHtml(v??'')}"`
@@ -1993,7 +1993,7 @@ function _condKnoepfe(tid) {
   }
   return Object.keys(nachGruppe).sort().map(g =>
     `<span style="width:100%;height:0"></span>`
-    + `<span style="font-size:.58rem;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;`
+    + `<span style="font-size:.6875rem;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;`
     + `align-self:center;margin-right:2px">${escHtml(g)}</span>`
     + nachGruppe[g].map(([typ, d]) =>
         `<button onclick="trigAddCond('${tid}','${typ}')"`
@@ -2039,9 +2039,9 @@ function _condInner(bot, tid, ci, c, ziel) {
   let inner = '';
   const _def = COND_DEFS[c.typ];
   if (_def) {
-    inner = `<span style="font-size:.68rem;color:var(--text2);margin-right:2px">${escHtml(_def.label)}</span>`
+    inner = `<span style="font-size:.75rem;color:var(--text2);margin-right:2px">${escHtml(_def.label)}</span>`
       + _condFelder(tid, ci, c, _def, ziel)
-      + (_def.hinweis ? `<span style="font-size:.6rem;color:var(--text3);margin-left:4px" title="${escHtml(_def.hinweis)}">ⓘ</span>` : '');
+      + (_def.hinweis ? `<span style="font-size:.6875rem;color:var(--text3);margin-left:4px" title="${escHtml(_def.hinweis)}">ⓘ</span>` : '');
   } else if (c.typ === 'wort') {
     inner = `
       <input class="cf cf-w120" value="${escHtml(c.wort||'')}" oninput="${SF}'wort',this.value)" placeholder="Triggerwort (lowercase)">
@@ -2061,28 +2061,28 @@ function _condInner(bot, tid, ci, c, ziel) {
       X<input class="cf" style="width:46px" type="number" value="${c.x??0}" oninput="${SF}'x',+this.value)">
       Y<input class="cf" style="width:46px" type="number" value="${c.y??0}" oninput="${SF}'y',+this.value)">
       ±<input class="cf" style="width:38px" type="number" value="${c.puffer??1}" oninput="${SF}'puffer',+this.value)" title="Puffer">
-      <button onclick="condSetZoneZiel('${_zf}','${_zargs}','${tid}')" style="font-size:.62rem;padding:2px 8px;background:var(--pd);border:none;color:var(--pl);border-radius:4px;cursor:pointer" title="Aktuelle Spielerposition übernehmen">📍 Set</button>
+      <button onclick="condSetZoneZiel('${_zf}','${_zargs}','${tid}')" style="font-size:.6875rem;padding:2px 8px;background:var(--pd);border:none;color:var(--pl);border-radius:4px;cursor:pointer" title="Aktuelle Spielerposition übernehmen">📍 Set</button>
       <select class="cf" style="width:150px" onchange="${SF}'zoneMode',this.value)" title="Bei Eintritt: einmal beim Betreten. Dauerhaft: bei jedem Check (~0,5s) solange drin – z.B. für %-Chance pro Schritt.">
         <option value="eintritt" ${(!c.zoneMode||c.zoneMode==='eintritt')?'selected':''}>↘️ bei Eintritt</option>
         <option value="dauerhaft" ${c.zoneMode==='dauerhaft'?'selected':''}>🔁 dauerhaft (jeder Check)</option>
       </select>`;
   } else if (c.typ === 'item_traegt' || c.typ === 'item_traegt_nicht') {
-    const negLabel = c.typ === 'item_traegt_nicht' ? '<span style="color:#e55;font-size:.65rem;font-weight:600;margin-right:4px">🚫 NICHT</span>' : '';
+    const negLabel = c.typ === 'item_traegt_nicht' ? '<span style="color:#e55;font-size:.6875rem;font-weight:600;margin-right:4px">🚫 NICHT</span>' : '';
     inner = `
       ${negLabel}
-      <span style="font-size:.68rem;color:var(--text2)">${c.gruppe?escHtml(c.gruppe)+' / ':''}<b>${escHtml(c.item||'–')}</b></span>
-      <button onclick="ipickerOpen('item',v=>{${SF}'item',v.asset||v.name);${SF}'gruppe',v.group);${RR};})" style="font-size:.62rem;padding:2px 7px;background:var(--pd);border:none;color:var(--pl);border-radius:4px;cursor:pointer">📦 Wählen</button>`;
+      <span style="font-size:.75rem;color:var(--text2)">${c.gruppe?escHtml(c.gruppe)+' / ':''}<b>${escHtml(c.item||'–')}</b></span>
+      <button onclick="ipickerOpen('item',v=>{${SF}'item',v.asset||v.name);${SF}'gruppe',v.group);${RR};})" style="font-size:.6875rem;padding:2px 7px;background:var(--pd);border:none;color:var(--pl);border-radius:4px;cursor:pointer">📦 Wählen</button>`;
   } else if (c.typ === 'zone_rect') {
     inner = `
       <input class="cf cf-w100" value="${escHtml(c.name||'')}" oninput="${SF}'name',this.value)" placeholder="Zonen-Name (!set)" title="Name für den Admin-Befehl !set <Name> X1 / X2">
-      <span style="font-size:.62rem;color:var(--text3)">Von</span>
+      <span style="font-size:.6875rem;color:var(--text3)">Von</span>
       X<input class="cf" style="width:44px" type="number" value="${c.x1??0}" oninput="${SF}'x1',+this.value)" title="X-Start">
       Y<input class="cf" style="width:44px" type="number" value="${c.y1??0}" oninput="${SF}'y1',+this.value)" title="Y-Start">
-      <span style="font-size:.62rem;color:var(--text3)">Bis</span>
+      <span style="font-size:.6875rem;color:var(--text3)">Bis</span>
       X<input class="cf" style="width:44px" type="number" value="${c.x2??2}" oninput="${SF}'x2',+this.value)" title="X-Ende">
       Y<input class="cf" style="width:44px" type="number" value="${c.y2??2}" oninput="${SF}'y2',+this.value)" title="Y-Ende">
-      <button onclick="condSetZoneZiel('${_zf}','${_zargs}','${tid}','A')" style="font-size:.62rem;padding:2px 8px;background:var(--pd);border:none;color:var(--pl);border-radius:4px;cursor:pointer" title="Von-Ecke = aktuelle Position">📍 Set A</button>
-      <button onclick="condSetZoneZiel('${_zf}','${_zargs}','${tid}','B')" style="font-size:.62rem;padding:2px 8px;background:var(--pd);border:none;color:var(--pl);border-radius:4px;cursor:pointer" title="Bis-Ecke = aktuelle Position">📍 Set B</button>
+      <button onclick="condSetZoneZiel('${_zf}','${_zargs}','${tid}','A')" style="font-size:.6875rem;padding:2px 8px;background:var(--pd);border:none;color:var(--pl);border-radius:4px;cursor:pointer" title="Von-Ecke = aktuelle Position">📍 Set A</button>
+      <button onclick="condSetZoneZiel('${_zf}','${_zargs}','${tid}','B')" style="font-size:.6875rem;padding:2px 8px;background:var(--pd);border:none;color:var(--pl);border-radius:4px;cursor:pointer" title="Bis-Ecke = aktuelle Position">📍 Set B</button>
       <select class="cf" style="width:150px" onchange="${SF}'zoneMode',this.value)" title="Bei Eintritt: einmal beim Betreten. Dauerhaft: bei jedem Check (~0,5s) solange drin – z.B. für %-Chance pro Schritt.">
         <option value="eintritt" ${(!c.zoneMode||c.zoneMode==='eintritt')?'selected':''}>↘️ bei Eintritt</option>
         <option value="dauerhaft" ${c.zoneMode==='dauerhaft'?'selected':''}>🔁 dauerhaft (jeder Check)</option>
@@ -2093,15 +2093,15 @@ function _condInner(bot, tid, ci, c, ziel) {
     const refTrig = trigs.find(t=>t.id===c.trigId);
     const modeBadge = refTrig
       ? refTrig.charSpec
-        ? `<span style="font-size:.58rem;background:#1a1040;border:1px solid var(--purple);color:var(--pl);padding:1px 5px;border-radius:3px">👤 Pro Spieler</span>`
-        : `<span style="font-size:.58rem;background:#0a1a0a;border:1px solid var(--green);color:var(--green);padding:1px 5px;border-radius:3px">🌐 Global</span>`
+        ? `<span style="font-size:.6875rem;background:#1a1040;border:1px solid var(--purple);color:var(--pl);padding:1px 5px;border-radius:3px">👤 Pro Spieler</span>`
+        : `<span style="font-size:.6875rem;background:#0a1a0a;border:1px solid var(--green);color:var(--green);padding:1px 5px;border-radius:3px">🌐 Global</span>`
       : '';
     inner = `
       <select class="cf cf-w160" onchange="${SF}'trigId',this.value);${RR}">
         <option value="">– Trigger wählen –</option>${opts}
       </select>
       ${modeBadge}
-      <span style="font-size:.62rem;color:var(--text3)">muss zuerst ausgelöst worden sein</span>`;
+      <span style="font-size:.6875rem;color:var(--text3)">muss zuerst ausgelöst worden sein</span>`;
   } else if (c.typ === 'player_betritt') {
     const bt = c.betritt_typ ?? 'alle';
     inner = `
@@ -2131,21 +2131,21 @@ function _condInner(bot, tid, ci, c, ziel) {
         <option value="">🛒 Jeder Shop-Kauf</option>
         ${shopItems.map(i=>`<option value="${i.id}" ${c.shop_id===i.id?'selected':''}>${escHtml(i.icon+' '+i.name)} (${i.preis} 💰)</option>`).join('')}
       </select>
-      <span style="font-size:.62rem;color:var(--text3)">Auslöser = Käufer · C = Kaufziel</span>`;
+      <span style="font-size:.6875rem;color:var(--text3)">Auslöser = Käufer · C = Kaufziel</span>`;
   }
   if (c.typ === 'ev_timer') {
-    inner = `<span style="font-size:.65rem;color:var(--text3)">Einmalig nach</span>
+    inner = `<span style="font-size:.6875rem;color:var(--text3)">Einmalig nach</span>
       <input class="cf cf-w80" type="number" min="1" step="1" value="${c.sek??10}"
         oninput="${SF}'sek',+this.value)">
-      <span style="font-size:.65rem;color:var(--text3)">Sekunden automatisch feuern</span>`;
+      <span style="font-size:.6875rem;color:var(--text3)">Sekunden automatisch feuern</span>`;
   } else if (c.typ === 'ev_interval') {
-    inner = `<span style="font-size:.65rem;color:var(--text3)">Alle</span>
+    inner = `<span style="font-size:.6875rem;color:var(--text3)">Alle</span>
       <input class="cf cf-w70" type="number" min="1" value="${c.sek_min??30}"
         oninput="${SF}'sek_min',+this.value)">
-      <span style="font-size:.62rem;color:var(--text3)">–</span>
+      <span style="font-size:.6875rem;color:var(--text3)">–</span>
       <input class="cf cf-w70" type="number" min="1" value="${c.sek_max??180}"
         oninput="${SF}'sek_max',+this.value)">
-      <span style="font-size:.65rem;color:var(--text3)">Sekunden wiederholt feuern</span>`;
+      <span style="font-size:.6875rem;color:var(--text3)">Sekunden wiederholt feuern</span>`;
   } else if (c.typ === 'variable') {
     inner = `
       <input class="cf cf-w120" value="${escHtml(c.varName||'')}" oninput="${SF}'varName',this.value)" placeholder="Variable (z.B. punkte)">
@@ -2155,17 +2155,17 @@ function _condInner(bot, tid, ci, c, ziel) {
       <input class="cf cf-w80" value="${escHtml(c.varWert||'')}" oninput="${SF}'varWert',this.value)" placeholder="Wert">`;
   } else if (c.typ === 'zufall') {
     inner = `
-      <span style="font-size:.65rem;color:var(--text3)">Chance</span>
+      <span style="font-size:.6875rem;color:var(--text3)">Chance</span>
       <input class="cf cf-w70" type="number" min="0" max="100" value="${c.prozent??50}" oninput="${SF}'prozent',+this.value)"> %
-      <span style="font-size:.62rem;color:var(--text3)">dass die Bedingung zutrifft</span>`;
+      <span style="font-size:.6875rem;color:var(--text3)">dass die Bedingung zutrifft</span>`;
   } else if (c.typ === 'erregung') {
     inner = `
-      <span style="font-size:.65rem;color:var(--text3)">Erregung</span>
+      <span style="font-size:.6875rem;color:var(--text3)">Erregung</span>
       <select class="cf" style="width:70px" onchange="${SF}'arCmp',this.value)">
         ${['>=','<=','>','<','=='].map(o=>`<option value="${o}" ${(c.arCmp||'>=')===o?'selected':''}>${o}</option>`).join('')}
       </select>
       <input class="cf cf-w70" type="number" min="0" max="100" value="${c.arWert??99}" oninput="${SF}'arWert',+this.value)"> %
-      <span style="font-size:.6rem;color:var(--text3)">prüft die Erregung des auslösenden Spielers · funktioniert auch allein (wird alle 2s geprüft, feuert beim Überschreiten) · setzt voraus, dass der Spieler seine Erregung teilt (BC-Sichtbarkeit „Everyone/Access")</span>`;
+      <span style="font-size:.6875rem;color:var(--text3)">prüft die Erregung des auslösenden Spielers · funktioniert auch allein (wird alle 2s geprüft, feuert beim Überschreiten) · setzt voraus, dass der Spieler seine Erregung teilt (BC-Sichtbarkeit „Everyone/Access")</span>`;
   }
   return inner;
 }
@@ -2192,7 +2192,7 @@ function renderCond(bot, tid, c, ci) {
     <div class="cond-card cond-op" id="cond-${tid}-${ci}">
       <div class="card-fields">
         <span class="cond-num">${ci+1}</span>
-        <span style="font-size:.7rem;font-weight:600;color:var(--purple);flex-shrink:0">${icons[c.typ]??'❓'}</span>
+        <span style="font-size:.75rem;font-weight:600;color:var(--purple);flex-shrink:0">${icons[c.typ]??'❓'}</span>
         ${inner}
       </div>
       <div style="display:flex;flex-direction:column;gap:2px">
@@ -2257,12 +2257,12 @@ function _renderAktGruppe(bot, tid, a, ai, branch, lok, tot) {
       rerender: `_aktListeNeu('${tid}','${branch || ''}')`
     });
     return `<div style="display:flex;align-items:center;gap:5px;padding:2px 0">`
-      + `<span style="font-size:.6rem;color:${farbe};font-weight:700;min-width:30px">`
+      + `<span style="font-size:.6875rem;color:${farbe};font-weight:700;min-width:30px">`
       + (ci === 0 ? 'WENN' : (oder ? 'ODER' : 'UND')) + `</span>`
-      + `<span style="font-size:.7rem">${_condIcon(c.typ)}</span>`
+      + `<span style="font-size:.75rem">${_condIcon(c.typ)}</span>`
       + `<div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;flex:1">${inner}</div>`
       + `<button onclick="aktGruppeBedRemove('${tid}',${AI},${ci}${bArg})" title="Bedingung löschen"`
-      + ` style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.7rem">✕</button>`
+      + ` style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.75rem">✕</button>`
       + `</div>`;
   }).join('');
 
@@ -2278,12 +2278,12 @@ function _renderAktGruppe(bot, tid, a, ai, branch, lok, tot) {
           <button class="order-btn" onclick="aktAusGruppe('${tid}',${AI}${bArg})" title="Aus der Klammer herausnehmen">⤴</button>
         </span>
         <span class="trig-order-num" style="margin-right:2px">${lok + 1}</span>
-        <span style="font-size:.68rem;font-weight:700;color:${farbe}">( ) Klammer</span>
-        <select class="cf" style="width:150px;font-size:.66rem" onchange="aktGruppeFeld('${tid}',${AI},'verknuepfung',this.value${bArg})">
+        <span style="font-size:.75rem;font-weight:700;color:${farbe}">( ) Klammer</span>
+        <select class="cf" style="width:150px;font-size:.75rem" onchange="aktGruppeFeld('${tid}',${AI},'verknuepfung',this.value${bArg})">
           <option value="und"  ${!oder ? 'selected' : ''}>alle Bedingungen nötig</option>
           <option value="oder" ${oder ? 'selected' : ''}>eine Bedingung genügt</option>
         </select>
-        <select class="cf" style="width:170px;font-size:.66rem" onchange="if(this.value){aktGruppeBedAdd('${tid}',${AI},this.value${bArg});this.value='';}">
+        <select class="cf" style="width:170px;font-size:.75rem" onchange="if(this.value){aktGruppeBedAdd('${tid}',${AI},this.value${bArg});this.value='';}">
           <option value="">+ Bedingung für die Klammer</option>
           ${_condTypOptionen()}
           <option value="gruppe">( ) Klammer in der Klammer</option>
@@ -2291,14 +2291,14 @@ function _renderAktGruppe(bot, tid, a, ai, branch, lok, tot) {
         <input class="cf cf-w80" type="number" value="${a.delay ?? 0}" oninput="actField('${tid}',${AI},'delay',+this.value${bArg})" title="Wartezeit vor der Klammer (ms)"> ms
       </div>
 
-      <div style="font-size:.59rem;color:var(--text3);margin:4px 0 2px">
+      <div style="font-size:.6875rem;color:var(--text3);margin:4px 0 2px">
         Ohne Bedingung läuft die Klammer immer – sie dient dann nur der Übersicht.
       </div>
       ${bedZeilen}
 
       <div style="display:flex;gap:6px;align-items:center;margin-top:6px;padding:5px 8px;background:rgba(96,165,250,0.05);border:1px solid rgba(96,165,250,0.12);border-radius:6px;flex-wrap:wrap">
-        <span style="font-size:.62rem;font-weight:700;color:#60a5fa;white-space:nowrap">🎯 Ziel für alles darin</span>
-        <select class="cf" style="width:230px;font-size:.68rem" onchange="aktGruppeFeld('${tid}',${AI},'aktZiel',this.value${bArg});_aktListeNeu('${tid}','${branch || ''}')">
+        <span style="font-size:.6875rem;font-weight:700;color:#60a5fa;white-space:nowrap">🎯 Ziel für alles darin</span>
+        <select class="cf" style="width:230px;font-size:.75rem" onchange="aktGruppeFeld('${tid}',${AI},'aktZiel',this.value${bArg});_aktListeNeu('${tid}','${branch || ''}')">
           <option value="erben"            ${(!a.aktZiel || a.aktZiel === 'erben') ? 'selected' : ''}>↳ jede Aktion behält ihr eigenes Ziel</option>
           <option value="ausloeser"        ${a.aktZiel === 'ausloeser' ? 'selected' : ''}>👤 Die Person, die ausgelöst hat</option>
           <option value="ausser_ausloeser" ${a.aktZiel === 'ausser_ausloeser' ? 'selected' : ''}>👥 Alle außer der auslösenden Person</option>
@@ -2307,20 +2307,20 @@ function _renderAktGruppe(bot, tid, a, ai, branch, lok, tot) {
           <option value="rang"             ${a.aktZiel === 'rang' ? 'selected' : ''}>🏆 Alle ab einem bestimmten Rang</option>
           <option value="zufall"           ${a.aktZiel === 'zufall' ? 'selected' : ''}>🎲 Eine zufällige Person im Raum</option>
         </select>
-        ${a.aktZiel === 'rang' ? `<select class="cf" style="width:190px;font-size:.68rem" onchange="aktGruppeFeld('${tid}',${AI},'aktZielRangId',this.value${bArg})">
+        ${a.aktZiel === 'rang' ? `<select class="cf" style="width:190px;font-size:.75rem" onchange="aktGruppeFeld('${tid}',${AI},'aktZielRangId',this.value${bArg})">
           <option value="">– Rang wählen –</option>
           ${_quelleRaenge().map(r => `<option value="${escHtml(r[0])}" ${a.aktZielRangId === r[0] ? 'selected' : ''}>${escHtml(r[1])}</option>`).join('')}
         </select>` : ''}
-        ${a.aktZiel === 'whitelist' ? `<input class="cf" style="flex:1;min-width:150px;font-size:.68rem" value="${escHtml((a.aktZielNummern || []).join(', '))}"
+        ${a.aktZiel === 'whitelist' ? `<input class="cf" style="flex:1;min-width:150px;font-size:.75rem" value="${escHtml((a.aktZielNummern || []).join(', '))}"
           oninput="aktGruppeFeld('${tid}',${AI},'aktZielNummern',this.value.split(',').map(x=>+x.trim()).filter(x=>x>0)${bArg})"
           placeholder="MemberNummer, z.B. 12345, 67890">` : ''}
       </div>
 
       <div style="margin-top:6px;padding-left:10px;border-left:2px dashed ${farbe}44">
-        ${kinder || `<div style="font-size:.64rem;color:var(--text3);padding:4px 0">noch leer – unten eine Aktion hinzufügen</div>`}
+        ${kinder || `<div style="font-size:.6875rem;color:var(--text3);padding:4px 0">noch leer – unten eine Aktion hinzufügen</div>`}
         <div style="display:flex;gap:6px;margin-top:4px">
-          <button onclick="aktGruppeAddKind('${tid}',${AI},'chat'${bArg})" style="font-size:.64rem;padding:3px 10px;background:none;border:1px solid rgba(255,255,255,0.12);border-radius:5px;color:var(--text2);cursor:pointer">+ Aktion</button>
-          <button onclick="aktGruppeAddKind('${tid}',${AI},'gruppe'${bArg})" style="font-size:.64rem;padding:3px 10px;background:none;border:1px solid ${farbe}55;border-radius:5px;color:${farbe};cursor:pointer">+ Klammer</button>
+          <button onclick="aktGruppeAddKind('${tid}',${AI},'chat'${bArg})" style="font-size:.6875rem;padding:3px 10px;background:none;border:1px solid rgba(255,255,255,0.12);border-radius:5px;color:var(--text2);cursor:pointer">+ Aktion</button>
+          <button onclick="aktGruppeAddKind('${tid}',${AI},'gruppe'${bArg})" style="font-size:.6875rem;padding:3px 10px;background:none;border:1px solid ${farbe}55;border-radius:5px;color:${farbe};cursor:pointer">+ Klammer</button>
         </div>
       </div>
     </div>
@@ -2359,13 +2359,13 @@ function renderAct(tid, a, ai, branch) {
     extra = `<textarea class="cf" style="width:100%;resize:vertical;min-height:44px;margin-top:4px" rows="2"
         oninput="actField('${tid}',${AI},'text',this.value${branch?`,'${branch}'`:''})"
         placeholder="{name} schrieb: {wort} – Pos: {x}/{y}">${escHtml(a.text||'')}</textarea>
-      <div style="font-size:.59rem;color:var(--text3);margin-top:2px">Variablen: {name} {wort} {typ} {x} {y}</div>
-      <label style="cursor:pointer;display:flex;align-items:center;gap:5px;font-size:.62rem;color:var(--text2);margin-top:2px" title="An: jede Zeile ist eine Variante. Es wird zufällig EINE Zeile gesendet.">
+      <div style="font-size:.6875rem;color:var(--text3);margin-top:2px">Variablen: {name} {wort} {typ} {x} {y}</div>
+      <label style="cursor:pointer;display:flex;align-items:center;gap:5px;font-size:.6875rem;color:var(--text2);margin-top:2px" title="An: jede Zeile ist eine Variante. Es wird zufällig EINE Zeile gesendet.">
         <input type="checkbox" ${a.zufallstext?'checked':''} onchange="actField('${tid}',${AI},'zufallstext',this.checked${branch?`,'${branch}'`:''})">
         🎲 Zufallszeile (1 Zeile = 1 Variante, zufällig gewählt)
       </label>`;
   } else if (a.typ === 'item') {
-    const cfgInfo = a.itemConfig ? ` <span style="font-size:.58rem;background:var(--gd);color:var(--green);padding:1px 4px;border-radius:3px">✓ Konfig</span>` : '';
+    const cfgInfo = a.itemConfig ? ` <span style="font-size:.6875rem;background:var(--gd);color:var(--green);padding:1px 4px;border-radius:3px">✓ Konfig</span>` : '';
     const label = a.itemConfig ? `📦 ${a.itemConfig.group}/${a.itemConfig.asset}` : a.profilName ? `👗 ${a.profilName}` : a.curseName ? `🔮 ${a.curseName}` : a.item ? `📦 ${a.gruppe||'?'}/${a.item}` : '– nichts gewählt –';
     const _keepList = Array.isArray(a.outfitKeepGroups) ? a.outfitKeepGroups : (a.outfitKeepGroups ? (''+a.outfitKeepGroups).split(',').map(s=>s.trim()).filter(Boolean) : []);
     const asLabel = a.antiStrip_itemConfig ? `📦 ${a.antiStrip_itemConfig.group}/${a.antiStrip_itemConfig.asset}`
@@ -2375,70 +2375,70 @@ function renderAct(tid, a, ai, branch) {
     const antiStripRows = a.antiStrip ? `
       <div class="as-act-row">
         <span class="as-act-label">Ersatz-Item:</span>
-        <span style="font-size:.68rem;color:var(--text2);flex:1">${escHtml(asLabel)}</span>
-        <button onclick="ipickerOpenForActAntiStrip('${tid}',${AI}${branchArg})" style="font-size:.63rem;padding:3px 9px;background:var(--pd);border:none;color:var(--pl);border-radius:5px;cursor:pointer">📂 Wählen</button>
+        <span style="font-size:.75rem;color:var(--text2);flex:1">${escHtml(asLabel)}</span>
+        <button onclick="ipickerOpenForActAntiStrip('${tid}',${AI}${branchArg})" style="font-size:.6875rem;padding:3px 9px;background:var(--pd);border:none;color:var(--pl);border-radius:5px;cursor:pointer">📂 Wählen</button>
         ${a.antiStrip_ersatz && !a.antiStrip_itemConfig ? `<input class="cf" type="color" value="${a.antiStrip_farbe||'#ff0000'}" oninput="actField('${tid}',${AI},'antiStrip_farbe',this.value${branchArg})" style="width:28px;padding:1px;cursor:pointer" title="Farbe">` : ''}
       </div>
       <div class="as-act-row">
         <span class="as-act-label">Delay:</span>
         <input class="cf" type="number" value="${a.antiStrip_delay??500}" min="0" step="100"
           oninput="actField('${tid}',${AI},'antiStrip_delay',+this.value${branchArg})"
-          style="width:72px;font-size:.68rem"> ms
-        <span style="font-size:.6rem;color:var(--text3)">(Wartezeit nach Entfernen)</span>
+          style="width:72px;font-size:.75rem"> ms
+        <span style="font-size:.6875rem;color:var(--text3)">(Wartezeit nach Entfernen)</span>
       </div>` : '';
     extra = `<div style="display:flex;gap:6px;align-items:center;margin-top:4px;flex-wrap:wrap">
-        <span style="font-size:.7rem;color:var(--text2);flex:1">${escHtml(label)}${cfgInfo}</span>
-        <button onclick="ipickerOpenForAct('${tid}',${AI}${branchArg})" style="font-size:.63rem;padding:3px 9px;background:var(--pd);border:none;color:var(--pl);border-radius:5px;cursor:pointer">📂 Auswählen…</button>
+        <span style="font-size:.75rem;color:var(--text2);flex:1">${escHtml(label)}${cfgInfo}</span>
+        <button onclick="ipickerOpenForAct('${tid}',${AI}${branchArg})" style="font-size:.6875rem;padding:3px 9px;background:var(--pd);border:none;color:var(--pl);border-radius:5px;cursor:pointer">📂 Auswählen…</button>
         ${a.item && !a.itemConfig ? `<input class="cf" type="color" value="${a.farbe||'#ffffff'}" oninput="actField('${tid}',${AI},'farbe',this.value${branchArg})" style="width:28px;padding:1px;cursor:pointer" title="Farbe">` : ''}
       </div>
       <div style="display:flex;gap:5px;align-items:center;margin-top:3px">
-        <span style="font-size:.62rem;color:var(--text3)" title="0 = aus. Nach X Sekunden wird das angelegte Item/Outfit automatisch wieder entfernt (Verfall).">⏳ Verfall nach:</span>
-        <input class="cf cf-w80" type="number" min="0" value="${a.verfallSek??0}" oninput="actField('${tid}',${AI},'verfallSek',+this.value${branchArg})"> s <span style="font-size:.6rem;color:var(--text3)">(0 = aus, auto-entfernen)</span>
+        <span style="font-size:.6875rem;color:var(--text3)" title="0 = aus. Nach X Sekunden wird das angelegte Item/Outfit automatisch wieder entfernt (Verfall).">⏳ Verfall nach:</span>
+        <input class="cf cf-w80" type="number" min="0" value="${a.verfallSek??0}" oninput="actField('${tid}',${AI},'verfallSek',+this.value${branchArg})"> s <span style="font-size:.6875rem;color:var(--text3)">(0 = aus, auto-entfernen)</span>
       </div>
       <div class="as-act-box">
-        <label style="cursor:pointer;display:flex;align-items:center;gap:6px;font-size:.65rem;color:var(--text2)">
+        <label style="cursor:pointer;display:flex;align-items:center;gap:6px;font-size:.6875rem;color:var(--text2)">
           <input type="checkbox" ${a.antiStrip?'checked':''} onchange="actField('${tid}',${AI},'antiStrip',this.checked${branchArg});actRerender('${tid}',${AI}${branchArg})">
           🛡️ AntiStrip – Item wird wieder angelegt wenn der Spieler es entfernt
         </label>
         ${antiStripRows}
       </div>
       <div class="as-act-box" style="margin-top:2px">
-        <label style="cursor:pointer;display:flex;align-items:center;gap:6px;font-size:.65rem;color:var(--text2)">
+        <label style="cursor:pointer;display:flex;align-items:center;gap:6px;font-size:.6875rem;color:var(--text2)">
           <input type="checkbox" ${a.nostrip?'checked':''} onchange="actField('${tid}',${AI},'nostrip',this.checked${branchArg})">
           🔒 NoStrip – Freeze + AntiStrip wenn K&auml;ufer /nostrip tippt
         </label>
       </div>
       ${(Array.isArray(a.profilItems)&&a.profilItems.length)?`
       <div class="as-act-box" style="margin-top:2px">
-        <label style="cursor:pointer;display:flex;align-items:center;gap:6px;font-size:.65rem;color:var(--text2)" title="An: bereits angelegte Fesseln/Items (z.B. vom Bot, Cage) bleiben beim Outfit-Anlegen erhalten. Aus: werden vorher entfernt.">
+        <label style="cursor:pointer;display:flex;align-items:center;gap:6px;font-size:.6875rem;color:var(--text2)" title="An: bereits angelegte Fesseln/Items (z.B. vom Bot, Cage) bleiben beim Outfit-Anlegen erhalten. Aus: werden vorher entfernt.">
           <input type="checkbox" ${a.outfitKeep?'checked':''} onchange="actField('${tid}',${AI},'outfitKeep',this.checked${branchArg})">
           🛡️ Fesseln/Items behalten (nicht ablegen)
         </label>
-        <label style="cursor:pointer;display:flex;align-items:center;gap:6px;font-size:.65rem;color:var(--text2);margin-top:3px" title="An: vorhandene Klamotten bleiben. Aus: alle Klamotten werden entfernt (Fesseln/Items bleiben je nach Option oben).">
+        <label style="cursor:pointer;display:flex;align-items:center;gap:6px;font-size:.6875rem;color:var(--text2);margin-top:3px" title="An: vorhandene Klamotten bleiben. Aus: alle Klamotten werden entfernt (Fesseln/Items bleiben je nach Option oben).">
           <input type="checkbox" ${a.outfitKeepClothes?'checked':''} onchange="actField('${tid}',${AI},'outfitKeepClothes',this.checked${branchArg})">
           👗 Klamotten behalten (sonst werden sie abgelegt)
         </label>
         <div style="margin-top:3px">
-          <span style="font-size:.6rem;color:var(--text3)" title="Haare (Hair/发) bleiben automatisch. Hier weitere Gruppen wählen, die NIE abgelegt werden (z.B. Augen). Eigene/Custom-Namen rechts eintippen + Enter.">🔒 immer behalten (zusätzlich):</span>
+          <span style="font-size:.6875rem;color:var(--text3)" title="Haare (Hair/发) bleiben automatisch. Hier weitere Gruppen wählen, die NIE abgelegt werden (z.B. Augen). Eigene/Custom-Namen rechts eintippen + Enter.">🔒 immer behalten (zusätzlich):</span>
           <div style="display:flex;gap:5px;align-items:center;margin-top:2px;flex-wrap:wrap">
             <select class="cf" style="min-width:150px" onchange="if(this.value){outfitKeepAdd('${tid}',${AI},this.value${branchArg});this.value='';}">
               <option value="">➕ Gruppe wählen …</option>
               ${_botItemGroups().map(g=>`<option value="${escHtml(g)}">${escHtml(g)}</option>`).join('')}
             </select>
-            <input class="cf" style="width:150px;font-size:.62rem" placeholder="eigener Name + Enter" onkeydown="if(event.key==='Enter'&&this.value.trim()){outfitKeepAdd('${tid}',${AI},this.value${branchArg});this.value='';event.preventDefault();}">
+            <input class="cf" style="width:150px;font-size:.6875rem" placeholder="eigener Name + Enter" onkeydown="if(event.key==='Enter'&&this.value.trim()){outfitKeepAdd('${tid}',${AI},this.value${branchArg});this.value='';event.preventDefault();}">
           </div>
-          <div style="margin-top:3px">${_keepList.length?_keepList.map((g,gi)=>`<span style="display:inline-flex;align-items:center;gap:4px;background:var(--pd);color:var(--pl);padding:2px 8px;border-radius:11px;font-size:.62rem;margin:2px 3px 0 0">${escHtml(g)}<button onclick="outfitKeepRemove('${tid}',${AI},${gi}${branchArg})" style="background:none;border:none;color:var(--pl);cursor:pointer;font-size:.7rem;padding:0 1px;line-height:1">✕</button></span>`).join(''):`<span style="font-size:.6rem;color:var(--text3)">– nur Haare automatisch geschützt –</span>`}</div>
+          <div style="margin-top:3px">${_keepList.length?_keepList.map((g,gi)=>`<span style="display:inline-flex;align-items:center;gap:4px;background:var(--pd);color:var(--pl);padding:2px 8px;border-radius:11px;font-size:.6875rem;margin:2px 3px 0 0">${escHtml(g)}<button onclick="outfitKeepRemove('${tid}',${AI},${gi}${branchArg})" style="background:none;border:none;color:var(--pl);cursor:pointer;font-size:.75rem;padding:0 1px;line-height:1">✕</button></span>`).join(''):`<span style="font-size:.6875rem;color:var(--text3)">– nur Haare automatisch geschützt –</span>`}</div>
         </div>
-        <label style="cursor:pointer;display:flex;align-items:center;gap:6px;font-size:.65rem;color:var(--text2);margin-top:3px">
+        <label style="cursor:pointer;display:flex;align-items:center;gap:6px;font-size:.6875rem;color:var(--text2);margin-top:3px">
           <input type="checkbox" ${a.profilEinzeln?'checked':''} onchange="actField('${tid}',${AI},'profilEinzeln',this.checked${branchArg});actRerender('${tid}',${AI}${branchArg})">
           🧩 Items einzeln nacheinander anlegen (in Reihenfolge unten)
         </label>
         ${a.profilEinzeln?`<div style="display:flex;gap:6px;align-items:center;margin-top:3px">
-          <span style="font-size:.6rem;color:var(--text3)">Abstand pro Item:</span>
+          <span style="font-size:.6875rem;color:var(--text3)">Abstand pro Item:</span>
           <input class="cf" type="number" min="80" step="10" value="${a.profilEinzelnGap??250}" style="width:72px" oninput="actField('${tid}',${AI},'profilEinzelnGap',+this.value${branchArg})"> ms
         </div>`:''}
         <div style="margin-top:4px;display:flex;flex-direction:column;gap:2px;max-height:230px;overflow:auto">
-          ${a.profilItems.map((it,ii)=>`<div style="display:flex;gap:5px;align-items:center;font-size:.62rem;background:rgba(255,255,255,0.03);border-radius:4px;padding:2px 5px">
+          ${a.profilItems.map((it,ii)=>`<div style="display:flex;gap:5px;align-items:center;font-size:.6875rem;background:rgba(255,255,255,0.03);border-radius:4px;padding:2px 5px">
             <span style="display:flex;flex-direction:column;gap:0">
               <button class="order-btn" onclick="profilItemMove('${tid}',${AI},${ii},-1${branchArg})" ${ii===0?'disabled':''}>▲</button>
               <button class="order-btn" onclick="profilItemMove('${tid}',${AI},${ii},1${branchArg})" ${ii===a.profilItems.length-1?'disabled':''}>▼</button>
@@ -2452,8 +2452,8 @@ function renderAct(tid, a, ai, branch) {
     const _entfList = Array.isArray(a.gruppen) ? a.gruppen : (a.gruppe ? [a.gruppe] : []);
     const _entfGroups = _botItemGroups();
     const _entfChips = _entfList.length
-      ? _entfList.map((g,gi)=>`<span style="display:inline-flex;align-items:center;gap:4px;background:var(--pd);color:var(--pl);padding:2px 8px;border-radius:11px;font-size:.65rem;margin:2px 3px 0 0">${escHtml(g)}<button onclick="actEntfRemoveGruppe('${tid}',${AI},${gi}${branchArg})" style="background:none;border:none;color:var(--pl);cursor:pointer;font-size:.7rem;padding:0 1px;line-height:1">✕</button></span>`).join('')
-      : `<span style="font-size:.62rem;color:var(--text3)">– noch keine Gruppe gewählt –</span>`;
+      ? _entfList.map((g,gi)=>`<span style="display:inline-flex;align-items:center;gap:4px;background:var(--pd);color:var(--pl);padding:2px 8px;border-radius:11px;font-size:.6875rem;margin:2px 3px 0 0">${escHtml(g)}<button onclick="actEntfRemoveGruppe('${tid}',${AI},${gi}${branchArg})" style="background:none;border:none;color:var(--pl);cursor:pointer;font-size:.75rem;padding:0 1px;line-height:1">✕</button></span>`).join('')
+      : `<span style="font-size:.6875rem;color:var(--text3)">– noch keine Gruppe gewählt –</span>`;
     extra = `<div style="margin-top:4px">
       <select class="cf" style="width:100%" onchange="if(this.value){actEntfAddGruppe('${tid}',${AI},this.value${branchArg});this.value='';}">
         <option value="">➕ Gruppe hinzufügen …</option>
@@ -2467,22 +2467,22 @@ function renderAct(tid, a, ai, branch) {
       const gueltig = s.gueltig ?? true; // Fallback zählt als Erfolg?
       return `<div class="tp-slot-row" id="tpslot-${tid}-${ai}-${si}">
         <span class="tp-slot-badge ${si===0?'primary':'fallback'}">${si===0?'Primär':'Fallback '+(si)}</span>
-        <span style="font-size:.63rem;color:var(--text3)">X</span>
+        <span style="font-size:.6875rem;color:var(--text3)">X</span>
         <input class="cf" type="number" style="width:54px" value="${s.x??0}" oninput="tpSlotField('${tid}',${AI},${si},'x',+this.value${branchArg})" placeholder="X">
-        <span style="font-size:.63rem;color:var(--text3)">Y</span>
+        <span style="font-size:.6875rem;color:var(--text3)">Y</span>
         <input class="cf" type="number" style="width:54px" value="${s.y??0}" oninput="tpSlotField('${tid}',${AI},${si},'y',+this.value${branchArg})" placeholder="Y">
-        <button onclick="tpSlotSetPos('${tid}',${AI},${si}${branchArg})" style="font-size:.62rem;padding:1px 7px;background:var(--pd);border:none;color:var(--pl);border-radius:4px;cursor:pointer" title="Aktuelle Spielerposition übernehmen">📍 Set</button>
+        <button onclick="tpSlotSetPos('${tid}',${AI},${si}${branchArg})" style="font-size:.6875rem;padding:1px 7px;background:var(--pd);border:none;color:var(--pl);border-radius:4px;cursor:pointer" title="Aktuelle Spielerposition übernehmen">📍 Set</button>
         <button class="tp-slot-valid ${gueltig?'zählt':'zählt-nicht'}"
           onclick="tpSlotField('${tid}',${AI},${si},'gueltig',!${gueltig}${branchArg});actRerender('${tid}',${AI}${branchArg})"
           title="${gueltig?'Dieser Slot zählt als Erfolg – klicken um zu ändern':'Dieser Slot gilt als Fehler (bei_fehler greift) – klicken um zu ändern'}">
           ${gueltig?'✅ Gültig':'❌ Fehler'}
         </button>
-        <button onclick="tpSlotRemove('${tid}',${AI},${si}${branchArg})" style="margin-left:auto;background:none;border:none;color:var(--red);cursor:pointer;font-size:.7rem;padding:1px 4px" title="Entfernen">✕</button>
+        <button onclick="tpSlotRemove('${tid}',${AI},${si}${branchArg})" style="margin-left:auto;background:none;border:none;color:var(--red);cursor:pointer;font-size:.75rem;padding:1px 4px" title="Entfernen">✕</button>
       </div>`;
     }).join('');
     const tpMode = a.tpMode || 'punkte';
     const modeSel = `<div style="display:flex;gap:8px;align-items:center;margin-top:5px;flex-wrap:wrap">
-      <span style="font-size:.63rem;color:var(--text3)">Modus:</span>
+      <span style="font-size:.6875rem;color:var(--text3)">Modus:</span>
       <select class="cf" style="width:200px" onchange="actField('${tid}',${AI},'tpMode',this.value${branchArg});actRerender('${tid}',${AI}${branchArg})">
         <option value="punkte" ${tpMode==='punkte'?'selected':''}>📍 Punkte (Primär + Fallbacks)</option>
         <option value="bereich" ${tpMode==='bereich'?'selected':''}>⬛ Bereich (zufälliger freier Punkt)</option>
@@ -2490,22 +2490,22 @@ function renderAct(tid, a, ai, branch) {
     </div>`;
     if (tpMode === 'bereich') {
       extra = modeSel + `
-        <div style="font-size:.63rem;color:var(--text3);margin-top:5px">🌀 Teleportiert auf einen zufälligen freien Punkt im Rechteck A→B. Alles belegt → Fehler.</div>
+        <div style="font-size:.6875rem;color:var(--text3);margin-top:5px">🌀 Teleportiert auf einen zufälligen freien Punkt im Rechteck A→B. Alles belegt → Fehler.</div>
         <div class="tp-slot-row" style="margin-top:4px">
           <span class="tp-slot-badge primary">Ecke A</span>
-          <span style="font-size:.63rem;color:var(--text3)">X</span><input class="cf" type="number" style="width:54px" value="${a.tpAx??0}" oninput="actField('${tid}',${AI},'tpAx',+this.value${branchArg})">
-          <span style="font-size:.63rem;color:var(--text3)">Y</span><input class="cf" type="number" style="width:54px" value="${a.tpAy??0}" oninput="actField('${tid}',${AI},'tpAy',+this.value${branchArg})">
-          <button onclick="tpAreaSetPos('${tid}',${AI},'A'${branchArg})" style="font-size:.62rem;padding:1px 7px;background:var(--pd);border:none;color:var(--pl);border-radius:4px;cursor:pointer" title="Ecke A = aktuelle Position">📍 Set A</button>
+          <span style="font-size:.6875rem;color:var(--text3)">X</span><input class="cf" type="number" style="width:54px" value="${a.tpAx??0}" oninput="actField('${tid}',${AI},'tpAx',+this.value${branchArg})">
+          <span style="font-size:.6875rem;color:var(--text3)">Y</span><input class="cf" type="number" style="width:54px" value="${a.tpAy??0}" oninput="actField('${tid}',${AI},'tpAy',+this.value${branchArg})">
+          <button onclick="tpAreaSetPos('${tid}',${AI},'A'${branchArg})" style="font-size:.6875rem;padding:1px 7px;background:var(--pd);border:none;color:var(--pl);border-radius:4px;cursor:pointer" title="Ecke A = aktuelle Position">📍 Set A</button>
         </div>
         <div class="tp-slot-row" style="margin-top:3px">
           <span class="tp-slot-badge fallback">Ecke B</span>
-          <span style="font-size:.63rem;color:var(--text3)">X</span><input class="cf" type="number" style="width:54px" value="${a.tpBx??2}" oninput="actField('${tid}',${AI},'tpBx',+this.value${branchArg})">
-          <span style="font-size:.63rem;color:var(--text3)">Y</span><input class="cf" type="number" style="width:54px" value="${a.tpBy??2}" oninput="actField('${tid}',${AI},'tpBy',+this.value${branchArg})">
-          <button onclick="tpAreaSetPos('${tid}',${AI},'B'${branchArg})" style="font-size:.62rem;padding:1px 7px;background:var(--pd);border:none;color:var(--pl);border-radius:4px;cursor:pointer" title="Ecke B = aktuelle Position">📍 Set B</button>
+          <span style="font-size:.6875rem;color:var(--text3)">X</span><input class="cf" type="number" style="width:54px" value="${a.tpBx??2}" oninput="actField('${tid}',${AI},'tpBx',+this.value${branchArg})">
+          <span style="font-size:.6875rem;color:var(--text3)">Y</span><input class="cf" type="number" style="width:54px" value="${a.tpBy??2}" oninput="actField('${tid}',${AI},'tpBy',+this.value${branchArg})">
+          <button onclick="tpAreaSetPos('${tid}',${AI},'B'${branchArg})" style="font-size:.6875rem;padding:1px 7px;background:var(--pd);border:none;color:var(--pl);border-radius:4px;cursor:pointer" title="Ecke B = aktuelle Position">📍 Set B</button>
         </div>`;
     } else {
       extra = modeSel + `
-        <div style="font-size:.63rem;color:var(--text3);margin-top:5px">
+        <div style="font-size:.6875rem;color:var(--text3);margin-top:5px">
           🌀 Teleportiert den Auslöser. Wenn alle Positionen belegt sind → gilt als Fehler.
         </div>
         <div class="tp-slot-list" id="tpslots-${tid}-${ai}">${slotsHtml}</div>
@@ -2522,8 +2522,8 @@ function renderAct(tid, a, ai, branch) {
         <option value="reset" ${mop==='reset'?'selected':''}>🔄 Zurücksetzen (0)</option>
       </select>
       ${mop!=='reset'?`<input class="cf cf-w80" type="number" value="${a.money_val??1}" oninput="actField('${tid}',${AI},'money_val',+this.value${branchArg})">
-      <span style="font-size:.68rem;color:var(--text3)">${escHtml(moneyName)}</span>`:''}
-      <span style="font-size:.62rem;color:var(--text3)">Ziel: Auslöser</span>
+      <span style="font-size:.75rem;color:var(--text3)">${escHtml(moneyName)}</span>`:''}
+      <span style="font-size:.6875rem;color:var(--text3)">Ziel: Auslöser</span>
     </div>`;
   } else if (a.typ === 'rang') {
     const rop = a.rang_op ?? 'setzen';
@@ -2539,11 +2539,11 @@ function renderAct(tid, a, ai, branch) {
         <option value="">– Rang wählen –</option>
         ${ranks.map(r=>`<option value="${r.id}" ${a.rang_id===r.id?'selected':''}>${escHtml(r.icon+' '+r.name)} (Lv.${r.level})</option>`).join('')}
       </select>`:''}
-      ${rop==='naechster'||rop==='vorheriger'?`<span style="font-size:.62rem;color:var(--text3)">Bei Lv.Max/Min: kein Wechsel</span>`:''}
+      ${rop==='naechster'||rop==='vorheriger'?`<span style="font-size:.6875rem;color:var(--text3)">Bei Lv.Max/Min: kein Wechsel</span>`:''}
     </div>`;
   } else if (a.typ === 'szene') {
     extra = `<div style="display:flex;gap:8px;align-items:center;margin-top:5px;flex-wrap:wrap">
-      <span style="font-size:.65rem;color:var(--text3)">📖 Szene:</span>
+      <span style="font-size:.6875rem;color:var(--text3)">📖 Szene:</span>
       <select class="cf" style="flex:1;min-width:170px" onchange="actField('${tid}',${AI},'szeneId',this.value${branchArg})">
         <option value="">– Szene wählen –</option>
         ${_szenen(b).map(sz=>`<option value="${sz.id}" ${a.szeneId===sz.id?'selected':''}>${escHtml(sz.name||sz.id)}</option>`).join('')}
@@ -2559,7 +2559,7 @@ function renderAct(tid, a, ai, branch) {
         <option value="toggle" ${a.varOp==='toggle'?'selected':''}>🔁 Umschalten</option>
       </select>
       <input class="cf" style="width:90px" value="${escHtml(a.varWert||'')}" placeholder="Wert" oninput="actField('${tid}',${AI},'varWert',this.value${branchArg})">
-      <span style="font-size:.6rem;color:var(--text3)">Ziel: Auslöser</span>
+      <span style="font-size:.6875rem;color:var(--text3)">Ziel: Auslöser</span>
     </div>`;
   } else if (a.typ === 'inventar_geben') {
     const _defs = (typeof _quelleItemDefs === 'function') ? _quelleItemDefs() : [];
@@ -2575,9 +2575,9 @@ function renderAct(tid, a, ai, branch) {
         <option value="nehmen" ${a.invOp==='nehmen'?'selected':''}>\u2796 wegnehmen</option>
       </select>
       <input class="cf" type="number" min="1" style="width:70px" value="${a.invAnzahl??1}" oninput="actField('${tid}',${AI},'invAnzahl',+this.value${branchArg})">
-      <span style="font-size:.6rem;color:var(--text3)">St\u00fcck</span>
+      <span style="font-size:.6875rem;color:var(--text3)">St\u00fcck</span>
     </div>
-    <div style="font-size:.59rem;color:var(--text3);margin-top:3px">Die Gegenst\u00e4nde kommen aus dem <b>Items</b>-Tab. Wer sie bekommt, legst du unten bei \u{1F3AF} Ziel fest.</div>`;
+    <div style="font-size:.6875rem;color:var(--text3);margin-top:3px">Die Gegenst\u00e4nde kommen aus dem <b>Items</b>-Tab. Wer sie bekommt, legst du unten bei \u{1F3AF} Ziel fest.</div>`;
   } else if (a.typ === 'erregung') {
     const eop = a.erregOp||'set';
     extra = `<div style="display:flex;gap:6px;align-items:center;margin-top:5px;flex-wrap:wrap">
@@ -2589,7 +2589,7 @@ function renderAct(tid, a, ai, branch) {
         <option value="stop" ${eop==='stop'?'selected':''}>🛑 Orgasmus stoppen</option>
       </select>
       ${(eop==='set'||eop==='add'||eop==='sub')?`<input class="cf cf-w70" type="number" min="0" max="100" value="${a.erregVal??50}" oninput="actField('${tid}',${AI},'erregVal',+this.value${branchArg})"> %`:''}
-      <span style="font-size:.6rem;color:var(--text3)">wirkt zuverlässig auf dich selbst (BC synct nur eigene Erregung)</span>
+      <span style="font-size:.6875rem;color:var(--text3)">wirkt zuverlässig auf dich selbst (BC synct nur eigene Erregung)</span>
     </div>`;
   } else if (a.typ === 'mapkey') {
     const mop = a.mapKeyOp||'geben';
@@ -2604,7 +2604,7 @@ function renderAct(tid, a, ai, branch) {
         <option value="silver" ${mk==='silver'?'selected':''}>🥈 Silver</option>
         <option value="gold" ${mk==='gold'?'selected':''}>🥇 Gold</option>
       </select>
-      <span style="font-size:.6rem;color:var(--text3)">Map-Schlüssel (Ziel = Aktions-Ziel) · benötigt Raum-Admin · keine Raum-Meldung</span>
+      <span style="font-size:.6875rem;color:var(--text3)">Map-Schlüssel (Ziel = Aktions-Ziel) · benötigt Raum-Admin · keine Raum-Meldung</span>
     </div>`;
   }
 
@@ -2619,14 +2619,14 @@ function renderAct(tid, a, ai, branch) {
     if (!canBranch) return '';
     const ba = branch ? `,'${branch}'` : '';
     return `<div style="display:flex;gap:5px;align-items:center;margin-top:4px">
-      <span style="font-size:.62rem;font-weight:600;color:${color};white-space:nowrap;min-width:42px">${label}</span>
-      <select class="cf" style="width:86px;font-size:.62rem" onchange="actField('${tid}',${AI},'${typField}',this.value${ba});actRerender('${tid}',${AI}${ba})">
+      <span style="font-size:.6875rem;font-weight:600;color:${color};white-space:nowrap;min-width:42px">${label}</span>
+      <select class="cf" style="width:86px;font-size:.6875rem" onchange="actField('${tid}',${AI},'${typField}',this.value${ba});actRerender('${tid}',${AI}${ba})">
         <option value="nichts"   ${mt==='nichts'?'selected':''}>– nichts</option>
         <option value="chat"    ${mt==='chat'?'selected':''}>💬 Chat</option>
         <option value="emote"   ${mt==='emote'?'selected':''}>✨ Emote</option>
         <option value="whisper" ${mt==='whisper'?'selected':''}>🤫 Whisper</option>
       </select>
-      ${mt!=='nichts'?`<input class="cf cf-flex" style="font-size:.68rem" value="${escHtml(val)}"
+      ${mt!=='nichts'?`<input class="cf cf-flex" style="font-size:.75rem" value="${escHtml(val)}"
         oninput="actField('${tid}',${AI},'${field}',this.value${ba})"
         placeholder="${placeholder}">`:''}
     </div>`;
@@ -2643,7 +2643,7 @@ function renderAct(tid, a, ai, branch) {
   const bfColors = {ignorieren:'var(--text3)',kette_stoppen:'#e8a020',trigger_ungueltig:'#e05050'};
   const ba2 = branch ? `,'${branch}'` : '';
   const bfRow = canBranch ? `<div style="display:flex;gap:6px;align-items:center;margin-top:4px">
-    <span style="font-size:.6rem;color:var(--text3);white-space:nowrap">Wenn fehlschlägt:</span>
+    <span style="font-size:.6875rem;color:var(--text3);white-space:nowrap">Wenn fehlschlägt:</span>
     <select class="cf" style="flex:1;color:${bfColors[bf]??'var(--text3)'}" onchange="actField('${tid}',${AI},'bei_fehler',this.value${ba2});actRerender('${tid}',${AI}${ba2})">
       <option value="ignorieren"        ${bf==='ignorieren'?'selected':''}>⬇️ Weiter mit nächster Aktion</option>
       <option value="kette_stoppen"     ${bf==='kette_stoppen'?'selected':''}>⏹ Kette stoppen (Trigger zählt)</option>
@@ -2666,8 +2666,8 @@ function renderAct(tid, a, ai, branch) {
         <input class="cf cf-w80" type="number" value="${a.delay??0}" oninput="actField('${tid}',${AI},'delay',+this.value${branchArg})" title="Delay nach vorheriger Aktion (ms)"> ms
       </div>
       <div style="display:flex;gap:6px;align-items:center;margin-top:5px;padding:5px 8px;background:rgba(96,165,250,0.05);border:1px solid rgba(96,165,250,0.12);border-radius:6px;flex-wrap:wrap">
-        <span style="font-size:.62rem;font-weight:700;color:#60a5fa;white-space:nowrap">🎯 Ziel</span>
-        <select class="cf" style="width:230px;font-size:.68rem" onchange="actField('${tid}',${AI},'aktZiel',this.value${branchArg});actRerender('${tid}',${AI}${branchArg})">
+        <span style="font-size:.6875rem;font-weight:700;color:#60a5fa;white-space:nowrap">🎯 Ziel</span>
+        <select class="cf" style="width:230px;font-size:.75rem" onchange="actField('${tid}',${AI},'aktZiel',this.value${branchArg});actRerender('${tid}',${AI}${branchArg})">
           <option value="ausloeser" ${(!a.aktZiel||a.aktZiel==='ausloeser')?'selected':''}>👤 Die Person, die ausgelöst hat</option>
           <option value="ausser_ausloeser" ${a.aktZiel==='ausser_ausloeser'?'selected':''}>👥 Alle außer der auslösenden Person</option>
           <option value="alle"      ${a.aktZiel==='alle'?'selected':''}>👥 Alle im Raum</option>
@@ -2676,11 +2676,11 @@ function renderAct(tid, a, ai, branch) {
           <option value="zufall"    ${a.aktZiel==='zufall'?'selected':''}>🎲 Eine zufällige Person im Raum</option>
           <option value="shop_kaeufer" ${a.aktZiel==='shop_kaeufer'?'selected':''}>💳 Wer im Shop gekauft hat</option>
         </select>
-        ${a.aktZiel==='rang'?`<select class="cf" style="width:190px;font-size:.68rem" onchange="actField('${tid}',${AI},'aktZielRangId',this.value${branchArg})">
+        ${a.aktZiel==='rang'?`<select class="cf" style="width:190px;font-size:.75rem" onchange="actField('${tid}',${AI},'aktZielRangId',this.value${branchArg})">
           <option value="">– Rang wählen –</option>
           ${_quelleRaenge().map(r=>`<option value="${escHtml(r[0])}" ${a.aktZielRangId===r[0]?'selected':''}>${escHtml(r[1])}</option>`).join('')}
-        </select><span style="font-size:.6rem;color:var(--text3)" title="Gilt für diesen Rang und alle höheren">ⓘ ab dieser Stufe aufwärts</span>`:''}
-        ${a.aktZiel==='whitelist'?`<input class="cf" style="flex:1;min-width:150px;font-size:.68rem" value="${escHtml((a.aktZielNummern||[]).join(', '))}"
+        </select><span style="font-size:.6875rem;color:var(--text3)" title="Gilt für diesen Rang und alle höheren">ⓘ ab dieser Stufe aufwärts</span>`:''}
+        ${a.aktZiel==='whitelist'?`<input class="cf" style="flex:1;min-width:150px;font-size:.75rem" value="${escHtml((a.aktZielNummern||[]).join(', '))}"
           oninput="actField('${tid}',${AI},'aktZielNummern',this.value.split(',').map(x=>+x.trim()).filter(x=>x>0)${branchArg})"
           placeholder="MemberNummer, z.B. 12345, 67890">`:''}
       </div>
@@ -3227,27 +3227,27 @@ function ipickerRender() {
     const entries = Object.entries(CURSE_DB).filter(([k,e])=>
       !search || k.toLowerCase().includes(search) || (e.CraftName||'').toLowerCase().includes(search) || (e.ItemName||'').toLowerCase().includes(search)
     ).slice(0, 150);
-    if (!entries.length) { el.innerHTML='<div style="padding:20px;color:var(--text3);font-size:.72rem;text-align:center">Keine Curses. Bitte Craft & Curse scannen/importieren.</div>'; return; }
+    if (!entries.length) { el.innerHTML='<div style="padding:20px;color:var(--text3);font-size:.75rem;text-align:center">Keine Curses. Bitte Craft & Curse scannen/importieren.</div>'; return; }
     html = entries.map(([k,e])=>{
       const idx = _ipickerCacheIdx++;
       _ipickerCache[idx] = {type:'curse', key:k, name:e.CraftName||e.ItemName, entry:e};
       return `<div class="ipicker-row" onclick="ipickerSelectIdx(${idx})">
         <span class="ipicker-tag purple">${escHtml(e.Gruppe||'?')}</span>
         <span style="flex:1">${escHtml(e.CraftName||e.ItemName)}</span>
-        <span style="color:var(--text3);font-size:.6rem">${escHtml(e.Besitzer?.Name||'')}</span>
+        <span style="color:var(--text3);font-size:.6875rem">${escHtml(e.Besitzer?.Name||'')}</span>
         ${e.IstLSCGCurse?'<span class="ipicker-tag green">🧿</span>':''}
       </div>`;
     }).join('');
   } else if (_ipickerTab === 'profil') {
     const profiles = Object.keys(PROFILES).filter(p=>!search||p.toLowerCase().includes(search));
-    if (!profiles.length) { el.innerHTML='<div style="padding:20px;color:var(--text3);font-size:.72rem;text-align:center">Keine Profile. Zuerst ein Outfit-Profil speichern.</div>'; return; }
+    if (!profiles.length) { el.innerHTML='<div style="padding:20px;color:var(--text3);font-size:.75rem;text-align:center">Keine Profile. Zuerst ein Outfit-Profil speichern.</div>'; return; }
     html = profiles.map(p=>{
       const idx = _ipickerCacheIdx++;
       _ipickerCache[idx] = {type:'profil', name:p};
       return `<div class="ipicker-row" onclick="ipickerSelectIdx(${idx})">
         <span class="ipicker-tag green">👗</span>
         <span style="flex:1">${escHtml(p)}</span>
-        <span style="color:var(--text3);font-size:.6rem">${PROFILES[p]?.date||''}</span>
+        <span style="color:var(--text3);font-size:.6875rem">${PROFILES[p]?.date||''}</span>
       </div>`;
     }).join('');
   }
@@ -3278,11 +3278,11 @@ function _showTriggerAddBanner() {
   if (!_trigPending) return;
   const banner = document.createElement('div');
   banner.id = '_trigBanner';
-  banner.style.cssText = 'position:fixed;bottom:0;left:0;right:0;z-index:400;background:#1e1040;border-top:2px solid var(--purple);padding:8px 18px;display:flex;align-items:center;gap:12px;font-size:.73rem';
+  banner.style.cssText = 'position:fixed;bottom:0;left:0;right:0;z-index:400;background:#1e1040;border-top:2px solid var(--purple);padding:8px 18px;display:flex;align-items:center;gap:12px;font-size:.8125rem';
   const _ziel = window._shopPickActive ? 'Shop' : 'Trigger';
   banner.innerHTML = `<span style="color:var(--pl)">🎯 Item für ${_ziel} wählen:</span>
     <span style="color:var(--text3);flex:1">Klicke ein Item in der Sidebar, dann auf <b style="color:var(--pl)">➕ Zum ${_ziel}</b></span>
-    <button onclick="_cancelTrigPending()" style="background:var(--rd);border:none;color:var(--red);border-radius:5px;padding:4px 10px;cursor:pointer;font-size:.68rem">✕ Abbrechen</button>`;
+    <button onclick="_cancelTrigPending()" style="background:var(--rd);border:none;color:var(--red);border-radius:5px;padding:4px 10px;cursor:pointer;font-size:.75rem">✕ Abbrechen</button>`;
   document.body.appendChild(banner);
 
   // Patch the action buttons area to show "Zum Trigger" button
@@ -3307,7 +3307,7 @@ function _injectTriggerButton() {
   const btn = document.createElement('button');
   btn.id = '_trigAddBtn';
   btn.className = 'btn btn-green';
-  btn.style.cssText = 'min-width:130px;font-size:.8rem;border:2px solid var(--green)';
+  btn.style.cssText = 'min-width:130px;font-size:.8125rem;border:2px solid var(--green)';
   btn.textContent = window._shopPickActive ? '➕ Zum Shop' : '➕ Zum Trigger';
   btn.onclick = _addCurrentItemToTrigger;
   btnRow.appendChild(btn);

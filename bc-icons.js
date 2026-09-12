@@ -95,6 +95,7 @@
     '⬇': 'download',   '📤': 'download',  '⬆️': 'upload',    '⬆': 'upload',
     '📥': 'upload',    '⭐': 'star',      '✨': 'sparkle',   '🔤': 'type',
     '🎛': 'sliders',   '🎛️': 'sliders',   '🧩': 'grid',      '📦': 'package',
+    '🎒': 'package',
     '👤': 'user',      '🧍': 'user',      '👥': 'users',     '👗': 'shirt',
     '🔒': 'lock',      '🔓': 'unlock',    '👋': 'login',     '🚪': 'logout',
     '🛒': 'cart',      '🏆': 'award',     '💰': 'money',

@@ -41,7 +41,7 @@ function renderRankDefs() {
   const el = document.getElementById('rank-def-list'); if(!el) return;
   const defs = _rankData.defs||[];
   if(!defs.length) {
-    el.innerHTML = '<div style="color:var(--text3);font-size:.72rem;text-align:center;padding:18px 0">Noch keine Raenge. Fuege deinen ersten Rang hinzu!</div>';
+    el.innerHTML = '<div style="color:var(--text3);font-size:.75rem;text-align:center;padding:18px 0">Noch keine Raenge. Fuege deinen ersten Rang hinzu!</div>';
     return;
   }
   // i / anz beziehen sich auf die Gruppe, in der die Karte angezeigt wird –
@@ -55,8 +55,8 @@ function renderRankDefs() {
       <span class="rank-def-badge" style="background:${r.farbe}22;color:${r.farbe};border-color:${r.farbe}55">${escHtml(r.icon||'\uD83C\uDFC5')} ${escHtml(r.name)}</span>
       <span class="rank-def-level">Lv.${r.level}</span>
       <span style="flex:1"></span>
-      <button onclick="rankDefEdit('${r.id}')" style="background:none;border:1px solid rgba(255,255,255,0.1);border-radius:5px;color:var(--text3);font-size:.62rem;padding:2px 7px;cursor:pointer">&#9999;&#65039;</button>
-      <button onclick="rankDefDelete('${r.id}')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.75rem;padding:2px 5px">&#x2715;</button>
+      <button onclick="rankDefEdit('${r.id}')" style="background:none;border:1px solid rgba(255,255,255,0.1);border-radius:5px;color:var(--text3);font-size:.6875rem;padding:2px 7px;cursor:pointer">&#9999;&#65039;</button>
+      <button onclick="rankDefDelete('${r.id}')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.8125rem;padding:2px 5px">&#x2715;</button>
     </div>`;
   const groups = {};
   defs.forEach(r=>{ const g=r.group||''; (groups[g]=groups[g]||[]).push(r); });
@@ -64,7 +64,7 @@ function renderRankDefs() {
   el.innerHTML = order.map(g=>{
     const items = groups[g].slice().sort((a,b)=>a.level-b.level);
     const title = g ? ('\uD83D\uDC65 '+escHtml(g)) : '\u26AA Ohne Gruppe';
-    return `<div style="margin-bottom:12px"><div style="font-size:.62rem;font-weight:700;color:var(--pl,#c4b5fd);text-transform:uppercase;letter-spacing:.5px;margin:2px 0 5px 2px;border-bottom:1px solid rgba(139,92,246,0.2);padding-bottom:3px">${title} <span style="color:var(--text3);font-weight:400">(${items.length})</span></div>${items.map((r,i)=>card(r,i,items.length)).join('')}</div>`;
+    return `<div style="margin-bottom:12px"><div style="font-size:.6875rem;font-weight:700;color:var(--pl,#c4b5fd);text-transform:uppercase;letter-spacing:.5px;margin:2px 0 5px 2px;border-bottom:1px solid rgba(139,92,246,0.2);padding-bottom:3px">${title} <span style="color:var(--text3);font-weight:400">(${items.length})</span></div>${items.map((r,i)=>card(r,i,items.length)).join('')}</div>`;
   }).join('');
 }
 
@@ -77,26 +77,26 @@ function renderRankPlayers() {
   if(filterRank==='__none__') entries = entries.filter(([,p])=>!p.rankId);
   else if(filterRank) entries = entries.filter(([,p])=>p.rankId===filterRank);
   if(!entries.length) {
-    el.innerHTML = `<div class="rank-empty">&#127942; Keine Spieler gefunden.<br><span style="font-size:.72rem;color:var(--text3)">Raenge werden automatisch gesetzt wenn der Bot die Aktion "Rang setzen" ausfuehrt.</span></div>`;
+    el.innerHTML = `<div class="rank-empty">&#127942; Keine Spieler gefunden.<br><span style="font-size:.75rem;color:var(--text3)">Raenge werden automatisch gesetzt wenn der Bot die Aktion "Rang setzen" ausfuehrt.</span></div>`;
     return;
   }
   const sorted = _rankSorted();
   el.innerHTML = entries.sort((a,b)=>{ const la=_rankById(a[1].rankId)?.level??-1; const lb=_rankById(b[1].rankId)?.level??-1; return lb-la; }).map(([num,p])=>{
     const rank=_rankById(p.rankId);
-    const badge=rank?`<span class="rank-def-badge" style="background:${rank.farbe}22;color:${rank.farbe};border-color:${rank.farbe}55;font-size:.69rem">${escHtml(rank.icon||'\uD83C\uDFC5')} ${escHtml(rank.name)}</span>`:`<span class="rank-badge-none">- Kein Rang -</span>`;
+    const badge=rank?`<span class="rank-def-badge" style="background:${rank.farbe}22;color:${rank.farbe};border-color:${rank.farbe}55;font-size:.75rem">${escHtml(rank.icon||'\uD83C\uDFC5')} ${escHtml(rank.name)}</span>`:`<span class="rank-badge-none">- Kein Rang -</span>`;
     const ts=p.assignedAt?new Date(p.assignedAt).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'}):'';
     const histCount=(p.history||[]).length;
     return `<div class="rank-player-card">
       <div><div class="rank-player-name">${escHtml(p.name||('#'+num))}</div><div class="rank-player-num">#${num}</div></div>
       <div class="rank-player-rank">${badge}</div>
       <div style="display:flex;gap:6px;align-items:center;flex-shrink:0">
-        <select class="cf" style="font-size:.68rem;width:160px" onchange="rankSetPlayerDirect('${num}',this.value)">
+        <select class="cf" style="font-size:.75rem;width:160px" onchange="rankSetPlayerDirect('${num}',this.value)">
           <option value="">- Kein Rang -</option>
           ${sorted.map(r=>`<option value="${r.id}" ${p.rankId===r.id?'selected':''}>${escHtml(r.icon+' '+r.name)} (Lv.${r.level})</option>`).join('')}
         </select>
         ${histCount?`<button class="rank-history-btn" onclick="rankShowHistory('${num}')" title="${histCount} Eintraege">&#128345; ${histCount}</button>`:''}
-        <span style="font-size:.6rem;color:var(--text3);white-space:nowrap">${ts}</span>
-        <button onclick="rankRemovePlayer('${num}')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.75rem;padding:2px 5px">&#x2715;</button>
+        <span style="font-size:.6875rem;color:var(--text3);white-space:nowrap">${ts}</span>
+        <button onclick="rankRemovePlayer('${num}')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.8125rem;padding:2px 5px">&#x2715;</button>
       </div>
     </div>`;
   }).join('');
@@ -214,9 +214,9 @@ function rankShowHistory(memberNum) {
     const r=_rankById(h.rankId);
     const ts=new Date(h.ts).toLocaleString('de-DE');
     return `<div style="display:flex;gap:8px;align-items:center;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.05)">
-      <span style="font-size:.6rem;color:var(--text3);white-space:nowrap">${ts}</span>
-      ${r?`<span style="font-size:.69rem;font-weight:700;color:${r.farbe}">${escHtml(r.icon+' '+r.name)}</span>`:'<span style="color:var(--text3);font-size:.69rem">- Entfernt -</span>'}
-      ${h.source?`<span style="font-size:.58rem;color:var(--text3)">(${escHtml(h.source)})</span>`:''}
+      <span style="font-size:.6875rem;color:var(--text3);white-space:nowrap">${ts}</span>
+      ${r?`<span style="font-size:.75rem;font-weight:700;color:${r.farbe}">${escHtml(r.icon+' '+r.name)}</span>`:'<span style="color:var(--text3);font-size:.75rem">- Entfernt -</span>'}
+      ${h.source?`<span style="font-size:.6875rem;color:var(--text3)">(${escHtml(h.source)})</span>`:''}
     </div>`;
   }).join('');
   const existing=document.getElementById('_rankHistPopup'); if(existing) existing.remove();
@@ -224,9 +224,9 @@ function rankShowHistory(memberNum) {
   popup.id='_rankHistPopup'; popup.className='rank-history-popup';
   popup.style.cssText='position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:700;max-height:320px;overflow-y:auto;min-width:300px';
   popup.innerHTML=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-    <span style="font-size:.78rem;font-weight:700;color:#c4b5fd">Rang-Verlauf: ${escHtml(p.name||('#'+memberNum))}</span>
-    <button onclick="document.getElementById('_rankHistPopup').remove()" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:.85rem">&#x2715;</button>
-  </div>${lines||'<div style="color:var(--text3);font-size:.72rem">Kein Verlauf vorhanden.</div>'}`;
+    <span style="font-size:.8125rem;font-weight:700;color:#c4b5fd">Rang-Verlauf: ${escHtml(p.name||('#'+memberNum))}</span>
+    <button onclick="document.getElementById('_rankHistPopup').remove()" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:.875rem">&#x2715;</button>
+  </div>${lines||'<div style="color:var(--text3);font-size:.75rem">Kein Verlauf vorhanden.</div>'}`;
   document.body.appendChild(popup);
   setTimeout(()=>{ const close=(e)=>{ if(!popup.contains(e.target)){popup.remove();document.removeEventListener('click',close);} }; document.addEventListener('click',close); },200);
 }

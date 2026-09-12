@@ -130,7 +130,7 @@ function renderItemDefsTab() {
   if (btn) btn.textContent = '🎁 Items (' + items.filter(i => i.aktiv !== false).length + ')';
 
   if (!items.length) {
-    el.innerHTML = '<div style="font-size:.7rem;color:var(--text3);text-align:center;padding:14px 0">' +
+    el.innerHTML = '<div style="font-size:.75rem;color:var(--text3);text-align:center;padding:14px 0">' +
       'Noch keine Gegenstände. Lege einen an – dann kannst du ihn im Shop verkaufen, ' +
       'ins Inventar legen und in Bedingungen darauf verweisen.</div>';
     return;
@@ -139,7 +139,7 @@ function renderItemDefsTab() {
   // ── Filterleiste ──
   const kats = _itemKategorien();
   const knopf = (wert, text, aktiv) =>
-    '<button onclick="itemDefFilter(\'' + escJsAttr(wert) + '\')" style="font-size:.62rem;padding:3px 9px;border-radius:11px;cursor:pointer;' +
+    '<button onclick="itemDefFilter(\'' + escJsAttr(wert) + '\')" style="font-size:.6875rem;padding:3px 9px;border-radius:11px;cursor:pointer;' +
     (aktiv ? 'background:var(--pd,#3a2a6a);border:1px solid #8b5cf6;color:var(--pl,#cbb6ff)'
            : 'background:none;border:1px solid rgba(255,255,255,0.12);color:var(--text3)') + '">' + escHtml(text) + '</button>';
   const filter = _itemDefFilterKat;
@@ -170,12 +170,12 @@ function renderItemDefsTab() {
 
   el.innerHTML = leiste + (sichtbar.length ? sichtbar.map(k =>
     (reihenfolge.length > 1 || k !== '__ohne__'
-      ? '<div style="font-size:.66rem;font-weight:700;color:var(--text2);margin:10px 0 4px">'
+      ? '<div style="font-size:.75rem;font-weight:700;color:var(--text2);margin:10px 0 4px">'
         + escHtml(k === '__ohne__' ? '– ohne Kategorie –' : k)
         + ' <span style="color:var(--text3);font-weight:400">(' + gruppen.get(k).length + ')</span></div>'
       : '')
     + _itemDefKarten(gruppen.get(k))).join('')
-    : '<div style="font-size:.7rem;color:var(--text3);text-align:center;padding:14px 0">In dieser Kategorie ist nichts.</div>');
+    : '<div style="font-size:.75rem;color:var(--text3);text-align:center;padding:14px 0">In dieser Kategorie ist nichts.</div>');
 }
 
 let _itemDefFilterKat = '';
@@ -192,16 +192,16 @@ function _itemDefKarten(items) {
       '<span class="shop-item-icon">' + escHtml(d.icon || '🎁') + '</span>' +
       '<div style="flex:1;min-width:0">' +
         '<div class="shop-item-name">' + escHtml(d.name || '–') +
-          (d.unendlich ? ' <span style="font-size:.55rem;color:#a78bfa;border:1px solid rgba(139,92,246,.3);border-radius:3px;padding:1px 5px">∞ unbegrenzt</span>' : '') +
+          (d.unendlich ? ' <span style="font-size:.6875rem;color:#a78bfa;border:1px solid rgba(139,92,246,.3);border-radius:3px;padding:1px 5px">∞ unbegrenzt</span>' : '') +
         '</div>' +
-        '<div style="font-size:.62rem;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' +
+        '<div style="font-size:.6875rem;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' +
           escHtml(_itemDefInhaltText(d.inhalt)) +
           (imShop ? ' · im Shop (' + imShop + ')' : '') +
           ((d.kategorien || []).length > 1 ? ' · ' + escHtml((d.kategorien || []).join(', ')) : '') +
         '</div>' +
       '</div>' +
-      '<button onclick="itemDefEdit(\'' + escJsAttr(d.id) + '\')" style="background:none;border:1px solid rgba(255,255,255,0.1);border-radius:5px;color:var(--text3);font-size:.62rem;padding:2px 7px;cursor:pointer">✏️</button>' +
-      '<button onclick="itemDefDelete(\'' + escJsAttr(d.id) + '\')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.75rem;padding:2px 5px">✕</button>' +
+      '<button onclick="itemDefEdit(\'' + escJsAttr(d.id) + '\')" style="background:none;border:1px solid rgba(255,255,255,0.1);border-radius:5px;color:var(--text3);font-size:.6875rem;padding:2px 7px;cursor:pointer">✏️</button>' +
+      '<button onclick="itemDefDelete(\'' + escJsAttr(d.id) + '\')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.8125rem;padding:2px 5px">✕</button>' +
     '</div>';
   }).join('');
 }
@@ -521,16 +521,16 @@ function renderInventarTab() {
     const versteckt = alle.filter(mn => (_inventar.spieler[mn] || {}).versteckt);
     const mns = _invZeigeVersteckte ? alle : alle.filter(mn => !(_inventar.spieler[mn] || {}).versteckt);
     const kopf = versteckt.length
-      ? '<label style="display:flex;align-items:center;gap:6px;font-size:.63rem;color:var(--text3);margin-bottom:6px;cursor:pointer">'
+      ? '<label style="display:flex;align-items:center;gap:6px;font-size:.6875rem;color:var(--text3);margin-bottom:6px;cursor:pointer">'
         + '<input type="checkbox" ' + (_invZeigeVersteckte ? 'checked' : '') + ' onchange="invZeigeVersteckte(this.checked)">'
         + versteckt.length + ' ausgeblendete anzeigen</label>'
       : '';
     // Auswahlliste zum Geben - nur aktive Gegenstaende
     const katalog = _itemDefAktive();
     if (!alle.length) {
-      el.innerHTML = '<div style="font-size:.7rem;color:var(--text3);text-align:center;padding:14px 0">Noch niemand besitzt etwas.</div>';
+      el.innerHTML = '<div style="font-size:.75rem;color:var(--text3);text-align:center;padding:14px 0">Noch niemand besitzt etwas.</div>';
     } else if (!mns.length) {
-      el.innerHTML = kopf + '<div style="font-size:.7rem;color:var(--text3);text-align:center;padding:14px 0">Alle Spieler sind ausgeblendet.</div>';
+      el.innerHTML = kopf + '<div style="font-size:.75rem;color:var(--text3);text-align:center;padding:14px 0">Alle Spieler sind ausgeblendet.</div>';
     } else {
       el.innerHTML = kopf + mns.map(mn => {
         // Beim Zeichnen wird nichts angelegt - sonst entstuenden allein
@@ -545,25 +545,25 @@ function renderInventarTab() {
           const knopf = (zeichen, delta, titel) =>
             '<button title="' + titel + '" onclick="invAnzahlUm(\'' + escJsAttr(mn) + '\',\'' + escJsAttr(did) + '\',' + delta + ')"'
             + ' style="background:none;border:1px solid rgba(255,255,255,0.12);border-radius:4px;color:var(--text2);'
-            + 'font-size:.66rem;width:20px;height:20px;line-height:1;cursor:pointer;padding:0">' + zeichen + '</button>';
+            + 'font-size:.75rem;width:20px;height:20px;line-height:1;cursor:pointer;padding:0">' + zeichen + '</button>';
           const rechts = unbegrenzt
-            ? '<span style="font-size:.63rem;color:#a78bfa;min-width:96px;text-align:right">∞ unbegrenzt</span>'
+            ? '<span style="font-size:.6875rem;color:#a78bfa;min-width:96px;text-align:right">∞ unbegrenzt</span>'
             : knopf('−', -1, 'eins weniger')
               + '<input type="number" min="0" value="' + (e.anzahl || 0) + '"'
               + ' onchange="invAnzahlSetzen(\'' + escJsAttr(mn) + '\',\'' + escJsAttr(did) + '\',this.value)"'
               + ' style="width:52px;text-align:center;background:var(--bg3,#1a1a24);border:1px solid rgba(255,255,255,0.1);'
-              + 'border-radius:4px;color:var(--text1);font-size:.66rem;padding:2px 4px">'
+              + 'border-radius:4px;color:var(--text1);font-size:.75rem;padding:2px 4px">'
               + knopf('+', 1, 'eins mehr');
-          return '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:.66rem;padding:3px 0;' + grau + '">'
+          return '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:.75rem;padding:3px 0;' + grau + '">'
             + '<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escHtml(nm) + '</span>'
             + '<span style="display:flex;align-items:center;gap:4px">' + rechts + '</span></div>';
-        }).join('') : '<div style="font-size:.62rem;color:var(--text3);padding:3px 0">– noch nichts –</div>';
+        }).join('') : '<div style="font-size:.6875rem;color:var(--text3);padding:3px 0">– noch nichts –</div>';
 
         const geben = katalog.length
           ? '<div style="display:flex;gap:6px;margin-top:6px">'
             + '<select onchange="if(this.value){invGeben(\'' + escJsAttr(mn) + '\',this.value);this.value=\'\';}"'
             + ' style="flex:1;background:var(--bg3,#1a1a24);border:1px solid rgba(255,255,255,0.1);border-radius:5px;'
-            + 'color:var(--text2);font-size:.64rem;padding:3px 6px">'
+            + 'color:var(--text2);font-size:.6875rem;padding:3px 6px">'
             + '<option value="">+ Gegenstand geben …</option>'
             + katalog.map(d => '<option value="' + escHtml(d.id) + '">' + escHtml((d.icon || '🎁') + ' ' + d.name) + '</option>').join('')
             + '</select></div>'
@@ -573,12 +573,12 @@ function renderInventarTab() {
         const pk = (typeof _playerKeys !== 'undefined' && _playerKeys && _playerKeys[mn]) || {};
         const keys = '<div style="display:flex;align-items:center;gap:5px;margin-top:6px;padding-top:6px;'
           + 'border-top:1px solid rgba(255,255,255,.06)">'
-          + '<span style="font-size:.62rem;color:var(--text3);margin-right:2px">🔑 Keys</span>'
+          + '<span style="font-size:.6875rem;color:var(--text3);margin-right:2px">🔑 Keys</span>'
           + INV_KEYS.map(([k, lbl, c]) => {
               const an = !!pk[k];
               return '<button title="' + (an ? 'wegnehmen' : 'geben') + '"'
                 + ' onclick="invKeyUm(\'' + escJsAttr(mn) + '\',\'' + k + '\')"'
-                + ' style="font-size:.62rem;padding:2px 9px;border-radius:5px;cursor:pointer;'
+                + ' style="font-size:.6875rem;padding:2px 9px;border-radius:5px;cursor:pointer;'
                 + 'border:1px solid ' + (an ? c : 'rgba(255,255,255,0.1)') + ';'
                 + 'background:' + (an ? c + '1f' : 'transparent') + ';'
                 + 'color:' + (an ? c : 'var(--text3)') + '">' + lbl + (an ? ' ✓' : '') + '</button>';
@@ -588,12 +588,12 @@ function renderInventarTab() {
         return '<div style="border:1px solid rgba(255,255,255,.08);border-radius:7px;padding:8px 10px;margin-bottom:6px;'
           + (sp.versteckt ? 'opacity:.6' : '') + '">'
           + '<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">'
-            + '<span style="font-size:.72rem;font-weight:600">' + escHtml(_invName(mn))
+            + '<span style="font-size:.75rem;font-weight:600">' + escHtml(_invName(mn))
             + ' <span style="color:var(--text3);font-weight:400">#' + escHtml(mn) + '</span></span>'
             + '<button title="' + (sp.versteckt ? 'wieder anzeigen' : 'ausblenden – die Daten bleiben erhalten') + '"'
             + ' onclick="invSpielerAusblenden(\'' + escJsAttr(mn) + '\',' + (sp.versteckt ? 'false' : 'true') + ')"'
             + ' style="margin-left:auto;background:none;border:1px solid rgba(255,255,255,0.12);border-radius:5px;'
-            + 'color:var(--text3);font-size:.6rem;padding:2px 7px;cursor:pointer">'
+            + 'color:var(--text3);font-size:.6875rem;padding:2px 7px;cursor:pointer">'
             + (sp.versteckt ? '👁 einblenden' : '🙈 ausblenden') + '</button>'
           + '</div>' + zeilen + geben + keys + '</div>';
       }).join('');
@@ -605,20 +605,20 @@ function renderInventarTab() {
   if (al) {
     const a = _inventar.ausleihe || [];
     al.innerHTML = !a.length
-      ? '<div style="font-size:.7rem;color:var(--text3);text-align:center;padding:10px 0">Gerade ist nichts verliehen.</div>'
+      ? '<div style="font-size:.75rem;color:var(--text3);text-align:center;padding:10px 0">Gerade ist nichts verliehen.</div>'
       : a.map(x => {
           const d = _itemDefById(x.itemDefId);
           const nm = d ? ((d.icon || '🎁') + ' ' + d.name) : ('❓ ' + x.itemDefId);
           const besitzer = _invName(x.ownerMn);
           const traeger  = _invName(x.wearerMn);
           const selbst = String(x.ownerMn) === String(x.wearerMn);
-          return '<div style="display:flex;align-items:center;gap:8px;font-size:.66rem;padding:4px 0;border-bottom:1px solid rgba(255,255,255,.05)">' +
+          return '<div style="display:flex;align-items:center;gap:8px;font-size:.75rem;padding:4px 0;border-bottom:1px solid rgba(255,255,255,.05)">' +
             '<span style="flex:1">' + escHtml(nm) + ' — ' + escHtml(besitzer) +
             (selbst ? ' <span style="color:var(--text3)">trägt selbst</span>'
                     : ' → getragen von <b>' + escHtml(traeger) + '</b>') + '</span>' +
             '<button title="Von Hand an den Besitzer zurückbuchen" onclick="invAusleiheAufloesen(\'' + escJsAttr(x.id) + '\')"' +
             ' style="background:none;border:1px solid rgba(255,255,255,0.12);border-radius:5px;color:var(--text3);' +
-            'font-size:.6rem;padding:2px 8px;cursor:pointer">↩ zurückbuchen</button></div>';
+            'font-size:.6875rem;padding:2px 8px;cursor:pointer">↩ zurückbuchen</button></div>';
         }).join('');
   }
 }

@@ -696,7 +696,7 @@ function renderGroups(filter = '') {
     const row = document.createElement('div');
     row.className = 'item-row';
     row.innerHTML = `
-      <button class="item-btn${CURRENT?.asset===n&&CURRENT?.group===g?' active':''}" onclick="selectItem('${g}','${n}')">${n}${echoTranslate(n)?'<span style="display:block;font-size:.57rem;color:#a78bfa;line-height:1.1;pointer-events:none">'+echoTranslate(n)+'</span>':''}</button>
+      <button class="item-btn${CURRENT?.asset===n&&CURRENT?.group===g?' active':''}" onclick="selectItem('${g}','${n}')">${n}${echoTranslate(n)?'<span style="display:block;font-size:.6875rem;color:#a78bfa;line-height:1.1;pointer-events:none">'+echoTranslate(n)+'</span>':''}</button>
       <button class="star-btn fav" onclick="toggleFav('${g}','${n}',event)" title="Favorit entfernen">⭐</button>`;
     favList.appendChild(row);
   });
@@ -711,7 +711,7 @@ function renderGroups(filter = '') {
     const wrap    = document.createElement('div');
     const hdr     = document.createElement('div');
     hdr.className = 'group-hdr' + (fl ? ' open' : '');
-    hdr.innerHTML = `<span>${group}</span><span style="font-size:.62rem;color:var(--text3)">${names.length}</span>`;
+    hdr.innerHTML = `<span>${group}</span><span style="font-size:.6875rem;color:var(--text3)">${names.length}</span>`;
     const itemsDiv = document.createElement('div');
     itemsDiv.className = 'group-items' + (fl ? ' open' : '');
     hdr.onclick = () => { hdr.classList.toggle('open'); itemsDiv.classList.toggle('open'); };
@@ -721,7 +721,7 @@ function renderGroups(filter = '') {
       const row   = document.createElement('div');
       row.className = 'item-row';
       row.innerHTML = `
-        <button class="item-btn${CURRENT?.asset===name&&CURRENT?.group===group?' active':''}" id="ib_${group}_${name}" onclick="selectItem('${group}','${name}')">${name}${echoTranslate(name)?'<span style="display:block;font-size:.57rem;color:#a78bfa;line-height:1.1;pointer-events:none">'+echoTranslate(name)+'</span>':''}</button>
+        <button class="item-btn${CURRENT?.asset===name&&CURRENT?.group===group?' active':''}" id="ib_${group}_${name}" onclick="selectItem('${group}','${name}')">${name}${echoTranslate(name)?'<span style="display:block;font-size:.6875rem;color:#a78bfa;line-height:1.1;pointer-events:none">'+echoTranslate(name)+'</span>':''}</button>
         <button class="star-btn${isFav?' fav':''}" onclick="toggleFav('${group}','${name}',event)" title="${isFav?'Favorit entfernen':'Zu Favoriten'}">${isFav?'⭐':'☆'}</button>`;
       itemsDiv.appendChild(row);
     });
@@ -805,7 +805,7 @@ function buildModules() {
     block.className = 'dim-block';
     block.innerHTML = `<div class="dim-hdr">
       <span class="key-badge">${key}</span>
-      <span class="dim-title">${modName} <span style="color:var(--text3);font-size:.66rem">(${opts.length} Optionen)</span></span>
+      <span class="dim-title">${modName} <span style="color:var(--text3);font-size:.75rem">(${opts.length} Optionen)</span></span>
       <label class="multi-toggle">
         <input type="checkbox" id="multi_${key}" onchange="toggleMulti('${key}')"> Multi
       </label></div>
@@ -843,13 +843,13 @@ function renderDimOpts(key) {
     if (opt.intensity  != null) infoItems.push(`<span class="b p">Intensity: ${opt.intensity}</span>`);
     if (opt.inflate    != null) infoItems.push(`<span class="b p">InflateLevel: ${opt.inflate}</span>`);
     if (opt.shock      != null) infoItems.push(`<span class="b bl">ShockLevel: ${opt.shock}</span>`);
-    if (opt.desc)               infoItems.push(`<span style="font-size:.66rem;color:var(--text3)">${opt.desc}</span>`);
+    if (opt.desc)               infoItems.push(`<span style="font-size:.75rem;color:var(--text3)">${opt.desc}</span>`);
 
     const subInfoHtml = infoItems.length ? infoItems.map(i => `<div class="sub-info">${i}</div>`).join('') : '';
 
     let subPropsHtml = '';
     if (configProps.length > 0) {
-      subPropsHtml = `<div style="font-size:.65rem;color:var(--text3);margin:5px 0 3px">Konfigurierbare Properties:</div>
+      subPropsHtml = `<div style="font-size:.6875rem;color:var(--text3);margin:5px 0 3px">Konfigurierbare Properties:</div>
         <div class="sub-props">` +
         configProps.map(prop => {
           const id    = `sp_${key}_${idx}_${prop}`;
@@ -959,9 +959,9 @@ function buildColors() {
     } else {
       // Kein Hex bekannt → neutraler Platzhalter, Custom-Color auf Wunsch
       div.innerHTML = `
-        <label>${name} <span style="color:var(--text3);font-size:.6rem">(BC-Standard)</span></label>
+        <label>${name} <span style="color:var(--text3);font-size:.6875rem">(BC-Standard)</span></label>
         <div class="color-row">
-          <div id="ci_placeholder_${i}" style="flex:1;height:26px;border:1px dashed var(--border2);border-radius:4px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:.65rem;color:var(--text3)" title="Klicken um eigene Farbe zu setzen" onclick="activateColorPicker(${i})">
+          <div id="ci_placeholder_${i}" style="flex:1;height:26px;border:1px dashed var(--border2);border-radius:4px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:.6875rem;color:var(--text3)" title="Klicken um eigene Farbe zu setzen" onclick="activateColorPicker(${i})">
             + Farbe setzen
           </div>
           <input type="color" id="color_${i}" value="#808080" style="display:none" oninput="onColorChange(${i})">
@@ -1024,7 +1024,7 @@ function resetColor(i) {
   ci.classList.toggle('is-default', isDefault);
   const name = CURRENT.cfg.layerNames?.[i] || `Layer ${i+1}`;
   ci.querySelector('label').innerHTML = name
-    + (isDefault ? ' <span style="color:var(--text3);font-size:.6rem">' + (hasKnown ? '' : '(BC-Standard)') + '</span>' : '');
+    + (isDefault ? ' <span style="color:var(--text3);font-size:.6875rem">' + (hasKnown ? '' : '(BC-Standard)') + '</span>' : '');
   generate();
 }
 
@@ -1250,7 +1250,7 @@ function buildBaselinePropsUI() {
       wrap.style.cssText = 'display:flex;flex-wrap:wrap;gap:5px;';
       allTriggers.forEach(t => {
         const lbl = document.createElement('label');
-        lbl.style.cssText = 'display:flex;align-items:center;gap:3px;font-size:.7rem;color:var(--text2);cursor:pointer;';
+        lbl.style.cssText = 'display:flex;align-items:center;gap:3px;font-size:.75rem;color:var(--text2);cursor:pointer;';
         const cb = document.createElement('input');
         cb.type = 'checkbox'; cb.style.accentColor = 'var(--purple)';
         cb.checked = active.has(t);
@@ -1498,7 +1498,7 @@ function generate() {
   const archLabel = cfg.archetype==='modular' ? '🧩 Modular' : cfg.archetype==='vibrating' ? '⚡ Vibrating' : (hasTypeRecord?'📋 TypeRecord': cfg.directOptions?.length?'🎛️ Classic-Opts':'');
   document.getElementById('typePreview').innerHTML =
     '<span style="color:var(--text3)">' + group + '</span> → <strong>' + asset + '</strong>' +
-    (archLabel ? ' <span style="font-size:.62rem;color:var(--text3)">['+archLabel+']</span>' : '') +
+    (archLabel ? ' <span style="font-size:.6875rem;color:var(--text3)">['+archLabel+']</span>' : '') +
     (cfg.archetype==='vibrating' ? '<br>⚡ Mode: '+vibratingMode+' | Intensity: '+vibratingIntensity : '') +
     (cfg.directOptions?.length ? '<br>🎛️ Option: '+cfg.directOptions[classicOptionSel] : '') +
     (hasTypeRecord && cfg.archetype!=='vibrating' ? '<br>TypeRecord: { '+Object.entries(tr).map(([k,v])=>k+':'+v).join(' ')+' }' : '') +
@@ -1801,9 +1801,9 @@ function renderOutfitList() {
         <div class="outfit-item-group">${item.group}${item.lock ? ' | 🔒 '+item.lock : ''}${Object.keys(item.tr||{}).length ? ' | '+item.typeStr : ''}</div>
       </div>
       <div style="display:flex;gap:5px;align-items:center">
-        <button class="btn btn-primary" style="padding:3px 8px;font-size:.68rem" onclick="moveOutfitItem(${i},-1)">↑</button>
-        <button class="btn btn-primary" style="padding:3px 8px;font-size:.68rem" onclick="moveOutfitItem(${i},1)">↓</button>
-        <button class="btn btn-red" style="padding:3px 7px;font-size:.68rem" onclick="removeOutfitItem(${i})">✕</button>
+        <button class="btn btn-primary" style="padding:3px 8px;font-size:.75rem" onclick="moveOutfitItem(${i},-1)">↑</button>
+        <button class="btn btn-primary" style="padding:3px 8px;font-size:.75rem" onclick="moveOutfitItem(${i},1)">↓</button>
+        <button class="btn btn-red" style="padding:3px 7px;font-size:.75rem" onclick="removeOutfitItem(${i})">✕</button>
       </div>`;
     list.appendChild(row);
   });
@@ -2178,7 +2178,7 @@ function renderProfileList() {
   if (_profileFilter === 'noold')  keys = keys.filter(k => !/\(old\)/i.test(_profileOwnerOf(k)));
   document.querySelectorAll('.profile-fc').forEach(chip => chip.classList.toggle('on', chip.dataset.filter === _profileFilter));
   if (!keys.length) {
-    el.innerHTML = '<p style="color:var(--text3);font-size:.8rem">Noch keine Profile gespeichert.</p>';
+    el.innerHTML = '<p style="color:var(--text3);font-size:.8125rem">Noch keine Profile gespeichert.</p>';
     el._profileKeys = [];
     return;
   }
@@ -2209,7 +2209,7 @@ function renderProfileList() {
   function _ownerLabel(owner) {
     // Ist alt wenn: manuell im Set ODER "(old)" steckt bereits im Namen
     const isAlt = PROFILE_ALT_OWNERS.has(owner) || /\(old\)/i.test(owner);
-    const altBadge = ' <span style="color:#e55;font-size:.6rem;font-weight:700;border:1px solid #e55;border-radius:3px;padding:0 3px;vertical-align:middle;opacity:.9">(old)</span>';
+    const altBadge = ' <span style="color:#e55;font-size:.6875rem;font-weight:700;border:1px solid #e55;border-radius:3px;padding:0 3px;vertical-align:middle;opacity:.9">(old)</span>';
     if (/#\d{4,}/.test(owner)) {
       // Bereits angereichert (hat #ID drin) – nur Badge anhängen wenn alt
       return escHtml(owner) + (isAlt ? altBadge : '');
@@ -2219,7 +2219,7 @@ function renderProfileList() {
     const displayName = owner.replace(/\s*\(old\)\s*$/i, '').trim(); // für Anzeige ohne doppeltes (old)
     const id = _ownerIdMap[baseName];
     if (id) {
-      return escHtml(displayName) + (isAlt ? altBadge : '') + ' <span style="color:var(--text3);font-size:.6rem;font-family:var(--font-mono)">#' + id + '</span>';
+      return escHtml(displayName) + (isAlt ? altBadge : '') + ' <span style="color:var(--text3);font-size:.6875rem;font-family:var(--font-mono)">#' + id + '</span>';
     }
     return escHtml(owner) + (isAlt && !/\(old\)/i.test(owner) ? altBadge : '');
   }
@@ -2244,7 +2244,7 @@ function renderProfileList() {
       const p = PROFILES[name];
       const slotKey = 'p_' + idx;
       const nameInput = '<div class="profile-edit-name-row">'
-        + '<label style="font-size:.62rem;color:var(--text3)">Profilname:</label>'
+        + '<label style="font-size:.6875rem;color:var(--text3)">Profilname:</label>'
         + '<input class="profile-edit-name-inp" id="pedit_name_' + idx + '" value="' + escHtml(name) + '" maxlength="60">'
         + '<button class="profile-gear-btn" data-slot="' + slotKey + '" onclick="profileRename(this.dataset.slot)" title="Umbenennen">💾 Speichern</button>'
         + '</div>';
@@ -2305,7 +2305,7 @@ function renderProfileList() {
         + '<button class="pc-btn primary" data-slot="' + slotKey + '" onclick="profileExecuteBySlot(this.dataset.slot)" title="Laden + ausführen">▶ Run</button>'
         + '<button class="pc-btn' + (isFav ? ' fav-on' : '') + '" data-pkey="' + idx + '" onclick="toggleProfileFav(_profileNameMap[\'p_\'+this.dataset.pkey])" title="Favorit">⭐</button>'
         + '<button class="pc-btn' + (isEdit ? ' edit-on' : '') + '" data-slot="' + slotKey + '" onclick="profileToggleEdit(this.dataset.slot)" title="Bearbeiten">✏️</button>'
-        + '<button class="pc-btn" data-slot="' + slotKey + '" onclick="copyProfileToYuuki(_profileNameMap[this.dataset.slot])" title="Kopie unter Yuuki 998 erstellen" style="font-size:9px">📋 Yuuki</button>'
+        + '<button class="pc-btn" data-slot="' + slotKey + '" onclick="copyProfileToYuuki(_profileNameMap[this.dataset.slot])" title="Kopie unter Yuuki 998 erstellen" style="font-size:11px">📋 Yuuki</button>'
         + '<button class="pc-btn" data-slot="' + slotKey + '" onclick="_showCardColorFreq(this.dataset.slot)" title="Farb-Häufigkeit anzeigen und Farben ersetzen">🎨</button>'
         + '</div>'
         + '</div>';
@@ -2368,7 +2368,7 @@ function _renderDefaultHairList() {
   if (!el) return;
   const keys = Object.keys(DEFAULT_HAIR);
   if (!keys.length) {
-    el.innerHTML = '<span style="color:var(--text3);font-size:.72rem;font-style:italic">Keine Standard-Haare gesetzt</span>';
+    el.innerHTML = '<span style="color:var(--text3);font-size:.75rem;font-style:italic">Keine Standard-Haare gesetzt</span>';
     return;
   }
   el.innerHTML = keys.map(g => {
@@ -2379,12 +2379,12 @@ function _renderDefaultHairList() {
       .filter(c => c && c !== 'Default')
       .map(c => '<span style="display:inline-block;width:10px;height:10px;border-radius:2px;border:1px solid rgba(255,255,255,.25);background:' + escHtml(c) + ';flex-shrink:0" title="' + escHtml(c) + '"></span>')
       .join('');
-    return '<span style="display:inline-flex;align-items:center;gap:4px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:2px 8px;font-size:.7rem;margin:2px 2px">'
+    return '<span style="display:inline-flex;align-items:center;gap:4px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:2px 8px;font-size:.75rem;margin:2px 2px">'
       + '<span style="color:var(--text2);max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + escHtml(g) + '">' + escHtml(g) + '</span>'
       + '<span style="color:var(--text4)">→</span>'
       + '<span style="color:var(--accent-text)">' + escHtml(entry.name) + '</span>'
       + (swatches ? '<span style="display:inline-flex;gap:2px;align-items:center">' + swatches + '</span>' : '')
-      + '<button onclick="removeDefaultHairGroup(\'' + g.replace(/\\/g,'\\\\').replace(/'/g,"\\'") + '\')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:10px;padding:0 2px;line-height:1">✕</button>'
+      + '<button onclick="removeDefaultHairGroup(\'' + g.replace(/\\/g,'\\\\').replace(/'/g,"\\'") + '\')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:11px;padding:0 2px;line-height:1">✕</button>'
       + '</span>';
   }).join('');
 }
@@ -2824,13 +2824,13 @@ body{display:flex;align-items:flex-start;justify-content:center;padding:32px 16p
 .card-header{padding:16px 18px 12px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px}
 .dot{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 6px var(--green);flex-shrink:0}
 .card-title{font-size:1rem;font-weight:800;color:var(--accent-text)}
-.card-sub{font-size:0.72rem;color:var(--text3);font-family:var(--font-mono);margin-top:1px}
+.card-sub{font-size:.75rem;color:var(--text3);font-family:var(--font-mono);margin-top:1px}
 .img-wrap{background:var(--bg3);display:flex;align-items:center;justify-content:center;border-bottom:1px solid var(--border);overflow:hidden}
 .img-wrap img{width:100%;display:block}
 .card-footer{padding:12px 18px;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
-.badge{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:9999px;font-size:0.7rem;font-weight:600;font-family:var(--font-mono);background:var(--accent-soft);color:var(--accent-text);border:1px solid var(--accent-line)}
+.badge{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:9999px;font-size:.75rem;font-weight:600;font-family:var(--font-mono);background:var(--accent-soft);color:var(--accent-text);border:1px solid var(--accent-line)}
 .badge-green{background:var(--gd);color:var(--green);border-color:rgba(52,211,153,0.25)}
-.meta{font-size:0.72rem;color:var(--text3);font-family:var(--font-mono)}
+.meta{font-size:.75rem;color:var(--text3);font-family:var(--font-mono)}
 </style>
 </head>
 <body>
@@ -3507,7 +3507,7 @@ function _renderColorFreqHtml(freqData, ctxType, ctxKey) {
   _cfreqSrcItems         = (ctxType === 'profile' && ctxKey) ? (PROFILES[ctxKey]?.items || []) : OUTFIT;
 
   if (!freqData.length && !_cfreqSrcItems.length)
-    return '<div style="color:var(--text3);font-size:.76rem;padding:6px 0">Keine Items/Farben vorhanden.</div>';
+    return '<div style="color:var(--text3);font-size:.8125rem;padding:6px 0">Keine Items/Farben vorhanden.</div>';
 
   const copyName = escHtml((ctxType === 'profile' && ctxKey)
     ? _profileShortName(ctxKey, _profileOwnerOf(ctxKey)) + ' (Farbanpassung)'
@@ -3554,7 +3554,7 @@ function _renderColorFreqHtml(freqData, ctxType, ctxKey) {
 
 // ── Globale Ansicht ───────────────────────────────────────
 function _renderGlobalRows(freqData) {
-  if (!freqData.length) return '<div style="color:var(--text3);font-size:.76rem;padding:6px 0">Keine Farbdaten vorhanden.</div>';
+  if (!freqData.length) return '<div style="color:var(--text3);font-size:.8125rem;padding:6px 0">Keine Farbdaten vorhanden.</div>';
   return '<div style="display:flex;flex-direction:column;gap:3px">'
     + freqData.map((f, idx) => {
       const hex    = f.color.toLowerCase();
@@ -3580,7 +3580,7 @@ function _renderGlobalRows(freqData) {
 function _renderItemRows(items) {
   const filtered = (items||[]).map((item,iidx)=>({item,iidx,cols:Array.isArray(item.colors)?item.colors:(item.colors?[item.colors]:[])}))
     .filter(({cols})=>cols.some(c=>c&&c!=='Default'));
-  if (!filtered.length) return '<div style="color:var(--text3);font-size:.76rem;padding:6px 0">Keine farbigen Items.</div>';
+  if (!filtered.length) return '<div style="color:var(--text3);font-size:.8125rem;padding:6px 0">Keine farbigen Items.</div>';
 
   return filtered.map(({item,iidx,cols})=>{
     const nm = escHtml(item.label||item.asset||'?'), gr = escHtml(item.group||'');
@@ -3590,7 +3590,7 @@ function _renderItemRows(items) {
         + '<div class="cfreq-link-grp" style="visibility:hidden">' + _cfreqLinkBtnsHtml('','','') + '</div>'
         + '<span class="cfreq-ilabel">L'+(lidx+1)+'</span>'
         + '<span class="cfreq-swatch" style="background:#808080;border-style:dashed"></span>'
-        + '<span style="font-size:.65rem;color:var(--text3);font-family:var(--font-mono)">Default</span></div>';
+        + '<span style="font-size:.6875rem;color:var(--text3);font-family:var(--font-mono)">Default</span></div>';
       const hex=c.toLowerCase(), hexS=escHtml(hex), uid=iidx+'_'+lidx;
       const iiS=String(iidx), llS=String(lidx);
       const curHex=escHtml(_cfreqItemChanges[iidx+':'+lidx]||_cfreqChanges[hex]||hex);
@@ -4823,7 +4823,7 @@ function renderCurseTab() {
 
     const _meta = CURSE_SCAN_META[String(owner.num)] ?? null;
     const _metaHtml = _meta
-      ? '<span style="font-size:.6rem;color:var(--text3);white-space:nowrap;margin-left:4px" title="Zuletzt gescannt">'
+      ? '<span style="font-size:.6875rem;color:var(--text3);white-space:nowrap;margin-left:4px" title="Zuletzt gescannt">'
         + '📍' + (_meta.room ? escHtml(_meta.room) : '?') + ' &nbsp;🕐' + escHtml(_meta.time) + '</span>'
       : '';
 
@@ -4838,7 +4838,7 @@ function renderCurseTab() {
         (ownerFavCount ? '<span class="curse-owner-count curse-owner-fav-badge" style="background:rgba(251,191,36,.12);color:#fbbf24;border-color:rgba(251,191,36,.3)">⭐ '+ownerFavCount+'</span>' : '<span class="curse-owner-fav-badge" style="display:none"></span>')+
         '<span class="curse-owner-count curse-owner-outfit-badge" style="background:rgba(52,211,153,0.12);color:#6ee7b7;border-color:rgba(52,211,153,0.3);'+(!ownerOutfitCount?'display:none':'')+'" title="Als Outfit markierte Items">👗 '+ownerOutfitCount+'</span>'+
         '<button onclick="event.stopPropagation();curseSaveAllAsProfile(\'' + owner.num + '\')"'
-          + ' style="margin-left:auto;background:rgba(139,92,246,0.12);border:1px solid rgba(139,92,246,0.3);color:#a78bfa;cursor:pointer;font-size:.68rem;padding:2px 8px;border-radius:4px;white-space:nowrap"'
+          + ' style="margin-left:auto;background:rgba(139,92,246,0.12);border:1px solid rgba(139,92,246,0.3);color:#a78bfa;cursor:pointer;font-size:.75rem;padding:2px 8px;border-radius:4px;white-space:nowrap"'
           + ' title="Alle Curses als Outfit-Profil speichern">💾 Alle speichern</button>'+
         '<span class="curse-owner-chevron">▶</span>'+
       '</div>'+
@@ -4888,8 +4888,8 @@ function _renderCurseOwnerRows(ownerNum) {
       + '<div class="cg-outfit" data-dbkey="' + escHtml(dbKey) + '" onclick="toggleCurseOutfitFlag(this.dataset.dbkey,this)" title="Outfit-Markierung">'
       + '<button class="curse-outfit-btn' + (isOutfit ? ' on' : '') + '" style="pointer-events:none">' + (isOutfit ? '\uD83D\uDC57 Outfit' : '+ Outfit') + '</button>'
       + '</div>'
-      + '<div class="cg-name"><span class="cursor-detail-toggle" onclick="toggleCurseDetail(\'' + detId + '\',\'' + rowId + '\')">\u25B6</span>' + escHtml(entry.CraftName) + (echoTranslate(entry.CraftName) ? '<span style="font-size:.58rem;color:#a78bfa;margin-left:4px">(' + echoTranslate(entry.CraftName) + ')</span>' : '') + '</div>'
-      + '<div class="cg-item">' + escHtml(entry.ItemName) + (echoTranslate(entry.ItemName) ? '<span style="font-size:.58rem;color:var(--text3);margin-left:4px">(' + echoTranslate(entry.ItemName) + ')</span>' : '') + '</div>'
+      + '<div class="cg-name"><span class="cursor-detail-toggle" onclick="toggleCurseDetail(\'' + detId + '\',\'' + rowId + '\')">\u25B6</span>' + escHtml(entry.CraftName) + (echoTranslate(entry.CraftName) ? '<span style="font-size:.6875rem;color:#a78bfa;margin-left:4px">(' + echoTranslate(entry.CraftName) + ')</span>' : '') + '</div>'
+      + '<div class="cg-item">' + escHtml(entry.ItemName) + (echoTranslate(entry.ItemName) ? '<span style="font-size:.6875rem;color:var(--text3);margin-left:4px">(' + echoTranslate(entry.ItemName) + ')</span>' : '') + '</div>'
       + '<div class="cg-grp' + (isUnbekannt ? ' grp-unknown' : '') + '" data-dbkey="' + escHtml(dbKey) + '" onclick="_openCurseGruppeEditor(this)" title="Gruppe bearbeiten">'
       + escHtml(effGruppe) + (isUnbekannt ? ' <span class="grp-edit-hint">\u270F\uFE0F</span>' : (hasOverride ? ' <span class="grp-edit-hint">\uD83D\uDCCC</span>' : ''))
       + '</div>'
@@ -4907,8 +4907,8 @@ function _renderCurseOwnerRows(ownerNum) {
       + '<div class="cg-actions">'
       + '<button class="curse-apply-btn" data-rid="' + rowId + '" data-tgt="" onclick="wearCurseByData(this)" title="Auf mich anwenden">\uD83D\uDC64</button>'
       + (_selectedMemberNum ? '<button class="curse-apply-btn other" data-rid="' + rowId + '" data-tgt="' + _selectedMemberNum + '" onclick="wearCurseByData(this)" title="Auf #' + _selectedMemberNum + '">\uD83D\uDC65 #' + _selectedMemberNum + '</button>' : '')
-      + '<button data-rid="' + rowId + '" onclick="curseSaveAsProfile(this.dataset.rid)" style="background:rgba(139,92,246,0.12);border:1px solid rgba(139,92,246,0.3);color:#a78bfa;cursor:pointer;font-size:.72rem;padding:2px 6px;border-radius:4px;margin-left:2px" title="Als Outfit-Profil speichern, dann eigenes Outfit wiederherstellen">\uD83D\uDCBE Profil</button>'
-      + '<button data-dbkey="' + escHtml(dbKey) + '" onclick="deleteCurseEntry(this.dataset.dbkey)" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.8rem;padding:2px 5px;margin-left:2px" title="L\u00f6schen">\u2715</button>'
+      + '<button data-rid="' + rowId + '" onclick="curseSaveAsProfile(this.dataset.rid)" style="background:rgba(139,92,246,0.12);border:1px solid rgba(139,92,246,0.3);color:#a78bfa;cursor:pointer;font-size:.75rem;padding:2px 6px;border-radius:4px;margin-left:2px" title="Als Outfit-Profil speichern, dann eigenes Outfit wiederherstellen">\uD83D\uDCBE Profil</button>'
+      + '<button data-dbkey="' + escHtml(dbKey) + '" onclick="deleteCurseEntry(this.dataset.dbkey)" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.8125rem;padding:2px 5px;margin-left:2px" title="L\u00f6schen">\u2715</button>'
       + '</div>';
 
     frag.appendChild(tr);
@@ -4935,7 +4935,7 @@ function _renderCurseOwnerRows(ownerNum) {
     detTr.id = detId;
     detTr.innerHTML =
       '<div class="curse-detail-cell">'
-      + '<div style="font-size:.63rem;color:var(--text3);margin-bottom:4px">Details f\u00fcr ' + escHtml(entry.CraftName) + '</div>'
+      + '<div style="font-size:.6875rem;color:var(--text3);margin-bottom:4px">Details f\u00fcr ' + escHtml(entry.CraftName) + '</div>'
       + '<div class="curse-detail-grid">'
       + detailFields.map(([label, val]) =>
           '<div class="curse-detail-field">'
@@ -6498,7 +6498,7 @@ function renderOutfitMemberChips() {
   if (!el) return;
   const members = _lastRoomMembers;
   if (!members.length) {
-    el.innerHTML = '<span style="color:var(--text3);font-size:.72rem">– Niemand im Raum –</span>';
+    el.innerHTML = '<span style="color:var(--text3);font-size:.75rem">– Niemand im Raum –</span>';
     return;
   }
   el.innerHTML = members.map(m => {
@@ -6632,7 +6632,7 @@ function renderRoomDropdown() {
     html += others.map(rowHtml).join('');
   }
   if (!favs.length && !others.length) {
-    html = '<div style="padding:12px;color:var(--text3);font-size:.73rem;text-align:center">' + (filter ? 'Keine Treffer' : 'Niemand im Raum') + '</div>';
+    html = '<div style="padding:12px;color:var(--text3);font-size:.8125rem;text-align:center">' + (filter ? 'Keine Treffer' : 'Niemand im Raum') + '</div>';
   }
   list.innerHTML = html;
 }
@@ -8129,13 +8129,13 @@ body{display:flex;align-items:flex-start;justify-content:center;padding:32px 16p
 .card-header{padding:16px 18px 12px;border-bottom:1px solid rgba(255,255,255,0.06);display:flex;align-items:center;gap:10px}
 .dot{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 6px var(--green);flex-shrink:0}
 .card-title{font-size:1rem;font-weight:800;color:var(--accent-text)}
-.card-sub{font-size:0.72rem;color:var(--text3);font-family:var(--font-mono);margin-top:1px}
+.card-sub{font-size:.75rem;color:var(--text3);font-family:var(--font-mono);margin-top:1px}
 .img-wrap{background:var(--bg3);border-bottom:1px solid rgba(255,255,255,0.06);overflow:hidden}
 .img-wrap img{width:100%;display:block}
 .card-footer{padding:12px 18px;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
-.badge{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:9999px;font-size:0.7rem;font-weight:600;font-family:var(--font-mono);background:var(--accent-soft);color:var(--accent-text);border:1px solid var(--accent-line)}
+.badge{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:9999px;font-size:.75rem;font-weight:600;font-family:var(--font-mono);background:var(--accent-soft);color:var(--accent-text);border:1px solid var(--accent-line)}
 .badge-green{background:var(--gd);color:var(--green);border-color:rgba(52,211,153,0.25)}
-.meta{font-size:0.72rem;color:var(--text3);font-family:var(--font-mono)}
+.meta{font-size:.75rem;color:var(--text3);font-family:var(--font-mono)}
 </style></head><body>
 <div class="card">
   <div class="card-header"><div class="dot"></div>
@@ -9467,7 +9467,7 @@ function _renderMbsWheelTab() {
 
   if (!_mbsWheelData.length) {
     if (st) st.textContent = 'Noch keine MBS Wheel-Outfits gesehen.';
-    body.innerHTML = '<span style="font-size:.7rem;color:var(--text3);font-style:italic">Noch keine MBS Wheel-Outfits gesehen. Automatischer Scan beim Raum-Beitritt.</span>';
+    body.innerHTML = '<span style="font-size:.75rem;color:var(--text3);font-style:italic">Noch keine MBS Wheel-Outfits gesehen. Automatischer Scan beim Raum-Beitritt.</span>';
     _updateWheelTabBadge();
     return;
   }
@@ -9534,7 +9534,7 @@ function _renderMbsWheelTab() {
 
   if (!entries.length) {
     const why = _mbsWheelFilter === 'fav' ? 'Keine Favoriten' : _mbsWheelFilter === 'new' ? 'Nichts Neues (48h)' : 'Keine Ergebnisse für „' + escHtml(_mbsWheelSearch) + '"';
-    body.innerHTML = '<span style="font-size:.7rem;color:var(--text3);font-style:italic">' + why + '</span>';
+    body.innerHTML = '<span style="font-size:.75rem;color:var(--text3);font-style:italic">' + why + '</span>';
     return;
   }
 
@@ -9606,7 +9606,7 @@ function _renderMbsWheelTab() {
       + '<span class="os-member-num">#' + mn + '</span>'
       + '<span class="os-member-vcnt">' + e.pairs.length + 'x</span>'
       + '<button class="os-member-fav' + (isFav ? ' on' : '') + '" onclick="event.stopPropagation();mbsWheelToggleFav(' + mn + ')">' + (isFav ? '⭐' : '☆') + '</button>'
-      + '<button class="os-member-fav" style="font-size:.7rem" onclick="event.stopPropagation();mbsWheelDeletePlayer(' + mn + ')" title="Spieler entfernen">🗑</button>'
+      + '<button class="os-member-fav" style="font-size:.75rem" onclick="event.stopPropagation();mbsWheelDeletePlayer(' + mn + ')" title="Spieler entfernen">🗑</button>'
       + '<span class="os-member-chevron">▶</span>'
       + '</div>'
       + '<div class="os-member-rows"><div class="os-strip">' + cards + '</div></div>'
@@ -10279,7 +10279,7 @@ function renderOutfitScanTab() {
         + '<button class="os-card-fav' + (isFav ? ' on' : '') + '" onclick="event.stopPropagation();toggleOsFav(\'' + mk + '\')">' + (isFav ? '⭐' : '☆') + '</button>'
         + delBtn + hintIcon
         + '</div>'
-        + '<div class="os-card-name">v' + vNum + (i === 0 ? ' <span style="font-size:.6rem;color:var(--green)">neu</span>' : '') + '</div>'
+        + '<div class="os-card-name">v' + vNum + (i === 0 ? ' <span style="font-size:.6875rem;color:var(--green)">neu</span>' : '') + '</div>'
         + '<div class="os-card-meta">' + metaLabel + ' · ' + ts + '</div>'
         + '<div class="os-card-actions">'
         + repairBtn
@@ -10568,7 +10568,7 @@ function _renderPmodTags(name) {
   const tags = profileGetTags(name);
   row.innerHTML = tags.length
     ? tags.map(t => `<span class="profile-tag">${escHtml(t)} <span class="tag-del" onclick="profileRemoveTag(${JSON.stringify(name)},${JSON.stringify(t)})" title="Entfernen">✕</span></span>`).join('')
-    : '<span style="color:var(--text3);font-size:.68rem">Keine Tags</span>';
+    : '<span style="color:var(--text3);font-size:.75rem">Keine Tags</span>';
 }
 
 function _allUsedTags() {
@@ -10748,7 +10748,7 @@ function _buildColorStats() {
       <div class="stats-row">
         <span class="stats-rank">#${i+1}</span>
         <span class="stats-color-swatch" style="background:${escHtml(hex)}" title="${escHtml(hex)}"></span>
-        <span class="stats-label" style="font-family:var(--font-mono);font-size:.7rem">${escHtml(hex)}</span>
+        <span class="stats-label" style="font-family:var(--font-mono);font-size:.75rem">${escHtml(hex)}</span>
         <div class="stats-bar-wrap"><div class="stats-bar" style="width:${Math.round(cnt/max*100)}%;background:${escHtml(hex)}"></div></div>
         <span class="stats-count">${cnt}×</span>
       </div>`).join('')
@@ -10867,7 +10867,7 @@ function _cfreqInjectToolButtons(containerId) {
     '<div style="display:flex;gap:6px;margin-top:5px">' +
       '<button class="btn cfreq-act-btn" onclick="_cfreqAutoFillGradient()" title="Dunkelste + hellste Outfit-Farbe automatisch erkennen">🎯 Aus Outfit</button>' +
       '<button class="btn btn-primary cfreq-act-btn" onclick="_cfreqApplyGradient()" title="Verlauf auf alle Outfit-Farben proportional mappen">✅ Übernehmen</button>' +
-      '<span style="font-size:.62rem;color:var(--text3);align-self:center">Klick auf Farbe → Zwischenablage</span>' +
+      '<span style="font-size:.6875rem;color:var(--text3);align-self:center">Klick auf Farbe → Zwischenablage</span>' +
     '</div>';
   actions.after(gradPanel);
 
@@ -11055,7 +11055,7 @@ function _cfreqRenderHarmony() {
   if (!container) return;
   container.innerHTML = harmonies.map(h => `
     <div style="display:flex;flex-direction:column;gap:5px">
-      <span style="font-size:.6rem;color:var(--text3);font-weight:700">${escHtml(h.label)}</span>
+      <span style="font-size:.6875rem;color:var(--text3);font-weight:700">${escHtml(h.label)}</span>
       <div style="display:flex;gap:4px">
         ${h.colors.map(c => `<span class="ctool-swatch" style="background:${c};width:30px;height:30px" title="${c}" onclick="navigator.clipboard.writeText('${c}');showStatus('📋 ${c} kopiert','success')"></span>`).join('')}
       </div>
@@ -11363,11 +11363,11 @@ function _ctRenderDots() {
   // Pagination Buttons
   const prevPageBtn = '<button onclick="_ctDotsGoPage(' + (_ctDotsPage-1) + ')" '
     + ((_ctDotsPage > 0) ? '' : 'disabled ')
-    + 'style="background:none;border:1px solid var(--border);border-radius:4px;color:var(--text3);cursor:pointer;font-size:.6rem;padding:1px 5px;flex-shrink:0">◀</button>';
+    + 'style="background:none;border:1px solid var(--border);border-radius:4px;color:var(--text3);cursor:pointer;font-size:.6875rem;padding:1px 5px;flex-shrink:0">◀</button>';
   const nextPageBtn = '<button onclick="_ctDotsGoPage(' + (_ctDotsPage+1) + ')" '
     + ((_ctDotsPage < totalPages-1) ? '' : 'disabled ')
-    + 'style="background:none;border:1px solid var(--border);border-radius:4px;color:var(--text3);cursor:pointer;font-size:.6rem;padding:1px 5px;flex-shrink:0">▶</button>';
-  const pageLabel = '<span style="font-size:.6rem;color:var(--text3);flex-shrink:0">'
+    + 'style="background:none;border:1px solid var(--border);border-radius:4px;color:var(--text3);cursor:pointer;font-size:.6875rem;padding:1px 5px;flex-shrink:0">▶</button>';
+  const pageLabel = '<span style="font-size:.6875rem;color:var(--text3);flex-shrink:0">'
     + (start+1) + '–' + end + ' / ' + total + '</span>';
 
   el.innerHTML = '<div style="display:flex;align-items:center;gap:4px;flex-wrap:nowrap;margin-bottom:3px">'
@@ -11439,7 +11439,7 @@ function _ctRenderCheckList() {
   const el = document.getElementById('curseTestCheckList');
   if (!el) return;
   if (!_ctCheckList.length) {
-    el.innerHTML = '<span style="font-size:.62rem;color:var(--text3);font-style:italic">Keine</span>';
+    el.innerHTML = '<span style="font-size:.6875rem;color:var(--text3);font-style:italic">Keine</span>';
     return;
   }
   el.innerHTML = _ctCheckList.slice().reverse().map((e, i) =>
@@ -11447,9 +11447,9 @@ function _ctRenderCheckList() {
     + (i === 0
       ? 'background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.25)'
       : 'background:var(--bg3);border:1px solid var(--border)') + '">'
-    + '<span style="font-size:.58rem;color:var(--text3);font-family:var(--font-mono);flex-shrink:0">' + escHtml(e.ts) + '</span>'
-    + '<span style="font-size:.68rem;font-weight:700;color:var(--yellow);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="' + escHtml(e.craftName + ' - ' + e.ownerName) + '">' + escHtml(e.craftName) + '</span>'
-    + '<span style="font-size:.6rem;color:var(--text3);white-space:nowrap;flex-shrink:0">' + escHtml(e.ownerName) + '</span>'
+    + '<span style="font-size:.6875rem;color:var(--text3);font-family:var(--font-mono);flex-shrink:0">' + escHtml(e.ts) + '</span>'
+    + '<span style="font-size:.75rem;font-weight:700;color:var(--yellow);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="' + escHtml(e.craftName + ' - ' + e.ownerName) + '">' + escHtml(e.craftName) + '</span>'
+    + '<span style="font-size:.6875rem;color:var(--text3);white-space:nowrap;flex-shrink:0">' + escHtml(e.ownerName) + '</span>'
     + '</div>'
   ).join('');
 }
@@ -11480,7 +11480,7 @@ function _ctRenderLog() {
   const el = document.getElementById('curseTestLog');
   if (!el) return;
   if (!_ctLog.length) {
-    el.innerHTML = '<span style="font-size:.62rem;color:var(--text3);font-style:italic">Noch keine Curses gespeichert</span>';
+    el.innerHTML = '<span style="font-size:.6875rem;color:var(--text3);font-style:italic">Noch keine Curses gespeichert</span>';
     return;
   }
   el.innerHTML = _ctLog.slice().reverse().map((e, i) =>
@@ -11488,9 +11488,9 @@ function _ctRenderLog() {
     + (i === 0
       ? 'background:rgba(52,211,153,.08);border:1px solid rgba(52,211,153,.2)'
       : 'background:var(--bg3);border:1px solid var(--border)') + '">'
-    + '<span style="font-size:.58rem;color:var(--text3);font-family:var(--font-mono);flex-shrink:0">' + escHtml(e.ts) + '</span>'
-    + '<span style="font-size:.68rem;font-weight:700;color:var(--text);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="' + escHtml(e.profileName) + '">' + escHtml(e.craftName) + '</span>'
-    + '<span style="font-size:.6rem;color:var(--text3);white-space:nowrap;flex-shrink:0">' + escHtml(e.owner) + '</span>'
+    + '<span style="font-size:.6875rem;color:var(--text3);font-family:var(--font-mono);flex-shrink:0">' + escHtml(e.ts) + '</span>'
+    + '<span style="font-size:.75rem;font-weight:700;color:var(--text);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="' + escHtml(e.profileName) + '">' + escHtml(e.craftName) + '</span>'
+    + '<span style="font-size:.6875rem;color:var(--text3);white-space:nowrap;flex-shrink:0">' + escHtml(e.owner) + '</span>'
     + '</div>'
   ).join('');
 }

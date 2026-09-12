@@ -81,25 +81,25 @@ function _shopKatalogAuffrischen(){
 function renderShopItems() {
   const el = document.getElementById('shop-item-list'); if (!el) return;
   const items = _shop.items;
-  if (!items.length) { el.innerHTML = '<div style="font-size:.7rem;color:var(--text3);text-align:center;padding:12px 0">Noch keine Artikel.</div>'; return; }
+  if (!items.length) { el.innerHTML = '<div style="font-size:.75rem;color:var(--text3);text-align:center;padding:12px 0">Noch keine Artikel.</div>'; return; }
   el.innerHTML = items.map(item => {
     const nostripPreis = item.preisNostrip != null ? item.preisNostrip : (_shop.settings.preisNostrip??0);
     const uPreis       = item.preisU       != null ? item.preisU       : (_shop.settings.preisU??0);
     const flagBadges   = [
-      uPreis>0       ? `<span style="font-size:.55rem;background:rgba(139,92,246,0.15);border:1px solid rgba(139,92,246,0.3);color:#a78bfa;padding:1px 5px;border-radius:3px">/u +${uPreis}💰</span>` : '',
-      nostripPreis>0 ? `<span style="font-size:.55rem;background:rgba(248,113,113,0.12);border:1px solid rgba(248,113,113,0.3);color:#f87171;padding:1px 5px;border-radius:3px">/nostrip +${nostripPreis}💰</span>` : (nostripPreis===0?`<span style="font-size:.55rem;background:rgba(248,113,113,0.07);border:1px solid rgba(248,113,113,0.2);color:#f87171;padding:1px 5px;border-radius:3px">/nostrip ✓</span>`:''),
+      uPreis>0       ? `<span style="font-size:.6875rem;background:rgba(139,92,246,0.15);border:1px solid rgba(139,92,246,0.3);color:#a78bfa;padding:1px 5px;border-radius:3px">/u +${uPreis}💰</span>` : '',
+      nostripPreis>0 ? `<span style="font-size:.6875rem;background:rgba(248,113,113,0.12);border:1px solid rgba(248,113,113,0.3);color:#f87171;padding:1px 5px;border-radius:3px">/nostrip +${nostripPreis}💰</span>` : (nostripPreis===0?`<span style="font-size:.6875rem;background:rgba(248,113,113,0.07);border:1px solid rgba(248,113,113,0.2);color:#f87171;padding:1px 5px;border-radius:3px">/nostrip ✓</span>`:''),
     ].filter(Boolean).join(' ');
     return `
     <div class="shop-item-card ${item.aktiv?'':'shop-item-inactive'}">
       <span class="shop-item-icon">${escHtml(item.icon||'🛒')}</span>
       <div style="flex:1;min-width:0">
         <div class="shop-item-name">${escHtml(item.name||'–')}</div>
-        ${item.beschreibung?`<div style="font-size:.62rem;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(item.beschreibung)}</div>`:''}
+        ${item.beschreibung?`<div style="font-size:.6875rem;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(item.beschreibung)}</div>`:''}
         ${flagBadges?`<div style="margin-top:3px;display:flex;gap:3px;flex-wrap:wrap">${flagBadges}</div>`:''}
       </div>
       <span class="shop-item-price">${item.preis??0} 💰</span>
-      <button onclick="shopItemEdit('${item.id}')" style="background:none;border:1px solid rgba(255,255,255,0.1);border-radius:5px;color:var(--text3);font-size:.62rem;padding:2px 7px;cursor:pointer">✏️</button>
-      <button onclick="shopItemDelete('${item.id}')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.75rem;padding:2px 5px">✕</button>
+      <button onclick="shopItemEdit('${item.id}')" style="background:none;border:1px solid rgba(255,255,255,0.1);border-radius:5px;color:var(--text3);font-size:.6875rem;padding:2px 7px;cursor:pointer">✏️</button>
+      <button onclick="shopItemDelete('${item.id}')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.8125rem;padding:2px 5px">✕</button>
     </div>
   `}).join('');
 }
@@ -110,7 +110,7 @@ function renderShopLog() {
   const cntEl = document.getElementById('shop-log-count');
   if (cntEl) cntEl.textContent = log.length + ' Käufe';
   if (!log.length) {
-    el.innerHTML = '<div class="shop-empty">🛒 Noch keine Käufe.<br><span style="font-size:.72rem;color:var(--text3)">Käufe erscheinen hier wenn der Bot aktiv ist und ein Spieler einen Artikel kauft.</span></div>';
+    el.innerHTML = '<div class="shop-empty">🛒 Noch keine Käufe.<br><span style="font-size:.75rem;color:var(--text3)">Käufe erscheinen hier wenn der Bot aktiv ist und ein Spieler einen Artikel kauft.</span></div>';
     return;
   }
   el.innerHTML = log.map(e => {
@@ -123,7 +123,7 @@ function renderShopLog() {
       targetStr = ` → <span style="color:#60a5fa">${escHtml(e.targetName)}</span>`;
     }
     const preisLabel = e.isAll
-      ? `<span style="color:var(--yellow)">${e.preis} 💰</span> <span style="font-size:.6rem;color:var(--text3)">(${e.anzahl}×${e.preis/e.anzahl})</span>`
+      ? `<span style="color:var(--yellow)">${e.preis} 💰</span> <span style="font-size:.6875rem;color:var(--text3)">(${e.anzahl}×${e.preis/e.anzahl})</span>`
       : `<span style="color:var(--green)">${e.preis} 💰</span>`;
     return `<div class="shop-log-card">
       <span class="shop-log-who">${escHtml(e.buyerName||('#'+e.buyerNum))}</span>${targetStr}
@@ -152,7 +152,7 @@ function _shopNostripHint(){
   if(!hint){
     hint=document.createElement('div');
     hint.id='shop-nostrip-hint';
-    hint.style.cssText='font-size:.62rem;color:#f87171;background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.2);border-radius:4px;padding:5px 8px;margin-top:6px;line-height:1.4';
+    hint.style.cssText='font-size:.6875rem;color:#f87171;background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.2);border-radius:4px;padding:5px 8px;margin-top:6px;line-height:1.4';
     hint.textContent='\u26A0\uFE0F Hinweis: /nostrip wirkt nur, wenn dieser Artikel ein Item anlegt \u2013 entweder oben \u00fcber "Item/Curse/Outfit beim Kauf anlegen" oder \u00fcber einen Trigger mit Bedingung "shop_kauf". Ohne angelegtes Item hat /nostrip keinen Effekt.';
     anchor.parentNode.insertBefore(hint,anchor.nextSibling);
   }
@@ -204,7 +204,7 @@ function _shopKaufItemLabel(){
     : k.profilName ? ('👗 '+k.profilName)
     : k.curseName  ? ('🔮 '+k.curseName)
     : ('📦 '+(k.gruppe||'?')+'/'+k.item);
-  el.innerHTML='<div style="margin-top:6px;font-size:.61rem;color:var(--text3);border:1px dashed rgba(255,255,255,0.14);'
+  el.innerHTML='<div style="margin-top:6px;font-size:.6875rem;color:var(--text3);border:1px dashed rgba(255,255,255,0.14);'
     +'border-radius:6px;padding:5px 8px">↩ Alte Einstellung dieses Artikels: <b>'+escHtml(txt)+'</b>'
     +'<br>Sie greift nur, solange oben kein Gegenstand gewählt ist. Bleibt erhalten, wird aber nicht mehr bearbeitet.</div>';
 }
@@ -215,7 +215,7 @@ function _shopItemDefHinweis(){
   const sel=(document.getElementById('shop-modal-itemdef')||{}).value||'';
   const hatAlt=!!(_shopKaufItemAktiv&&_shopKaufItem);
   el.innerHTML=(!sel&&!hatAlt)
-    ? '<div style="margin-top:4px;font-size:.61rem;color:#fbbf24">⚠️ Ohne Gegenstand kostet der Artikel nur Geld – es passiert nichts weiter.</div>'
+    ? '<div style="margin-top:4px;font-size:.6875rem;color:#fbbf24">⚠️ Ohne Gegenstand kostet der Artikel nur Geld – es passiert nichts weiter.</div>'
     : '';
 }
 
