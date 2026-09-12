@@ -1,18 +1,18 @@
 ---
 gsd_state_version: "1.0"
 current_phase: 1
-current_phase_name: READY TO EXECUTE
+current_phase_name: Testfundament
 status: executing
-stopped_at: Roadmap und STATE.md erstellt; Traceability in REQUIREMENTS.md aktualisiert
-last_updated: "2026-09-12T21:49:36.898Z"
-last_activity: 2026-09-12
-last_activity_desc: Roadmap erstellt (6 Phasen, 37/37 Anforderungen zugeordnet)
-state_head: a6de3c22d73f81c47edc502ef1880df790fe4ebf
+stopped_at: Completed 01-01-PLAN.md
+last_updated: "2026-09-12T22:10:23.376Z"
+last_activity: 2026-09-13
+last_activity_desc: Phase 1 execution started
+state_head: 125b96eacf583acceebe1c43e5f735faefac18a1
 progress:
   total_phases: 6
   completed_phases: 0
   total_plans: 3
-  completed_plans: 0
+  completed_plans: 1
   percent: 0
 ---
 
@@ -27,10 +27,10 @@ See: .planning/PROJECT.md (updated 2026-09-12)
 
 ## Current Position
 
-Phase: 1 — READY TO EXECUTE
-Plan: 0 of TBD in current phase
+Phase: 1 (Testfundament) — EXECUTING
+Plan: 2 of 3
 Status: Ready to execute
-Last activity: 2026-09-12 — Roadmap erstellt (6 Phasen, 37/37 Anforderungen zugeordnet)
+Last activity: 2026-09-13 — Phase 1 execution started
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -54,6 +54,11 @@ Progress: [░░░░░░░░░░] 0%
 - Trend: —
 
 *Updated after each plan completion*
+**Per-Plan Metrics:**
+
+| Plan | Duration | Tasks | Files |
+|------|----------|-------|-------|
+| Phase 01-testfundament P01 | 12min | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -67,6 +72,8 @@ Recent decisions affecting current work:
 - [Roadmap]: Origin-Pinning (STAB-04..06) landet in Phase 3 vor der Bridge-Extraktion (SPLIT-02) in Phase 4
 - [Roadmap]: Screenshot-Migration additiv — Alt-Blob `PROFILE_SCREENSHOTS` bleibt als Rollback-Pfad; JSON-Export vor Migration
 - [Roadmap]: Gamecode-Inventar zur Laufzeit über den Loader, read-only und gechunkt; kein Gamecode im Repo
+- [Phase 1]: type: commonjs in package.json statt module, damit node --check *.js auf Produktionsdateien gueltig bleibt; Vitest liest vitest.config.js trotzdem als ESM
+- [Phase 1]: vitest.no-idb.config.js ueberschreibt setupFiles per Objekt-Spread statt mergeConfig, da mergeConfig Arrays konkateniert haette
 
 ### Pending Todos
 
@@ -88,6 +95,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-12
-Stopped at: Roadmap und STATE.md erstellt; Traceability in REQUIREMENTS.md aktualisiert
+Last session: 2026-09-12T22:10:23.352Z
+Stopped at: Completed 01-01-PLAN.md
 Resume file: None

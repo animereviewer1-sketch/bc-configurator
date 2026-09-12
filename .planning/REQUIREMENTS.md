@@ -22,9 +22,9 @@ Requirements for this milestone. Each maps to roadmap phases.
 
 ### Tests (TEST)
 
-- [ ] **TEST-01**: `npm test` führt eine Vitest-Suite lokal aus; die Produktionsauslieferung (GitHub Pages, `<script>`-Tags) bleibt unverändert und ohne Build-Schritt
+- [x] **TEST-01**: `npm test` führt eine Vitest-Suite lokal aus; die Produktionsauslieferung (GitHub Pages, `<script>`-Tags) bleibt unverändert und ohne Build-Schritt
 - [ ] **TEST-02**: Bestehende Global-Scope-Dateien (`items.js`, `bot-data.js`, `outfit-import.js`) sind ohne Quelländerung per Node-`vm`-Sandbox testbar
-- [ ] **TEST-03**: Ein Canary-Test schlägt fehl, wenn `fake-indexeddb` nicht aktiv ist (verhindert stilles Zurückfallen auf den localStorage-Pfad)
+- [x] **TEST-03**: Ein Canary-Test schlägt fehl, wenn `fake-indexeddb` nicht aktiv ist (verhindert stilles Zurückfallen auf den localStorage-Pfad)
 - [ ] **TEST-04**: IDB-Helfer (`idbGet`/`idbSet`) sind getestet inkl. Quota-Fehlerpfad
 - [ ] **TEST-05**: Bot-Validatoren aus `bot-data.js` und der Outfit-Import-Parser sind mit gültigen und ungültigen Eingaben getestet
 - [ ] **TEST-06**: Der Bot-Code-Generator erzeugt für Nutzerdaten mit Backticks, `${` und Sonderzeichen syntaktisch gültigen Code (Escaping-Test)
@@ -108,9 +108,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | STAB-08 | Phase 3 | Pending |
 | STAB-09 | Phase 2 | Pending |
 | STAB-10 | Phase 2 | Pending |
-| TEST-01 | Phase 1 | Pending |
+| TEST-01 | Phase 1 | Complete |
 | TEST-02 | Phase 1 | Pending |
-| TEST-03 | Phase 1 | Pending |
+| TEST-03 | Phase 1 | Complete |
 | TEST-04 | Phase 2 | Pending |
 | TEST-05 | Phase 1 | Pending |
 | TEST-06 | Phase 1 | Pending |
@@ -137,6 +137,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SCAN-13 | Phase 5 | Pending |
 
 **Coverage:**
+
 - v1 requirements: 37 total
 - Mapped to phases: 37
 - Unmapped: 0 ✓
