@@ -78,8 +78,7 @@ Gescannte Daten (Outfits, Versionen, Screenshots, Bots) gehen nie verloren — n
 | Gamecode-Inventar zur Laufzeit über den Loader exportieren | Nutzt die vorhandene Bridge; kein Gamecode im Repo nötig; erfasst Mods automatisch | — Pending |
 | Vitest nur für browserfreie Logik, kein E2E in diesem Milestone | Schnellster Weg zu einem Sicherheitsnetz vor dem Refactoring | — Pending |
 | Kein Bundler | Static-Hosting-Deployment bleibt trivial; Modulschnitt über normale Script-Includes | ✓ Good |
-| `safeName` in `_buildBotCode` escaped zusätzlich `'`, ``, `
-` (nicht nur `\`/`` ` ``) | `O'Brien` und mehrzeilige Namen erzeugten SyntaxError; gleiche Konvention wie `escJsAttr` | ✓ Good |
+| `safeName` in `_buildBotCode` escaped zusätzlich Apostroph, CR und LF (nicht nur Backslash/Backtick) | `O'Brien` und mehrzeilige Namen erzeugten SyntaxError; gleiche Konvention wie `escJsAttr` | ✓ Good |
 | Executor laufen ohne Git-Worktrees (`workflow.use_worktrees=false`) | Arbeitsbaum trug uncommitteten WIP, gegen den Recherche und Pläne erstellt wurden | ✓ Good |
 | `tests/package.json` mit `type: module`; Root bleibt CommonJS | ESM-Loader-Helper importierbar, `node --check` auf Produktionsdateien bleibt möglich | ✓ Good |
 
