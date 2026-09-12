@@ -98,16 +98,49 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| STAB-01 … STAB-10 | — | Pending |
-| TEST-01 … TEST-07 | — | Pending |
-| SPLIT-01 … SPLIT-07 | — | Pending |
-| SCAN-01 … SCAN-13 | — | Pending |
+| STAB-01 | Phase 2 | Pending |
+| STAB-02 | Phase 2 | Pending |
+| STAB-03 | Phase 2 | Pending |
+| STAB-04 | Phase 3 | Pending |
+| STAB-05 | Phase 3 | Pending |
+| STAB-06 | Phase 3 | Pending |
+| STAB-07 | Phase 3 | Pending |
+| STAB-08 | Phase 3 | Pending |
+| STAB-09 | Phase 2 | Pending |
+| STAB-10 | Phase 2 | Pending |
+| TEST-01 | Phase 1 | Pending |
+| TEST-02 | Phase 1 | Pending |
+| TEST-03 | Phase 1 | Pending |
+| TEST-04 | Phase 2 | Pending |
+| TEST-05 | Phase 1 | Pending |
+| TEST-06 | Phase 1 | Pending |
+| TEST-07 | Phase 3 | Pending |
+| SPLIT-01 | Phase 4 | Pending |
+| SPLIT-02 | Phase 4 | Pending |
+| SPLIT-03 | Phase 4 | Pending |
+| SPLIT-04 | Phase 4 | Pending |
+| SPLIT-05 | Phase 4 | Pending |
+| SPLIT-06 | Phase 4 | Pending |
+| SPLIT-07 | Phase 4 | Pending |
+| SCAN-01 | Phase 5 | Pending |
+| SCAN-02 | Phase 5 | Pending |
+| SCAN-03 | Phase 5 | Pending |
+| SCAN-04 | Phase 5 | Pending |
+| SCAN-05 | Phase 5 | Pending |
+| SCAN-06 | Phase 5 | Pending |
+| SCAN-07 | Phase 5 | Pending |
+| SCAN-08 | Phase 5 | Pending |
+| SCAN-09 | Phase 6 | Pending |
+| SCAN-10 | Phase 6 | Pending |
+| SCAN-11 | Phase 6 | Pending |
+| SCAN-12 | Phase 6 | Pending |
+| SCAN-13 | Phase 5 | Pending |
 
 **Coverage:**
 - v1 requirements: 37 total
-- Mapped to phases: 0
-- Unmapped: 37 ⚠️ (filled by roadmap)
+- Mapped to phases: 37
+- Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-09-12*
-*Last updated: 2026-09-12 after initial definition*
+*Last updated: 2026-09-12 after roadmap creation (traceability filled)*
