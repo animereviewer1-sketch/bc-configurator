@@ -17,8 +17,8 @@ Requirements for this milestone. Each maps to roadmap phases.
 - [ ] **STAB-06**: Beide Seiten der Bridge prüfen `event.origin` und `event.source` gegen eine einzige gemeinsame Origin-Konstante; es gibt keine zweite Definition des Origins im Code
 - [ ] **STAB-07**: Verliert das Tool die Verbindung zum Spiel-Tab (`window.opener` null oder kein Heartbeat), zeigt es das sichtbar an und bietet erneutes Verbinden an
 - [ ] **STAB-08**: Jeder EXEC-Aufruf wird mit Zeitstempel und Kurzbeschreibung protokolliert und ist im Tool einsehbar
-- [ ] **STAB-09**: Das Löschen von Bildern, einzelnen Outfits oder Outfit-Versionen ist nur über eine explizite Nutzeraktion mit Bestätigungsdialog möglich; kein Code-Pfad löscht gespeicherte Scan-Daten als Nebeneffekt
-- [ ] **STAB-10**: Ein bestätigter Löschvorgang entfernt den Datensatz konsistent aus allen Speicherorten (LSCG_DB, LSCG_SCREENSHOTS, PROFILE_SCREENSHOTS) — keine verwaisten Einträge
+- [x] **STAB-09**: Das Löschen von Bildern, einzelnen Outfits oder Outfit-Versionen ist nur über eine explizite Nutzeraktion mit Bestätigungsdialog möglich; kein Code-Pfad löscht gespeicherte Scan-Daten als Nebeneffekt
+- [x] **STAB-10**: Ein bestätigter Löschvorgang entfernt den Datensatz konsistent aus allen Speicherorten (LSCG_DB, LSCG_SCREENSHOTS, PROFILE_SCREENSHOTS) — keine verwaisten Einträge
 
 ### Tests (TEST)
 
@@ -106,8 +106,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | STAB-06 | Phase 3 | Pending |
 | STAB-07 | Phase 3 | Pending |
 | STAB-08 | Phase 3 | Pending |
-| STAB-09 | Phase 2 | Pending |
-| STAB-10 | Phase 2 | Pending |
+| STAB-09 | Phase 2 | Complete |
+| STAB-10 | Phase 2 | Complete |
 | TEST-01 | Phase 1 | Complete |
 | TEST-02 | Phase 1 | Complete |
 | TEST-03 | Phase 1 | Complete |
