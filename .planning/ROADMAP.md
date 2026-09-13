@@ -61,7 +61,7 @@ Plans:
 
 Plans:
 
-- [ ] 02-01-PLAN.md — TEST-04: Quota-/Fehlerpfad-Tests für `idbSet`/`idbGet` (STAB-02 bereits implementiert, nur Test) + STAB-01: Screenshot-Sync liest `mk|fp` (RED → GREEN, 3/2 Zeilen in items.js) — Wave 1
+- [x] 02-01-PLAN.md — TEST-04: Quota-/Fehlerpfad-Tests für `idbSet`/`idbGet` (STAB-02 bereits implementiert, nur Test) + STAB-01: Screenshot-Sync liest `mk|fp` (RED → GREEN, 3/2 Zeilen in items.js) — Wave 1
 - [ ] 02-02-PLAN.md — STAB-09: `confirm()` in fünf confirm-losen Lösch-Pfaden (inkl. `mbsWheelDeleteShot` und Lightbox-Wheel-Zweig) + statischer Quell-Audit; STAB-10: `_removeLscgScreenshotFromProfiles(fp, img)` + Key-/All-Helfer an allen LSCG-Löschpfaden, Konsistenztest inkl. IDB (RED → GREEN) — Wave 2
 - [ ] 02-03-PLAN.md — STAB-03: `_speicherFormat`/`_speicherZeigeStatus` in items.js + Sektion `📊 Speicher` im Tweaks-Panel (index.html nur Einfügungen), Test mit `navigator`-Stub (RED → GREEN) — Wave 3
 

@@ -9,8 +9,8 @@ Requirements for this milestone. Each maps to roadmap phases.
 
 ### Stabilisierung (STAB)
 
-- [ ] **STAB-01**: Screenshots, die unter `mk|fp` gespeichert wurden, werden beim Profil-Sync unter demselben Schlüssel gelesen — ein Screenshot einer Outfit-Version erscheint danach im Profil (`_syncLscgScreenshotToProfiles(mk, fp)`)
-- [ ] **STAB-02**: Schlägt ein IDB-Schreibvorgang mit `QuotaExceededError` fehl, sieht der Nutzer sofort eine Fehlermeldung in der UI; der Fehler wird nie still verschluckt
+- [x] **STAB-01**: Screenshots, die unter `mk|fp` gespeichert wurden, werden beim Profil-Sync unter demselben Schlüssel gelesen — ein Screenshot einer Outfit-Version erscheint danach im Profil (`_syncLscgScreenshotToProfiles(mk, fp)`)
+- [x] **STAB-02**: Schlägt ein IDB-Schreibvorgang mit `QuotaExceededError` fehl, sieht der Nutzer sofort eine Fehlermeldung in der UI; der Fehler wird nie still verschluckt
 - [ ] **STAB-03**: Der Nutzer kann den belegten und verfügbaren Speicher (`navigator.storage.estimate()`) im Tool einsehen
 - [ ] **STAB-04**: Alle `postMessage`-Aufrufe vom Tool zum Spiel verwenden den beim Handshake gelernten Spiel-Origin statt `"*"`
 - [ ] **STAB-05**: Alle `postMessage`-Aufrufe im injizierten Code (Bot-Engine-Generator, Watcher) zum Tool verwenden den statischen Tool-Origin statt `"*"`
@@ -25,7 +25,7 @@ Requirements for this milestone. Each maps to roadmap phases.
 - [x] **TEST-01**: `npm test` führt eine Vitest-Suite lokal aus; die Produktionsauslieferung (GitHub Pages, `<script>`-Tags) bleibt unverändert und ohne Build-Schritt
 - [x] **TEST-02**: Bestehende Global-Scope-Dateien (`items.js`, `bot-data.js`, `outfit-import.js`) sind ohne Quelländerung per Node-`vm`-Sandbox testbar
 - [x] **TEST-03**: Ein Canary-Test schlägt fehl, wenn `fake-indexeddb` nicht aktiv ist (verhindert stilles Zurückfallen auf den localStorage-Pfad)
-- [ ] **TEST-04**: IDB-Helfer (`idbGet`/`idbSet`) sind getestet inkl. Quota-Fehlerpfad
+- [x] **TEST-04**: IDB-Helfer (`idbGet`/`idbSet`) sind getestet inkl. Quota-Fehlerpfad
 - [x] **TEST-05**: Bot-Validatoren aus `bot-data.js` und der Outfit-Import-Parser sind mit gültigen und ungültigen Eingaben getestet
 - [x] **TEST-06**: Der Bot-Code-Generator erzeugt für Nutzerdaten mit Backticks, `${` und Sonderzeichen syntaktisch gültigen Code (Escaping-Test)
 - [ ] **TEST-07**: Das Bridge-Protokoll (Nachrichtentypen, Origin-Prüfung, Handler-Dispatch) ist mit simulierten Nachrichten getestet
@@ -98,8 +98,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| STAB-01 | Phase 2 | Pending |
-| STAB-02 | Phase 2 | Pending |
+| STAB-01 | Phase 2 | Complete |
+| STAB-02 | Phase 2 | Complete |
 | STAB-03 | Phase 2 | Pending |
 | STAB-04 | Phase 3 | Pending |
 | STAB-05 | Phase 3 | Pending |
@@ -111,7 +111,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | TEST-01 | Phase 1 | Complete |
 | TEST-02 | Phase 1 | Complete |
 | TEST-03 | Phase 1 | Complete |
-| TEST-04 | Phase 2 | Pending |
+| TEST-04 | Phase 2 | Complete |
 | TEST-05 | Phase 1 | Complete |
 | TEST-06 | Phase 1 | Complete |
 | TEST-07 | Phase 3 | Pending |
