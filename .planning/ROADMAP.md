@@ -56,8 +56,14 @@ Plans:
   4. Bilder, einzelne Outfits und Outfit-Versionen lassen sich nur über eine explizite Nutzeraktion mit Bestätigungsdialog löschen; kein anderer Code-Pfad entfernt gespeicherte Scan-Daten
   5. Nach einem bestätigten Löschvorgang existiert der Datensatz in keinem der Speicherorte mehr (LSCG_DB, LSCG_SCREENSHOTS, PROFILE_SCREENSHOTS) — keine verwaisten Einträge
 
-**Plans**: TBD
+**Plans:** 3 plans
 **UI hint**: yes
+
+Plans:
+
+- [ ] 02-01-PLAN.md — TEST-04: Quota-/Fehlerpfad-Tests für `idbSet`/`idbGet` (STAB-02 bereits implementiert, nur Test) + STAB-01: Screenshot-Sync liest `mk|fp` (RED → GREEN, 3/2 Zeilen in items.js) — Wave 1
+- [ ] 02-02-PLAN.md — STAB-09: `confirm()` in fünf confirm-losen Lösch-Pfaden (inkl. `mbsWheelDeleteShot` und Lightbox-Wheel-Zweig) + statischer Quell-Audit; STAB-10: `_removeLscgScreenshotFromProfiles(fp, img)` + Key-/All-Helfer an allen LSCG-Löschpfaden, Konsistenztest inkl. IDB (RED → GREEN) — Wave 2
+- [ ] 02-03-PLAN.md — STAB-03: `_speicherFormat`/`_speicherZeigeStatus` in items.js + Sektion `📊 Speicher` im Tweaks-Panel (index.html nur Einfügungen), Test mit `navigator`-Stub (RED → GREEN) — Wave 3
 
 ### Phase 3: Bridge-Härtung
 
@@ -128,7 +134,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Testfundament | 3/3 | Complete    | 2026-09-13 |
-| 2. Speicher-Sicherheit | 0/TBD | Not started | - |
+| 2. Speicher-Sicherheit | 0/3 | Planned | - |
 | 3. Bridge-Härtung | 0/TBD | Not started | - |
 | 4. Entflechtung | 0/TBD | Not started | - |
 | 5. Gamecode-Inventar | 0/TBD | Not started | - |

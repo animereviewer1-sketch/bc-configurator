@@ -29,7 +29,7 @@ created: "2026-09-13"
 ## Sampling Rate
 
 - **After every task commit:** Run `npx vitest run tests/<betroffene Datei>.test.js`
-- **After every plan wave:** Run `npm test`
+- **After every plan wave:** Run `npm test` (waves are sequential: 02-01 → 02-02 → 02-03, all touch items.js)
 - **Before `/gsd-verify-work`:** Full suite green; `node --check items.js` passes
 - **Max feedback latency:** 10 seconds
 
@@ -39,11 +39,11 @@ created: "2026-09-13"
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| 2-01-01 | 01 | 1 | TEST-04, STAB-02 | T-2-01 | `idbSet` returns false + `showStatus(..,'error')` on QuotaExceededError; no partial write | unit | `npx vitest run tests/idb-helpers.test.js` | ⚠️ extend | ⬜ pending |
-| 2-01-02 | 01 | 1 | STAB-01 | — | Sync reads `mk|fp` key it was written under | unit (RED→GREEN) | `npx vitest run tests/screenshot-sync.test.js` | ❌ W0 | ⬜ pending |
-| 2-02-01 | 02 | 1 | STAB-09 | T-2-02 | Every image/outfit/version delete path calls `confirm()`; false → data unchanged | unit (RED→GREEN) | `npx vitest run tests/delete-confirmation.test.js` | ❌ W0 | ⬜ pending |
-| 2-02-02 | 02 | 1 | STAB-10 | T-2-03 | Confirmed delete removes record from LSCG_DB, LSCG_SCREENSHOTS, PROFILE_SCREENSHOTS — no orphans | unit (RED→GREEN) | `npx vitest run tests/delete-consistency.test.js` | ❌ W0 | ⬜ pending |
-| 2-03-01 | 03 | 1 | STAB-03 | — | Storage panel renders `navigator.storage.estimate()` result; graceful fallback when API missing | unit | `npx vitest run tests/storage-estimate.test.js` | ❌ W0 | ⬜ pending |
+| 2-01-01 | 01 (Task 1) | 1 | TEST-04, STAB-02 | T-2-01 | `idbSet` returns false + `showStatus(..,'error')` on QuotaExceededError; no partial write; throttle + idbGet error path documented | unit (green on first run — STAB-02 already implemented) | `npx vitest run tests/idb-helpers.test.js` | ⚠️ extend | ⬜ pending |
+| 2-01-02 | 01 (Task 2 RED, Task 3 GREEN) | 1 | STAB-01 | T-2-04 | Sync reads `mk|fp` key it was written under; never overwrites existing profile image | unit (RED→GREEN) | `npx vitest run tests/screenshot-sync.test.js` | ❌ W0 | ⬜ pending |
+| 2-02-01 | 02 (Task 1 RED, Task 2 GREEN) | 2 | STAB-09 | T-2-02 | Every image/outfit/version delete path calls `confirm()` exactly once (incl. `mbsWheelDeleteShot` and the wheel branch of `deleteOsScreenshotFromLb`); false → all four stores unchanged; static source audit: no delete line outside confirmed/allow-listed functions | unit (RED→GREEN) | `npx vitest run tests/delete-confirmation.test.js` | ❌ W0 | ⬜ pending |
+| 2-02-02 | 02 (Task 1 RED, Task 3 GREEN) | 2 | STAB-10 | T-2-03, T-2-07 | Confirmed delete removes record from LSCG_DB, LSCG_SCREENSHOTS and every byte-identical copy in PROFILE_SCREENSHOTS (via `_removeLscgScreenshotFromProfiles(fp, img)`) — no orphans; manual profile uploads stay; persisted after `bcSpeichernJetzt()` | unit (RED→GREEN) | `npx vitest run tests/delete-consistency.test.js` | ❌ W0 | ⬜ pending |
+| 2-03-01 | 03 (Task 1 RED, Task 2 GREEN) | 3 | STAB-03 | T-2-09 | Storage panel renders `navigator.storage.estimate()` result via pure `_speicherFormat`; graceful fallback when API missing or rejecting; guarded init hook never throws in the sandbox | unit (RED→GREEN) | `npx vitest run tests/storage-estimate.test.js` | ❌ W0 | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
