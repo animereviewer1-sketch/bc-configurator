@@ -13,8 +13,8 @@ Requirements for this milestone. Each maps to roadmap phases.
 - [x] **STAB-02**: Schlägt ein IDB-Schreibvorgang mit `QuotaExceededError` fehl, sieht der Nutzer sofort eine Fehlermeldung in der UI; der Fehler wird nie still verschluckt
 - [x] **STAB-03**: Der Nutzer kann den belegten und verfügbaren Speicher (`navigator.storage.estimate()`) im Tool einsehen
 - [x] **STAB-04**: Alle `postMessage`-Aufrufe vom Tool zum Spiel verwenden den beim Handshake gelernten Spiel-Origin statt `"*"`
-- [ ] **STAB-05**: Alle `postMessage`-Aufrufe im injizierten Code (Bot-Engine-Generator, Watcher) zum Tool verwenden den statischen Tool-Origin statt `"*"`
-- [ ] **STAB-06**: Beide Seiten der Bridge prüfen `event.origin` und `event.source` gegen eine einzige gemeinsame Origin-Konstante; es gibt keine zweite Definition des Origins im Code
+- [x] **STAB-05**: Alle `postMessage`-Aufrufe im injizierten Code (Bot-Engine-Generator, Watcher) zum Tool verwenden den statischen Tool-Origin statt `"*"`
+- [x] **STAB-06**: Beide Seiten der Bridge prüfen `event.origin` und `event.source` gegen eine einzige gemeinsame Origin-Konstante; es gibt keine zweite Definition des Origins im Code
 - [x] **STAB-07**: Verliert das Tool die Verbindung zum Spiel-Tab (`window.opener` null oder kein Heartbeat), zeigt es das sichtbar an und bietet erneutes Verbinden an
 - [ ] **STAB-08**: Jeder EXEC-Aufruf wird mit Zeitstempel und Kurzbeschreibung protokolliert und ist im Tool einsehbar
 - [x] **STAB-09**: Das Löschen von Bildern, einzelnen Outfits oder Outfit-Versionen ist nur über eine explizite Nutzeraktion mit Bestätigungsdialog möglich; kein Code-Pfad löscht gespeicherte Scan-Daten als Nebeneffekt
@@ -102,8 +102,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | STAB-02 | Phase 2 | Complete |
 | STAB-03 | Phase 2 | Complete |
 | STAB-04 | Phase 3 | Complete |
-| STAB-05 | Phase 3 | Pending |
-| STAB-06 | Phase 3 | Pending |
+| STAB-05 | Phase 3 | Complete |
+| STAB-06 | Phase 3 | Complete |
 | STAB-07 | Phase 3 | Complete |
 | STAB-08 | Phase 3 | Pending |
 | STAB-09 | Phase 2 | Complete |

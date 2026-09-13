@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 3
 current_phase_name: Bridge-Härtung
 status: executing
-stopped_at: Completed 03-01-PLAN.md
-last_updated: "2026-09-13T20:15:18.493Z"
+stopped_at: Completed 03-02-PLAN.md
+last_updated: "2026-09-13T20:26:54.627Z"
 last_activity: 2026-09-13
 last_activity_desc: Phase 3 execution started
-state_head: 74e739dc72cdea574c6a28c0a7a1472547ef7df5
+state_head: 44e1bf48f2d7570fcbed1dfe4717372070fa3cbc
 progress:
   total_phases: 6
   completed_phases: 0
   total_plans: 9
-  completed_plans: 7
+  completed_plans: 8
   percent: 0
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-09-12)
 ## Current Position
 
 Phase: 3 (Bridge-Härtung) — EXECUTING
-Plan: 2 of 3
+Plan: 3 of 3
 Status: Ready to execute
 Last activity: 2026-09-13 — Phase 3 execution started
 
@@ -65,6 +65,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 02-speicher-sicherheit P02 | 15min | 3 tasks | 3 files |
 | Phase 02-speicher-sicherheit P03 | 10min | 2 tasks | 3 files |
 | Phase 03-bridge-haertung P01 | 25 min | 3 tasks | 4 files |
+| Phase 03-bridge-haertung P02 | 20min | 3 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -89,6 +90,9 @@ Recent decisions affecting current work:
 - [Phase 2]: Wheel-Zweig von deleteOsScreenshotFromLb als sechster confirm-loser Pfad mitgefixt (Planer-Probe-Fund)
 - [Phase 2]: Init-Hook-Direktaufruf und Listener-Aufruf auf zwei Zeilen gesetzt, damit _speicherZeigeStatus als separat zaehlbare Vorkommen erscheint
 - [Phase 3]: Trust-on-first-use Origin-Pinning statt Allowlist; kein Origin-Reset im Heartbeat-Pfad; Bootstrap-PINGs bleiben dokumentierte '*'-Ausnahme — BC läuft auf mehreren Domains (Orchestrator-Entscheidung 1); Heartbeat-Reset würde die Origin-Erzwingung durch einen navigierten Opener umgehbar machen (STAB-07)
+- [Phase 03-bridge-haertung]: TOOL_ORIGIN einmalig in items.js definiert; bot-engine.js/bot-ui.js konsumieren das Global statt zu duplizieren
+- [Phase 03-bridge-haertung]: bot-engine.js bettet TOOL_ORIGIN als _TOOL_ORIGIN-Kopfzeile im generierten Code ein (JSON.stringify), statt es an jeder der 18 Stellen zu interpolieren
+- [Phase 03-bridge-haertung]: loader.js Source-Pinning erlaubt PING immer neu zu pinnen, damit Tool-Reload/manueller Reconnect nach dem ersten Handshake nicht dauerhaft ausgesperrt wird
 
 ### Pending Todos
 
@@ -110,6 +114,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-13T20:15:18.416Z
-Stopped at: Completed 03-01-PLAN.md
+Last session: 2026-09-13T20:26:54.544Z
+Stopped at: Completed 03-02-PLAN.md
 Resume file: None
