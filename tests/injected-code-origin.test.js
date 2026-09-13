@@ -35,6 +35,7 @@ describe('Injizierter Code sendet an den Tool-Origin statt an "*" (STAB-05)', ()
       setTimeout: () => 0,
       clearTimeout: () => {},
     });
+    evalIn(ctx, "_bcOrigin = 'https://game.test'"); // Handshake simulieren (STAB-04-Sperre in bcSend)
     opener.postMessage.mockClear();
   });
 

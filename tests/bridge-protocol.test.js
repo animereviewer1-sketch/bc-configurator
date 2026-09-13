@@ -180,12 +180,22 @@ describe('Sendepfad bcSend nutzt den gelernten Origin (STAB-04)', () => {
     expect(opener.postMessage.mock.calls[0]).toEqual([{ app: APP, type: 'PING' }, '*']);
   });
 
-  it('vor dem Handshake sendet bcSend an "*"', () => {
+  it('vor dem Handshake weist bcSend alles außer PING zentral ab – nichts geht an "*"', () => {
     const { ctx, opener } = boot();
     opener.postMessage.mockClear();
-    expect(ctx.bcSend({ type: 'GET_PLAYER' }, true)).toBe(true);
-    const last = opener.postMessage.mock.calls.at(-1);
-    expect(last[1]).toBe('*');
+    expect(ctx.bcSend({ type: 'GET_PLAYER' }, true)).toBe(false);
+    expect(ctx.bcSend({ type: 'EXEC', code: '1+1' }, true)).toBe(false);
+    expect(opener.postMessage).not.toHaveBeenCalled();
+    // PING (Bootstrap) bleibt die einzige dokumentierte Ausnahme
+    expect(ctx.bcSend({ type: 'PING' }, true)).toBe(true);
+    expect(opener.postMessage.mock.calls.at(-1)[1]).toBe('*');
+  });
+
+  it('vor dem Handshake landet ein abgewiesener EXEC nicht im EXEC-Log', () => {
+    const { ctx } = boot();
+    const before = evalIn(ctx, '_execLog.length');
+    ctx.bcSend({ type: 'EXEC', code: '1+1' }, true);
+    expect(evalIn(ctx, '_execLog.length')).toBe(before);
   });
 
   it('nach dem Handshake sendet bcSend an den gelernten Spiel-Origin', () => {

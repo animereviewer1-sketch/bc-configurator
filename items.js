@@ -6004,8 +6004,15 @@ function bcSend(msg, silent) {
       return false;
     }
     if (!silent || msg.type !== 'PING') console.log('[BCK-Popup] bcSend \u2192', msg.type);
+    // STAB-04: Vor dem Handshake ist der Spiel-Origin unbekannt \u2013 dann darf nur der
+    // PING-Bootstrap raus (an '*'). Alles andere (insb. EXEC) wird zentral abgewiesen,
+    // damit kein Aufrufer versehentlich an ein unbekanntes Fenster sendet.
+    if (!_bcOrigin && msg.type !== 'PING') {
+      console.warn('[BCK-Popup] bcSend abgewiesen \u2013 kein Handshake', msg.type);
+      if (!silent) showStatus('\u274c Noch nicht mit BC verbunden \u2013 erst \ud83d\udd04 Verbinden', 'error');
+      return false;
+    }
     if (msg.type === 'EXEC') _execLogAppend(msg); // STAB-08: einziger Sendepfad = einziger Log-Hakenpunkt
-    // Gezielte Origin sobald bekannt; '*' nur f\u00fcr den PING-Bootstrap n\u00f6tig
     window.opener.postMessage({ app: APP, ...msg }, _bcOrigin || '*');
     return true;
   } catch(e) {

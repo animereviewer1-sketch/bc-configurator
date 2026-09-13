@@ -14,6 +14,7 @@ async function boot() {
   const opener = { closed: false, postMessage: vi.fn() };
   const el = makeElementStub();
   const ctx = loadScript(['items.js'], { opener, setTimeout: () => 0, clearTimeout: () => {} });
+  evalIn(ctx, "_bcOrigin = 'https://game.test'"); // Handshake simulieren – bcSend weist sonst alles außer PING ab (STAB-04)
   ctx.document.getElementById = (id) => (id === 'execLogInfo' ? el : makeElementStub());
   await settle(50);
   opener.postMessage.mockClear();
@@ -118,6 +119,7 @@ describe('EXEC-Log: Persistenz unter BC_ExecLog_v1', () => {
   it('_loadExecLog überschreibt keine bereits im RAM liegenden Einträge (Merge)', async () => {
     const opener = { closed: false, postMessage: vi.fn() };
     const ctx = loadScript(['items.js'], { opener, setTimeout: () => 0 });
+    evalIn(ctx, "_bcOrigin = 'https://game.test'");
     const earlyDesc = 'early-' + Date.now();
     exec(ctx, 'early', { desc: earlyDesc });
     await settle(50);
