@@ -5909,6 +5909,67 @@ let _playerChecked = false;
    Bis zu einem bewussten "Neu verbinden" wird alles verworfen. */
 let _playerAbgelehnt = false;
 
+// ── EXEC-Log (STAB-08) ──────────────────────────────────────────────────
+// Betriebs-Telemetrie, KEIN Scan-Datensatz: der Ringpuffer verwirft nur
+// eigene Log-Einträge (älteste zuerst), nie Outfits/Screenshots/Bots.
+// Geloggt wird ausschließlich in bcSend – dem einzigen Sendepfad aller
+// EXEC-Aufrufstellen.
+const EXEC_LOG_KEY = 'BC_ExecLog_v1';
+const EXEC_LOG_MAX = 200;
+const EXEC_LOG_SHOWN = 30;
+const EXEC_LOG_DESC_LEN = 60;
+let _execLog = [];
+
+function _execLogDesc(msg) {
+  if (typeof msg.desc === 'string' && msg.desc.trim()) return msg.desc.trim();
+  const code = String(msg.code || '').replace(/\s+/g, ' ').trim();
+  return code ? code.slice(0, EXEC_LOG_DESC_LEN) : '(leer)';
+}
+
+function _execLogAppend(msg) {
+  _execLog.push({ ts: Date.now(), desc: _execLogDesc(msg), len: String(msg.code || '').length });
+  if (_execLog.length > EXEC_LOG_MAX) _execLog.splice(0, _execLog.length - EXEC_LOG_MAX);
+  _debouncedSaveExecLog();
+  _renderExecLog();
+}
+
+function _saveExecLog() { return idbSet(EXEC_LOG_KEY, _execLog); }
+const _debouncedSaveExecLog = _debounce(_saveExecLog, 1200);
+
+async function _loadExecLog() {
+  try {
+    const stored = await idbGet(EXEC_LOG_KEY);
+    if (Array.isArray(stored)) _execLog = stored.concat(_execLog).slice(-EXEC_LOG_MAX);
+  } catch (e) {
+    console.warn('[ExecLog] IDB load error:', e);
+  }
+  _renderExecLog();
+}
+
+function _execLogFormat(e) {
+  const d = new Date(e.ts);
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mm = String(d.getMinutes()).padStart(2, '0');
+  const ss = String(d.getSeconds()).padStart(2, '0');
+  return hh + ':' + mm + ':' + ss + ' · ' + e.desc + ' (' + e.len + ' Zeichen)';
+}
+
+function _renderExecLog() {
+  const el = document.getElementById('execLogInfo');
+  if (!el) return;
+  if (!_execLog.length) { el.textContent = 'Noch kein EXEC gesendet'; return; }
+  const shown = _execLog.slice(-EXEC_LOG_SHOWN).reverse();
+  let text = shown.map(_execLogFormat).join('\n');
+  if (_execLog.length > shown.length) {
+    text += '\n… ' + (_execLog.length - shown.length) + ' ältere Einträge';
+  }
+  el.textContent = text;
+}
+try {
+  if (document.readyState !== 'loading') _loadExecLog();
+  else document.addEventListener('DOMContentLoaded', () => _loadExecLog());
+} catch (e) {}
+
 // Absender-Doppelprüfung (STAB-06, Tool-Seite): Quelle muss der Opener sein;
 // sobald beim ersten gültigen Handshake ein Spiel-Origin gelernt wurde, muss
 // jede weitere Nachricht von genau diesem Origin kommen (Trust-on-first-use).
@@ -5943,6 +6004,7 @@ function bcSend(msg, silent) {
       return false;
     }
     if (!silent || msg.type !== 'PING') console.log('[BCK-Popup] bcSend \u2192', msg.type);
+    if (msg.type === 'EXEC') _execLogAppend(msg); // STAB-08: einziger Sendepfad = einziger Log-Hakenpunkt
     // Gezielte Origin sobald bekannt; '*' nur f\u00fcr den PING-Bootstrap n\u00f6tig
     window.opener.postMessage({ app: APP, ...msg }, _bcOrigin || '*');
     return true;
