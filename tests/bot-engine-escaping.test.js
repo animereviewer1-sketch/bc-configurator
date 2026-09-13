@@ -11,7 +11,8 @@ import { fileURLToPath } from 'node:url'
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 
 function buildSandbox() {
-  const sandbox = { console, btoa, atob, _money: undefined, _rankData: undefined, _shop: undefined }
+  // Global aus items.js, das `_buildBotCode` ab Phase 3 für das Origin-Literal braucht
+  const sandbox = { console, btoa, atob, _money: undefined, _rankData: undefined, _shop: undefined, TOOL_ORIGIN: 'https://tool.test' }
   sandbox.window = sandbox
   vm.createContext(sandbox)
   vm.runInContext(fs.readFileSync(path.join(REPO_ROOT, 'bot-engine.js'), 'utf8'), sandbox, { filename: 'bot-engine.js' })
