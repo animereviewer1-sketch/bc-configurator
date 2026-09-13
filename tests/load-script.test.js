@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeAll } from 'vitest';
-import { loadScript, evalIn } from './helpers/loadScript.js';
+import { describe, it, expect, beforeAll, vi } from 'vitest';
+import { loadScript, evalIn, dispatch, SANDBOX_ORIGIN } from './helpers/loadScript.js';
 
 describe('vm-Sandbox-Loader (TEST-02)', () => {
   let ctx;
@@ -58,5 +58,40 @@ describe('vm-Sandbox-Loader (TEST-02)', () => {
   it('Stubs neutralisieren Timer und DOM beim Laden', () => {
     expect(ctx.setInterval(() => {}, 10)).toBe(0);
     expect(ctx.document.querySelectorAll('.x')).toEqual([]);
+  });
+
+  it('addEventListener sammelt Handler pro Typ; dispatch ruft sie mit dem Event auf', () => {
+    const s = loadScript([]);
+    const fn = vi.fn();
+    s.addEventListener('message', fn);
+    expect(dispatch(s, 'message', { data: 1 })).toBe(1);
+    expect(fn).toHaveBeenCalledWith({ data: 1 });
+    expect(dispatch(s, 'keydown', {})).toBe(0);
+  });
+
+  it('removeEventListener entfernt genau den übergebenen Handler', () => {
+    const s = loadScript([]);
+    const fn1 = vi.fn();
+    const fn2 = vi.fn();
+    s.addEventListener('message', fn1);
+    s.addEventListener('message', fn2);
+    s.removeEventListener('message', fn1);
+    expect(dispatch(s, 'message', { data: 2 })).toBe(1);
+    expect(fn1).not.toHaveBeenCalled();
+    expect(fn2).toHaveBeenCalledWith({ data: 2 });
+  });
+
+  it('items.js registriert seinen message-Handler in der Registry', () => {
+    const handlers = ctx._listeners.get('message');
+    expect(handlers.length).toBeGreaterThanOrEqual(1);
+    for (const h of handlers) {
+      expect(typeof h).toBe('function');
+    }
+  });
+
+  it('location.origin ist gesetzt und per extraGlobals überschreibbar', () => {
+    expect(loadScript([]).location.origin).toBe(SANDBOX_ORIGIN);
+    expect(loadScript([], { location: { origin: 'https://x.test' } }).location.origin).toBe('https://x.test');
+    expect(evalIn(loadScript([]), 'window.location.origin')).toBe(SANDBOX_ORIGIN);
   });
 });

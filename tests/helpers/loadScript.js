@@ -7,6 +7,13 @@
 // dereferenziert. Top-Level-`let`/`const` der geladenen Dateien (`_bots`,
 // `_botVars`, `_playerKeys`) werden KEINE Sandbox-Properties — dafür gibt es
 // `evalIn`, das denselben vm-Kontext erneut ausführt.
+//
+// Das Sandbox-`addEventListener` sammelt registrierte Handler in `_listeners`
+// (Map: Typ → Array von Funktionen) statt sie zu verwerfen (Phase 3, TEST-07).
+// `dispatch`/`dispatchMessage` rufen sie mit einem synthetischen Event auf.
+// Ein `location`-Stub (Default-Origin `SANDBOX_ORIGIN`, per `extraGlobals`
+// überschreibbar) steht bereit, weil Plan 03-02 `window.location.origin` in
+// items.js einführt.
 
 import fs from 'node:fs';
 import vm from 'node:vm';
@@ -14,6 +21,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
+
+export const SANDBOX_ORIGIN = 'https://tool.test';
 
 export function makeElementStub() {
   const stub = {
@@ -108,6 +117,8 @@ export function makeSandbox(extraGlobals = {}) {
     activeElement: null,
   };
 
+  const listeners = new Map();
+
   const sandbox = {
     console,
     setTimeout,
@@ -118,8 +129,28 @@ export function makeSandbox(extraGlobals = {}) {
     atob,
     localStorage,
     document,
-    addEventListener() {},
-    removeEventListener() {},
+    location: {
+      origin: SANDBOX_ORIGIN,
+      href: SANDBOX_ORIGIN + '/bc-configurator/',
+      protocol: 'https:',
+      host: 'tool.test',
+      hostname: 'tool.test',
+      pathname: '/bc-configurator/',
+      search: '',
+      hash: '',
+    },
+    _listeners: listeners,
+    addEventListener(type, fn) {
+      if (typeof fn !== 'function') return;
+      if (!listeners.has(type)) listeners.set(type, []);
+      listeners.get(type).push(fn);
+    },
+    removeEventListener(type, fn) {
+      const arr = listeners.get(type);
+      if (!arr) return;
+      const idx = arr.indexOf(fn);
+      if (idx !== -1) arr.splice(idx, 1);
+    },
     indexedDB: globalThis.indexedDB,
     _money: undefined,
     _rankData: undefined,
@@ -150,6 +181,21 @@ export function loadScript(files, extraGlobals = {}) {
 
 export function evalIn(sandbox, code) {
   return vm.runInContext(code, sandbox);
+}
+
+export function dispatch(sandbox, type, event) {
+  const handlers = sandbox._listeners.get(type);
+  if (!handlers || handlers.length === 0) return 0;
+  let called = 0;
+  for (const fn of handlers.slice()) {
+    fn.call(sandbox, event);
+    called++;
+  }
+  return called;
+}
+
+export function dispatchMessage(sandbox, data, opts = {}) {
+  return dispatch(sandbox, 'message', { data, origin: opts.origin, source: opts.source });
 }
 
 export function settle(ms = 100) {
