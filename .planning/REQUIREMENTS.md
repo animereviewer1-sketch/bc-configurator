@@ -11,7 +11,7 @@ Requirements for this milestone. Each maps to roadmap phases.
 
 - [x] **STAB-01**: Screenshots, die unter `mk|fp` gespeichert wurden, werden beim Profil-Sync unter demselben Schlüssel gelesen — ein Screenshot einer Outfit-Version erscheint danach im Profil (`_syncLscgScreenshotToProfiles(mk, fp)`)
 - [x] **STAB-02**: Schlägt ein IDB-Schreibvorgang mit `QuotaExceededError` fehl, sieht der Nutzer sofort eine Fehlermeldung in der UI; der Fehler wird nie still verschluckt
-- [ ] **STAB-03**: Der Nutzer kann den belegten und verfügbaren Speicher (`navigator.storage.estimate()`) im Tool einsehen
+- [x] **STAB-03**: Der Nutzer kann den belegten und verfügbaren Speicher (`navigator.storage.estimate()`) im Tool einsehen
 - [ ] **STAB-04**: Alle `postMessage`-Aufrufe vom Tool zum Spiel verwenden den beim Handshake gelernten Spiel-Origin statt `"*"`
 - [ ] **STAB-05**: Alle `postMessage`-Aufrufe im injizierten Code (Bot-Engine-Generator, Watcher) zum Tool verwenden den statischen Tool-Origin statt `"*"`
 - [ ] **STAB-06**: Beide Seiten der Bridge prüfen `event.origin` und `event.source` gegen eine einzige gemeinsame Origin-Konstante; es gibt keine zweite Definition des Origins im Code
@@ -100,7 +100,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 |-------------|-------|--------|
 | STAB-01 | Phase 2 | Complete |
 | STAB-02 | Phase 2 | Complete |
-| STAB-03 | Phase 2 | Pending |
+| STAB-03 | Phase 2 | Complete |
 | STAB-04 | Phase 3 | Pending |
 | STAB-05 | Phase 3 | Pending |
 | STAB-06 | Phase 3 | Pending |
