@@ -545,6 +545,47 @@ const _sammelSpeicher = (() => {
 /* Von Hand ausloesbar, z.B. vor einem Export. */
 function bcSpeichernJetzt() { return _sammelSpeicher.jetzt('von Hand'); }
 
+// ── Speicherplatz-Anzeige (STAB-03) ─────────────────────────────────────
+// navigator.storage.estimate liefert Bytes; Anzeige im Tweaks-Panel
+// (#storageInfo). Kein toLocaleString, damit die Ausgabe umgebungsunabhaengig
+// deterministisch bleibt (Testbarkeit) - Dezimalpunkt wird per replace() zum
+// deutschen Komma.
+function _speicherFormatBytes(n) {
+  n = Number(n) || 0;
+  if (n >= 1073741824) return (n / 1073741824).toFixed(2).replace('.', ',') + ' GB';
+  return (n / 1048576).toFixed(1).replace('.', ',') + ' MB';
+}
+function _speicherFormat(usage, quota) {
+  usage = Number(usage) || 0;
+  quota = Number(quota) || 0;
+  if (!quota) return _speicherFormatBytes(usage) + ' belegt (Kontingent unbekannt)';
+  const pct = Math.round(usage / quota * 100);
+  let txt = _speicherFormatBytes(usage) + ' von ' + _speicherFormatBytes(quota) + ' belegt (' + pct + ' %)';
+  if (pct >= 90) txt += ' – Speicher fast voll!';
+  return txt;
+}
+// Guard ist Pflicht: die vm-Sandbox der Tests hat kein `navigator`, und der
+// Init-Hook unten feuert beim Laden von items.js in JEDER Testdatei.
+async function _speicherZeigeStatus() {
+  const el = document.getElementById('storageInfo');
+  if (!el) return;
+  if (typeof navigator === 'undefined' || !navigator.storage || typeof navigator.storage.estimate !== 'function') {
+    el.textContent = 'Speicher-API nicht verfügbar';
+    return;
+  }
+  try {
+    const { usage, quota } = await navigator.storage.estimate();
+    el.textContent = _speicherFormat(usage, quota);
+  } catch (e) {
+    console.warn('[Speicher] estimate:', e);
+    el.textContent = 'Speicherabfrage fehlgeschlagen';
+  }
+}
+try {
+  if (document.readyState !== 'loading') _speicherZeigeStatus();
+  else document.addEventListener('DOMContentLoaded', () => setTimeout(_speicherZeigeStatus, 1500));
+} catch (e) {}
+
 function _saveProfilesJetzt() {
   idbSet('BC_PROFILES_v12', PROFILES);
   // Spiegel im localStorage als Rueckfallebene. JSON.stringify plus der

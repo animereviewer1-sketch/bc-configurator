@@ -2455,6 +2455,14 @@ button { cursor: pointer; }
   </div>
 
   <div>
+    <div class="tweaks-section-title">📊 Speicher</div>
+    <div class="tweaks-btn-group">
+      <button class="tweaks-btn" onclick="_speicherZeigeStatus()" title="Belegten und verfügbaren Browser-Speicher neu abfragen">🔄 Aktualisieren</button>
+    </div>
+    <div id="storageInfo" style="font-size:.6875rem;color:var(--text3);margin-top:5px;line-height:1.5">–</div>
+  </div>
+
+  <div>
     <div class="tweaks-section-title">📦 Item-Katalog</div>
     <div style="font-size:.6875rem;color:var(--text3);margin-bottom:7px">Exportiert jedes Item &amp; jede Klamotte aus dem Cache mit allen Infos + Bild-URL als JSON.</div>
     <button class="tweaks-btn" style="width:100%" onclick="itemsExportCatalog()" title="Alle Items mit allen Feldern und Vorschaubild-URLs als JSON exportieren">⬇️ Katalog exportieren</button>
