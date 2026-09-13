@@ -28,8 +28,8 @@
   const POPUP_W  = 1380;
   const POPUP_H  = 900;
   const POPUP_URL = 'https://animereviewer1-sketch.github.io/bc-configurator/';
-  // FIX: Validate origin to prevent other pages from sending EXEC commands
-  const ALLOWED_ORIGIN = 'https://animereviewer1-sketch.github.io';
+  // FIX: Validate origin to prevent other pages from sending EXEC commands (aus POPUP_URL abgeleitet — eine Origin-Quelle, STAB-06)
+  const ALLOWED_ORIGIN = new URL(POPUP_URL).origin;
 
   // ── Cache-Builder ─────────────────────────────────────
   function buildBCCache() {
@@ -842,6 +842,8 @@ window.CurseScanner = (() => {
         return;
       }
       const src = ev.source;
+      // Source-Pinning (STAB-06): nach dem ersten Kontakt nur noch das gepinnte Tool-Fenster; PING darf immer neu pinnen (Tool-Fenster neu geladen / 🔄 Verbinden)
+      if (window.__BCK_popupRef && src !== window.__BCK_popupRef && ev.data.type !== 'PING') { BCK.warn('postMessage von nicht gepinnter Quelle blockiert:', ev.data.type); return; }
       window.__BCK_popupRef = src; // Bot kann damit Logs zurückschicken
       BCK.info('\u2190 postMessage:', ev.data.type, '| origin:', ev.origin);
 
