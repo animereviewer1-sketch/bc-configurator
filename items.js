@@ -5868,6 +5868,7 @@ function startPingRetry() {
     n++;
     const ok = !!window.opener && !window.opener.closed;
     console.log('[BCK-Popup] Ping-Retry #' + n + ' | opener=' + ok);
+    // STAB-04-Ausnahme: Bootstrap-PING vor dem Handshake — Spiel-Origin noch unbekannt, Payload trägt keine Daten
     if (ok) window.opener.postMessage({ app: APP, type: 'PING' }, '*');
   }, 3000);
 }
@@ -5878,7 +5879,8 @@ function startPingRetry() {
 // Status rot + Ping-Retry neu starten (verbindet automatisch sobald der Loader
 // im BC-Tab wieder aktiv ist).
 let _lastMsgTs = Date.now();
-setInterval(function() {
+// benannt, damit der Test ihn ohne Timer aufrufen kann
+function _heartbeatCheck() {
   if (!_connected) return;
   if (Date.now() - _lastMsgTs > 15000) {
     console.warn('[BCK-Popup] Heartbeat verloren – Verbindung als tot markiert');
@@ -5889,7 +5891,8 @@ setInterval(function() {
     if (cs) { cs.textContent = 'Verbindung verloren'; cs.dataset.conn = 'off'; }
     startPingRetry();
   }
-}, 5000);
+}
+setInterval(_heartbeatCheck, 5000);
 
 // ── Spieler-Check: nur mit dem zuletzt bekannten Account verbinden ────────────
 const _LAST_MEMBER_KEY = 'BC_LAST_MEMBER_v1';
@@ -5901,11 +5904,24 @@ let _playerChecked = false;
    Bis zu einem bewussten "Neu verbinden" wird alles verworfen. */
 let _playerAbgelehnt = false;
 
+// Absender-Doppelprüfung (STAB-06, Tool-Seite): Quelle muss der Opener sein;
+// sobald beim ersten gültigen Handshake ein Spiel-Origin gelernt wurde, muss
+// jede weitere Nachricht von genau diesem Origin kommen (Trust-on-first-use).
+// Bei Mirror-Wechsel läuft der Heartbeat ab; nur manualReconnect() darf neu
+// vertrauen.
+function _bridgeSenderOk(ev) {
+  if (!window.opener || ev.source !== window.opener) return false;
+  if (_bcOrigin && ev.origin !== _bcOrigin) return false;
+  return true;
+}
+
 function manualReconnect() {
   _connected = false;
   _playerChecked = false;
   _playerAbgelehnt = false;
   stopRoomScan();
+  // Origin beim nächsten Handshake neu lernen (Mirror-Wechsel, STAB-07)
+  _bcOrigin = null;
   document.getElementById('connStatus').textContent = 'Nicht verbunden';
   document.getElementById('connStatus').dataset.conn = 'off';
   console.log('[BCK-Popup] manualReconnect()');
@@ -5959,19 +5975,20 @@ function _pushCurseDBToBC() {
 
 window.addEventListener('message', function(ev) {
   if (!ev.data || ev.data.app !== APP) return;
-  // Sicherheit: nur Nachrichten vom BC-Fenster (opener) akzeptieren.
+  // Sicherheit: nur Nachrichten vom BC-Fenster (opener) akzeptieren, UND nach
+  // dem ersten Handshake nur vom gelernten Spiel-Origin (STAB-06, TOFU).
   // Verhindert, dass fremde Fenster/Tabs gef\u00e4lschte CURSE_DATA/EXEC_OK etc. einschleusen.
   // Ohne opener gibt es keine legitime Gegenstelle \u2013 frueher entfiel die Pruefung
   // in dem Fall komplett, und jedes Fenster mit einem Handle auf dieses hier
   // konnte Daten einschleusen.
-  if (!window.opener || ev.source !== window.opener) {
-    console.warn('[BCK-Popup] message von fremder Quelle ignoriert');
+  if (!_bridgeSenderOk(ev)) {
+    console.warn('[BCK-Popup] message von fremder Quelle/Origin ignoriert:', ev.origin);
     return;
   }
   // Abgelehnter Account: nichts annehmen bis der Nutzer neu verbindet
   if (_playerAbgelehnt) return;
-  // BC-Origin lernen/aktuell halten (BC l\u00e4uft auf mehreren Domains)
-  if (ev.origin && ev.origin !== 'null') _bcOrigin = ev.origin;
+  // Spiel-Origin einmalig lernen (BC l\u00e4uft auf mehreren Domains); danach erzwingt `_bridgeSenderOk` ihn
+  if (!_bcOrigin && ev.origin && ev.origin !== 'null') _bcOrigin = ev.origin;
   _lastMsgTs = Date.now();
   console.log('[BCK-Popup] \u2190 message:', ev.data.type);
 
@@ -6771,6 +6788,7 @@ function renderLeiste() {
   } catch(e) { console.warn('[BCK-Popup] localStorage Fehler:', e.message); }
 
   // Sofortiger PING + Retry-Schleife
+  // STAB-04-Ausnahme: Bootstrap-PING vor dem Handshake — Spiel-Origin noch unbekannt, Payload trägt keine Daten
   if (window.opener && !window.opener.closed) {
     console.log('[BCK-Popup] Sende ersten PING...');
     window.opener.postMessage({ app: APP, type: 'PING' }, '*');
@@ -7974,7 +7992,7 @@ window.debugOsOutfit = function(mk, vIdx) {
 
   // Handler für Analyse-Ergebnis
   const handler = function(ev) {
-    if (!ev.data || ev.data.app !== 'BCKonfigurator' || ev.data.type !== 'OUTFIT_DEBUG_RESULT' || ev.data.reqId !== reqId) return;
+    if (!ev.data || ev.data.app !== 'BCKonfigurator' || ev.data.type !== 'OUTFIT_DEBUG_RESULT' || ev.data.reqId !== reqId || !_bridgeSenderOk(ev)) return;
     window.removeEventListener('message', handler);
 
     const r = ev.data;
