@@ -7500,6 +7500,9 @@ function importAllData() {
 const LSCG_SCREENSHOTS_KEY = 'BC_LSCG_SCREENSHOTS_v1';
 let   LSCG_SCREENSHOTS     = {};   // mk (string) → dataUrl (jpeg)
 
+// Hinweistext für confirm()-Dialoge, die LSCG-Bilder löschen (STAB-09/STAB-10)
+const _LSCG_PROFIL_KOPIEN_HINWEIS = 'Synchronisierte Kopien in Profil-Bildern werden mit entfernt.';
+
 /* Sofort schreiben - fuer den Sammelspeicher und alles, was nicht warten darf. */
 async function _saveLscgScreenshotsJetzt() {
   await idbSet(LSCG_SCREENSHOTS_KEY, LSCG_SCREENSHOTS);
@@ -7569,6 +7572,44 @@ function _syncLscgScreenshotToProfiles(mk, fp) {
     }
   }
   if (changed) _saveProfileScreenshots();
+}
+
+// Spiegelbild von _syncLscgScreenshotToProfiles: entfernt statt zu kopieren;
+// nur byte-identische Kopien, manuelle Profil-Bilder bleiben erhalten.
+function _removeLscgScreenshotFromProfiles(fp, img) {
+  if (!fp || !img) return 0;
+  const keys = _lscgFpMap[fp] ?? [];
+  let n = 0;
+  for (const k of keys) {
+    if (PROFILE_SCREENSHOTS[k] === img) {
+      delete PROFILE_SCREENSHOTS[k];
+      n++;
+    }
+  }
+  if (n) _saveProfileScreenshots();
+  return n;
+}
+
+// MUSS vor dem Löschen aus LSCG_SCREENSHOTS laufen (braucht das Bild).
+function _removeLscgScreenshotKeyFromProfiles(key) {
+  const img = LSCG_SCREENSHOTS[key];
+  if (!img) return 0;
+  const sepIdx = key.indexOf('|');
+  const mk = sepIdx === -1 ? key : key.slice(0, sepIdx);
+  const fps = new Set();
+  if (sepIdx !== -1) fps.add(key.slice(sepIdx + 1));
+  for (const v of LSCG_DB[mk]?.versions ?? []) {
+    if (v.fingerprint) fps.add(v.fingerprint);
+  }
+  let n = 0;
+  for (const fp of fps) n += _removeLscgScreenshotFromProfiles(fp, img);
+  return n;
+}
+
+function _removeAllLscgScreenshotsFromProfiles() {
+  let n = 0;
+  for (const key of Object.keys(LSCG_SCREENSHOTS)) n += _removeLscgScreenshotKeyFromProfiles(key);
+  return n;
 }
 
 // ── Einzelnen Screenshot aufnehmen ───────────────────
@@ -10415,21 +10456,23 @@ function deleteOsScreenshotFromLb() {
 // Screenshot löschen (legacy per-member)
 function deleteOsScreenshot(mk) {
   if (!LSCG_SCREENSHOTS[mk]) return;
-  if (!confirm('Bild für #' + mk + ' löschen?')) return;
+  if (!confirm('Bild für #' + mk + ' löschen?\n\n' + _LSCG_PROFIL_KOPIEN_HINWEIS)) return;
+  const n = _removeLscgScreenshotKeyFromProfiles(mk);
   delete LSCG_SCREENSHOTS[mk];
   _saveLscgScreenshots();
   if (_activeTab === 'outfit-scan') renderOutfitScanTab();
-  showStatus('🗑️ Bild für #' + mk + ' gelöscht', 'info');
+  showStatus('🗑️ Bild für #' + mk + ' gelöscht' + (n ? ' (+' + n + ' Profil-Kopien)' : ''), 'info');
 }
 
 // Screenshot löschen (version-specific key)
 function deleteOsScreenshotKey(key) {
   if (!LSCG_SCREENSHOTS[key]) return;
-  if (!confirm('Dieses Bild löschen?')) return;
+  if (!confirm('Dieses Bild löschen?\n\n' + _LSCG_PROFIL_KOPIEN_HINWEIS)) return;
+  const n = _removeLscgScreenshotKeyFromProfiles(key);
   delete LSCG_SCREENSHOTS[key];
   _saveLscgScreenshots();
   if (_activeTab === 'outfit-scan') renderOutfitScanTab();
-  showStatus('🗑️ Bild gelöscht', 'info');
+  showStatus('🗑️ Bild gelöscht' + (n ? ' (+' + n + ' Profil-Kopien)' : ''), 'info');
 }
 
 function saveOutfitToLscg(mk, vIdx) {
@@ -10462,11 +10505,12 @@ function deleteLscgVersion(mk, vIdx) {
   if (!entry?.versions?.[vIdx]) return;
   const vNum = entry.versions.length - vIdx;
   const name = entry.name ?? ('#' + mk);
-  if (!confirm('Version v' + vNum + ' von ' + name + ' löschen?\n\nDiese Aktion kann nicht rückgängig gemacht werden.')) return;
+  if (!confirm('Version v' + vNum + ' von ' + name + ' löschen?\n\nDiese Aktion kann nicht rückgängig gemacht werden.\n' + _LSCG_PROFIL_KOPIEN_HINWEIS)) return;
   // Screenshot für diese Version löschen
   const fp  = entry.versions[vIdx]?.fingerprint ?? null;
   const key = fp ? (mk + '|' + fp) : null;
   if (key && LSCG_SCREENSHOTS[key]) {
+    _removeLscgScreenshotKeyFromProfiles(key);
     delete LSCG_SCREENSHOTS[key];
     _saveLscgScreenshots();
   }
@@ -10499,15 +10543,17 @@ function clearAllProfileScreenshots() {
 function clearAllLscgScreenshots() {
   const count = Object.keys(LSCG_SCREENSHOTS).length;
   if (!count) { showStatus('ℹ️ Keine Bilder vorhanden', 'info'); return; }
-  if (!confirm('Alle ' + count + ' gespeicherten Bilder löschen?\n\nDie Outfit-Codes bleiben erhalten.')) return;
+  if (!confirm('Alle ' + count + ' gespeicherten Bilder löschen?\n\nDie Outfit-Codes bleiben erhalten.\n' + _LSCG_PROFIL_KOPIEN_HINWEIS)) return;
+  const n = _removeAllLscgScreenshotsFromProfiles();
   LSCG_SCREENSHOTS = {};
   _saveLscgScreenshots();
   if (_activeTab === 'outfit-scan') renderOutfitScanTab();
-  showStatus('🗑️ Alle Bilder gelöscht', 'info');
+  showStatus('🗑️ Alle Bilder gelöscht' + (n ? ' (+' + n + ' Profil-Kopien)' : ''), 'info');
 }
 
 function clearAllLscgOutfits() {
-  if (!confirm('Alle gespeicherten LSCG-Outfits löschen?\n\nDies löscht alle Codes und Bilder.')) return;
+  if (!confirm('Alle gespeicherten LSCG-Outfits löschen?\n\nDies löscht alle Codes und Bilder.\n' + _LSCG_PROFIL_KOPIEN_HINWEIS)) return;
+  _removeAllLscgScreenshotsFromProfiles();
   LSCG_DB = {};
   LSCG_SCREENSHOTS = {};
   _lscgSlots = {};
