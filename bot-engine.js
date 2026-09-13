@@ -79,6 +79,8 @@ function _buildBotCode(bot) {
   const roomEverJson = JSON.stringify(persistedRoomEver);
 
   return `(function(){
+// Tool-Origin für Rückmeldungen ans Popup (STAB-05)
+const _TOOL_ORIGIN=${JSON.stringify(TOOL_ORIGIN)};
 const _BID='${safeId}';
 const _BOTID=${JSON.stringify(bot.id)};
 const _VER='${BOT_ENGINE_VERSION}';
@@ -213,7 +215,7 @@ var _sceneRunId = 0;
 function _vget(mn,name){ return (_sceneVars[mn]||{})[name]; }
 function _vset(mn,name,val){
   (_sceneVars[mn]=_sceneVars[mn]||{})[name]=val;
-  try{window.__BCK_popupRef&&window.__BCK_popupRef.postMessage({app:'BCKonfigurator',type:'BOT_VAR',memberNum:mn,name:name,value:val},'*');}catch(e){}
+  try{window.__BCK_popupRef&&window.__BCK_popupRef.postMessage({app:'BCKonfigurator',type:'BOT_VAR',memberNum:mn,name:name,value:val},_TOOL_ORIGIN);}catch(e){}
 }
 // Trigger-Bedingung auf eine Variable/Punkte prüfen (nutzt _scTruth + persistente Vars)
 function _varCondOk(c,C){
@@ -466,7 +468,7 @@ let _invAusleihe=(_cfg.invAusleihe||[]).slice();
 function _invMelde(d){
   try{
     window.__BCK_popupRef?.postMessage(Object.assign(
-      {app:'BCKonfigurator',type:'BOT_INVENTAR',botId:_BOTID,ausleihe:_invAusleihe},d),'*');
+      {app:'BCKonfigurator',type:'BOT_INVENTAR',botId:_BOTID,ausleihe:_invAusleihe},d),_TOOL_ORIGIN);
   }catch(e){}
 }
 function _invAnz(mn,id){
@@ -1546,7 +1548,7 @@ function _execAct(a,C,vars){
       const delta=op==='add'?val:op==='sub'?-val:0;
       const setVal=op==='set'?val:op==='reset'?0:undefined;
       window.__BCK_popupRef?.postMessage({app:'BCKonfigurator',type:'BOT_MONEY',
-        memberNum:C.MemberNumber,name:C.Name,delta,setVal},'*');
+        memberNum:C.MemberNumber,name:C.Name,delta,setVal},_TOOL_ORIGIN);
       ok=true;
     }
     else if(a.typ==='rang'){
@@ -1562,7 +1564,7 @@ function _execAct(a,C,vars){
       else if(op==='vorheriger'){ if(curIdx>0) newRankId=sorted[curIdx-1].id; }
       _rangState[C.MemberNumber]=newRankId;
       window.__BCK_popupRef?.postMessage({app:'BCKonfigurator',type:'BOT_RANG',
-        memberNum:C.MemberNumber,name:C.Name,rankId:newRankId},'*');
+        memberNum:C.MemberNumber,name:C.Name,rankId:newRankId},_TOOL_ORIGIN);
       ok=true;
     }
     else if(a.typ==='szene'){ _playScene(a.szeneId,C,vars,a.szeneStep||null); ok=true; }
@@ -1602,7 +1604,7 @@ function _execAct(a,C,vars){
         ServerSend('ChatRoomChat',{Content:'ChatRoomMapViewChangeKey',Type:'Hidden',Dictionary:[{Tag:'MapViewChangeKey',Key:_keyGross(_mk),Bool:_has}],Target:C.MemberNumber});
         // Persistent merken (für Rejoin-Neuvergabe) – lokal + an Popup
         try{ _cfg.playerKeys=_cfg.playerKeys||{}; var _pk=_cfg.playerKeys[C.MemberNumber]||{name:'',bronze:false,silver:false,gold:false}; _pk.name=C.Name; _pk[_mk]=_has; _cfg.playerKeys[C.MemberNumber]=_pk; }catch(e){}
-        window.__BCK_popupRef?.postMessage({app:'BCKonfigurator',type:'BOT_MAPKEY',memberNum:C.MemberNumber,name:C.Name,key:_mk,has:_has},'*');
+        window.__BCK_popupRef?.postMessage({app:'BCKonfigurator',type:'BOT_MAPKEY',memberNum:C.MemberNumber,name:C.Name,key:_mk,has:_has},_TOOL_ORIGIN);
         _log('\u{1F511} Map-Key '+_mk+' '+(_has?'gegeben':'entfernt')+' ('+C.Name+')');
         ok=true;
       }catch(e){_log('\u26A0 Map-Key Fehler:',e.message); ok=false;}
@@ -1834,14 +1836,14 @@ function _pushLog(extra,vars,trig){
   };
   // Brücke: postMessage zurück an Popup (window.__BCK_popupRef = gespeichert in loader.js)
   try{
-    window.__BCK_popupRef?.postMessage({app:'BCKonfigurator',type:'BOT_LOG',entry},'*');
+    window.__BCK_popupRef?.postMessage({app:'BCKonfigurator',type:'BOT_LOG',entry},_TOOL_ORIGIN);
   }catch(e){}
 }
 
 // Sendet roomEver ans Popup zur Persistenz
 function _syncRoomEver(){
   try{
-    window.__BCK_popupRef?.postMessage({app:'BCKonfigurator',type:'BOT_ROOM_EVER',botId:'${safeId}',members:[..._roomEver]},'*');
+    window.__BCK_popupRef?.postMessage({app:'BCKonfigurator',type:'BOT_ROOM_EVER',botId:'${safeId}',members:[..._roomEver]},_TOOL_ORIGIN);
   }catch(e){}
 }
 
@@ -2165,7 +2167,7 @@ function _handleShopCmd(rohText,buyerC){
       _moneyBalances[buyerC.MemberNumber]={balance:0,name:buyerC.Name};
     _moneyBalances[buyerC.MemberNumber].balance-=gesamt;
     window.__BCK_popupRef?.postMessage({app:'BCKonfigurator',type:'BOT_MONEY',
-      memberNum:buyerC.MemberNumber,name:buyerC.Name,delta:-gesamt},'*');
+      memberNum:buyerC.MemberNumber,name:buyerC.Name,delta:-gesamt},_TOOL_ORIGIN);
 
     const newBal=_moneyBalances[buyerC.MemberNumber].balance;
     _log('🛒 All-Kauf: '+buyerC.Name+' kauft "'+shopItem.name+'" für alle ('+anzahl+'×'+(preis+flagAufpreis)+'='+gesamt+' '+cur+'). Kontostand: '+newBal+(flagUnknown?' [/u]':'')+(flagWhisper?' [/w]':'')+(flagNostrip?' [/nostrip]':''));
@@ -2173,7 +2175,7 @@ function _handleShopCmd(rohText,buyerC){
     window.__BCK_popupRef?.postMessage({app:'BCKonfigurator',type:'BOT_SHOP',
       buyerNum:buyerC.MemberNumber,buyerName:buyerC.Name,
       targetNum:null,targetName:'Alle ('+anzahl+')',
-      itemName:shopItem.name,preis:gesamt,isAll:true,anzahl},'*');
+      itemName:shopItem.name,preis:gesamt,isAll:true,anzahl},_TOOL_ORIGIN);
 
     // All-Ankündigung
     const rawAnnAll=shopItem.announceAllMsg||_shopCfg.announceAllMsg||
@@ -2271,7 +2273,7 @@ function _handleShopCmd(rohText,buyerC){
     _moneyBalances[buyerC.MemberNumber]={balance:0,name:buyerC.Name};
   _moneyBalances[buyerC.MemberNumber].balance-=preisEffektiv;
   window.__BCK_popupRef?.postMessage({app:'BCKonfigurator',type:'BOT_MONEY',
-    memberNum:buyerC.MemberNumber,name:buyerC.Name,delta:-preisEffektiv},'*');
+    memberNum:buyerC.MemberNumber,name:buyerC.Name,delta:-preisEffektiv},_TOOL_ORIGIN);
 
   // Variable als Bezahlung abziehen (Modus 'abziehen')
   if(shopItem.varName && (Number(shopItem.varWert)||0) > 0 && shopItem.varModus==='abziehen'){
@@ -2288,7 +2290,7 @@ function _handleShopCmd(rohText,buyerC){
   window.__BCK_popupRef?.postMessage({app:'BCKonfigurator',type:'BOT_SHOP',
     buyerNum:buyerC.MemberNumber,buyerName:buyerC.Name,
     targetNum:targetC.MemberNumber,targetName:targetC.Name,
-    itemName:shopItem.name,preis},'*');
+    itemName:shopItem.name,preis},_TOOL_ORIGIN);
   // Item/Outfit direkt beim Kauf anlegen (ohne Trigger), falls konfiguriert
   /* Verweist der Artikel auf den Katalog, gilt der Katalog-Eintrag.
      Alte Artikel ohne itemDefId verhalten sich exakt wie bisher. */
@@ -2385,7 +2387,7 @@ function _proc(rohText,typKey,C){
       var _zn=_sp.join(' ');
       if(_zn&&(_slot==='X'||_slot==='X1'||_slot==='X2')){
         var _px=Player.X||0,_py=Player.Y||0;
-        try{window.__BCK_popupRef&&window.__BCK_popupRef.postMessage({app:'BCKonfigurator',type:'BOT_SET_ZONE',botId:_BOTID,zoneName:_zn,slot:_slot,x:_px,y:_py},'*');}catch(e){}
+        try{window.__BCK_popupRef&&window.__BCK_popupRef.postMessage({app:'BCKonfigurator',type:'BOT_SET_ZONE',botId:_BOTID,zoneName:_zn,slot:_slot,x:_px,y:_py},_TOOL_ORIGIN);}catch(e){}
         ServerSend('ChatRoomChat',{Content:'📍 Zone "'+_zn+'" '+_slot+' → '+_px+'/'+_py,Type:'Whisper',Target:C.MemberNumber});
         return;
       }
@@ -2394,7 +2396,7 @@ function _proc(rohText,typKey,C){
   // Money query command
   const qCmd=(_moneyCfg?.queryCmd||'').trim().toLowerCase();
   if(qCmd&&rohText.trim().toLowerCase()===qCmd.toLowerCase()){
-    window.__BCK_popupRef?.postMessage({app:'BCKonfigurator',type:'MONEY_QUERY',memberNum:C.MemberNumber,name:C.Name},'*');
+    window.__BCK_popupRef?.postMessage({app:'BCKonfigurator',type:'MONEY_QUERY',memberNum:C.MemberNumber,name:C.Name},_TOOL_ORIGIN);
     return;
   }
   // Rang query command
@@ -2612,9 +2614,9 @@ function _processJoinQueue(){
   _pushLog({status:istNeu?'join':'join_rejoin',trigName:'',msg:istNeu?'Erstes Mal':'Rejoin'},
     {name:C.Name+' #'+C.MemberNumber,x:C.X??0,y:C.Y??0,C},{id:'__system__',name:'System'});
   if(istNeu){
-    window.__BCK_popupRef?.postMessage({app:'BCKonfigurator',type:'MONEY_INIT_NEW',memberNum:C.MemberNumber,name:C.Name},'*');
+    window.__BCK_popupRef?.postMessage({app:'BCKonfigurator',type:'MONEY_INIT_NEW',memberNum:C.MemberNumber,name:C.Name},_TOOL_ORIGIN);
   }
-  window.__BCK_popupRef?.postMessage({app:'BCKonfigurator',type:'RANG_INIT',memberNum:C.MemberNumber,name:C.Name},'*');
+  window.__BCK_popupRef?.postMessage({app:'BCKonfigurator',type:'RANG_INIT',memberNum:C.MemberNumber,name:C.Name},_TOOL_ORIGIN);
   // Map-Keys automatisch neu vergeben (persistent gespeichert) – auch bei Startup/Rejoin
   try{
     var _sk=(_cfg.playerKeys||{})[C.MemberNumber];
@@ -3063,7 +3065,7 @@ function _probe(trigId){
   const trig=_trigMap[trigId];
   if(!trig){
     window.__BCK_popupRef?.postMessage({app:'BCKonfigurator',type:'BOT_PROBE',
-      botId:_BOTID,trigId,fehler:'Trigger nicht gefunden - laeuft der Bot mit der aktuellen Fassung? (Sync)'},'*');
+      botId:_BOTID,trigId,fehler:'Trigger nicht gefunden - laeuft der Bot mit der aktuellen Fassung? (Sync)'},_TOOL_ORIGIN);
     return;
   }
   const beds=trig.bedingungen??[];
@@ -3097,7 +3099,7 @@ function _probe(trigId){
             vonOk,bedingungen:einzeln,gesamt,aktionen};
   });
   window.__BCK_popupRef?.postMessage({app:'BCKonfigurator',type:'BOT_PROBE',
-    botId:_BOTID,trigId,trigName:trig.name,vonModus:trig.von||'alle',personen},'*');
+    botId:_BOTID,trigId,trigName:trig.name,vonModus:trig.von||'alle',personen},_TOOL_ORIGIN);
   _log('\u{1F9EA} Probelauf "'+trig.name+'" fuer '+personen.length+' Person(en)');
 }
 
@@ -3136,7 +3138,7 @@ window['_BCBot_'+_BID]={
                   schritt:idx>=0?idx+1:null,gesamt:sc?(sc.steps||[]).length:0,
                   wartet:!!st.wartet,ts:st.ts,imRaum:!!C};
       }
-      window.__BCK_popupRef?.postMessage({app:'BCKonfigurator',type:'BOT_STORY',botId:_BOTID,stand:raus},'*');
+      window.__BCK_popupRef?.postMessage({app:'BCKonfigurator',type:'BOT_STORY',botId:_BOTID,stand:raus},_TOOL_ORIGIN);
     }catch(e){console.warn('[Bot] storyStand:',e);}
   },
   /* Bestand von aussen setzen - wenn im Konfigurator von Hand geaendert

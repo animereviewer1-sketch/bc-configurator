@@ -1020,7 +1020,7 @@ function bcKeys() {
   const sid = bot.id.replace(/\W/g, '_');
   bcSend({ type: 'EXEC', code:
     "try{var _b=window['_BCBot_" + sid + "'];var _r=_b&&_b.keyBericht?_b.keyBericht():{fehler:'keine Wache'};"
-    + "window.__BCK_popupRef&&window.__BCK_popupRef.postMessage({app:'BCKonfigurator',type:'BOT_KEYBERICHT',bericht:_r},'*');}catch(e){console.warn(e);}" });
+    + "window.__BCK_popupRef&&window.__BCK_popupRef.postMessage({app:'BCKonfigurator',type:'BOT_KEYBERICHT',bericht:_r},'" + TOOL_ORIGIN + "');}catch(e){console.warn(e);}" });
   console.log('%cAnfrage gesendet – die Antwort erscheint gleich hier.', 'color:#8b8b9a');
 }
 /* Antwort der Key-Wache anzeigen. */

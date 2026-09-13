@@ -2545,9 +2545,9 @@ function captureProfileScreenshot(pname) {
     + '    var ctx2=cc.getContext("2d");'
     + '    ctx2.fillStyle="#000";ctx2.fillRect(0,0,cw,ch);'
     + '    ctx2.drawImage(oc,x0,y0,cw,ch,0,0,cw,ch);'
-    + '    window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"SCREENSHOT_DATA",reqId:' + J_reqId + ',data:cc.toDataURL("image/jpeg",0.88)},"*");'
+    + '    window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"SCREENSHOT_DATA",reqId:' + J_reqId + ',data:cc.toDataURL("image/jpeg",0.88)},"' + TOOL_ORIGIN + '");'
     + '  }catch(e){'
-    + '    window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"SCREENSHOT_DATA",reqId:' + J_reqId + ',err:e.message},"*");'
+    + '    window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"SCREENSHOT_DATA",reqId:' + J_reqId + ',err:e.message},"' + TOOL_ORIGIN + '");'
     + '  }'
     + '},250);'
     + '})();';
@@ -2723,7 +2723,7 @@ function openCanvasPreview() {
 
   const code = '(function(){'
     + 'var T=' + targetExpr + ';'
-    + 'if(!T){window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",reqId:' + JSON.stringify(reqId) + ',err:"Spieler nicht im Raum"},"*");return;}'
+    + 'if(!T){window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",reqId:' + JSON.stringify(reqId) + ',err:"Spieler nicht im Raum"},"' + TOOL_ORIGIN + '");return;}'
     + 'try{CharacterLoadCanvas(T);}catch(e){}'
     + 'requestAnimationFrame(function(){'
     + 'try{'
@@ -2734,9 +2734,9 @@ function openCanvasPreview() {
     + 'var d=oc.toDataURL("image/png");'
     + 'window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",reqId:' + JSON.stringify(reqId) + ','
     + 'data:d,name:T.Nickname||T.Name,memberNumber:T.MemberNumber,'
-    + 'itemCount:(T.Appearance||[]).length,width:src.width,height:src.height},"*");'
+    + 'itemCount:(T.Appearance||[]).length,width:src.width,height:src.height},"' + TOOL_ORIGIN + '");'
     + '}catch(e){'
-    + 'window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",reqId:' + JSON.stringify(reqId) + ',err:e.message},"*");'
+    + 'window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",reqId:' + JSON.stringify(reqId) + ',err:e.message},"' + TOOL_ORIGIN + '");'
     + '}'
     + '});'
     + '})();';
@@ -5315,10 +5315,10 @@ function captureAndSetCurseDefaultOutfit() {
     + '  }'
     + '  var compressed=LZString.compressToBase64(JSON.stringify(bundle));'
     + '  window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"DEFAULT_OUTFIT_DATA",'
-    + '    reqId:' + J_reqId + ',data:compressed,count:bundle.length},"*");'
+    + '    reqId:' + J_reqId + ',data:compressed,count:bundle.length},"' + TOOL_ORIGIN + '");'
     + '}catch(e){'
     + '  window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"DEFAULT_OUTFIT_DATA",'
-    + '    reqId:' + J_reqId + ',err:e.message},"*");'
+    + '    reqId:' + J_reqId + ',err:e.message},"' + TOOL_ORIGIN + '");'
     + '}'
     + '})();';
   bcSend({ type: 'EXEC', code }, true);
@@ -5851,6 +5851,11 @@ function curseClearAndScan() {
 //  POSTMESSAGE KOMMUNIKATION MIT BC
 // ══════════════════════════════════════════════════════
 const APP = 'BCKonfigurator';
+// Tool-eigene Origin für injizierten Code (STAB-05): im Tool-Fenster berechnet und als Literal in die
+// EXEC-Zeichenketten eingebettet — im Spiel-Tab darf die Location des Popup-Fensters nicht gelesen
+// werden (Cross-Origin, SecurityError). Einzige Tool-seitige Origin-Definition (STAB-06); bot-engine.js
+// und bot-ui.js nutzen dieses Global.
+const TOOL_ORIGIN = window.location.origin;
 
 // ── Ping-Retry ────────────────────────────────────────
 let _pingInterval = null;
@@ -7701,7 +7706,7 @@ function captureOsScreenshot(mk, vIdx) {
       + '  Player.Appearance.splice(0,Player.Appearance.length);'
       + '  origApp.forEach(function(i){Player.Appearance.push(i);});'
       + '  CharacterRefresh(Player,false,false);'
-      + '  window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",reqId:' + J_reqId + ',err:"APPLY_FAIL:"+applyErr.message},"*");'
+      + '  window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",reqId:' + J_reqId + ',err:"APPLY_FAIL:"+applyErr.message},"' + TOOL_ORIGIN + '");'
       + '  return;'
       + '}'
     : 'try{CharacterRefresh(Player,false,false);}catch(_e){}';
@@ -7778,9 +7783,9 @@ function captureOsScreenshot(mk, vIdx) {
     + '    ctx2.fillStyle="#000";ctx2.fillRect(0,0,cw,ch);'
     + '    ctx2.drawImage(oc,x0,y0,cw,ch,0,0,cw,ch);'
     + '    var data=cc.toDataURL("image/jpeg",0.88);'
-    + '    window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",reqId:' + J_reqId + ',data:data,width:cw,height:ch},"*");'
+    + '    window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",reqId:' + J_reqId + ',data:data,width:cw,height:ch},"' + TOOL_ORIGIN + '");'
     + '  }catch(e){'
-    + '    window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",reqId:' + J_reqId + ',err:e.message},"*");'
+    + '    window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",reqId:' + J_reqId + ',err:e.message},"' + TOOL_ORIGIN + '");'
     + '  }finally{'
     // Immer wiederherstellen – egal ob Erfolg oder Fehler
     + '    _restoreAndSync();'
@@ -7887,7 +7892,7 @@ function captureProfileViaCanvas(name, outfitCode, rawApplyCode) {
     + 'origApp.forEach(function(i){Player.Appearance.push(i);});'
     + 'CharacterRefresh(Player,false,false);';
   const _applyErrCode = _restoreCode
-    + 'window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",reqId:' + J_reqId + ',err:"APPLY_FAIL:"+applyErr.message},"*");'
+    + 'window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",reqId:' + J_reqId + ',err:"APPLY_FAIL:"+applyErr.message},"' + TOOL_ORIGIN + '");'
     + 'return;';
 
   let applyPart;
@@ -7948,9 +7953,9 @@ function captureProfileViaCanvas(name, outfitCode, rawApplyCode) {
     + '    var ctx2=cc.getContext("2d");'
     + '    ctx2.fillStyle="#000";ctx2.fillRect(0,0,cw,ch);'
     + '    ctx2.drawImage(oc,x0,y0,cw,ch,0,0,cw,ch);'
-    + '    window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",reqId:' + J_reqId + ',data:cc.toDataURL("image/jpeg",0.88)},"*");'
+    + '    window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",reqId:' + J_reqId + ',data:cc.toDataURL("image/jpeg",0.88)},"' + TOOL_ORIGIN + '");'
     + '  }catch(e){'
-    + '    window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",reqId:' + J_reqId + ',err:e.message},"*");'
+    + '    window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",reqId:' + J_reqId + ',err:e.message},"' + TOOL_ORIGIN + '");'
     + '  }finally{'
     + '    _restore();'
     + '  }'
@@ -8034,10 +8039,10 @@ window.debugOsOutfit = function(mk, vIdx) {
     + '    app:"BCKonfigurator",type:"OUTFIT_DEBUG_RESULT",reqId:' + JSON.stringify(reqId) + ','
     + '    total:decoded.length,missing:missing,naked:naked,'
     + '    missingNaked:missingNaked,assetFamily:Player.AssetFamily'
-    + '  },"*");'
+    + '  },"' + TOOL_ORIGIN + '");'
     + '}catch(e){'
     + '  window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"OUTFIT_DEBUG_RESULT",'
-    + '    reqId:' + JSON.stringify(reqId) + ',error:e.message},"*");'
+    + '    reqId:' + JSON.stringify(reqId) + ',error:e.message},"' + TOOL_ORIGIN + '");'
     + '}'
     + '})();';
 
@@ -10039,9 +10044,9 @@ function _buildCanvasShotCode(reqId) {
     + '    var ctx2=cc.getContext("2d");'
     + '    ctx2.fillStyle="#000";ctx2.fillRect(0,0,cw,ch);'
     + '    ctx2.drawImage(oc,x0,y0,cw,ch,0,0,cw,ch);'
-    + '    window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"SCREENSHOT_DATA",reqId:' + J + ',data:cc.toDataURL("image/jpeg",0.88)},"*");'
+    + '    window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"SCREENSHOT_DATA",reqId:' + J + ',data:cc.toDataURL("image/jpeg",0.88)},"' + TOOL_ORIGIN + '");'
     + '  }catch(e){'
-    + '    window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"SCREENSHOT_DATA",reqId:' + J + ',err:e.message},"*");'
+    + '    window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"SCREENSHOT_DATA",reqId:' + J + ',err:e.message},"' + TOOL_ORIGIN + '");'
     + '  }'
     + '},250);'
     + '})();';
