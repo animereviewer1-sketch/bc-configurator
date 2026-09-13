@@ -78,8 +78,14 @@ Plans:
   4. Jeder EXEC-Aufruf erscheint mit Zeitstempel und Kurzbeschreibung in einer Log-Ansicht im Tool
   5. Alle bestehenden Bridge-Flows (Cache laden, EXEC, Screenshot-Aufnahme, Raum-Scan) funktionieren nach der Härtung im Live-Smoke-Test unverändert
 
-**Plans**: TBD
+**Plans:** 3 plans
 **UI hint**: yes
+
+Plans:
+
+- [ ] 03-01-PLAN.md — TEST-07 Wave 0: Sandbox-Listener-Registry + `location`-Stub; Bridge-Protokoll-Tests (RED → GREEN): `_bridgeSenderOk` Origin+Source mit Trust-on-first-use, `_heartbeatCheck`, `_bcOrigin`-Reset in `manualReconnect`, Bootstrap-PING-Ausnahme per statischem Audit (TEST-07, STAB-04, STAB-07) — Wave 1
+- [ ] 03-02-PLAN.md — STAB-05: `const TOOL_ORIGIN = window.location.origin` (items.js) + 36 injizierte Stellen (17/18/1) auf Origin-Literal; STAB-06: loader.js `ALLOWED_ORIGIN = new URL(POPUP_URL).origin` + Source-Pinning (+5/−1), Tests behavioral + statisch (RED → GREEN) — Wave 2
+- [ ] 03-03-PLAN.md — STAB-08: EXEC-Ringpuffer (200, `{ts, desc, len}`) in `bcSend`, Persistenz `BC_ExecLog_v1`, Sektion `📜 EXEC-Log` im Tweaks-Panel (index.html nur Einfügungen), Scan-Daten-Invarianz-Test; End-of-Phase-Human-Checks (Live-Smoke-Test, Disconnect/Reconnect, Log sichtbar) — Wave 3
 
 ### Phase 4: Entflechtung
 
@@ -135,7 +141,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 |-------|----------------|--------|-----------|
 | 1. Testfundament | 3/3 | Complete    | 2026-09-13 |
 | 2. Speicher-Sicherheit | 0/3 | Planned | - |
-| 3. Bridge-Härtung | 0/TBD | Not started | - |
+| 3. Bridge-Härtung | 0/3 | Planned | - |
 | 4. Entflechtung | 0/TBD | Not started | - |
 | 5. Gamecode-Inventar | 0/TBD | Not started | - |
 | 6. Scan-Tab & Analyse | 0/TBD | Not started | - |

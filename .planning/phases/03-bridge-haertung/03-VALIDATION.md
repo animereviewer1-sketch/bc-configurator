@@ -19,7 +19,7 @@ created: "2026-09-13"
 |----------|-------|
 | **Framework** | Vitest 5.0.0 |
 | **Config file** | `vitest.config.js` |
-| **Quick run command** | `npx vitest run tests/bridge-protocol.test.js tests/exec-log.test.js` |
+| **Quick run command** | `npx vitest run tests/bridge-protocol.test.js tests/injected-code-origin.test.js tests/loader-origin.test.js tests/exec-log.test.js` |
 | **Full suite command** | `npm test` |
 | **Estimated runtime** | ~6 seconds |
 
@@ -38,11 +38,14 @@ created: "2026-09-13"
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| 3-01-01 | 01 | 1 | TEST-07 (W0) | — | Sandbox `addEventListener` captures listeners and can dispatch `message` events with origin/source | unit | `npx vitest run tests/load-script.test.js` | ⚠️ extend | ⬜ pending |
-| 3-01-02 | 01 | 1 | STAB-04, STAB-06, STAB-07, TEST-07 | T-3-01, T-3-02 | Tool handler ignores wrong origin/source after handshake; `bcSend` uses `_bcOrigin`; bootstrap PING exception documented; heartbeat timeout sets `dataset.conn='off'`; `manualReconnect` resets `_bcOrigin` | unit (RED→GREEN) | `npx vitest run tests/bridge-protocol.test.js` | ❌ W0 | ⬜ pending |
-| 3-02-01 | 02 | 2 | STAB-05 | T-3-03 | Every generated injected-code string uses the tool-origin literal instead of `"*"` (36 sites in items.js/bot-engine.js/bot-ui.js); grep-count assertion = 0 remaining | unit (RED→GREEN) | `npx vitest run tests/bridge-protocol.test.js -t "injizierter Code"` | ❌ W0 | ⬜ pending |
-| 3-02-02 | 02 | 2 | STAB-06 (loader) | T-3-02 | loader.js derives `ALLOWED_ORIGIN` from `POPUP_URL` (single definition) and pins `event.source` after handshake | static + `node --check` | `node --check loader.js && test "$(grep -c "animereviewer1-sketch.github.io" loader.js)" = 1` | n/a | ⬜ pending |
-| 3-03-01 | 03 | 3 | STAB-08 | T-3-04 | Every EXEC through `bcSend` appends `{ts, desc, len}` to a capped ring buffer persisted under `BC_ExecLog_v1`; rotation never touches scan data; log view in Tweaks panel | unit (RED→GREEN) | `npx vitest run tests/exec-log.test.js` | ❌ W0 | ⬜ pending |
+| 3-01-01 | 01 | 1 | TEST-07 (W0) | T-3-06 | Sandbox `addEventListener` captures listeners in `_listeners` (Map) and `dispatch`/`dispatchMessage` invoke them with `{data, origin, source}`; `location.origin` stub = `https://tool.test`; all 10 existing test files stay green | unit | `npx vitest run tests/load-script.test.js && npm test` | ⚠️ extend | ⬜ pending |
+| 3-01-02 | 01 | 1 | TEST-07, STAB-04, STAB-07 (+ STAB-06 tool half) | T-3-01, T-3-05 | RED: `tests/bridge-protocol.test.js` — `_bridgeSenderOk` (origin+source, TOFU), dispatch by type, `bcSend` learned origin + static PING audit, `_heartbeatCheck`, `manualReconnect` resets `_bcOrigin` | unit (RED) | `npx vitest run tests/bridge-protocol.test.js` (RED-CONFIRMED) | ❌ W0 | ⬜ pending |
+| 3-01-03 | 01 | 1 | STAB-04, STAB-07 (+ STAB-06 tool half) | T-3-01, T-3-05 | GREEN in items.js: `_bridgeSenderOk(ev)` used by main + debug listener; origin learned once, then enforced; `_heartbeatCheck()` named; `_bcOrigin = null` in `manualReconnect()`; exactly 2 bootstrap PINGs keep `'*'` | unit (GREEN) + static | `npx vitest run tests/bridge-protocol.test.js && node --check items.js && npm test` | ❌ W0 | ⬜ pending |
+| 3-02-01 | 02 | 2 | STAB-05, STAB-06 | T-3-03, T-3-02 | RED: `tests/injected-code-origin.test.js` (behavioral: `debugOsOutfit`, `bcKeys`, `_buildBotCode` + static audit 2/0/0, single `TOOL_ORIGIN` definition) and `tests/loader-origin.test.js` (static: origin string 1×, `ALLOWED_ORIGIN` derived, source-pin guard); escaping sandbox gets `TOOL_ORIGIN` | unit (RED) | `npx vitest run tests/injected-code-origin.test.js tests/loader-origin.test.js` (RED-CONFIRMED) | ❌ W0 | ⬜ pending |
+| 3-02-02 | 02 | 2 | STAB-06 (loader) | T-3-02, T-3-08 | loader.js derives `ALLOWED_ORIGIN = new URL(POPUP_URL).origin` (origin string 1×) and rejects non-`PING` messages whose `ev.source !== window.__BCK_popupRef`; diff ≤ +8/−2 | static test + `node --check` | `npx vitest run tests/loader-origin.test.js && node --check loader.js` | ❌ W0 | ⬜ pending |
+| 3-02-03 | 02 | 2 | STAB-05, STAB-06 (tool) | T-3-03, T-3-09, T-3-10 | `const TOOL_ORIGIN = window.location.origin;` once in items.js; 17 items.js + 18 bot-engine.js (`_TOOL_ORIGIN` head const) + 1 bot-ui.js sites use it; wildcard targets 2/0/0/0 | unit (GREEN) + static | `npx vitest run tests/injected-code-origin.test.js tests/bot-engine-escaping.test.js tests/loader-origin.test.js && npm test` | ❌ W0 | ⬜ pending |
+| 3-03-01 | 03 | 3 | STAB-08 | T-3-04, T-3-11 | RED: `tests/exec-log.test.js` — append contract `{ts, desc, len}`, cap 200, scan-data invariance (`LSCG_DB`/`PROFILE_SCREENSHOTS` unchanged after 250 EXECs + save), persistence/merge under `BC_ExecLog_v1`, panel rendering | unit (RED) | `npx vitest run tests/exec-log.test.js` (RED-CONFIRMED) | ❌ W0 | ⬜ pending |
+| 3-03-02 | 03 | 3 | STAB-08 | T-3-04, T-3-11, T-3-12 | GREEN: EXEC-log block in items.js, one hook line in `bcSend` before `postMessage`, section `📜 EXEC-Log` in index.html (insertions only) | unit (GREEN) + static | `npx vitest run tests/exec-log.test.js && node --check items.js && npm test` | ❌ W0 | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -50,9 +53,13 @@ created: "2026-09-13"
 
 ## Wave 0 Requirements
 
-- [ ] `tests/helpers/loadScript.js` — real `addEventListener`/`removeEventListener` (listener registry + `dispatch(type, event)` helper), `window.opener` injectable via `extraGlobals`
-- [ ] `tests/bridge-protocol.test.js` — STAB-04/05/06/07 + TEST-07
-- [ ] `tests/exec-log.test.js` — STAB-08
+- [ ] `tests/helpers/loadScript.js` — real `addEventListener`/`removeEventListener` (listener registry `_listeners` + `dispatch(sandbox, type, event)` / `dispatchMessage(sandbox, data, {origin, source})` helpers), `location` stub (`SANDBOX_ORIGIN = 'https://tool.test'`), `window.opener` injectable via `extraGlobals` (Plan 03-01 Task 1)
+- [ ] `tests/load-script.test.js` — 4 new cases for the registry, `removeEventListener`, items.js handler registration, `location` override (Plan 03-01 Task 1)
+- [ ] `tests/bridge-protocol.test.js` — STAB-04/07 + STAB-06 tool half + TEST-07 (Plan 03-01 Task 2)
+- [ ] `tests/injected-code-origin.test.js` — STAB-05 + STAB-06 tool-side single definition (Plan 03-02 Task 1)
+- [ ] `tests/loader-origin.test.js` — STAB-06 loader half, static (Plan 03-02 Task 1; loader sandbox deferred to Phase 5 per orchestrator decision 4)
+- [ ] `tests/bot-engine-escaping.test.js` — minimal sandbox gains `TOOL_ORIGIN: 'https://tool.test'` (Plan 03-02 Task 1)
+- [ ] `tests/exec-log.test.js` — STAB-08 (Plan 03-03 Task 1)
 
 ---
 
