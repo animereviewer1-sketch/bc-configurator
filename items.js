@@ -7548,8 +7548,9 @@ function _getAnyLscgScreenshot(mk) {
 }
 
 // Screenshot zu allen Profilen mit gleichem Fingerprint kopieren
-function _syncLscgScreenshotToProfiles(mk) {
-  const img = LSCG_SCREENSHOTS[mk];
+function _syncLscgScreenshotToProfiles(mk, fp) {
+  const key = fp ? (mk + '|' + fp) : mk;
+  const img = LSCG_SCREENSHOTS[key];
   if (!img) return;
   const entry = LSCG_DB[mk];
   if (!entry?.versions) return;
