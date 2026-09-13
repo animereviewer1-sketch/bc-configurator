@@ -12,10 +12,10 @@ Requirements for this milestone. Each maps to roadmap phases.
 - [x] **STAB-01**: Screenshots, die unter `mk|fp` gespeichert wurden, werden beim Profil-Sync unter demselben Schlüssel gelesen — ein Screenshot einer Outfit-Version erscheint danach im Profil (`_syncLscgScreenshotToProfiles(mk, fp)`)
 - [x] **STAB-02**: Schlägt ein IDB-Schreibvorgang mit `QuotaExceededError` fehl, sieht der Nutzer sofort eine Fehlermeldung in der UI; der Fehler wird nie still verschluckt
 - [x] **STAB-03**: Der Nutzer kann den belegten und verfügbaren Speicher (`navigator.storage.estimate()`) im Tool einsehen
-- [ ] **STAB-04**: Alle `postMessage`-Aufrufe vom Tool zum Spiel verwenden den beim Handshake gelernten Spiel-Origin statt `"*"`
+- [x] **STAB-04**: Alle `postMessage`-Aufrufe vom Tool zum Spiel verwenden den beim Handshake gelernten Spiel-Origin statt `"*"`
 - [ ] **STAB-05**: Alle `postMessage`-Aufrufe im injizierten Code (Bot-Engine-Generator, Watcher) zum Tool verwenden den statischen Tool-Origin statt `"*"`
 - [ ] **STAB-06**: Beide Seiten der Bridge prüfen `event.origin` und `event.source` gegen eine einzige gemeinsame Origin-Konstante; es gibt keine zweite Definition des Origins im Code
-- [ ] **STAB-07**: Verliert das Tool die Verbindung zum Spiel-Tab (`window.opener` null oder kein Heartbeat), zeigt es das sichtbar an und bietet erneutes Verbinden an
+- [x] **STAB-07**: Verliert das Tool die Verbindung zum Spiel-Tab (`window.opener` null oder kein Heartbeat), zeigt es das sichtbar an und bietet erneutes Verbinden an
 - [ ] **STAB-08**: Jeder EXEC-Aufruf wird mit Zeitstempel und Kurzbeschreibung protokolliert und ist im Tool einsehbar
 - [x] **STAB-09**: Das Löschen von Bildern, einzelnen Outfits oder Outfit-Versionen ist nur über eine explizite Nutzeraktion mit Bestätigungsdialog möglich; kein Code-Pfad löscht gespeicherte Scan-Daten als Nebeneffekt
 - [x] **STAB-10**: Ein bestätigter Löschvorgang entfernt den Datensatz konsistent aus allen Speicherorten (LSCG_DB, LSCG_SCREENSHOTS, PROFILE_SCREENSHOTS) — keine verwaisten Einträge
@@ -28,7 +28,7 @@ Requirements for this milestone. Each maps to roadmap phases.
 - [x] **TEST-04**: IDB-Helfer (`idbGet`/`idbSet`) sind getestet inkl. Quota-Fehlerpfad
 - [x] **TEST-05**: Bot-Validatoren aus `bot-data.js` und der Outfit-Import-Parser sind mit gültigen und ungültigen Eingaben getestet
 - [x] **TEST-06**: Der Bot-Code-Generator erzeugt für Nutzerdaten mit Backticks, `${` und Sonderzeichen syntaktisch gültigen Code (Escaping-Test)
-- [ ] **TEST-07**: Das Bridge-Protokoll (Nachrichtentypen, Origin-Prüfung, Handler-Dispatch) ist mit simulierten Nachrichten getestet
+- [x] **TEST-07**: Das Bridge-Protokoll (Nachrichtentypen, Origin-Prüfung, Handler-Dispatch) ist mit simulierten Nachrichten getestet
 
 ### Entflechtung (SPLIT)
 
@@ -101,10 +101,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | STAB-01 | Phase 2 | Complete |
 | STAB-02 | Phase 2 | Complete |
 | STAB-03 | Phase 2 | Complete |
-| STAB-04 | Phase 3 | Pending |
+| STAB-04 | Phase 3 | Complete |
 | STAB-05 | Phase 3 | Pending |
 | STAB-06 | Phase 3 | Pending |
-| STAB-07 | Phase 3 | Pending |
+| STAB-07 | Phase 3 | Complete |
 | STAB-08 | Phase 3 | Pending |
 | STAB-09 | Phase 2 | Complete |
 | STAB-10 | Phase 2 | Complete |
@@ -114,7 +114,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | TEST-04 | Phase 2 | Complete |
 | TEST-05 | Phase 1 | Complete |
 | TEST-06 | Phase 1 | Complete |
-| TEST-07 | Phase 3 | Pending |
+| TEST-07 | Phase 3 | Complete |
 | SPLIT-01 | Phase 4 | Pending |
 | SPLIT-02 | Phase 4 | Pending |
 | SPLIT-03 | Phase 4 | Pending |
