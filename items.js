@@ -2890,6 +2890,8 @@ function uploadProfileScreenshot(pname) {
 function removeProfileScreenshot(pname) {
   const name = _profileNameMap[pname] || pname;
   if (!name) return;
+  if (!PROFILE_SCREENSHOTS[name]) return;
+  if (!confirm('Profil-Bild von "' + name + '" entfernen?')) return;
   delete PROFILE_SCREENSHOTS[name];
   _saveProfileScreenshots();
   renderProfileList();
@@ -9638,7 +9640,10 @@ function mbsWheelDeleteShot(mn, oi) {
   const r = _mbsWheelData.find(x => _mbsNum(x.memberNumber) === mn);
   const o = r?.outfits[oi];
   if (!o) return;
-  delete _mbsWheelShots[_mbsOutfitFp(o)];
+  const fp = _mbsOutfitFp(o);
+  if (!_mbsWheelShots[fp]) return;
+  if (!confirm('Wheel-Bild von "' + (o.name || '?') + '" löschen?')) return;
+  delete _mbsWheelShots[fp];
   _saveMbsWheelShots();
   _renderMbsWheelTab();
 }
@@ -10395,6 +10400,7 @@ function closeOsLightbox() {
 function deleteOsScreenshotFromLb() {
   // Wheel zuerst: der Fingerprint darf '' sein, daher explizit auf null pruefen
   if (_osLightboxWheelFp !== null) {
+    if (!confirm('Wheel-Bild löschen?')) return;
     delete _mbsWheelShots[_osLightboxWheelFp];
     _saveMbsWheelShots();
     if (_activeTab === 'lscg-wheel') _renderMbsWheelTab();
@@ -10409,6 +10415,7 @@ function deleteOsScreenshotFromLb() {
 // Screenshot löschen (legacy per-member)
 function deleteOsScreenshot(mk) {
   if (!LSCG_SCREENSHOTS[mk]) return;
+  if (!confirm('Bild für #' + mk + ' löschen?')) return;
   delete LSCG_SCREENSHOTS[mk];
   _saveLscgScreenshots();
   if (_activeTab === 'outfit-scan') renderOutfitScanTab();
@@ -10418,6 +10425,7 @@ function deleteOsScreenshot(mk) {
 // Screenshot löschen (version-specific key)
 function deleteOsScreenshotKey(key) {
   if (!LSCG_SCREENSHOTS[key]) return;
+  if (!confirm('Dieses Bild löschen?')) return;
   delete LSCG_SCREENSHOTS[key];
   _saveLscgScreenshots();
   if (_activeTab === 'outfit-scan') renderOutfitScanTab();
