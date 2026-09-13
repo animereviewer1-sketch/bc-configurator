@@ -85,7 +85,7 @@ Plans:
 
 - [x] 03-01-PLAN.md — TEST-07 Wave 0: Sandbox-Listener-Registry + `location`-Stub; Bridge-Protokoll-Tests (RED → GREEN): `_bridgeSenderOk` Origin+Source mit Trust-on-first-use, `_heartbeatCheck`, `_bcOrigin`-Reset in `manualReconnect`, Bootstrap-PING-Ausnahme per statischem Audit (TEST-07, STAB-04, STAB-07) — Wave 1
 - [x] 03-02-PLAN.md — STAB-05: `const TOOL_ORIGIN = window.location.origin` (items.js) + 36 injizierte Stellen (17/18/1) auf Origin-Literal; STAB-06: loader.js `ALLOWED_ORIGIN = new URL(POPUP_URL).origin` + Source-Pinning (+5/−1), Tests behavioral + statisch (RED → GREEN) — Wave 2
-- [ ] 03-03-PLAN.md — STAB-08: EXEC-Ringpuffer (200, `{ts, desc, len}`) in `bcSend`, Persistenz `BC_ExecLog_v1`, Sektion `📜 EXEC-Log` im Tweaks-Panel (index.html nur Einfügungen), Scan-Daten-Invarianz-Test; End-of-Phase-Human-Checks (Live-Smoke-Test, Disconnect/Reconnect, Log sichtbar) — Wave 3
+- [x] 03-03-PLAN.md — STAB-08: EXEC-Ringpuffer (200, `{ts, desc, len}`) in `bcSend`, Persistenz `BC_ExecLog_v1`, Sektion `📜 EXEC-Log` im Tweaks-Panel (index.html nur Einfügungen), Scan-Daten-Invarianz-Test; End-of-Phase-Human-Checks (Live-Smoke-Test, Disconnect/Reconnect, Log sichtbar) — Wave 3
 
 ### Phase 4: Entflechtung
 
