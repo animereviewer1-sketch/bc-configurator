@@ -184,11 +184,23 @@ async function _migrateScreenshotsToStore() {
       blobs[kind] = (b && typeof b === 'object') ? b : {};
     }
 
+    // Kopie, Verifikation und Marker laufen in EINER Transaktion ueber beide
+    // Stores: Entweder landen Bilder UND Marker, oder gar nichts. Ein Marker
+    // ohne Bilder (oder Bilder ohne Marker) ist damit ausgeschlossen — sonst
+    // koennte ein Wiederholungslauf zwischenzeitlich vom Nutzer geloeschte
+    // Bilder aus dem eingefrorenen Alt-Blob wiederbeleben (Review CR-02).
+    const counts = {};
+    let total = 0;
+    for (const kind of SCREENSHOT_KINDS) { counts[kind] = Object.keys(blobs[kind]).length; total += counts[kind]; }
+    const m = { done: true, count: total, counts, ts: Date.now() };
+
     const written = await new Promise((resolve, reject) => {
-      const tx = db.transaction(_IDB_SCREENSHOTS, 'readwrite');
+      const tx = db.transaction([_IDB_SCREENSHOTS, _IDB_STORE], 'readwrite');
       const st = tx.objectStore(_IDB_SCREENSHOTS);
-      const keysReq = st.getAllKeys();
+      const kv = tx.objectStore(_IDB_STORE);
       let count = 0;
+      const fail = err => { try { tx.abort(); } catch (e) {} reject(err); };
+      const keysReq = st.getAllKeys();
       keysReq.onsuccess = () => {
         try {
           const have = new Set(keysReq.result);
@@ -201,30 +213,29 @@ async function _migrateScreenshotsToStore() {
               }
             }
           }
-        } catch (err) {
-          try { tx.abort(); } catch (e) {}
-          reject(err);
-        }
+          // Verifikation in derselben Transaktion: Requests laufen in Reihenfolge,
+          // die puts oben sind hier bereits sichtbar.
+          const verifyReq = st.getAllKeys();
+          verifyReq.onsuccess = () => {
+            try {
+              const ids = new Set(verifyReq.result);
+              for (const kind of SCREENSHOT_KINDS) {
+                for (const key of Object.keys(blobs[kind])) {
+                  if (!ids.has(_screenshotId(kind, key))) throw new Error('Verifikation fehlgeschlagen: ' + kind + '|' + key + ' fehlt im Store');
+                }
+              }
+              kv.put(m, SCREENSHOT_MIGRATION_KEY); // Marker nur zusammen mit den Bildern
+            } catch (err) { fail(err); }
+          };
+          verifyReq.onerror = e => fail(e.target.error);
+        } catch (err) { fail(err); }
       };
-      keysReq.onerror = e => reject(e.target.error);
+      keysReq.onerror = e => fail(e.target.error);
       tx.oncomplete   = () => resolve(count);
       tx.onerror      = e => reject(e.target.error);
       tx.onabort      = e => reject(tx.error || e.target.error);
     });
 
-    const ids = new Set(await idbScreenshotKeys());
-    const counts = {};
-    let count = 0;
-    for (const kind of SCREENSHOT_KINDS) {
-      for (const key of Object.keys(blobs[kind])) {
-        if (!ids.has(_screenshotId(kind, key))) throw new Error('Verifikation fehlgeschlagen: ' + kind + '|' + key + ' fehlt im Store');
-      }
-      counts[kind] = Object.keys(blobs[kind]).length;
-      count += counts[kind];
-    }
-
-    const m = { done: true, count, counts, ts: Date.now() };
-    if (!(await idbSet(SCREENSHOT_MIGRATION_KEY, m))) return { done: false, reason: 'marker' };
     console.info('[IDB] Screenshot-Migration abgeschlossen:', m);
     return { done: true, migrated: written, marker: m };
   } catch (err) {

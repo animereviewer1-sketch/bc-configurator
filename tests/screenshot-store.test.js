@@ -214,7 +214,7 @@ describe('Screenshot-Store (SPLIT-05) — ein Datensatz je Bild, Alt-Blob frozen
     // (unveraendert vor/nach Task 3) ist das, was zaehlt; Task 3s eigenes
     // `<verify>`-Gate vergleicht ohnehin PRE- gegen POST-Stand per grep -Fc,
     // nicht gegen einen fixen Wert.
-    expect(count(src, 'PROFILE_SCREENSHOTS[')).toBe(33);
+    expect(count(src, 'PROFILE_SCREENSHOTS[')).toBe(34); // +1: additive Ladeschleife (Review CR-01)
     expect(count(src, 'LSCG_SCREENSHOTS[')).toBe(24);
     expect(count(src, '_mbsWheelShots[')).toBe(10);
   });

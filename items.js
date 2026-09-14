@@ -575,7 +575,13 @@ async function _screenshotFlush(kind, map) {
 
 let PROFILE_SCREENSHOTS = {};
 _screenshotStoreReady().then(() => idbScreenshotGetAll('profile')).then(d => {
-  if (d && typeof d === 'object') { Object.assign(PROFILE_SCREENSHOTS, d); _screenshotShadowMerge('profile', d); }
+  if (d && typeof d === 'object') {
+    // Gespeicherte Bilder fuellen nur auf; waehrend des Ladens neu aufgenommene
+    // behalten Vorrang (Review CR-01) — wie bei LSCG/Wheel. Objekt-Identitaet
+    // bleibt erhalten, damit bestehende Referenzen weiter gueltig sind.
+    for (const k of Object.keys(d)) if (!(k in PROFILE_SCREENSHOTS)) PROFILE_SCREENSHOTS[k] = d[k];
+    _screenshotShadowMerge('profile', d);
+  }
 });
 function _saveProfileScreenshotsJetzt() { return _screenshotFlush('profile', PROFILE_SCREENSHOTS); }
 function _saveProfileScreenshots() {

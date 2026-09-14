@@ -189,6 +189,34 @@ describe('Screenshot-Migration (SPLIT-06) — additiv, verifiziert, idempotent, 
     expect((await ctx5.idbScreenshotKeys())).toHaveLength(5);
   });
 
+  it('Atomizität (Review CR-02): schlägt nur der Marker-Put fehl, werden auch KEINE Bilder committet — kein Wiederbeleben gelöschter Bilder beim Retry', async () => {
+    const dbX = await openRaw(2);
+    await rawKvDelete(dbX, 'BC_SCREENSHOT_MIGRATION_v1');
+    await rawStoreClear(dbX, 'screenshots');
+    dbX.close();
+
+    // Nur der kv-Put (Marker) wirft; Screenshot-Puts laufen durch.
+    globalThis.IDBObjectStore.prototype.put = function (...args) {
+      if (this.name === 'kv' && args[1] === 'BC_SCREENSHOT_MIGRATION_v1') throw new DOMException('simuliert', 'QuotaExceededError');
+      return origPut.apply(this, args);
+    };
+    const { ctx: ctxA } = boot();
+    const rA = await ctxA._screenshotStoreReady();
+    globalThis.IDBObjectStore.prototype.put = origPut;
+
+    expect(rA.done).toBe(false);
+    expect(await ctxA.idbGet('BC_SCREENSHOT_MIGRATION_v1')).toBeNull();
+    // Entscheidend: gleiche Transaktion → Bilder wurden mit abgebrochen.
+    expect(await ctxA.idbScreenshotKeys()).toHaveLength(0);
+    expect(await ctxA.idbGet(LEGACY.profile)).toEqual(SEED.profile);
+
+    // Retry beim naechsten Start migriert vollstaendig.
+    ({ ctx: ctx5 } = boot());
+    const r5b = await ctx5._screenshotStoreReady();
+    expect(r5b.done).toBe(true);
+    expect(await ctx5.idbScreenshotKeys()).toHaveLength(5);
+  });
+
   it('idbScreenshotBatch: ein put/delete je Eintrag in EINER Transaktion; leere Batches sind ein No-op', async () => {
     installPutSpy();
     expect(await ctx5.idbScreenshotBatch('wheel', [['x', 'd1'], ['y', 'd2']], ['G:A|G:B'])).toBe(true);
