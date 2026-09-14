@@ -70,11 +70,12 @@ describe('_syncLscgScreenshotToProfiles liest denselben Schlüssel wie die Aufna
     expect(profShots(ctx)).toEqual({});
   });
 
-  it('Sync persistiert nach bcSpeichernJetzt() unter BC_PROFILE_SCREENSHOTS_v1', async () => {
+  it('Sync persistiert nach bcSpeichernJetzt() im Store screenshots (profile|Anna_v1)', async () => {
+    await ctx._screenshotStoreReady();
     ctx._syncLscgScreenshotToProfiles('123', 'FP1');
     ctx.bcSpeichernJetzt();
     await settle(100);
-    const saved = await ctx.idbGet('BC_PROFILE_SCREENSHOTS_v1');
+    const saved = await ctx.idbScreenshotGetAll('profile');
     expect(saved?.Anna_v1).toBe('data:img1');
   });
 

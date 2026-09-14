@@ -50,6 +50,9 @@ describe('idbSet/idbGet Fehlerpfade (TEST-04, STAB-02)', () => {
   beforeAll(async () => {
     ctx = loadScript(['items.js']);
     await ctx.idbGet('warmup');
+    // Migration beenden, bevor `put` gepatcht wird — sonst zaehlt ihr
+    // Marker-Write als zweite Statusmeldung (SPLIT-06, Race).
+    await ctx._screenshotStoreReady();
   });
 
   beforeEach(() => {

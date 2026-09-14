@@ -99,15 +99,16 @@ describe('Bestätigtes Löschen hinterlässt keine verwaisten Kopien (STAB-10)',
     expect(ctx._removeLscgScreenshotKeyFromProfiles('gibt-es-nicht')).toBe(0);
   });
 
-  it('nach bcSpeichernJetzt() sind die Kopien auch in IDB weg', async () => {
+  it('nach bcSpeichernJetzt() sind die Kopien auch im Store screenshots weg', async () => {
+    await ctx._screenshotStoreReady();
     ctx.deleteLscgVersion('123', 0);
     ctx.bcSpeichernJetzt();
     await settle(100);
-    const p = await ctx.idbGet('BC_PROFILE_SCREENSHOTS_v1');
+    const p = await ctx.idbScreenshotGetAll('profile');
     expect(p?.Anna_v1).toBeUndefined();
     expect(p?.Anna_v2c).toBeUndefined();
     expect(p?.Anna_v2b).toBe('data:manual');
-    const s = await ctx.idbGet('BC_LSCG_SCREENSHOTS_v1');
+    const s = await ctx.idbScreenshotGetAll('lscg');
     expect(s?.['123|FP1']).toBeUndefined();
     expect(s?.['123|FP2']).toBe('data:img2');
   });

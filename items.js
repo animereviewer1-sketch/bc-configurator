@@ -508,6 +508,35 @@ try {
   else document.addEventListener('DOMContentLoaded', () => setTimeout(_speicherZeigeStatus, 1500));
 } catch (e) {}
 
+// ── Screenshot-Store-Anzeige (SPLIT-06) ─────────────────────────────────
+// #screenshotStoreInfo (Plan 04-03) zeigt Migrationsstand + aktuelle
+// Store-Groesse. Datumsformatierung bewusst ohne locale-abhaengige API,
+// damit die Ausgabe umgebungsunabhaengig deterministisch bleibt (Testbarkeit,
+// gleiche Konvention wie _speicherFormat).
+async function _renderScreenshotStoreInfo() {
+  const el = document.getElementById('screenshotStoreInfo');
+  if (!el) return;
+  try {
+    await _screenshotStoreReady();
+    const m = await idbGet(SCREENSHOT_MIGRATION_KEY);
+    const n = (await idbScreenshotKeys()).length;
+    if (m && m.done) {
+      const c = m.counts || {};
+      el.textContent = 'Migration abgeschlossen ' + new Date(m.ts).toISOString().slice(0, 16).replace('T', ' ') + ' UTC · '
+        + m.count + ' Bilder übernommen (Profil ' + (c.profile || 0) + ' · Outfit-Scan ' + (c.lscg || 0) + ' · Wheel ' + (c.wheel || 0) + ') '
+        + '· aktuell ' + n + ' Bilder im Store · Alt-Bestände bleiben unverändert erhalten';
+    } else {
+      el.textContent = 'Migration noch nicht abgeschlossen – wird beim nächsten Start wiederholt · aktuell ' + n + ' Bilder im Store';
+    }
+  } catch (e) {
+    el.textContent = 'Screenshot-Store nicht abfragbar';
+  }
+}
+try {
+  if (document.readyState !== 'loading') _renderScreenshotStoreInfo();
+  else document.addEventListener('DOMContentLoaded', () => _renderScreenshotStoreInfo());
+} catch (e) {}
+
 function _saveProfilesJetzt() {
   idbSet('BC_PROFILES_v12', PROFILES);
   // Spiegel im localStorage als Rueckfallebene. JSON.stringify plus der
@@ -520,9 +549,35 @@ function _saveProfiles() {
 }
 
 // ── Profile Screenshots (base64, per Profil-Name) ─────
+// Screenshot-Store (SPLIT-05): die drei Maps bleiben Lese-Cache für alle
+// Lesestellen; geschrieben wird nur die Differenz zum zuletzt persistierten
+// Stand — ein put/delete je Bild, nie mehr das ganze Objekt. Alt-Blobs werden
+// nach der Migration nicht mehr beschrieben und nie gelöscht (Kernwert).
+const _screenshotShadow = { profile: new Map(), lscg: new Map(), wheel: new Map() };
+function _screenshotShadowMerge(kind, map) {
+  const s = _screenshotShadow[kind];
+  for (const k of Object.keys(map || {})) s.set(k, map[k]);
+}
+async function _screenshotFlush(kind, map) {
+  const shadow = _screenshotShadow[kind];
+  const puts = [];
+  const deletes = [];
+  for (const k of Object.keys(map)) if (shadow.get(k) !== map[k]) puts.push([k, map[k]]);
+  for (const k of shadow.keys()) if (!Object.prototype.hasOwnProperty.call(map, k)) deletes.push(k);
+  if (!puts.length && !deletes.length) return true;
+  const ok = await idbScreenshotBatch(kind, puts, deletes);
+  if (ok) {
+    for (const p of puts) shadow.set(p[0], p[1]);
+    for (const k of deletes) shadow.delete(k);
+  }
+  return ok;
+}
+
 let PROFILE_SCREENSHOTS = {};
-idbGet('BC_PROFILE_SCREENSHOTS_v1').then(d => { if (d && typeof d === 'object') Object.assign(PROFILE_SCREENSHOTS, d); });
-function _saveProfileScreenshotsJetzt() { idbSet('BC_PROFILE_SCREENSHOTS_v1', PROFILE_SCREENSHOTS); }
+_screenshotStoreReady().then(() => idbScreenshotGetAll('profile')).then(d => {
+  if (d && typeof d === 'object') { Object.assign(PROFILE_SCREENSHOTS, d); _screenshotShadowMerge('profile', d); }
+});
+function _saveProfileScreenshotsJetzt() { return _screenshotFlush('profile', PROFILE_SCREENSHOTS); }
 function _saveProfileScreenshots() {
   _sammelSpeicher.plane('profilScreenshots', _saveProfileScreenshotsJetzt);
 }
@@ -7457,15 +7512,15 @@ function importAllData() {
 // ══════════════════════════════════════════════════════
 //  LSCG Screenshots – pro Member gespeicherte Canvas-Bilder
 // ══════════════════════════════════════════════════════
-const LSCG_SCREENSHOTS_KEY = 'BC_LSCG_SCREENSHOTS_v1';
 let   LSCG_SCREENSHOTS     = {};   // mk (string) → dataUrl (jpeg)
 
 // Hinweistext für confirm()-Dialoge, die LSCG-Bilder löschen (STAB-09/STAB-10)
 const _LSCG_PROFIL_KOPIEN_HINWEIS = 'Synchronisierte Kopien in Profil-Bildern werden mit entfernt.';
 
-/* Sofort schreiben - fuer den Sammelspeicher und alles, was nicht warten darf. */
+/* Sofort schreiben - fuer den Sammelspeicher und alles, was nicht warten darf.
+   Differenz-Flush, ein Datensatz je Bild (SPLIT-05). */
 async function _saveLscgScreenshotsJetzt() {
-  await idbSet(LSCG_SCREENSHOTS_KEY, LSCG_SCREENSHOTS);
+  await _screenshotFlush('lscg', LSCG_SCREENSHOTS);
 }
 /* Regelfall: buendeln. Beim Aufnehmen vieler Bilder hintereinander wird die
    Sammlung sonst pro Bild komplett neu geschrieben. */
@@ -8383,11 +8438,13 @@ function toggleOsChar(mk, hdrEl) {
   await _loadIgnoreSettings();
   const favSaved = await idbGet(LSCG_FAV_KEY);
   if (Array.isArray(favSaved)) _osFavs = new Set(favSaved);
-  const ssSaved = await idbGet(LSCG_SCREENSHOTS_KEY);
+  await _screenshotStoreReady();
+  const ssSaved = await idbScreenshotGetAll('lscg');
   if (ssSaved && typeof ssSaved === 'object') {
     // Gespeicherte Bilder fuellen auf; waehrend des Ladens neu aufgenommene
     // behalten Vorrang. Kein Ersetzen – sonst waeren sie weg.
     LSCG_SCREENSHOTS = Object.assign({}, ssSaved, LSCG_SCREENSHOTS);
+    _screenshotShadowMerge('lscg', ssSaved);
     console.log('[BCU] LSCG Screenshots geladen:', Object.keys(LSCG_SCREENSHOTS).length);
   }
   // Gespeicherte LSCG-Outfit-Slots laden (persistierte Slot-Namen + Codes)
@@ -9360,17 +9417,17 @@ function _mbsOutfitFp(o) {
 }
 
 // Screenshots pro Outfit-Fingerprint (identische Outfits teilen sich das Bild)
-const _MBS_WHEEL_SS_KEY = 'BC_MBS_WHEEL_SS_v1';
 let _mbsWheelShots = {};   // fp → dataUrl
 const _pendingWheelShot = {}; // reqId → fp
-idbGet(_MBS_WHEEL_SS_KEY).then(function(d) {
+_screenshotStoreReady().then(function () { return idbScreenshotGetAll('wheel'); }).then(function(d) {
   // Gespeicherte Bilder auffuellen, waehrend des Ladens neu aufgenommene behalten
   if (d && typeof d === 'object') {
     _mbsWheelShots = Object.assign({}, d, _mbsWheelShots);
+    _screenshotShadowMerge('wheel', d);
     if (_activeTab === 'lscg-wheel') _renderMbsWheelTab();
   }
 });
-function _saveMbsWheelShotsJetzt() { idbSet(_MBS_WHEEL_SS_KEY, _mbsWheelShots); }
+function _saveMbsWheelShotsJetzt() { return _screenshotFlush('wheel', _mbsWheelShots); }
 /* Wie bei LSCG buendeln - die Stapel-Erzeugung weiter unten laeuft sonst
    pro Bild einmal ueber die ganze Sammlung. */
 function _saveMbsWheelShots() {
