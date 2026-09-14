@@ -127,7 +127,8 @@ const _bridgeHandlers = new Map();
 function onBridgeMessage(type, handler) {
   if (typeof handler !== 'function') throw new TypeError('onBridgeMessage: handler muss eine Funktion sein (' + type + ')');
   if (!_bridgeHandlers.has(type)) _bridgeHandlers.set(type, []);
-  _bridgeHandlers.get(type).push(handler);
+  const list = _bridgeHandlers.get(type);
+  if (!list.includes(handler)) list.push(handler); // Doppelregistrierung ist ein No-op
   return handler;
 }
 
@@ -143,7 +144,10 @@ function offBridgeMessage(type, handler) {
 function _bridgeDispatch(ev) {
   const list = _bridgeHandlers.get(ev.data.type);
   if (!list || !list.length) return 0;
-  for (const fn of list.slice()) fn(ev); // Kopie: Selbst-Entfernung während Dispatch bleibt sicher
+  for (const fn of list.slice()) { // Kopie: Selbst-Entfernung während Dispatch bleibt sicher
+    try { fn(ev); }
+    catch (err) { console.error('[Bridge] Handler-Fehler bei', ev.data.type, err); } // ein kaputter Handler blockiert keine Geschwister
+  }
   return list.length;
 }
 

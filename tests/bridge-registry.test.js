@@ -97,6 +97,26 @@ describe('Registry-Vertrag: onBridgeMessage / offBridgeMessage / Dispatch (SPLIT
     expect(order).toEqual(['a', 'b']);
   });
 
+  it('ein werfender Handler blockiert keine Geschwister (Review WR-01)', () => {
+    const order = [];
+    const errSpy = vi.spyOn(ctx.console, 'error').mockImplementation(() => {});
+    ctx.onBridgeMessage('TEST_ERR', () => { throw new Error('boom'); });
+    ctx.onBridgeMessage('TEST_ERR', () => order.push('b'));
+    expect(() => send(ctx, msg('TEST_ERR'), BC, opener)).not.toThrow();
+    expect(order).toEqual(['b']);
+    expect(errSpy).toHaveBeenCalled();
+    errSpy.mockRestore();
+  });
+
+  it('Doppelregistrierung desselben Handlers ist ein No-op (Review WR-02)', () => {
+    let n = 0;
+    const h = () => { n++; };
+    ctx.onBridgeMessage('TEST_DUP', h);
+    ctx.onBridgeMessage('TEST_DUP', h);
+    send(ctx, msg('TEST_DUP'), BC, opener);
+    expect(n).toBe(1);
+  });
+
   it('offBridgeMessage entfernt genau den übergebenen Handler und meldet Erfolg', () => {
     const fnA = vi.fn();
     const fnB = vi.fn();
