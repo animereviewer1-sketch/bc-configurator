@@ -3,11 +3,11 @@ gsd_state_version: "1.0"
 current_phase: 4
 current_phase_name: Entflechtung
 status: executing
-stopped_at: Completed 04-02-PLAN.md
-last_updated: "2026-09-14T16:47:11.186Z"
+stopped_at: Completed 04-03-PLAN.md
+last_updated: "2026-09-14T16:56:10.634Z"
 last_activity: 2026-09-14
 last_activity_desc: Phase 4 execution started
-state_head: f89ba37dcb2502dbe3129140900fe61595aaccae
+state_head: 455a6fb48c8b3ad9f861f585e246b1d9c2333c8b
 progress:
   total_phases: 6
   completed_phases: 0
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-09-12)
 ## Current Position
 
 Phase: 4 (Entflechtung) — EXECUTING
-Plan: 3 of 4
+Plan: 4 of 4
 Status: Ready to execute
 Last activity: 2026-09-14 — Phase 4 execution started
 
@@ -69,6 +69,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 03-bridge-haertung P03 | 18min | 2 tasks | 3 files |
 | Phase 04-entflechtung P01 | 8min | 3 tasks | 7 files |
 | Phase 04-entflechtung P02 | 29min | 3 tasks | 13 files |
+| Phase 04-entflechtung P03 | 22 min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -100,6 +101,7 @@ Recent decisions affecting current work:
 - [Phase 04-entflechtung]: Byte-identische Extraktion (Orchestrator-Entscheidung 1): items.js Zeilen 5-96 per sed/awk extrahiert, nicht abgetippt - diff-Gate leer — Verhindert stille Verhaltensaenderung bei der Extraktion (T-4-01)
 - [Phase 04-entflechtung]: Nur die generische localStorage-Migrations-IIFE zieht nach persistence.js um; die 36 Ad-hoc-localStorage-Stellen bleiben in items.js — RESEARCH-Scope-Guardrail gegen ungeplantes Sweeping
 - [Phase 04-entflechtung]: bridge.js byte-identisch extrahiert (Node-Skript, nicht abgetippt); Handler-Registry onBridgeMessage/offBridgeMessage; items.js registriert 35 Handler statt switch — Erfolgskriterium 1 (neue Nachrichtentypen ohne items.js) und Sicherheits-Invarianz (Verbatim-Diff-Gates, EXEC-Zaehlung 41/41 unveraendert)
+- [Phase 4]: [Phase 04-entflechtung]: exportScreenshotsOnly() reuse-t exportAllData()-Pfad (bcSpeichernJetzt/_jsonParts/Blob) 1:1 mit identischen Feldnamen (profileScreenshots/lscgScreenshots/mbsWheelShots) fuer Restore-Kompatibilitaet ueber importAllData() - SPLIT-07
 
 ### Pending Todos
 
@@ -121,6 +123,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-14T16:47:11.080Z
-Stopped at: Completed 04-02-PLAN.md
+Last session: 2026-09-14T16:56:10.531Z
+Stopped at: Completed 04-03-PLAN.md
 Resume file: None
