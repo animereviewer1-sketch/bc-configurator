@@ -32,10 +32,10 @@ Requirements for this milestone. Each maps to roadmap phases.
 
 ### Entflechtung (SPLIT)
 
-- [ ] **SPLIT-01**: IDB-/localStorage-Helfer liegen in `persistence.js`, funktionieren unverändert als klassisches `<script>` und sind per Dual-Export in Vitest importierbar
+- [x] **SPLIT-01**: IDB-/localStorage-Helfer liegen in `persistence.js`, funktionieren unverändert als klassisches `<script>` und sind per Dual-Export in Vitest importierbar
 - [ ] **SPLIT-02**: Das postMessage-Protokoll liegt in `bridge.js` mit einer Handler-Registry (`onBridgeMessage(type, handler)`); neue Nachrichtentypen brauchen keine Änderung an `items.js`
 - [ ] **SPLIT-03**: `items.js` enthält keine eigene IDB- oder postMessage-Logik mehr, sondern nutzt `persistence.js` und `bridge.js`; alle bestehenden Tabs funktionieren unverändert
-- [ ] **SPLIT-04**: Die Ladereihenfolge der Script-Tags ist dokumentiert und wird zur Laufzeit defensiv geprüft (fehlendes Modul → sichtbare Fehlermeldung statt stiller Ausfall)
+- [x] **SPLIT-04**: Die Ladereihenfolge der Script-Tags ist dokumentiert und wird zur Laufzeit defensiv geprüft (fehlendes Modul → sichtbare Fehlermeldung statt stiller Ausfall)
 - [ ] **SPLIT-05**: Screenshots werden als einzelne IDB-Datensätze in einem eigenen Store gespeichert; das Speichern eines Screenshots serialisiert nicht mehr das gesamte `PROFILE_SCREENSHOTS`-Objekt oder `LSCG_DB`
 - [ ] **SPLIT-06**: Die Migration in den neuen Screenshot-Store ist additiv: der Alt-Blob bleibt erhalten, die Migration wird verifiziert (Anzahl/Schlüssel stimmen überein) und als abgeschlossen markiert; ein blockierter `versionchange` (zweiter Tab) wird dem Nutzer angezeigt statt still zu scheitern
 - [ ] **SPLIT-07**: Vor der Migration kann der Nutzer einen JSON-Export aller Screenshot-Daten auslösen
@@ -115,10 +115,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | TEST-05 | Phase 1 | Complete |
 | TEST-06 | Phase 1 | Complete |
 | TEST-07 | Phase 3 | Complete |
-| SPLIT-01 | Phase 4 | Pending |
+| SPLIT-01 | Phase 4 | Complete |
 | SPLIT-02 | Phase 4 | Pending |
 | SPLIT-03 | Phase 4 | Pending |
-| SPLIT-04 | Phase 4 | Pending |
+| SPLIT-04 | Phase 4 | Complete |
 | SPLIT-05 | Phase 4 | Pending |
 | SPLIT-06 | Phase 4 | Pending |
 | SPLIT-07 | Phase 4 | Pending |
