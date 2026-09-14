@@ -93,7 +93,7 @@ describe('loadScript expandiert die Kern-Reihenfolge (CORE_SCRIPTS)', () => {
   it('expandLoadOrder fügt fehlende Vorläufer vor dem ersten items.js ein und lässt alles andere unangetastet', () => {
     expect(expandLoadOrder(['items.js'])).toEqual([...CORE_SCRIPTS]);
     expect(expandLoadOrder(['items.js', 'bot-data.js'])).toEqual([...CORE_SCRIPTS, 'bot-data.js']);
-    expect(expandLoadOrder(['persistence.js', 'items.js'])).toEqual(['persistence.js', 'items.js']);
+    expect(expandLoadOrder(['persistence.js', 'items.js'])).toEqual(['persistence.js', 'bridge.js', 'items.js']);
     expect(expandLoadOrder(['bot-data.js'])).toEqual(['bot-data.js']);
     expect(expandLoadOrder([])).toEqual([]);
     const inp = ['items.js'];

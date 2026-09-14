@@ -1,6 +1,6 @@
-// ── Ladereihenfolge-Guard (SPLIT-04): persistence.js muss VOR items.js geladen sein (docs/LOAD-ORDER.md). Fehlt ein Modul, bricht items.js hier sichtbar ab statt später still in einer Tab-Funktion. Bewusst ohne Abhängigkeit zu den geprüften Modulen.
+// ── Ladereihenfolge-Guard (SPLIT-04): persistence.js → bridge.js müssen VOR items.js geladen sein (docs/LOAD-ORDER.md). Fehlt ein Modul, bricht items.js hier sichtbar ab statt später still in einer Tab-Funktion. Bewusst ohne Abhängigkeit zu den geprüften Modulen.
 (function () {
-  const required = [['idbGet', 'persistence.js']];
+  const required = [['idbGet', 'persistence.js'], ['bcSend', 'bridge.js'], ['onBridgeMessage', 'bridge.js']];
   const missing = required.filter(function (e) { return typeof window[e[0]] !== 'function'; }).map(function (e) { return e[1]; }).filter(function (f, i, a) { return a.indexOf(f) === i; });
   if (!missing.length) return;
   const msg = 'FATAL: ' + missing.join(', ') + ' wurde nicht vor items.js geladen – Ladereihenfolge in index.html prüfen (siehe docs/LOAD-ORDER.md)';
@@ -5769,67 +5769,13 @@ function curseClearAndScan() {
   } catch(e) { console.warn('[BCK-Popup] Curse IDB load error:', e); }
 })();
 
-// ══════════════════════════════════════════════════════
-//  POSTMESSAGE KOMMUNIKATION MIT BC
-// ══════════════════════════════════════════════════════
-const APP = 'BCKonfigurator';
+// ── Bridge-Konsumenten: APP, bcSend, onBridgeMessage, _connected/_bcOrigin usw. liefert bridge.js (SPLIT-02/03) ──
 // Tool-eigene Origin für injizierten Code (STAB-05): im Tool-Fenster berechnet und als Literal in die
 // EXEC-Zeichenketten eingebettet — im Spiel-Tab darf die Location des Popup-Fensters nicht gelesen
 // werden (Cross-Origin, SecurityError). Einzige Tool-seitige Origin-Definition (STAB-06); bot-engine.js
 // und bot-ui.js nutzen dieses Global.
 const TOOL_ORIGIN = window.location.origin;
 
-// ── Ping-Retry ────────────────────────────────────────
-let _pingInterval = null;
-let _connected    = false;
-// Echte BC-Origin – wird beim ersten empfangenen Message vom Opener gelernt.
-// Danach sendet bcSend gezielt dorthin statt an '*' (kein Daten-Leak, falls
-// der Opener zwischenzeitlich auf eine fremde Seite navigiert wurde).
-let _bcOrigin     = null;
-
-function startPingRetry() {
-  if (_pingInterval) clearInterval(_pingInterval);
-  let n = 0;
-  _pingInterval = setInterval(function() {
-    if (_connected) { clearInterval(_pingInterval); _pingInterval = null; return; }
-    n++;
-    const ok = !!window.opener && !window.opener.closed;
-    console.log('[BCK-Popup] Ping-Retry #' + n + ' | opener=' + ok);
-    // STAB-04-Ausnahme: Bootstrap-PING vor dem Handshake — Spiel-Origin noch unbekannt, Payload trägt keine Daten
-    if (ok) window.opener.postMessage({ app: APP, type: 'PING' }, '*');
-  }, 3000);
-}
-
-// ── Heartbeat-Watchdog ────────────────────────────────────────────────────────
-// Der Room-Scan liefert alle 5s PLAYER_DATA. Kommt 15s lang GAR keine Nachricht
-// mehr (BC-Tab neu geladen / Loader weg), gilt die Verbindung als tot →
-// Status rot + Ping-Retry neu starten (verbindet automatisch sobald der Loader
-// im BC-Tab wieder aktiv ist).
-let _lastMsgTs = Date.now();
-// benannt, damit der Test ihn ohne Timer aufrufen kann
-function _heartbeatCheck() {
-  if (!_connected) return;
-  if (Date.now() - _lastMsgTs > 15000) {
-    console.warn('[BCK-Popup] Heartbeat verloren – Verbindung als tot markiert');
-    _connected = false;
-    _playerChecked = false;
-    stopRoomScan();
-    const cs = document.getElementById('connStatus');
-    if (cs) { cs.textContent = 'Verbindung verloren'; cs.dataset.conn = 'off'; }
-    startPingRetry();
-  }
-}
-setInterval(_heartbeatCheck, 5000);
-
-// ── Spieler-Check: nur mit dem zuletzt bekannten Account verbinden ────────────
-const _LAST_MEMBER_KEY = 'BC_LAST_MEMBER_v1';
-let _playerChecked = false;
-/* Wurde die Verbindung wegen eines anderen BC-Accounts abgelehnt, schiebt der
-   Loader im BC-Tab trotzdem weiter Daten herueber (Auto-Scan bei Raumwechsel,
-   LSCG-Schnappschuesse). Die kamen bisher normal durch und landeten in der
-   Datenbank – also genau die Daten des Accounts, den der Nutzer abgelehnt hat.
-   Bis zu einem bewussten "Neu verbinden" wird alles verworfen. */
-let _playerAbgelehnt = false;
 
 // ── EXEC-Log (STAB-08) ──────────────────────────────────────────────────
 // Betriebs-Telemetrie, KEIN Scan-Datensatz: der Ringpuffer verwirft nur
@@ -5892,57 +5838,6 @@ try {
   else document.addEventListener('DOMContentLoaded', () => _loadExecLog());
 } catch (e) {}
 
-// Absender-Doppelprüfung (STAB-06, Tool-Seite): Quelle muss der Opener sein;
-// sobald beim ersten gültigen Handshake ein Spiel-Origin gelernt wurde, muss
-// jede weitere Nachricht von genau diesem Origin kommen (Trust-on-first-use).
-// Bei Mirror-Wechsel läuft der Heartbeat ab; nur manualReconnect() darf neu
-// vertrauen.
-function _bridgeSenderOk(ev) {
-  if (!window.opener || ev.source !== window.opener) return false;
-  if (_bcOrigin && ev.origin !== _bcOrigin) return false;
-  return true;
-}
-
-function manualReconnect() {
-  _connected = false;
-  _playerChecked = false;
-  _playerAbgelehnt = false;
-  stopRoomScan();
-  // Origin beim nächsten Handshake neu lernen (Mirror-Wechsel, STAB-07)
-  _bcOrigin = null;
-  document.getElementById('connStatus').textContent = 'Nicht verbunden';
-  document.getElementById('connStatus').dataset.conn = 'off';
-  console.log('[BCK-Popup] manualReconnect()');
-  bcSend({ type: 'PING' });
-  startPingRetry();
-}
-
-function bcSend(msg, silent) {
-  try {
-    const ok = !!window.opener && !window.opener.closed;
-    if (!ok) {
-      console.warn('[BCK-Popup] bcSend FAIL – kein opener', msg.type);
-      if (!silent) showStatus('\u274c BC-Fenster nicht verf\u00fcgbar \u2013 Bookmarklet nochmal klicken', 'error');
-      return false;
-    }
-    if (!silent || msg.type !== 'PING') console.log('[BCK-Popup] bcSend \u2192', msg.type);
-    // STAB-04: Vor dem Handshake ist der Spiel-Origin unbekannt \u2013 dann darf nur der
-    // PING-Bootstrap raus (an '*'). Alles andere (insb. EXEC) wird zentral abgewiesen,
-    // damit kein Aufrufer versehentlich an ein unbekanntes Fenster sendet.
-    if (!_bcOrigin && msg.type !== 'PING') {
-      console.warn('[BCK-Popup] bcSend abgewiesen \u2013 kein Handshake', msg.type);
-      if (!silent) showStatus('\u274c Noch nicht mit BC verbunden \u2013 erst \ud83d\udd04 Verbinden', 'error');
-      return false;
-    }
-    if (msg.type === 'EXEC') _execLogAppend(msg); // STAB-08: einziger Sendepfad = einziger Log-Hakenpunkt
-    window.opener.postMessage({ app: APP, ...msg }, _bcOrigin || '*');
-    return true;
-  } catch(e) {
-    console.error('[BCK-Popup] bcSend Exception:', e.message);
-    if (!silent) showStatus('\u274c postMessage Fehler: ' + e.message, 'error');
-    return false;
-  }
-}
 
 /* Den lokalen Curse-Bestand in den Loader schieben.
 
@@ -5969,34 +5864,8 @@ function _pushCurseDBToBC() {
   return true;
 }
 
-window.addEventListener('message', function(ev) {
-  if (!ev.data || ev.data.app !== APP) return;
-  // Sicherheit: nur Nachrichten vom BC-Fenster (opener) akzeptieren, UND nach
-  // dem ersten Handshake nur vom gelernten Spiel-Origin (STAB-06, TOFU).
-  // Verhindert, dass fremde Fenster/Tabs gef\u00e4lschte CURSE_DATA/EXEC_OK etc. einschleusen.
-  // Ohne opener gibt es keine legitime Gegenstelle \u2013 frueher entfiel die Pruefung
-  // in dem Fall komplett, und jedes Fenster mit einem Handle auf dieses hier
-  // konnte Daten einschleusen.
-  if (!_bridgeSenderOk(ev)) {
-    console.warn('[BCK-Popup] message von fremder Quelle/Origin ignoriert:', ev.origin);
-    return;
-  }
-  // Abgelehnter Account: nichts annehmen bis der Nutzer neu verbindet
-  if (_playerAbgelehnt) return;
-  // Spiel-Origin einmalig lernen (BC l\u00e4uft auf mehreren Domains); danach erzwingt `_bridgeSenderOk` ihn
-  if (!_bcOrigin && ev.origin && ev.origin !== 'null') _bcOrigin = ev.origin;
-  _lastMsgTs = Date.now();
-  console.log('[BCK-Popup] \u2190 message:', ev.data.type);
-
-  // Meldungen des Bots fuehren zu Speichervorgaengen. Waehrend die laufen,
-  // darf der automatische Sync nicht anspringen - sonst startet sich der Bot
-  // bei jedem Einkauf selbst neu.
-  if (/^(BOT_|RANG_INIT|MONEY_INIT_NEW)/.test(String(ev.data.type || '')) &&
-      typeof _botRueckschreibStart === 'function') _botRueckschreibStart();
-
-  switch (ev.data.type) {
-
-    case 'PONG':
+// ── Bridge-Handler: Nachrichtentypen aus dem Spiel, registriert bei bridge.js (SPLIT-02/03). Körper unverändert aus dem früheren switch; break → return. ──
+onBridgeMessage('PONG', function(ev) {
       console.log('[BCK-Popup] PONG \u2705 Verbunden!');
       if (!_connected) {
         _connected = true;
@@ -6041,9 +5910,9 @@ window.addEventListener('message', function(ev) {
           }, 5000);
         }
       }
-      break;
+});
 
-    case 'CACHE_DATA': {
+onBridgeMessage('CACHE_DATA', function(ev) {
       console.log('[BCK-Popup] CACHE_DATA err=' + ev.data.err, 'groups=' + Object.keys(ev.data.cache ?? {}).length);
       document.getElementById('loadingSpinner').classList.add('hidden');
       document.getElementById('loadCacheBtn').disabled = false;
@@ -6064,14 +5933,13 @@ window.addEventListener('message', function(ev) {
       showEmpty();
       showStatus('\u2705 ' + _items + ' Items geladen!', 'success');
       bcSend({ type: 'GET_PLAYER' });
-      break;
-    }
+});
 
-    case 'POS_DATA':
+onBridgeMessage('POS_DATA', function(ev) {
       _handlePosData(ev.data);
-      break;
+});
 
-    case 'PLAYER_DATA':
+onBridgeMessage('PLAYER_DATA', function(ev) {
       if (!ev.data.err) {
         // Spieler-Check: anderer BC-Account als beim letzten Mal → nachfragen
         if (!_playerChecked && ev.data.memberNumber) {
@@ -6087,7 +5955,7 @@ window.addEventListener('message', function(ev) {
               const cs = document.getElementById('connStatus');
               if (cs) { cs.textContent = 'Falscher Spieler – nicht verbunden'; cs.dataset.conn = 'off'; }
               showStatus('❌ Verbindung abgelehnt: anderer Spieler (#' + ev.data.memberNumber + ')', 'error');
-              break;
+              return;
             }
           }
           try { localStorage.setItem(_LAST_MEMBER_KEY, String(ev.data.memberNumber)); } catch {}
@@ -6099,55 +5967,55 @@ window.addEventListener('message', function(ev) {
       } else {
         console.warn('[BCK-Popup] PLAYER_DATA Fehler:', ev.data.err);
       }
-      break;
+});
 
-    case 'BOT_EV_STATUS':
+onBridgeMessage('BOT_EV_STATUS', function(ev) {
       _evIntervalStatusUpdate(ev.data.evId, ev.data.nextMs, ev.data.lo, ev.data.hi, ev.data.cnt);
-      break;
-    case 'BOT_LOG':
+});
+
+onBridgeMessage('BOT_LOG', function(ev) {
       logPush(ev.data.entry);
-      break;
+});
 
-    case 'BOT_MONEY':
+onBridgeMessage('BOT_MONEY', function(ev) {
       _moneyApply(ev.data.memberNum, ev.data.name, ev.data.delta, ev.data.setVal);
-      break;
+});
 
-    case 'BOT_SHOP': {
+onBridgeMessage('BOT_SHOP', function(ev) {
       _shopLogPurchase(ev.data);
-      break;
-    }
+});
 
-    case 'BOT_RANG':
+onBridgeMessage('BOT_RANG', function(ev) {
       _rankApply(ev.data.memberNum, ev.data.name, ev.data.rankId, 'bot');
-      break;
+});
 
-    case 'BOT_SET_ZONE':
+onBridgeMessage('BOT_SET_ZONE', function(ev) {
       _botSetZone(ev.data.botId, ev.data.zoneName, ev.data.slot, ev.data.x, ev.data.y);
-      break;
+});
 
-    case 'BOT_VAR':
+onBridgeMessage('BOT_VAR', function(ev) {
       _botVarApply(ev.data.memberNum, ev.data.name, ev.data.value);
-      break;
+});
 
-    // Antwort auf einen Probelauf – die Anzeige baut bot-ui.js
-    case 'BOT_PROBE':
+// Antwort auf einen Probelauf – die Anzeige baut bot-ui.js
+onBridgeMessage('BOT_PROBE', function(ev) {
       if (typeof _probeEmpfangen === 'function') _probeEmpfangen(ev.data);
-      break;
+});
 
-    // Der Bot meldet eine Inventar-Buchung oder den Stand der Ausleihen.
-    case 'BOT_KEYBERICHT':
+// Der Bot meldet eine Inventar-Buchung oder den Stand der Ausleihen.
+onBridgeMessage('BOT_KEYBERICHT', function(ev) {
       if (typeof _keyBerichtZeigen === 'function') _keyBerichtZeigen(ev.data.bericht);
-      break;
+});
 
-    case 'BOT_INVENTAR':
+onBridgeMessage('BOT_INVENTAR', function(ev) {
       if (typeof _invApply === 'function') _invApply(ev.data);
-      break;
+});
 
-    case 'BOT_MAPKEY':
+onBridgeMessage('BOT_MAPKEY', function(ev) {
       if (typeof _playerKeyApply === 'function') _playerKeyApply(ev.data.memberNum, ev.data.name, ev.data.key, ev.data.has);
-      break;
+});
 
-    case 'RANG_INIT': {
+onBridgeMessage('RANG_INIT', function(ev) {
       // Spieler registrieren ohne Rang – nur wenn noch nicht bekannt
       const rid = String(ev.data.memberNum);
       if (rid && !_rankData.players[rid]) {
@@ -6162,10 +6030,9 @@ window.addEventListener('message', function(ev) {
         _rankData.players[rid].name = ev.data.name || _rankData.players[rid].name;
         _saveRank();
       }
-      break;
-    }
+});
 
-    case 'MONEY_INIT_NEW': {
+onBridgeMessage('MONEY_INIT_NEW', function(ev) {
       // Neuer Spieler - nur eintragen wenn noch nicht vorhanden (0 Gold)
       const mn = ev.data.memberNum;
       if (mn && !_money.balances[mn]) {
@@ -6179,9 +6046,9 @@ window.addEventListener('message', function(ev) {
         // Name aktuell halten bei Rejoin
         _money.balances[mn].name = ev.data.name;
       }
-      break;
-    }
-    case 'MONEY_QUERY': {
+});
+
+onBridgeMessage('MONEY_QUERY', function(ev) {
       const id = ev.data.memberNum; // raw MemberNumber key
       const p = _money.balances[id];
       const bal = p?.balance ?? 0;
@@ -6199,10 +6066,9 @@ window.addEventListener('message', function(ev) {
           : `ServerSend('ChatRoomChat',{Content:${JSON.stringify(name+': '+msg)},Type:'Chat'});`;
         bcSend({type:'EXEC', code});
       }
-      break;
-    }
+});
 
-    case 'BOT_ROOM_EVER': {
+onBridgeMessage('BOT_ROOM_EVER', function(ev) {
       // Spieler die je da waren persistieren – überlebt Konfigurator-Neustart
       const reKey = 'BC_RoomEver_v1';
       try {
@@ -6210,32 +6076,31 @@ window.addEventListener('message', function(ev) {
         reData[ev.data.botId] = ev.data.members;
         localStorage.setItem(reKey, JSON.stringify(reData));
       } catch {}
-      break;
-    }
+});
 
-    case 'EXEC_OK':
+onBridgeMessage('EXEC_OK', function(ev) {
       console.log('[BCK-Popup] EXEC_OK \u2705');
       showStatus('\u2705 Ausgef\u00fchrt!', 'success');
-      break;
+});
 
-    case 'EXEC_ERR':
+onBridgeMessage('EXEC_ERR', function(ev) {
       console.error('[BCK-Popup] EXEC_ERR:', ev.data.msg);
       showStatus('\u274c Fehler: ' + ev.data.msg, 'error');
-      break;
+});
 
-    case 'CURSE_DATA':
+onBridgeMessage('CURSE_DATA', function(ev) {
       _handleCurseData(ev.data);
-      break;
+});
 
-    case 'LSCG_CACHE_DATA':
+onBridgeMessage('LSCG_CACHE_DATA', function(ev) {
       Object.assign(CURSE_CACHE_LSCG, ev.data.cache ?? {});
       if (_pendingExport) {
         _exportLscgCache = ev.data.cache ?? {};
         _tryFinishExport();
       }
-      break;
+});
 
-    case 'CRAFT_CACHE_DATA':
+onBridgeMessage('CRAFT_CACHE_DATA', function(ev) {
       // FIX: was incorrectly merging into CURSE_DB, corrupting it with craft-cache entries
       // Craft-cache is already part of CURSE_DB structure; just merge missing keys safely
       if (ev.data.cache) {
@@ -6247,69 +6112,65 @@ window.addEventListener('message', function(ev) {
         _exportCraftCache = ev.data.cache ?? {};
         _tryFinishExport();
       }
-      break;
+});
 
-    case 'WEAR_CURSE_OK':
+onBridgeMessage('WEAR_CURSE_OK', function(ev) {
       showStatus('\u2705 ' + (ev.data.msg || 'Curse angelegt!'), 'success');
-      break;
+});
 
-    case 'WEAR_CURSE_ERR':
+onBridgeMessage('WEAR_CURSE_ERR', function(ev) {
       showStatus('\u274c Curse-Fehler: ' + ev.data.msg, 'error');
-      break;
+});
 
-    case 'CT_CHAT_MSG':
+onBridgeMessage('CT_CHAT_MSG', function(ev) {
       console.log('%c[CURSE-TEST] ' + (ev.data.event === 'curse_end' ? '✅ CURSE ENDE' : '🔮 CURSE START') + ' erkannt → "' + ev.data.content + '"',
         'background:' + (ev.data.event === 'curse_end' ? '#064e3b' : '#78350f') + ';color:#fff;font-weight:700;padding:2px 6px;border-radius:3px');
       _ctHandleChatMsg(ev.data.event, ev.data.content);
-      break;
+});
 
-    case 'CHAR_APPEARANCE_DATA': {
+onBridgeMessage('CHAR_APPEARANCE_DATA', function(ev) {
       const _cb = _pendingOutfitSave[ev.data.reqId];
-      if (!_cb) break;
+      if (!_cb) return;
       delete _pendingOutfitSave[ev.data.reqId];
-      if (ev.data.err) { showStatus('\u274c Outfit-Laden fehlgeschlagen: ' + ev.data.err, 'error'); break; }
+      if (ev.data.err) { showStatus('\u274c Outfit-Laden fehlgeschlagen: ' + ev.data.err, 'error'); return; }
       _cb(ev.data.items ?? [], ev.data.name ?? '');
-      break;
-    }
+});
 
-    case 'DEFAULT_OUTFIT_DATA': {
-      if (ev.data.reqId !== _pendingDefaultOutfitCapture) break;
+onBridgeMessage('DEFAULT_OUTFIT_DATA', function(ev) {
+      if (ev.data.reqId !== _pendingDefaultOutfitCapture) return;
       _pendingDefaultOutfitCapture = null;
-      if (ev.data.err) { showStatus('\u274c Standard-Outfit Fehler: ' + ev.data.err, 'error'); break; }
+      if (ev.data.err) { showStatus('\u274c Standard-Outfit Fehler: ' + ev.data.err, 'error'); return; }
       CURSE_DEFAULT_OUTFIT_CODE = ev.data.data;
       CURSE_DEFAULT_OUTFIT_DATE = new Date().toLocaleString('de-DE', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
       _saveCurseDefaultOutfit();
       _updateCurseDefaultOutfitBtn();
       showStatus('\ud83c\udfe0 Standard-Outfit gemerkt (' + (ev.data.count ?? '?') + ' Items)', 'success');
-      break;
-    }
-
-    case 'SCREENSHOT_DATA':
-      _handleScreenshotData(ev.data);
-      break;
-
-    case 'CANVAS_PREVIEW_DATA':
-      _handleCanvasPreviewData(ev.data);
-      break;
-
-    case 'OUTFIT_SCAN_DATA':
-      _handleOutfitScanData(ev.data);
-      break;
-
-    case 'LSCG_OUTFITS_DATA':
-      _handleLscgOutfitsData(ev.data);
-      break;
-
-    case 'MBS_WHEEL_DATA':
-      _handleMbsWheelData(ev.data);
-      break;
-
-    case 'LOCKS_DATA':
-      _handleLocksData(ev.data);
-      break;
-
-  }
 });
+
+onBridgeMessage('SCREENSHOT_DATA', function(ev) {
+      _handleScreenshotData(ev.data);
+});
+
+onBridgeMessage('CANVAS_PREVIEW_DATA', function(ev) {
+      _handleCanvasPreviewData(ev.data);
+});
+
+onBridgeMessage('OUTFIT_SCAN_DATA', function(ev) {
+      _handleOutfitScanData(ev.data);
+});
+
+onBridgeMessage('LSCG_OUTFITS_DATA', function(ev) {
+      _handleLscgOutfitsData(ev.data);
+});
+
+onBridgeMessage('MBS_WHEEL_DATA', function(ev) {
+      _handleMbsWheelData(ev.data);
+});
+
+onBridgeMessage('LOCKS_DATA', function(ev) {
+      _handleLocksData(ev.data);
+});
+
 
 function loadCacheFromBC() {
   console.log('[BCK-Popup] loadCacheFromBC() | opener=' + !!window.opener + ' closed=' + window.opener?.closed);
@@ -6784,10 +6645,10 @@ function renderLeiste() {
   } catch(e) { console.warn('[BCK-Popup] localStorage Fehler:', e.message); }
 
   // Sofortiger PING + Retry-Schleife
-  // STAB-04-Ausnahme: Bootstrap-PING vor dem Handshake — Spiel-Origin noch unbekannt, Payload trägt keine Daten
+  // Bootstrap-PING über bcSend: vor dem Handshake lässt bcSend nur PING durch (an '*', STAB-04-Ausnahme in bridge.js)
   if (window.opener && !window.opener.closed) {
     console.log('[BCK-Popup] Sende ersten PING...');
-    window.opener.postMessage({ app: APP, type: 'PING' }, '*');
+    bcSend({ type: 'PING' }, true);
   }
   // Always render sidebar on startup
   renderGroups();
@@ -7988,8 +7849,9 @@ window.debugOsOutfit = function(mk, vIdx) {
 
   // Handler für Analyse-Ergebnis
   const handler = function(ev) {
-    if (!ev.data || ev.data.app !== 'BCKonfigurator' || ev.data.type !== 'OUTFIT_DEBUG_RESULT' || ev.data.reqId !== reqId || !_bridgeSenderOk(ev)) return;
-    window.removeEventListener('message', handler);
+    // app/Typ/Absender prüft die Bridge-Shell (bridge.js); hier nur die reqId-Korrelation
+    if (!ev.data || ev.data.reqId !== reqId) return;
+    offBridgeMessage('OUTFIT_DEBUG_RESULT', handler);
 
     const r = ev.data;
     console.group('%c[BCU] Outfit-Analyse #' + mk + ' v' + (vIdx+1), 'color:#6ee7b7;font-weight:bold');
@@ -8009,7 +7871,7 @@ window.debugOsOutfit = function(mk, vIdx) {
     console.log('👤 Player AssetFamily: ' + r.assetFamily);
     console.groupEnd();
   };
-  window.addEventListener('message', handler);
+  onBridgeMessage('OUTFIT_DEBUG_RESULT', handler);
 
   // Reines Analyse-EXEC – ändert NICHTS am Spielstand
   const code = '(function(){'

@@ -81,9 +81,9 @@ describe('vm-Sandbox-Loader (TEST-02)', () => {
     expect(fn2).toHaveBeenCalledWith({ data: 2 });
   });
 
-  it('items.js registriert seinen message-Handler in der Registry', () => {
+  it('bridge.js registriert genau einen message-Handler in der Registry', () => {
     const handlers = ctx._listeners.get('message');
-    expect(handlers.length).toBeGreaterThanOrEqual(1);
+    expect(handlers.length).toBe(1);
     for (const h of handlers) {
       expect(typeof h).toBe('function');
     }

@@ -17,7 +17,7 @@
 //
 // Phase 4 (SPLIT-01): `loadScript` expandiert `files` um fehlende Kern-
 // Vorläufer (`CORE_SCRIPTS`) vor dem ersten `items.js`, weil persistence.js
-// (und ab Plan 04-02 bridge.js) im Browser VOR items.js laufen. `loadInto`
+// und bridge.js im Browser VOR items.js laufen. `loadInto`
 // bleibt roh — der Ladereihenfolge-Guard-Test lädt items.js absichtlich
 // ohne Vorläufer.
 
@@ -30,7 +30,7 @@ export const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url
 
 export const SANDBOX_ORIGIN = 'https://tool.test';
 
-export const CORE_SCRIPTS = ['persistence.js', 'items.js'];
+export const CORE_SCRIPTS = ['persistence.js', 'bridge.js', 'items.js'];
 
 export function expandLoadOrder(files) {
   const idx = files.indexOf('items.js');

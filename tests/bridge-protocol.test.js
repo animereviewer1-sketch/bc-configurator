@@ -5,6 +5,7 @@ import { loadScript, evalIn, dispatchMessage, makeElementStub, REPO_ROOT } from 
 
 // TEST-07 / STAB-04 / STAB-06 (Tool-Hälfte) / STAB-07: Bridge-Protokoll gegen
 // den echten items.js-Handler, mit simulierten postMessage-Ereignissen.
+// (Listener/Shell in bridge.js, Handler-Körper in items.js — SPLIT-02/03.)
 //
 // Absender-Doppelprüfung (Trust-on-first-use): `_bcOrigin` startet als `null`
 // und wird beim ersten gültigen Handshake (source === opener, Origin nicht
@@ -106,10 +107,11 @@ describe('Absender-Doppelprüfung: Origin + Source, Trust-on-first-use (STAB-06 
   it('auch der temporäre Debug-Listener von debugOsOutfit prüft den Absender', () => {
     const { ctx, opener } = boot();
     handshake({ ctx, opener });
+    const count = () => evalIn(ctx, "(_bridgeHandlers.get('OUTFIT_DEBUG_RESULT') || []).length");
     evalIn(ctx, "LSCG_DB['1'] = { versions: [{ code: 'abc' }] }");
-    const before = ctx._listeners.get('message').length;
+    const before = count();
     ctx.debugOsOutfit('1', 0);
-    expect(ctx._listeners.get('message').length).toBe(before + 1);
+    expect(count()).toBe(before + 1);
 
     const call = opener.postMessage.mock.calls.find((c) => /reqId:"(dbg_\d+)"/.test(c[0]?.code || ''));
     const match = /reqId:"(dbg_\d+)"/.exec(call[0].code);
@@ -117,11 +119,11 @@ describe('Absender-Doppelprüfung: Origin + Source, Trust-on-first-use (STAB-06 
 
     // Fremder Origin: Handler bleibt registriert, hat nichts angenommen.
     send(ctx, msg('OUTFIT_DEBUG_RESULT', { reqId, total: 0, missing: [], naked: [], missingNaked: [], assetFamily: 'F' }), EVIL, opener);
-    expect(ctx._listeners.get('message').length).toBe(before + 1);
+    expect(count()).toBe(before + 1);
 
     // Gleiche Nachricht vom gelernten Origin: Handler akzeptiert und entfernt sich.
     send(ctx, msg('OUTFIT_DEBUG_RESULT', { reqId, total: 0, missing: [], naked: [], missingNaked: [], assetFamily: 'F' }), BC, opener);
-    expect(ctx._listeners.get('message').length).toBe(before);
+    expect(count()).toBe(before);
   });
 });
 
@@ -211,15 +213,21 @@ describe('Sendepfad bcSend nutzt den gelernten Origin (STAB-04)', () => {
     expect(ctx.bcSend({ type: 'GET_PLAYER' }, true)).toBe(false);
   });
 
-  it('statischer Audit: genau zwei direkte Wildcard-Sends, beide Bootstrap-PING; genau ein Fallback in bcSend', () => {
-    const lines = fs.readFileSync(path.join(REPO_ROOT, 'items.js'), 'utf8').split('\n');
-    const wildcardSends = lines.filter((l) => /window\.opener\.postMessage\(.*, '\*'\)/.test(l));
-    expect(wildcardSends).toHaveLength(2);
+  it('statischer Audit: genau ein direkter Wildcard-Send in bridge.js (Bootstrap-PING); items.js hat keinen mehr', () => {
+    const bridgeLines = fs.readFileSync(path.join(REPO_ROOT, 'bridge.js'), 'utf8').split('\n');
+    const itemsLines = fs.readFileSync(path.join(REPO_ROOT, 'items.js'), 'utf8').split('\n');
+    const wildcardSends = bridgeLines.filter((l) => /window\.opener\.postMessage\(.*, '\*'\)/.test(l));
+    expect(wildcardSends).toHaveLength(1);
     for (const l of wildcardSends) {
       expect(l).toContain("type: 'PING'");
     }
-    const fallbackLines = lines.filter((l) => l.includes("_bcOrigin || '*'"));
+    const fallbackLines = bridgeLines.filter((l) => l.includes("_bcOrigin || '*'"));
     expect(fallbackLines).toHaveLength(1);
+
+    const itemsWildcardSends = itemsLines.filter((l) => /window\.opener\.postMessage\(.*, '\*'\)/.test(l));
+    expect(itemsWildcardSends).toHaveLength(0);
+    const itemsFallbackLines = itemsLines.filter((l) => l.includes("_bcOrigin || '*'"));
+    expect(itemsFallbackLines).toHaveLength(0);
   });
 });
 

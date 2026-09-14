@@ -82,13 +82,15 @@ describe('Statischer Quell-Audit (STAB-05 / STAB-06 Tool-Seite)', () => {
     ['bot-engine.js', 0],
     ['bot-ui.js', 0],
     ['loader.js', 0],
+    ['items.js', 0],
+    ['persistence.js', 0],
   ])('%s: %i Wildcard-Ziele', (file, expected) => {
     expect(wildcardLines(file).length).toBe(expected);
   });
 
-  it('items.js: genau 2 Wildcard-Zeilen – beide Bootstrap-PING über window.opener', () => {
-    const lines = wildcardLines('items.js');
-    expect(lines.length).toBe(2);
+  it('bridge.js: genau 1 Wildcard-Zeile – Bootstrap-PING in startPingRetry über window.opener', () => {
+    const lines = wildcardLines('bridge.js');
+    expect(lines.length).toBe(1);
     for (const l of lines) {
       expect(l).toContain("type: 'PING'");
       expect(l).toContain('window.opener.postMessage(');
@@ -100,12 +102,13 @@ describe('Statischer Quell-Audit (STAB-05 / STAB-06 Tool-Seite)', () => {
     const defMatches = itemsSrc.match(/const TOOL_ORIGIN = window\.location\.origin;/g) || [];
     expect(defMatches.length).toBe(1);
 
-    const combined = itemsSrc + src('bot-engine.js') + src('bot-ui.js');
+    const combined = itemsSrc + src('bot-engine.js') + src('bot-ui.js') + src('bridge.js') + src('persistence.js');
     const originOccurrences = combined.match(/location\.origin/g) || [];
     expect(originOccurrences.length).toBe(1);
 
     expect((src('bot-engine.js').match(/const TOOL_ORIGIN/g) || []).length).toBe(0);
     expect((src('bot-ui.js').match(/const TOOL_ORIGIN/g) || []).length).toBe(0);
+    expect((src('bridge.js').match(/const TOOL_ORIGIN/g) || []).length).toBe(0);
   });
 
   it('kein GitHub-Pages-Origin-String in Tool-Dateien', () => {
@@ -114,7 +117,7 @@ describe('Statischer Quell-Audit (STAB-05 / STAB-06 Tool-Seite)', () => {
     const m = /const POPUP_URL = '([^']+)'/.exec(popupUrlLine);
     const originHost = new URL(m[1]).host;
 
-    for (const file of ['items.js', 'bot-engine.js', 'bot-ui.js']) {
+    for (const file of ['items.js', 'bot-engine.js', 'bot-ui.js', 'bridge.js', 'persistence.js']) {
       const occurrences = src(file).split(originHost).length - 1;
       expect(occurrences).toBe(0);
     }
