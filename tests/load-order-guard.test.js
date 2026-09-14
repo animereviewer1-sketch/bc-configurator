@@ -86,6 +86,72 @@ describe('index.html: Kommentar + persistence.js-Write vor items.js-Write im _cb
   });
 });
 
+describe('Plan 04-02: bridge.js im Guard, bot-ui.js-Guard', () => {
+  function loadRaw(files) {
+    const sb = makeSandbox();
+    const created = [];
+    sb.document.createElement = (tag) => {
+      const el = makeElementStub();
+      el.tagName = tag;
+      created.push(el);
+      return el;
+    };
+    const load = () => {
+      for (const f of files) loadInto(sb, f);
+    };
+    return { sb, created, load };
+  }
+
+  it('items.js ohne bridge.js wirft mit bridge.js-Hinweis, Box nennt bridge.js statt persistence.js', () => {
+    const { created, load } = loadRaw(['persistence.js', 'items.js']);
+    expect(load).toThrow(/bridge\.js/);
+    const box = created.find((e) => e.id === 'loadOrderFatal');
+    expect(box).toBeDefined();
+    expect(box.textContent).toContain('bridge.js');
+    expect(box.textContent).not.toContain('persistence.js');
+  });
+
+  it('bot-ui.js ohne items.js (persistence.js + bridge.js vorhanden) wirft mit items.js-Hinweis', () => {
+    const { load } = loadRaw(['persistence.js', 'bridge.js', 'bot-ui.js']);
+    expect(load).toThrow(/items\.js/);
+  });
+
+  it('bot-ui.js ohne bridge.js und items.js: Meldung nennt beide fehlenden Module, Box-Text FATAL…docs/LOAD-ORDER.md', () => {
+    const { created, load } = loadRaw(['persistence.js', 'bot-ui.js']);
+    expect(load).toThrow(/bridge\.js/);
+    const box = created.find((e) => e.id === 'loadOrderFatal');
+    expect(box).toBeDefined();
+    expect(box.textContent).toContain('bridge.js, items.js');
+    expect(box.textContent).toMatch(/^FATAL: /);
+    expect(box.textContent.trim().endsWith('(siehe docs/LOAD-ORDER.md)')).toBe(true);
+  });
+
+  it('loadScript(["items.js", "bot-data.js", "bot-ui.js"]) wirft nicht; renderBotTab ist eine Funktion', () => {
+    const ctx = loadScript(['items.js', 'bot-data.js', 'bot-ui.js']);
+    expect(typeof ctx.renderBotTab).toBe('function');
+  });
+
+  it('index.html: bridge.js liegt zwischen persistence.js und items.js, Kommentar nennt bridge.js', () => {
+    const html = src('index.html');
+    const persistIdx = html.indexOf('persistence.js?_=');
+    const bridgeIdx = html.indexOf('bridge.js?_=');
+    const itemsIdx = html.indexOf('items.js?_=');
+    expect(persistIdx).toBeLessThan(bridgeIdx);
+    expect(bridgeIdx).toBeLessThan(itemsIdx);
+    expect(html.indexOf('LADEREIHENFOLGE')).not.toBe(-1);
+    expect(html.slice(html.indexOf('LADEREIHENFOLGE'), html.indexOf('LADEREIHENFOLGE') + 200)).toContain('bridge.js');
+  });
+
+  it('docs/LOAD-ORDER.md nennt bridge.js, onBridgeMessage/offBridgeMessage und den bot-ui.js-Guard', () => {
+    const doc = src('docs/LOAD-ORDER.md');
+    expect(doc).toContain('bridge.js');
+    expect(doc).toContain('onBridgeMessage');
+    expect(doc).toContain('offBridgeMessage');
+    expect(doc).toContain('bot-ui.js');
+    expect(doc).toMatch(/GAME_SCAN_DATA|MEIN_TYP/);
+  });
+});
+
 describe('docs/LOAD-ORDER.md dokumentiert Kette, Guard und Test-Expansion', () => {
   it('Datei existiert und nennt alle Module', () => {
     expect(fs.existsSync(path.join(REPO_ROOT, 'docs/LOAD-ORDER.md'))).toBe(true);
