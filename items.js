@@ -7157,11 +7157,7 @@ function exportAllData() {
   }
 }
 
-/* Nur die drei Screenshot-Sammlungen sichern (SPLIT-07) – gedacht als
-   Sicherung VOR der Screenshot-Migration (Plan 04-04) und fuer Nutzer, denen
-   das Komplett-Backup zu gross ist. Gleiche Feldnamen wie exportAllData(),
-   damit importAllData() die Datei unveraendert einlesen kann. Liest nur;
-   mutiert weder Maps noch IDB. */
+// Nur die drei Screenshot-Sammlungen sichern (SPLIT-07, Sicherung vor der Migration in Plan 04-04). Gleiche Feldnamen wie exportAllData() -> importAllData() liest die Datei unveraendert. Liest nur; mutiert weder Maps noch IDB.
 function exportScreenshotsOnly() {
   try {
     bcSpeichernJetzt();
