@@ -6,7 +6,11 @@
 import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
-import { loadScript, loadInto, makeSandbox, makeElementStub, REPO_ROOT } from './helpers/loadScript.js';
+import { loadScript, loadInto, makeSandbox, makeElementStub, settle, REPO_ROOT } from './helpers/loadScript.js';
+
+// Der Migrations-Bootstrap in items.js loggt asynchron nach Testende — mit dem Host-console
+// kollidiert das mit dem Vitest-Worker-Teardown (EnvironmentTeardownError). Stumm + abwarten.
+const quietConsole = { log() {}, warn() {}, error() {}, info() {}, debug() {} };
 
 function src(file) {
   return fs.readFileSync(path.join(REPO_ROOT, file), 'utf8');
@@ -38,10 +42,11 @@ describe('items.js ohne persistence.js: sichtbare FATAL-Box + Throw, kein tiefer
 });
 
 describe('items.js mit persistence.js davor läuft an', () => {
-  it('kein Throw, idbGet und showStatus sind Funktionen', () => {
-    const ctx = loadScript(['items.js']);
+  it('kein Throw, idbGet und showStatus sind Funktionen', async () => {
+    const ctx = loadScript(['items.js'], { console: quietConsole });
     expect(typeof ctx.idbGet).toBe('function');
     expect(typeof ctx.showStatus).toBe('function');
+    await settle(150); // Bootstrap (Migration/Store-Load) ausklingen lassen
   });
 });
 
@@ -126,8 +131,9 @@ describe('Plan 04-02: bridge.js im Guard, bot-ui.js-Guard', () => {
     expect(box.textContent.trim().endsWith('(siehe docs/LOAD-ORDER.md)')).toBe(true);
   });
 
-  it('loadScript(["items.js", "bot-data.js", "bot-ui.js"]) wirft nicht; renderBotTab ist eine Funktion', () => {
-    const ctx = loadScript(['items.js', 'bot-data.js', 'bot-ui.js']);
+  it('loadScript(["items.js", "bot-data.js", "bot-ui.js"]) wirft nicht; renderBotTab ist eine Funktion', async () => {
+    const ctx = loadScript(['items.js', 'bot-data.js', 'bot-ui.js'], { console: quietConsole });
+    await settle(150);
     expect(typeof ctx.renderBotTab).toBe('function');
   });
 
