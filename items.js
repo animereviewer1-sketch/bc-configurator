@@ -7157,6 +7157,54 @@ function exportAllData() {
   }
 }
 
+/* Nur die drei Screenshot-Sammlungen sichern (SPLIT-07) – gedacht als
+   Sicherung VOR der Screenshot-Migration (Plan 04-04) und fuer Nutzer, denen
+   das Komplett-Backup zu gross ist. Gleiche Feldnamen wie exportAllData(),
+   damit importAllData() die Datei unveraendert einlesen kann. Liest nur;
+   mutiert weder Maps noch IDB. */
+function exportScreenshotsOnly() {
+  try {
+    bcSpeichernJetzt();
+    const profileCount = Object.keys(PROFILE_SCREENSHOTS).length;
+    const lscgCount    = Object.keys(LSCG_SCREENSHOTS).length;
+    const wheelCount   = Object.keys(_mbsWheelShots).length;
+    if (!profileCount && !lscgCount && !wheelCount) {
+      showStatus('⚠️ Keine Screenshots zum Exportieren', 'info');
+      return;
+    }
+    const payload = {
+      _meta: {
+        exportedAt: new Date().toISOString(),
+        version:    1,
+        tool:       'BC Konfigurator – Screenshot-Export',
+        counts: {
+          profileScreenshots: profileCount,
+          lscgScreenshots:    lscgCount,
+          mbsWheelShots:      wheelCount,
+        }
+      },
+      profileScreenshots: PROFILE_SCREENSHOTS,
+      lscgScreenshots:    LSCG_SCREENSHOTS,
+      mbsWheelShots:      _mbsWheelShots,
+    };
+    const parts = _jsonParts(payload);
+    const blob  = new Blob(parts, { type: 'application/json' });
+    const a    = document.createElement('a');
+    a.href     = URL.createObjectURL(blob);
+    a.download = 'BC_Screenshots_' + new Date().toISOString().slice(0, 10) + '.json';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+    const mb = (blob.size / 1048576).toFixed(1);
+    showStatus('✅ Screenshot-Export: ' + profileCount + ' Profil-Bilder, ' + lscgCount + ' Outfit-Scan-Bilder, '
+      + wheelCount + ' Wheel-Bilder (' + mb + ' MB)', 'success');
+  } catch (err) {
+    showStatus('❌ Screenshot-Export fehlgeschlagen: ' + (err && err.message ? err.message : err), 'error');
+    console.error('[exportScreenshotsOnly]', err);
+  }
+}
+
 /* Backup-Datei einlesen, ohne sie als einen einzigen String zu halten.
 
    exportAllData() serialisiert bewusst stueckweise, weil ein einzelner String

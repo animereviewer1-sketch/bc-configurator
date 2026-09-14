@@ -2472,6 +2472,15 @@ button { cursor: pointer; }
   </div>
 
   <div>
+    <div class="tweaks-section-title">🖼️ Screenshot-Speicher</div>
+    <div style="font-size:.6875rem;color:var(--text3);margin-bottom:7px">Alle Profil-, Outfit-Scan- und Wheel-Bilder als JSON sichern – empfohlen vor jedem Tool-Update. Die Datei lässt sich über ⬆️ Restore wieder einspielen.</div>
+    <div class="tweaks-btn-group">
+      <button class="tweaks-btn" onclick="exportScreenshotsOnly()" title="Nur die Screenshot-Sammlungen als JSON exportieren (restore-fähig)">📷 Screenshots exportieren</button>
+    </div>
+    <div id="screenshotStoreInfo" style="font-size:.6875rem;color:var(--text3);margin-top:5px;line-height:1.5">–</div>
+  </div>
+
+  <div>
     <div class="tweaks-section-title">📦 Item-Katalog</div>
     <div style="font-size:.6875rem;color:var(--text3);margin-bottom:7px">Exportiert jedes Item &amp; jede Klamotte aus dem Cache mit allen Infos + Bild-URL als JSON.</div>
     <button class="tweaks-btn" style="width:100%" onclick="itemsExportCatalog()" title="Alle Items mit allen Feldern und Vorschaubild-URLs als JSON exportieren">⬇️ Katalog exportieren</button>
