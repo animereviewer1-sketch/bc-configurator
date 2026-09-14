@@ -14,6 +14,12 @@
 // Ein `location`-Stub (Default-Origin `SANDBOX_ORIGIN`, per `extraGlobals`
 // überschreibbar) steht bereit, weil Plan 03-02 `window.location.origin` in
 // items.js einführt.
+//
+// Phase 4 (SPLIT-01): `loadScript` expandiert `files` um fehlende Kern-
+// Vorläufer (`CORE_SCRIPTS`) vor dem ersten `items.js`, weil persistence.js
+// (und ab Plan 04-02 bridge.js) im Browser VOR items.js laufen. `loadInto`
+// bleibt roh — der Ladereihenfolge-Guard-Test lädt items.js absichtlich
+// ohne Vorläufer.
 
 import fs from 'node:fs';
 import vm from 'node:vm';
@@ -23,6 +29,15 @@ import { fileURLToPath } from 'node:url';
 export const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 export const SANDBOX_ORIGIN = 'https://tool.test';
+
+export const CORE_SCRIPTS = ['persistence.js', 'items.js'];
+
+export function expandLoadOrder(files) {
+  const idx = files.indexOf('items.js');
+  if (idx === -1) return files.slice();
+  const missing = CORE_SCRIPTS.filter((f) => f !== 'items.js' && !files.includes(f));
+  return [...files.slice(0, idx), ...missing, ...files.slice(idx)];
+}
 
 export function makeElementStub() {
   const stub = {
@@ -173,7 +188,7 @@ export function loadScript(files, extraGlobals = {}) {
     throw new TypeError('loadScript: files must be an array of repo-relative paths');
   }
   const sandbox = makeSandbox(extraGlobals);
-  for (const file of files) {
+  for (const file of expandLoadOrder(files)) {
     loadInto(sandbox, file);
   }
   return sandbox;
