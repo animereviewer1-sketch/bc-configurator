@@ -53,9 +53,15 @@ function kvPutsFor(key) {
 async function boot() {
   const infoEl = makeElementStub();
   const ctx = loadScript(['items.js'], { confirm: () => true, setTimeout: () => 0, clearTimeout: () => {} });
+  // document.getElementById im Sandbox-Default liefert bei jedem Aufruf einen
+  // frischen Stub; der Init-Hook feuert _renderScreenshotStoreInfo() bereits
+  // synchron beim Laden, bevor wir hier ueberschreiben (01-REVIEW WR-02,
+  // gleiches Muster wie tests/storage-estimate.test.js) — darum nach dem
+  // Override erneut aufrufen, damit infoEl das tatsaechliche Ziel ist.
   ctx.document.getElementById = (id) => (id === 'screenshotStoreInfo' ? infoEl : makeElementStub());
   ctx.showStatus = vi.fn();
   await ctx._screenshotStoreReady();
+  await ctx._renderScreenshotStoreInfo();
   await settle(80);
   return { ctx, infoEl };
 }
@@ -197,9 +203,19 @@ describe('Screenshot-Store (SPLIT-05) — ein Datensatz je Bild, Alt-Blob frozen
     expect(count(src, "_screenshotFlush('profile', PROFILE_SCREENSHOTS)")).toBe(1);
     expect(count(src, "_screenshotFlush('lscg', LSCG_SCREENSHOTS)")).toBe(1);
     expect(count(src, "_screenshotFlush('wheel', _mbsWheelShots)")).toBe(1);
-    expect(count(src, '_screenshotStoreReady()')).toBe(3);
-    expect(count(src, 'PROFILE_SCREENSHOTS[')).toBe(26);
-    expect(count(src, 'LSCG_SCREENSHOTS[')).toBe(20);
-    expect(count(src, '_mbsWheelShots[')).toBe(9);
+    // >=3, nicht ===3: die drei Ladepfade (Profil/LSCG/Wheel) rufen
+    // _screenshotStoreReady() je einmal, _renderScreenshotStoreInfo() ein
+    // viertes Mal (muss die Migration abwarten, bevor sie den Marker liest) —
+    // matches Task-3-Verify (-ge 3), memoisiert also kein Mehraufwand.
+    expect(count(src, '_screenshotStoreReady()')).toBeGreaterThanOrEqual(3);
+    // 33/24/10, nicht 26/20/9: RESEARCH zaehlte per `grep -c` (Zeilen), hier
+    // wird per String-`split()` gezaehlt (echte Vorkommen) — mehrere Treffer
+    // pro Zeile (z.B. Zeile 634-636, 3131) heben die Zahl an. Die Invarianz
+    // (unveraendert vor/nach Task 3) ist das, was zaehlt; Task 3s eigenes
+    // `<verify>`-Gate vergleicht ohnehin PRE- gegen POST-Stand per grep -Fc,
+    // nicht gegen einen fixen Wert.
+    expect(count(src, 'PROFILE_SCREENSHOTS[')).toBe(33);
+    expect(count(src, 'LSCG_SCREENSHOTS[')).toBe(24);
+    expect(count(src, '_mbsWheelShots[')).toBe(10);
   });
 });
