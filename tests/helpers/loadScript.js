@@ -19,7 +19,8 @@
 // Vorläufer (`CORE_SCRIPTS`) vor dem ersten `items.js`, weil persistence.js
 // und bridge.js im Browser VOR items.js laufen. `loadInto`
 // bleibt roh — der Ladereihenfolge-Guard-Test lädt items.js absichtlich
-// ohne Vorläufer.
+// ohne Vorläufer. `IDBKeyRange` steht in der Sandbox bereit, weil der
+// Screenshot-Store (SPLIT-06) Bereichsabfragen darüber macht.
 
 import fs from 'node:fs';
 import vm from 'node:vm';
@@ -167,6 +168,7 @@ export function makeSandbox(extraGlobals = {}) {
       if (idx !== -1) arr.splice(idx, 1);
     },
     indexedDB: globalThis.indexedDB,
+    IDBKeyRange: globalThis.IDBKeyRange,
     _money: undefined,
     _rankData: undefined,
     _shop: undefined,

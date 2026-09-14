@@ -39,7 +39,12 @@ describe('persistence.js per CJS-Require (Dual-Export, Pattern B)', () => {
     expect(typeof mod.idbSet).toBe('function');
     expect(typeof mod._idbOpen).toBe('function');
     expect(typeof mod._debounce).toBe('function');
-    expect(Object.keys(mod).sort()).toEqual(['_debounce', '_idbOpen', 'idbGet', 'idbSet']);
+    expect(Object.keys(mod).sort()).toEqual([
+      'SCREENSHOT_KINDS', 'SCREENSHOT_LEGACY_KEYS', 'SCREENSHOT_MIGRATION_KEY',
+      '_debounce', '_idbOpen', '_migrateScreenshotsToStore', '_screenshotStoreReady',
+      'idbGet', 'idbScreenshotBatch', 'idbScreenshotDelete', 'idbScreenshotGetAll', 'idbScreenshotKeys', 'idbScreenshotPut',
+      'idbSet',
+    ]);
   });
 
   it('idbSet → idbGet Round-Trip über das required Modul gegen fake-indexeddb', async () => {
@@ -74,7 +79,12 @@ describe('persistence.js als klassisches Skript in der vm-Sandbox', () => {
     const module = { exports: {} };
     loadScript(['persistence.js'], { module });
     expect(typeof module.exports.idbGet).toBe('function');
-    expect(Object.keys(module.exports).sort()).toEqual(['_debounce', '_idbOpen', 'idbGet', 'idbSet']);
+    expect(Object.keys(module.exports).sort()).toEqual([
+      'SCREENSHOT_KINDS', 'SCREENSHOT_LEGACY_KEYS', 'SCREENSHOT_MIGRATION_KEY',
+      '_debounce', '_idbOpen', '_migrateScreenshotsToStore', '_screenshotStoreReady',
+      'idbGet', 'idbScreenshotBatch', 'idbScreenshotDelete', 'idbScreenshotGetAll', 'idbScreenshotKeys', 'idbScreenshotPut',
+      'idbSet',
+    ]);
   });
 
   it('Round-Trip über die Sandbox (wie tests/idb-helpers.test.js, aber ohne items.js)', async () => {
