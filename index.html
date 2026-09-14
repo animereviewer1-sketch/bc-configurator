@@ -3085,9 +3085,11 @@ button { cursor: pointer; }
   </div>
 </div>
 
+<!-- LADEREIHENFOLGE (nicht umstellen): bc-icons.js, bc-icons-ergaenzung.js (head) → persistence.js → items.js → money.js → rank.js → shop.js → inventar.js → bot-data.js → bot-ui.js → bot-engine.js → outfit-import.js → bc-autobackup.js. Details und Guard: docs/LOAD-ORDER.md -->
 <script>
 // Cache-Buster: jede Seite lädt immer die aktuelle JS-Version (kein Browser-Cache)
 var _cbv = Date.now();
+document.write('<scr'+'ipt src="persistence.js?_='+_cbv+'"><\/scr'+'ipt>');
 document.write('<scr'+'ipt src="items.js?_='+_cbv+'"><\/scr'+'ipt>');
 </script>
 
