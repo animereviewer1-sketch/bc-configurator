@@ -105,7 +105,7 @@ Plans:
 Plans:
 
 - [x] 04-01-PLAN.md — SPLIT-01/04: `persistence.js` wörtlich extrahiert (items.js 5-96, Dual-Export), Loader-Expansion `CORE_SCRIPTS`/`expandLoadOrder`, Ladereihenfolge-Guard `#loadOrderFatal` in items.js, index.html-Kommentar + Write-Zeile, `docs/LOAD-ORDER.md` (RED → GREEN) — Wave 1
-- [ ] 04-02-PLAN.md — SPLIT-02/03: `bridge.js` (Protokoll wörtlich, Registry `onBridgeMessage`/`offBridgeMessage`), items.js registriert 35 Handler + Debug-Fold, Start-PING über bcSend, statisches Gate (0× Listener/postMessage/switch/indexedDB.open in items.js), Guard um bridge.js + bot-ui.js-Guard — Wave 2
+- [x] 04-02-PLAN.md — SPLIT-02/03: `bridge.js` (Protokoll wörtlich, Registry `onBridgeMessage`/`offBridgeMessage`), items.js registriert 35 Handler + Debug-Fold, Start-PING über bcSend, statisches Gate (0× Listener/postMessage/switch/indexedDB.open in items.js), Guard um bridge.js + bot-ui.js-Guard — Wave 2
 - [ ] 04-03-PLAN.md — SPLIT-07: `exportScreenshotsOnly()` (restore-kompatibles JSON über `_jsonParts`) + Tweaks-Sektion `🖼️ Screenshot-Speicher` (nur Einfügungen) — Wave 3
 - [ ] 04-04-PLAN.md — SPLIT-06/05: IDB v2 mit Store `screenshots`, `onblocked`/`onversionchange` sichtbar, verifizierte additive idempotente Migration mit Marker `BC_SCREENSHOT_MIGRATION_v1` (Alt-Blobs eingefroren), Shadow-Diff-Flush (ein put/delete je Bild), Maps als Cache aus dem Store, Statusanzeige; End-of-Phase-Human-Checks — Wave 4
 
