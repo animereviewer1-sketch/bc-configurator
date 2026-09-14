@@ -2,17 +2,17 @@
 gsd_state_version: "1.0"
 current_phase: 4
 current_phase_name: Entflechtung
-status: executing
-stopped_at: Completed 04-03-PLAN.md
-last_updated: "2026-09-14T16:56:10.634Z"
+status: verifying
+stopped_at: Completed 04-04-PLAN.md
+last_updated: "2026-09-14T22:22:30.738Z"
 last_activity: 2026-09-14
 last_activity_desc: Phase 4 execution started
-state_head: 455a6fb48c8b3ad9f861f585e246b1d9c2333c8b
+state_head: fd71fba1ff2706ac035119a091c9e2971974dd3a
 progress:
   total_phases: 6
   completed_phases: 0
   total_plans: 13
-  completed_plans: 11
+  completed_plans: 13
   percent: 0
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-09-12)
 
 Phase: 4 (Entflechtung) — EXECUTING
 Plan: 4 of 4
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-09-14 — Phase 4 execution started
 
 Progress: [░░░░░░░░░░] 0%
@@ -70,6 +70,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 04-entflechtung P01 | 8min | 3 tasks | 7 files |
 | Phase 04-entflechtung P02 | 29min | 3 tasks | 13 files |
 | Phase 04-entflechtung P03 | 22 min | 2 tasks | 2 files |
+| Phase 04 P04 | 25min | 3 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -102,6 +103,9 @@ Recent decisions affecting current work:
 - [Phase 04-entflechtung]: Nur die generische localStorage-Migrations-IIFE zieht nach persistence.js um; die 36 Ad-hoc-localStorage-Stellen bleiben in items.js — RESEARCH-Scope-Guardrail gegen ungeplantes Sweeping
 - [Phase 04-entflechtung]: bridge.js byte-identisch extrahiert (Node-Skript, nicht abgetippt); Handler-Registry onBridgeMessage/offBridgeMessage; items.js registriert 35 Handler statt switch — Erfolgskriterium 1 (neue Nachrichtentypen ohne items.js) und Sicherheits-Invarianz (Verbatim-Diff-Gates, EXEC-Zaehlung 41/41 unveraendert)
 - [Phase 4]: [Phase 04-entflechtung]: exportScreenshotsOnly() reuse-t exportAllData()-Pfad (bcSpeichernJetzt/_jsonParts/Blob) 1:1 mit identischen Feldnamen (profileScreenshots/lscgScreenshots/mbsWheelShots) fuer Restore-Kompatibilitaet ueber importAllData() - SPLIT-07
+- [Phase 04]: Marker BC_SCREENSHOT_MIGRATION_v1 gated Screenshot-Migrations-Idempotenz, nicht die IDB-Versionsnummer - ein Teilfehler nach dem Versionsbump wiederholt die Migration beim naechsten Start zuverlaessig (SPLIT-06)
+- [Phase 04]: _IDB_OPENING-Memoisierung in persistence.js verhindert parallele indexedDB.open()-Aufrufe (items.js feuert ~10 idbGet zur Parse-Zeit) - genau eine Verbindung pro Sandbox/Tab, die bei versionchange auch wirklich schliesst
+- [Phase 04]: Screenshot-Speicherpfad auf Shadow-Diff-Flush umgestellt: drei In-Memory-Maps bleiben unveraenderter Lese-Cache, _screenshotFlush(kind, map) schreibt nur die Differenz zum zuletzt persistierten Stand als put/delete je Bild statt das ganze Objekt (SPLIT-05)
 
 ### Pending Todos
 
@@ -112,6 +116,7 @@ None yet.
 - [Phase 5]: SCAN-13 muss vor dem Enumerator abgeschlossen sein — Konsolenbefehle für bcModSdk-Rückgabeform, WCE/FBC-Global, Getter-Nebenwirkungen und Asset-Tiefe an den Nutzer geben, Ausgabe dokumentieren
 - [Phase 3]: Nach Origin-Pinning Live-Smoke-Test aller Bridge-Flows (Cache, EXEC, Screenshot, Raum-Scan) nötig — nur der Nutzer kann das im Spiel prüfen
 - [Repo]: ~900 uncommittete lokale Änderungen (Kontrast-/Theme-Durchgang in `index.html`, Modulanpassungen) — nie durch Planning-Commits stagen; nur `.planning/`-Dateien committen
+- [Phase 4]: tests/load-order-guard.test.js (Plan 04-01, nicht Teil dieses Plans) zeigt eine gelegentliche Vitest-Worker-Teardown-Race (EnvironmentTeardownError bei onUserConsoleLog), ausgeloest durch die in Task 04-04-03 neu eingefuehrten automatischen _screenshotStoreReady()-Ladepfade in items.js. Alle Tests melden weiterhin "passed" - nur der Prozess-Exitcode ist gelegentlich 1. Empfehlung: die Sandbox-Erzeuger in dieser Testdatei sollten IDB-Verbindungen schliessen oder auf _screenshotStoreReady() warten. Kein Blocker fuer diesen Plan oder die Phase, siehe 04-04-SUMMARY.md "Issues Encountered".
 
 ## Deferred Items
 
@@ -123,6 +128,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-14T16:56:10.531Z
-Stopped at: Completed 04-03-PLAN.md
+Last session: 2026-09-14T22:22:30.656Z
+Stopped at: Completed 04-04-PLAN.md
 Resume file: None

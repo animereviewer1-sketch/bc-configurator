@@ -36,8 +36,8 @@ Requirements for this milestone. Each maps to roadmap phases.
 - [x] **SPLIT-02**: Das postMessage-Protokoll liegt in `bridge.js` mit einer Handler-Registry (`onBridgeMessage(type, handler)`); neue Nachrichtentypen brauchen keine Änderung an `items.js`
 - [x] **SPLIT-03**: `items.js` enthält keine eigene IDB- oder postMessage-Logik mehr, sondern nutzt `persistence.js` und `bridge.js`; alle bestehenden Tabs funktionieren unverändert
 - [x] **SPLIT-04**: Die Ladereihenfolge der Script-Tags ist dokumentiert und wird zur Laufzeit defensiv geprüft (fehlendes Modul → sichtbare Fehlermeldung statt stiller Ausfall)
-- [ ] **SPLIT-05**: Screenshots werden als einzelne IDB-Datensätze in einem eigenen Store gespeichert; das Speichern eines Screenshots serialisiert nicht mehr das gesamte `PROFILE_SCREENSHOTS`-Objekt oder `LSCG_DB`
-- [ ] **SPLIT-06**: Die Migration in den neuen Screenshot-Store ist additiv: der Alt-Blob bleibt erhalten, die Migration wird verifiziert (Anzahl/Schlüssel stimmen überein) und als abgeschlossen markiert; ein blockierter `versionchange` (zweiter Tab) wird dem Nutzer angezeigt statt still zu scheitern
+- [x] **SPLIT-05**: Screenshots werden als einzelne IDB-Datensätze in einem eigenen Store gespeichert; das Speichern eines Screenshots serialisiert nicht mehr das gesamte `PROFILE_SCREENSHOTS`-Objekt oder `LSCG_DB`
+- [x] **SPLIT-06**: Die Migration in den neuen Screenshot-Store ist additiv: der Alt-Blob bleibt erhalten, die Migration wird verifiziert (Anzahl/Schlüssel stimmen überein) und als abgeschlossen markiert; ein blockierter `versionchange` (zweiter Tab) wird dem Nutzer angezeigt statt still zu scheitern
 - [x] **SPLIT-07**: Vor der Migration kann der Nutzer einen JSON-Export aller Screenshot-Daten auslösen
 
 ### Gamecode-Scan (SCAN)
@@ -119,8 +119,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SPLIT-02 | Phase 4 | Complete |
 | SPLIT-03 | Phase 4 | Complete |
 | SPLIT-04 | Phase 4 | Complete |
-| SPLIT-05 | Phase 4 | Pending |
-| SPLIT-06 | Phase 4 | Pending |
+| SPLIT-05 | Phase 4 | Complete |
+| SPLIT-06 | Phase 4 | Complete |
 | SPLIT-07 | Phase 4 | Complete |
 | SCAN-01 | Phase 5 | Pending |
 | SCAN-02 | Phase 5 | Pending |
