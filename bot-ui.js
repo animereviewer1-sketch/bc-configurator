@@ -1,3 +1,20 @@
+// ── Ladereihenfolge-Guard (SPLIT-04): persistence.js, bridge.js, items.js müssen VOR bot-ui.js geladen sein (docs/LOAD-ORDER.md). Fehlt ein Modul, bricht bot-ui.js hier sichtbar ab statt später still in einer Tab-Funktion. Bewusst ohne Abhängigkeit zu den geprüften Modulen.
+(function () {
+  const required = [['idbGet', 'persistence.js'], ['bcSend', 'bridge.js'], ['onBridgeMessage', 'bridge.js'], ['showStatus', 'items.js']];
+  const missing = required.filter(function (e) { return typeof window[e[0]] !== 'function'; }).map(function (e) { return e[1]; }).filter(function (f, i, a) { return a.indexOf(f) === i; });
+  if (!missing.length) return;
+  const msg = 'FATAL: ' + missing.join(', ') + ' wurde nicht vor bot-ui.js geladen – Ladereihenfolge in index.html prüfen (siehe docs/LOAD-ORDER.md)';
+  try {
+    const box = document.createElement('div');
+    box.id = 'loadOrderFatal';
+    box.textContent = msg;
+    box.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;padding:16px 20px;background:#3b0a0a;color:#ffb4b4;font:14px/1.5 monospace;border-bottom:2px solid #f66;white-space:pre-wrap';
+    (document.body || document.documentElement).appendChild(box);
+  } catch (e) {}
+  console.error('[BCK-Popup] ' + msg);
+  throw new Error(msg);
+})();
+
 function renderBotTab() {
   // Nur beim ersten Laden aus localStorage lesen – nie In-Memory-State überschreiben
   if (!_bots.length) _loadBots();
