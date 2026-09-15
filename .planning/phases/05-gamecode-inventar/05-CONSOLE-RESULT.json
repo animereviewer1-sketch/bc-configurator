@@ -1,0 +1,49 @@
+{
+ "meta": { "date": "2026-09-15", "gameVersion": "R131", "note": "Ausgabe des SCAN-13-Snippets, vom Nutzer aus der BC-Konsole kopiert; modGlobals auf die aussagekräftigen Einträge gekürzt (Themed_*/LSCG_*-Screen-Funktionen zusammengefasst)." },
+ "bcModSdk": {
+  "version": "1.2.0",
+  "apiKeys": ["version", "apiVersion", "registerMod", "getModsInfo", "getPatchingInfo", "errorReporterHooks"],
+  "modsType": "[object Array]",
+  "modsSample": [
+   {"name": "BCT", "fullName": "Bondage Club Tools", "version": "0.7.0", "repository": "https://github.com/Dutchie322/bclub-tools"},
+   {"name": "FUSAM", "fullName": "Fantastic Ultimate Solution to Addon Management", "version": "017d1923", "repository": "https://gitlab.com/Sidiousious/bc-addon-loader"},
+   {"name": "WCE", "fullName": "Wholesome Club Extensions", "version": "6.3.19", "repository": "https://github.com/KittenApps/WCE.git"}
+  ],
+  "modsCount": 28,
+  "patchingType": "[object Map]",
+  "patchingSize": 546,
+  "patchingSample": {
+   "key": "CommonDrawAppearanceBuild",
+   "valueKeys": ["name", "original", "originalHash", "sdkEntrypoint", "currentEntrypoint", "hookedByMods", "patchedByMods"],
+   "value": {"name": "CommonDrawAppearanceBuild", "originalHash": "B02DDFE3", "hookedByMods": ["LSCG", "BCT"], "patchedByMods": []}
+  }
+ },
+ "modGlobals": [
+  {"name": "bcModSdk", "type": "object"}, {"name": "bcModSDK", "type": "object", "note": "Alias"},
+  {"name": "FBC_VERSION", "type": "string"},
+  {"name": "fbcDisplayText", "type": "function"}, {"name": "fbcChatNotify", "type": "function"}, {"name": "fbcSendAction", "type": "function"}, {"name": "fbcSettingValue", "type": "function"}, {"name": "fbcDebug", "type": "function"}, {"name": "fbcPushEvent", "type": "function"}, {"name": "wceServerAppearance", "type": "function"},
+  {"name": "BCX_Loaded", "type": "boolean"}, {"name": "bcx", "type": "object", "keys": [], "note": "API nicht-enumerierbar; bcx.version = 1.1.19-2516cf88"},
+  {"name": "LSCG_Loaded", "type": "boolean"},
+  {"name": "LSCG", "type": "object", "keys": ["ConfiguredActivities", "CraftableItemSpellNames", "DrugKeywords", "ExportSettings", "GetDataSizeReport", "HypnoTriggers", "ImportSettings", "NetgunKeywords", "Outfits", "getModule", "sendLSCGBeep"]},
+  {"name": "LSCG_<Suggestion|Sleepy>MiniGame<Run|Click|Load|Unload|Resize|KeyDown|Exit>", "type": "function", "note": "Screen-Funktionen, 14 Stück"},
+  {"name": "LSCG_SuggestionEnd / LSCG_InjectEnd_Sedative / LSCG_InjectEnd_Brainwash", "type": "function"},
+  {"name": "mbs", "type": "object", "keys": ["API_VERSION", "MBS_VERSION", "_getOriginalHash", "_toItemBundles", "_unpackSettings", "css", "getDebug", "runTests", "wheelEvents", "wheelOutfits"]},
+  {"name": "MBS_<FWItemSet|FWCommand|FWSelect|Preference|WheelPreset>ScreenBackground", "type": "string"},
+  {"name": "Themed", "type": "undefined"}, {"name": "ThemedLoaded", "type": "boolean"},
+  {"name": "Themed_<import-export|reset|mainmenu|global|colors|integration|profiles><Load|Run|Click|Exit|Unload|Resize|Background>", "type": "function|string", "note": "Screen-Funktionen, 49 Stück"}
+ ],
+ "bcx": {"version": "1.1.19-2516cf88", "keys": []},
+ "mbs": {"version": "1.10.25", "api": {"major": 1, "minor": 5}},
+ "lscg": "LSCG_DB not found (ist ein Tool-Schlüssel, kein Spiel-Global) — Erkennung über LSCG_Loaded/LSCG",
+ "windowGetters": {"totalOwnProps": 18700, "getterCount": 189, "getterSampleAllStandardDOM": true},
+ "core": {
+  "matched": 12557,
+  "byPrefix": {"Character": 143, "Lock": 2, "Common": 121, "Player": 33, "Asset": 43, "Reputation": 6, "Skill": 20, "Pose": 10, "Dialog": 166, "Inventory": 11000, "Item": 51, "Server": 64, "Assets": 278, "Online": 24, "Wardrobe": 23, "Chat": 573},
+  "chatHandlers": "ChatRoomRegisterMessageHandler ok",
+  "gameVersion": "R131"
+ },
+ "assets": {
+  "assetCount": 4764, "groupCount": 120, "maxDepthSample": 5, "hasCircularGroupRef": true, "sampleName": "LeatherJacket", "sampleGroup": "ClothOuter",
+  "assetKeys": ["Name","Description","Group","ParentItem","Enable","Visible","DrawOffset","NotVisibleOnScreen","Wear","Activity","ActivityAudio","AllowActivity","AllowActivityOn","ActivityExpression","BuyGroup","InventoryID","Effect","Bonus","Block","Expose","Hide","HideItem","HideItemExclude","HideItemAttribute","Require","SetPose","AllowActivePose","Value","NeverSell","Difficulty","SelfBondage","SelfUnlock","ExclusiveUnlock","Random","RemoveAtLogin","WearTime","RemoveTime","RemoveTimer","MaxTimer","HeightModifier","ZoomModifier","Prerequisite","Extended","AlwaysExtend","AlwaysInteract","AllowLock","LayerVisibility","IsLock","PickDifficulty","OwnerOnly","LoverOnly","FamilyOnly","ExpressionTrigger","RemoveItemOnRemove","AllowEffect","AllowBlock","AllowTighten","AllowHide","AllowHideItem","DefaultColor","EditOpacity","Audio","Category","Fetish","ArousalZone","IsRestraint","BodyCosplay","OverrideBlinking","DialogSortOverride","DynamicDescription","DynamicPreviewImage","DynamicAllowInventoryAdd","DynamicName","DynamicGroupName","DynamicActivity","DynamicAudio","AllowRemoveExclusive","InheritColor","DynamicBeforeDraw","DynamicAfterDraw","DynamicScriptDraw","CreateLayerTypes","AllowLockType","AvailableLocations","OverrideHeight","DrawLocks","AllowExpression","MirrorExpression","FixedPosition","Layer","ColorableLayerCount","CustomBlindBackground","Attribute","PreviewIcons","Tint","AllowTint","DefaultTint","Gender","CraftGroup","ExpressionPrerequisite","AllowColorize"]
+ }
+}
