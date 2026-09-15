@@ -4,7 +4,7 @@
 // bekommt per Vitest-Isolation ihre eigene fake-indexeddb-Instanz, aber
 // innerhalb dieser Datei teilen sich alle Sandboxen dieselbe BCKonfigurator-DB
 // (mehrere boot()-Aufrufe simulieren mehrere Tool-Tabs gegen dieselbe DB).
-// onversionchange laeuft zuletzt, weil es die DB auf Version 3 hebt.
+// onversionchange laeuft zuletzt, weil es die DB auf Version 4 hebt.
 //
 // Lädt NUR persistence.js — bridge.js/items.js sind für die Migration nicht
 // nötig.
@@ -135,7 +135,7 @@ describe('Screenshot-Migration (SPLIT-06) — additiv, verifiziert, idempotent, 
     for (const kind of Object.keys(LEGACY)) {
       expect(await ctx.idbGet(LEGACY[kind])).toEqual(SEED[kind]);
     }
-    expect(evalIn(ctx, '_IDB_VERSION')).toBe(2);
+    expect(evalIn(ctx, '_IDB_VERSION')).toBe(3);
   });
 
   it('idempotent: zweiter Start überspringt (kein put), Marker unverändert', async () => {
@@ -150,7 +150,7 @@ describe('Screenshot-Migration (SPLIT-06) — additiv, verifiziert, idempotent, 
   });
 
   it('add-if-absent: ein bereits im Store liegendes Bild wird nicht vom Alt-Stand überschrieben', async () => {
-    const db2 = await openRaw(2);
+    const db2 = await openRaw(3);
     await rawKvDelete(db2, 'BC_SCREENSHOT_MIGRATION_v1');
     db2.close();
 
@@ -164,7 +164,7 @@ describe('Screenshot-Migration (SPLIT-06) — additiv, verifiziert, idempotent, 
   });
 
   it('Teilfehler: put wirft QuotaExceededError → kein Marker, Store leer, Alt-Blobs intakt, Status; nächster Start migriert', async () => {
-    const dbX = await openRaw(2);
+    const dbX = await openRaw(3);
     await rawKvDelete(dbX, 'BC_SCREENSHOT_MIGRATION_v1');
     await rawStoreClear(dbX, 'screenshots');
     dbX.close();
@@ -190,7 +190,7 @@ describe('Screenshot-Migration (SPLIT-06) — additiv, verifiziert, idempotent, 
   });
 
   it('Atomizität (Review CR-02): schlägt nur der Marker-Put fehl, werden auch KEINE Bilder committet — kein Wiederbeleben gelöschter Bilder beim Retry', async () => {
-    const dbX = await openRaw(2);
+    const dbX = await openRaw(3);
     await rawKvDelete(dbX, 'BC_SCREENSHOT_MIGRATION_v1');
     await rawStoreClear(dbX, 'screenshots');
     dbX.close();
@@ -231,11 +231,11 @@ describe('Screenshot-Migration (SPLIT-06) — additiv, verifiziert, idempotent, 
     expect(await ctx5.idbScreenshotGetAll('wheel')).toEqual({ y: 'd2' });
   });
 
-  it('onversionchange: Verbindung schließt, Status, _IDB_DB null (zuletzt, hebt die DB auf v3)', async () => {
+  it('onversionchange: Verbindung schließt, Status, _IDB_DB null (zuletzt, hebt die DB auf v4)', async () => {
     ({ ctx: ctx6, showStatus: showStatus6 } = boot());
     await ctx6.idbGet('warm');
 
-    const db3 = await openRaw(3);
+    const db3 = await openRaw(4);
     expect(showStatus6).toHaveBeenCalledWith(expect.stringContaining('anderen Tab'), 'error');
     expect(evalIn(ctx6, '_IDB_DB')).toBeNull();
     db3.close();
@@ -252,7 +252,7 @@ describe('Screenshot-Migration (SPLIT-06) — additiv, verifiziert, idempotent, 
     expect(count(src, 'deleteDatabase')).toBe(0);
     expect(count(src, 'req.onblocked')).toBe(1);
     expect(count(src, 'db.onversionchange')).toBe(1);
-    expect(count(src, 'const _IDB_VERSION = 2;')).toBe(1);
+    expect(count(src, 'const _IDB_VERSION = 3;')).toBe(1);
   });
 });
 
