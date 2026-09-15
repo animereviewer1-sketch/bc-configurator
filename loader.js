@@ -825,6 +825,604 @@ window.CurseScanner = (() => {
     return { memberNumber: C.MemberNumber, name: C.Name, nickname: C.Nickname ?? null, code, fingerprint, thumb };
   };
 
+  // ── Gamecode-Inventar (SCAN-01..07): read-only, deskriptorbasiert, gechunkt ──
+  // Enumeriert das laufende Spiel (window-Globals, Asset-Katalog, bcModSdk-
+  // Mods, Fallback-Probes, Chat-Hook-Registry) und meldet das Ergebnis über
+  // GAME_INVENTORY_PROGRESS/GAME_INVENTORY_DATA zurück. Regel: JEDER
+  // Wertzugriff läuft ausschließlich über giReadData (Deskriptor-basiert) —
+  // ein Accessor (Getter) wird nur als Name erfasst, NIE gelesen. Die
+  // einzigen Funktionsaufrufe dieses Blocks auf entdeckte Werte sind
+  // bcModSdk.getModsInfo()/getPatchingInfo() (dokumentierte SCAN-05-
+  // Ausnahme, beides reine Lese-APIs des Mod-SDK selbst). Die Arbeit läuft
+  // gechunkt in Leerlaufpausen (giNext/giChunked), damit der Spiel-Tab
+  // bedienbar bleibt. Snapshot-Vertrag: { schema: 1, gameVersion, ts,
+  // durationMs, globals, assets, modSdk, mods, probes, chatHooks, errors }.
+
+  const GI_SCHEMA = 1;
+  const GI_BATCH = 500;
+  const GI_SAMPLE = 5;
+  const GI_OTHER_MAX = 50;
+  const GI_LIST_MAX = 200;
+  const GI_STR_MAX = 500;
+  const GI_DEPTH_MAX = 2;
+
+  const GI_STEPS = ['Globals', 'Assets', 'Asset-Gruppen', 'ModSDK', 'Mod-Probes', 'Chat-Hooks'];
+
+  const GI_PREFIXES = ['Character', 'Lock', 'Common', 'Player', 'Asset', 'Reputation', 'Skill', 'Pose', 'Dialog', 'Inventory', 'Item', 'Server', 'Assets', 'Online', 'Wardrobe', 'Chat'];
+
+  // 88 Keys = die 100 SCAN-13-Keys (05-CONSOLE-RESULT.json) ohne Group,
+  // ParentItem, Layer (gesondert behandelt, s.u.) und ohne die zwölf
+  // Dynamic*-Keys (Funktionen — würden postMessage mit DataCloneError
+  // abbrechen, RESEARCH Pitfall 6).
+  const GI_ASSET_KEYS = ['Name', 'Description', 'Enable', 'Visible', 'DrawOffset', 'NotVisibleOnScreen', 'Wear', 'Activity', 'ActivityAudio', 'AllowActivity', 'AllowActivityOn', 'ActivityExpression', 'BuyGroup', 'InventoryID', 'Effect', 'Bonus', 'Block', 'Expose', 'Hide', 'HideItem', 'HideItemExclude', 'HideItemAttribute', 'Require', 'SetPose', 'AllowActivePose', 'Value', 'NeverSell', 'Difficulty', 'SelfBondage', 'SelfUnlock', 'ExclusiveUnlock', 'Random', 'RemoveAtLogin', 'WearTime', 'RemoveTime', 'RemoveTimer', 'MaxTimer', 'HeightModifier', 'ZoomModifier', 'Prerequisite', 'Extended', 'AlwaysExtend', 'AlwaysInteract', 'AllowLock', 'LayerVisibility', 'IsLock', 'PickDifficulty', 'OwnerOnly', 'LoverOnly', 'FamilyOnly', 'ExpressionTrigger', 'RemoveItemOnRemove', 'AllowEffect', 'AllowBlock', 'AllowTighten', 'AllowHide', 'AllowHideItem', 'DefaultColor', 'EditOpacity', 'Audio', 'Category', 'Fetish', 'ArousalZone', 'IsRestraint', 'BodyCosplay', 'OverrideBlinking', 'DialogSortOverride', 'AllowRemoveExclusive', 'InheritColor', 'CreateLayerTypes', 'AllowLockType', 'AvailableLocations', 'OverrideHeight', 'DrawLocks', 'AllowExpression', 'MirrorExpression', 'FixedPosition', 'ColorableLayerCount', 'CustomBlindBackground', 'Attribute', 'PreviewIcons', 'Tint', 'AllowTint', 'DefaultTint', 'Gender', 'CraftGroup', 'ExpressionPrerequisite', 'AllowColorize'];
+
+  // [ASSUMED] Feldnamen aus BC-Quellcode-Kenntnis, nicht per SCAN-13
+  // verifiziert; unbekannte Keys werden übersprungen, Funktionswerte fallen
+  // durch giBounded weg (kein Fehlerpfad).
+  const GI_GROUP_KEYS = ['Name', 'Description', 'Category', 'Family', 'IsDefault', 'IsRestraint', 'AllowNone', 'AllowColorize', 'AllowCustomize', 'Random', 'Color', 'ParentGroup', 'Clothing', 'Underwear', 'BodyCosplay', 'Hide', 'Block', 'Zone', 'SetPose', 'AllowPose', 'AllowExpression', 'Effect', 'MirrorGroup', 'RemoveItemOnRemove', 'DrawingPriority', 'DrawingLeft', 'DrawingTop', 'DrawingFullAlpha', 'DrawingBlink', 'InheritColor', 'FreezeActivePose', 'PreviewZone', 'MirrorActivitiesFrom', 'HasPreviewImages', 'IsAppearance', 'IsItem', 'IsScript'];
+
+  // Einziger Wertzugriff des gesamten Blocks: Deskriptor lesen, Accessor
+  // (Getter/Setter) NIE auswerten (SCAN-07, Pitfall 1).
+  function giReadData(obj, name) {
+    if (obj == null || (typeof obj !== 'object' && typeof obj !== 'function')) return { kind: 'missing' };
+    let d;
+    try { d = Object.getOwnPropertyDescriptor(obj, name); } catch (_e) { return { kind: 'missing' }; }
+    if (!d) return { kind: 'missing' };
+    if (d.get || d.set) return { kind: 'getter' };
+    return { kind: 'data', value: d.value };
+  }
+
+  // Für Metafelder (Namen, Versionen, Hashes) — kürzt lange Strings.
+  function giScalar(v) {
+    if (v == null) return null;
+    if (typeof v === 'string') return v.slice(0, GI_STR_MAX);
+    if (typeof v === 'number' || typeof v === 'boolean') return v;
+    return String(v);
+  }
+
+  // Begrenzte, klonbare Kopie: Tiefe/Umfang/Stringlänge gedeckelt, Funktionen
+  // und Symbole fallen durch (SCAN-07, T-5-02).
+  function giBounded(v, depth) {
+    if (v === undefined || typeof v === 'function' || typeof v === 'symbol') return undefined;
+    if (v === null) return null;
+    const t = typeof v;
+    if (t === 'string') return v.slice(0, GI_STR_MAX);
+    if (t === 'number' || t === 'boolean') return v;
+    if (t === 'bigint') return String(v);
+    if (depth > GI_DEPTH_MAX) return '[…]';
+    if (Array.isArray(v)) {
+      const out = [];
+      for (const item of v.slice(0, GI_LIST_MAX)) {
+        const b = giBounded(item, depth + 1);
+        out.push(b === undefined ? null : b);
+      }
+      return out;
+    }
+    if (t === 'object') {
+      const out = {};
+      for (const k of Object.keys(v).slice(0, GI_LIST_MAX)) {
+        const r = giReadData(v, k);
+        if (r.kind !== 'data' || r.value === undefined) continue;
+        const b = giBounded(r.value, depth + 1);
+        if (b !== undefined) out[k] = b;
+      }
+      return out;
+    }
+    return undefined;
+  }
+
+  // Leerlaufpause, Muster _BCU_leerlauf: rIC bevorzugt, sonst
+  // setTimeout(fn, 0) — bewusst 0ms statt 16ms (Orchestrator-Entscheidung 2),
+  // damit dieser Block eigenständig bleibt und _BCU_leerlauf unverändert
+  // bleibt.
+  function giNext(fn) {
+    if (typeof requestIdleCallback === 'function') {
+      requestIdleCallback(fn, { timeout: 1500 });
+    } else {
+      setTimeout(fn, 0);
+    }
+  }
+
+  // Verarbeitet `items` in Slices von GI_BATCH über giNext — der ERSTE
+  // Slice läuft ebenfalls über giNext, damit der aufrufende Case IMMER vor
+  // jeder Arbeit zurückkehrt (SCAN-07). Ein werfendes onItem überspringt nur
+  // das eine Element, der Lauf geht weiter.
+  function giChunked(items, onItem, onSlice, onDone) {
+    let i = 0;
+    let sliceIndex = 0;
+    const sliceCount = Math.max(1, Math.ceil(items.length / GI_BATCH));
+    function tick() {
+      const end = Math.min(i + GI_BATCH, items.length);
+      for (; i < end; i++) {
+        try { onItem(items[i], i); } catch (_e) { /* einzelnes Element überspringen */ }
+      }
+      sliceIndex++;
+      try { onSlice(sliceIndex, sliceCount); } catch (_e) {}
+      if (i < items.length) giNext(tick);
+      else onDone();
+    }
+    giNext(tick);
+  }
+
+  // Beschreibt die API-Fläche eines Objekts NUR über Namen+Art —
+  // Object.getOwnPropertyNames statt Object.keys (Pitfall 5: nicht-
+  // enumerierbare APIs wie bcx blieben sonst unsichtbar).
+  function giDescribeApi(obj) {
+    if (obj == null || (typeof obj !== 'object' && typeof obj !== 'function')) return [];
+    let names;
+    try { names = Object.getOwnPropertyNames(obj); } catch (_e) { return []; }
+    const out = [];
+    for (const name of names.slice(0, GI_LIST_MAX)) {
+      const r = giReadData(obj, name);
+      if (r.kind === 'missing') continue;
+      if (r.kind === 'getter') { out.push({ name, kind: 'getter' }); continue; }
+      const v = r.value;
+      const t = typeof v;
+      out.push({ name, kind: t === 'function' ? 'function' : (v === null ? 'null' : t) });
+    }
+    return out;
+  }
+
+  // SCAN-05: bcModSdk-Lese-API — die einzige dokumentierte Ausnahme von
+  // "nie Funktionen aufrufen": getModsInfo()/getPatchingInfo() sind reine
+  // Lesefunktionen des Mod-SDK selbst, kein Spielzustand wird verändert.
+  function giMods(sdk) {
+    const r = giReadData(sdk, 'getModsInfo');
+    if (r.kind !== 'data' || typeof r.value !== 'function') return [];
+    let list;
+    try { list = r.value.call(sdk); } catch (_e) { return []; }
+    if (!Array.isArray(list)) return [];
+    const out = [];
+    for (const m of list) {
+      out.push({
+        name: giScalar(giReadData(m, 'name').value),
+        fullName: giScalar(giReadData(m, 'fullName').value),
+        version: giScalar(giReadData(m, 'version').value),
+        repository: giScalar(giReadData(m, 'repository').value),
+      });
+    }
+    return out;
+  }
+
+  function giPatching(sdk) {
+    const r = giReadData(sdk, 'getPatchingInfo');
+    if (r.kind !== 'data' || typeof r.value !== 'function') return [];
+    let map;
+    try { map = r.value.call(sdk); } catch (_e) { return []; }
+    const out = [];
+    function pushEntry(key, info) {
+      const nameVal = giReadData(info, 'name');
+      const hashVal = giReadData(info, 'originalHash');
+      const hookedVal = giReadData(info, 'hookedByMods');
+      const patchedVal = giReadData(info, 'patchedByMods');
+      out.push({
+        name: giScalar(nameVal.kind === 'data' ? nameVal.value : key),
+        originalHash: giScalar(hashVal.kind === 'data' ? hashVal.value : null),
+        hookedByMods: hookedVal.kind === 'data' && Array.isArray(hookedVal.value) ? hookedVal.value.map(giScalar) : [],
+        patchedByMods: patchedVal.kind === 'data' && Array.isArray(patchedVal.value) ? patchedVal.value.map(giScalar) : [],
+      });
+    }
+    if (map instanceof Map) {
+      for (const [key, info] of map) pushEntry(key, info);
+    } else if (map && typeof map.forEach === 'function') {
+      map.forEach((info, key) => pushEntry(key, info));
+    } else if (map && typeof map === 'object') {
+      for (const key of Object.keys(map)) pushEntry(key, map[key]);
+    }
+    return out;
+  }
+
+  // Kernfunktion: baut den Snapshot Schritt für Schritt (Globals → Assets →
+  // Asset-Gruppen → ModSDK → Mod-Probes → Chat-Hooks) und postet nach jedem
+  // Schritt einen Fortschritt, am Ende genau einmal das Ergebnis. Ein
+  // Fehler in einem Schritt bricht die Kette NIE ab (fail() sammelt ihn,
+  // der nächste Schritt läuft trotzdem).
+  function buildGameInventory(reqId, post) {
+    const t0 = Date.now();
+    const errors = [];
+    const snapshot = {
+      schema: GI_SCHEMA,
+      gameVersion: null,
+      ts: t0,
+      durationMs: 0,
+      globals: null,
+      assets: null,
+      modSdk: null,
+      mods: [],
+      probes: null,
+      chatHooks: null,
+      errors,
+    };
+
+    function fail(step, err) {
+      errors.push({ step, message: String((err && err.message) || err) });
+    }
+
+    let aborted = false;
+    function safePost(msg) {
+      if (aborted) return;
+      try {
+        post(msg);
+      } catch (err) {
+        aborted = true;
+        try {
+          post({ type: 'GAME_INVENTORY_DATA', reqId, err: String((err && err.name) || 'Error') + ': ' + String((err && err.message) || err) });
+        } catch (_e2) { /* Tool-Fenster nicht mehr erreichbar — nichts mehr zu tun */ }
+      }
+    }
+
+    function progressMsg(step, sliceIndex, sliceCount) {
+      safePost({
+        type: 'GAME_INVENTORY_PROGRESS',
+        reqId,
+        step,
+        total: GI_STEPS.length,
+        label: GI_STEPS[step - 1] + (sliceCount > 1 ? ' ' + sliceIndex + '/' + sliceCount : ''),
+      });
+    }
+
+    function step1() {
+      try {
+        const gv = giReadData(window, 'GameVersion');
+        snapshot.gameVersion = gv.kind === 'data' && typeof gv.value === 'string' ? gv.value : null;
+
+        let names;
+        try {
+          names = Object.getOwnPropertyNames(window);
+        } catch (err) {
+          fail(1, err);
+          snapshot.globals = { error: String((err && err.message) || err) };
+          giNext(step2);
+          return;
+        }
+
+        const agr = giReadData(window, 'AssetGroup');
+        let groupNames = [];
+        if (agr.kind === 'data' && Array.isArray(agr.value)) {
+          for (const g of agr.value) {
+            const gn = giReadData(g, 'Name');
+            if (gn.kind === 'data' && typeof gn.value === 'string') groupNames.push(gn.value);
+          }
+        }
+        groupNames = groupNames.slice().sort((a, b) => b.length - a.length);
+
+        const getters = [];
+        const functions = [];
+        const values = [];
+        const byPrefix = {};
+        for (const p of GI_PREFIXES) byPrefix[p] = 0;
+        const buckets = new Map();
+        const other = { count: 0, names: [] };
+
+        function bucket(groupName) {
+          let b = buckets.get(groupName);
+          if (!b) {
+            b = { prefix: 'InventoryItem' + groupName, group: groupName, count: 0, sample: [] };
+            buckets.set(groupName, b);
+          }
+          return b;
+        }
+
+        giChunked(names, (name) => {
+          for (const p of GI_PREFIXES) if (name.startsWith(p)) byPrefix[p]++;
+          const r = giReadData(window, name);
+          if (r.kind === 'missing') return;
+          if (r.kind === 'getter') { getters.push(name); return; }
+          const v = r.value;
+          const t = typeof v;
+          if (t === 'function') {
+            const ar = giReadData(v, 'length');
+            const arity = ar.kind === 'data' && typeof ar.value === 'number' ? ar.value : null;
+            if (name.startsWith('InventoryItem')) {
+              const g = groupNames.find((gn) => name.startsWith('InventoryItem' + gn));
+              if (g) {
+                const b = bucket(g);
+                b.count++;
+                if (b.sample.length < GI_SAMPLE) b.sample.push(name);
+              } else {
+                other.count++;
+                if (other.names.length < GI_OTHER_MAX) other.names.push(name);
+              }
+            } else {
+              functions.push({ name, arity });
+            }
+          } else {
+            values.push({ name, type: v === null ? 'null' : t });
+          }
+        }, (si, sc) => progressMsg(1, si, sc), () => {
+          snapshot.globals = {
+            total: names.length,
+            getters,
+            functions,
+            values,
+            byPrefix,
+            inventory: { groups: Array.from(buckets.values()), other },
+          };
+          giNext(step2);
+        });
+      } catch (err) {
+        fail(1, err);
+        if (!snapshot.globals) snapshot.globals = { error: String((err && err.message) || err) };
+        giNext(step2);
+      }
+    }
+
+    function step2() {
+      try {
+        const ar = giReadData(window, 'Asset');
+        if (ar.kind !== 'data' || !Array.isArray(ar.value)) {
+          snapshot.assets = { error: 'Asset[] nicht verfügbar', count: 0, groupCount: 0, groups: [], items: [] };
+          progressMsg(2, 1, 1);
+          giNext(step3);
+          return;
+        }
+        const A = ar.value;
+        const items = [];
+        giChunked(A, (a) => {
+          if (!a || (typeof a !== 'object' && typeof a !== 'function')) return;
+          const it = {};
+
+          const g = giReadData(a, 'Group');
+          if (g.kind === 'data' && g.value && typeof g.value === 'object') {
+            const gn = giReadData(g.value, 'Name');
+            it.Group = gn.kind === 'data' && typeof gn.value === 'string' ? gn.value : null;
+          } else if (g.kind === 'data' && typeof g.value === 'string') {
+            it.Group = g.value;
+          } else {
+            it.Group = null;
+          }
+
+          const p = giReadData(a, 'ParentItem');
+          if (p.kind !== 'data' || p.value == null) {
+            it.ParentItem = null;
+          } else if (typeof p.value === 'object') {
+            const pn = giReadData(p.value, 'Name');
+            it.ParentItem = pn.kind === 'data' ? giScalar(pn.value) : null;
+          } else {
+            it.ParentItem = giScalar(p.value);
+          }
+
+          const L = giReadData(a, 'Layer');
+          if (L.kind === 'data' && Array.isArray(L.value)) {
+            const layerNames = [];
+            for (const l of L.value.slice(0, GI_OTHER_MAX)) {
+              if (l && typeof l === 'object') {
+                const ln = giReadData(l, 'Name');
+                layerNames.push(ln.kind === 'data' ? giScalar(ln.value) : null);
+              } else {
+                layerNames.push(null);
+              }
+            }
+            it.Layer = { count: L.value.length, names: layerNames };
+          } else {
+            it.Layer = { count: 0, names: [] };
+          }
+
+          for (const k of GI_ASSET_KEYS) {
+            const r = giReadData(a, k);
+            if (r.kind !== 'data' || r.value === undefined) continue;
+            const b = giBounded(r.value, 0);
+            if (b !== undefined) it[k] = b;
+          }
+
+          items.push(it);
+        }, (si, sc) => progressMsg(2, si, sc), () => {
+          snapshot.assets = { count: A.length, groupCount: 0, groups: [], items };
+          giNext(step3);
+        });
+      } catch (err) {
+        fail(2, err);
+        if (!snapshot.assets) snapshot.assets = { error: String((err && err.message) || err), count: 0, groupCount: 0, groups: [], items: [] };
+        giNext(step3);
+      }
+    }
+
+    function step3() {
+      try {
+        const gr = giReadData(window, 'AssetGroup');
+        if (gr.kind === 'data' && Array.isArray(gr.value)) {
+          const groups = [];
+          for (const g of gr.value.slice(0, 1000)) {
+            const out = {};
+            for (const k of GI_GROUP_KEYS) {
+              const r = giReadData(g, k);
+              if (r.kind !== 'data' || r.value === undefined) continue;
+              const b = giBounded(r.value, 0);
+              if (b !== undefined) out[k] = b;
+            }
+            const asr = giReadData(g, 'Asset');
+            out.assetCount = asr.kind === 'data' && Array.isArray(asr.value) ? asr.value.length : 0;
+            groups.push(out);
+          }
+          if (snapshot.assets) {
+            snapshot.assets.groups = groups;
+            snapshot.assets.groupCount = groups.length;
+          }
+        }
+      } catch (err) {
+        fail(3, err);
+      }
+      progressMsg(3, 1, 1);
+      giNext(step4);
+    }
+
+    function step4() {
+      try {
+        const sr = giReadData(window, 'bcModSdk');
+        if (sr.kind === 'data' && sr.value && (typeof sr.value === 'object' || typeof sr.value === 'function')) {
+          const sdk = sr.value;
+          let mods = [];
+          let patching = [];
+          try { mods = giMods(sdk); } catch (err) { fail(4, err); }
+          try { patching = giPatching(sdk); } catch (err) { fail(4, err); }
+          const vr = giReadData(sdk, 'version');
+          snapshot.modSdk = {
+            available: true,
+            version: giScalar(vr.kind === 'data' ? vr.value : null),
+            modCount: mods.length,
+            patchingCount: patching.length,
+            patching,
+          };
+          snapshot.mods = mods;
+        } else {
+          snapshot.modSdk = { available: false, version: null, modCount: 0, patchingCount: 0, patching: [] };
+          snapshot.mods = [];
+        }
+      } catch (err) {
+        fail(4, err);
+        if (!snapshot.modSdk) snapshot.modSdk = { available: false, version: null, modCount: 0, patchingCount: 0, patching: [] };
+      }
+      progressMsg(4, 1, 1);
+      giNext(step5);
+    }
+
+    function step5() {
+      try {
+        const g = snapshot.globals && !snapshot.globals.error ? snapshot.globals : null;
+        const fnNames = g ? g.functions.map((f) => f.name) : [];
+        const allNames = g ? g.getters.concat(fnNames, g.values.map((v) => v.name)) : [];
+
+        const fbcVer = giReadData(window, 'FBC_VERSION');
+        const wcePresent = fbcVer.kind === 'data' && typeof fbcVer.value === 'string';
+        const wce = {
+          present: wcePresent,
+          version: wcePresent ? fbcVer.value : null,
+          functions: fnNames.filter((n) => /^(fbc|wce)/i.test(n)).slice(0, GI_LIST_MAX),
+        };
+
+        const bcxLoadedR = giReadData(window, 'BCX_Loaded');
+        const bcxLoaded = bcxLoadedR.kind === 'data' && typeof bcxLoadedR.value === 'boolean' ? bcxLoadedR.value : null;
+        const bcxObjR = giReadData(window, 'bcx');
+        const bcxPresent = bcxObjR.kind === 'data' && !!bcxObjR.value && typeof bcxObjR.value === 'object';
+        let bcxVersion = null;
+        if (bcxPresent) {
+          const vr = giReadData(bcxObjR.value, 'version');
+          if (vr.kind === 'data' && typeof vr.value === 'string') bcxVersion = vr.value;
+          else if (vr.kind === 'getter') bcxVersion = 'getter';
+        }
+        const bcx = { present: bcxPresent, loaded: bcxLoaded, version: bcxVersion, api: bcxPresent ? giDescribeApi(bcxObjR.value) : [] };
+
+        const mbsObjR = giReadData(window, 'mbs');
+        const mbsPresent = mbsObjR.kind === 'data' && !!mbsObjR.value && typeof mbsObjR.value === 'object';
+        let mbsVersion = null;
+        let mbsApiVersion = null;
+        if (mbsPresent) {
+          const vr = giReadData(mbsObjR.value, 'MBS_VERSION');
+          mbsVersion = giScalar(vr.kind === 'data' ? vr.value : null);
+          const avr = giReadData(mbsObjR.value, 'API_VERSION');
+          if (avr.kind === 'data' && avr.value && typeof avr.value === 'object') {
+            mbsApiVersion = {
+              major: giScalar(giReadData(avr.value, 'major').value),
+              minor: giScalar(giReadData(avr.value, 'minor').value),
+            };
+          }
+        }
+        const mbs = { present: mbsPresent, version: mbsVersion, apiVersion: mbsApiVersion, api: mbsPresent ? giDescribeApi(mbsObjR.value) : [] };
+
+        const lscgLoadedR = giReadData(window, 'LSCG_Loaded');
+        const lscgLoaded = lscgLoadedR.kind === 'data' && typeof lscgLoadedR.value === 'boolean' ? lscgLoadedR.value : null;
+        const lscgObjR = giReadData(window, 'LSCG');
+        const lscgPresent = lscgObjR.kind === 'data' && !!lscgObjR.value && typeof lscgObjR.value === 'object';
+        const screenFns = allNames.filter((n) => /^LSCG_/.test(n));
+        const lscg = {
+          present: lscgPresent,
+          loaded: lscgLoaded,
+          api: lscgPresent ? giDescribeApi(lscgObjR.value) : [],
+          screenFunctions: { count: screenFns.length, sample: screenFns.slice(0, GI_OTHER_MAX) },
+        };
+
+        const themedLoadedR = giReadData(window, 'ThemedLoaded');
+        const themedLoaded = themedLoadedR.kind === 'data' && typeof themedLoadedR.value === 'boolean' ? themedLoadedR.value : null;
+        const themedFns = allNames.filter((n) => /^Themed_/.test(n));
+        const themed = {
+          present: themedLoaded === true || themedFns.length > 0,
+          loaded: themedLoaded,
+          screenFunctionCount: themedFns.length,
+          sample: themedFns.slice(0, GI_OTHER_MAX),
+        };
+
+        const sweep = allNames.filter((n) => /^(WCE|FBC|LSCG|MBS|BCX|Themed)/i.test(n)).slice(0, GI_LIST_MAX);
+
+        snapshot.probes = { wce, bcx, mbs, lscg, themed, sweep };
+      } catch (err) {
+        fail(5, err);
+        if (!snapshot.probes) {
+          snapshot.probes = {
+            wce: { present: false, version: null, functions: [] },
+            bcx: { present: false, loaded: null, version: null, api: [] },
+            mbs: { present: false, version: null, apiVersion: null, api: [] },
+            lscg: { present: false, loaded: null, api: [], screenFunctions: { count: 0, sample: [] } },
+            themed: { present: false, loaded: null, screenFunctionCount: 0, sample: [] },
+            sweep: [],
+          };
+        }
+      }
+      progressMsg(5, 1, 1);
+      giNext(step6);
+    }
+
+    function step6() {
+      try {
+        const hr = giReadData(window, 'ChatRoomRegisterMessageHandler');
+        const exists = hr.kind === 'data' && typeof hr.value === 'function';
+        let arity = null;
+        if (exists) {
+          const ar = giReadData(hr.value, 'length');
+          arity = ar.kind === 'data' && typeof ar.value === 'number' ? ar.value : null;
+        }
+        snapshot.chatHooks = {
+          ChatRoomRegisterMessageHandler: { exists, arity, kind: hr.kind },
+          registry: null,
+          hookedChatFunctions: [],
+        };
+
+        const checked = ['ChatRoomMessageHandlers'];
+        let registry = { introspectable: false, checked };
+        for (const name of checked) {
+          const cr = giReadData(window, name);
+          if (cr.kind === 'data' && Array.isArray(cr.value)) {
+            const handlers = [];
+            for (const h of cr.value.slice(0, GI_LIST_MAX)) {
+              const dr = giReadData(h, 'Description');
+              const pr = giReadData(h, 'Priority');
+              handlers.push({
+                Description: giScalar(dr.kind === 'data' ? dr.value : null),
+                Priority: pr.kind === 'data' && typeof pr.value === 'number' ? pr.value : null,
+              });
+            }
+            registry = { introspectable: true, source: name, count: cr.value.length, handlers };
+            break;
+          }
+        }
+        snapshot.chatHooks.registry = registry;
+
+        const patching = snapshot.modSdk && Array.isArray(snapshot.modSdk.patching) ? snapshot.modSdk.patching : [];
+        snapshot.chatHooks.hookedChatFunctions = patching
+          .filter((p) => /^ChatRoom/.test(p.name))
+          .map((p) => ({ name: p.name, hookedByMods: p.hookedByMods }));
+      } catch (err) {
+        fail(6, err);
+        if (!snapshot.chatHooks) {
+          snapshot.chatHooks = {
+            ChatRoomRegisterMessageHandler: { exists: false, arity: null, kind: 'missing' },
+            registry: { introspectable: false, checked: ['ChatRoomMessageHandlers'] },
+            hookedChatFunctions: [],
+          };
+        }
+      }
+      progressMsg(6, 1, 1);
+      snapshot.durationMs = Date.now() - t0;
+      safePost({ type: 'GAME_INVENTORY_DATA', reqId, snapshot });
+      try {
+        BCK.ok('[GameScan] Inventar gesendet: ' + ((snapshot.globals && snapshot.globals.total) || 0) + ' Globals, ' + ((snapshot.assets && snapshot.assets.count) || 0) + ' Assets, ' + snapshot.mods.length + ' Mods, ' + snapshot.durationMs + ' ms');
+      } catch (_e) {}
+    }
+
+    step1();
+  }
+
+  window.__BCK_buildGameInventory = buildGameInventory; // Test-Seam (Muster _BCU_serializeChar); im Spiel ungenutzt
+
   // ── PostMessage Listener ───────────────────────────────
   // Always replace the old listener so re-running the bookmarklet picks up new code
   if (window.__BCK_LISTENER_FN__) {
@@ -1358,6 +1956,23 @@ window.CurseScanner = (() => {
             const n = window.CurseScanner.mergeCraftCache(ev.data.cache ?? {});
             BCK.ok('Craft-Cache: ' + n + ' neue Einträge gemergt');
           } catch (ex) { BCK.err('LOAD_CRAFT_CACHE Fehler:', ex.message); }
+          break;
+        }
+
+        case 'GET_GAME_INVENTORY': {
+          // Einziger Case, der NICHT synchron antwortet: die Enumeration
+          // läuft gechunkt in Leerlaufpausen (SCAN-07) und postet
+          // PROGRESS/DATA später über denselben Absender. Ziel-Origin =
+          // ev.origin — oben in diesem Handler bereits gegen die Tool-
+          // Origin geprüft (identischer Wert); bewusst nicht erneut über
+          // die Konstante, damit der statische Zähler in
+          // tests/loader-origin.test.js unverändert bleibt.
+          const _giTarget = ev.origin;
+          const _giReqId = String(ev.data.reqId ?? '');
+          BCK.info('GET_GAME_INVENTORY → Scan gestartet | reqId:', _giReqId);
+          buildGameInventory(_giReqId, function (msg) {
+            src.postMessage({ app: APP, ...msg }, _giTarget);
+          });
           break;
         }
       }

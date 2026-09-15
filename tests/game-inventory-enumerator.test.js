@@ -18,7 +18,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
-import { REPO_ROOT } from './helpers/loadScript.js';
+import { REPO_ROOT, evalIn } from './helpers/loadScript.js';
 import { makeLoaderSandbox, LOADER_TOOL_ORIGIN } from './helpers/loaderSandbox.js';
 
 async function scan(opts = {}, reqId = 'gi_test_1') {
@@ -102,9 +102,10 @@ describe('GET_GAME_INVENTORY (SCAN-01 Loader-Hälfte)', () => {
 });
 
 describe('Global-Klassifizierung (SCAN-02)', () => {
-  it('globals.total stimmt mit Object.getOwnPropertyNames(ctx) überein; getters/functions/values ohne Überlappung', () => {
+  it('globals.total stimmt mit Object.getOwnPropertyNames(window) überein (von INNEN gemessen — vm-Kontexte zeigen von außen ~66 Intrinsics weniger, Node-Plattformeigenheit); getters/functions/values ohne Überlappung', () => {
     const { snapshot, ctx } = shared;
-    expect(snapshot.globals.total).toBe(Object.getOwnPropertyNames(ctx).length);
+    const insideTotal = evalIn(ctx, 'Object.getOwnPropertyNames(window).length');
+    expect(snapshot.globals.total).toBe(insideTotal);
     expect(snapshot.globals.getters).toContain('giThrowingGetter');
     expect(snapshot.globals.getters).toContain('giCountingGetter');
     expect(snapshot.globals.functions).toContainEqual({ name: 'giFn3', arity: 3 });
@@ -180,7 +181,10 @@ describe('Asset-Serialisierung (SCAN-03)', () => {
     const { snapshot, hits } = shared;
     for (const it of snapshot.assets.items) {
       for (const k of Object.keys(it)) expect(k.startsWith('Dynamic')).toBe(false);
-      expect(typeof it.Group).not.toBe('object');
+      // null (Waise ohne Gruppe) ist erlaubt (typeof null === 'object' in JS,
+      // das ist NICHT der verbotene Zirkelbezug — verboten ist nur das rohe
+      // Gruppenobjekt selbst).
+      expect(it.Group === null || typeof it.Group === 'string').toBe(true);
     }
     expect(() => JSON.stringify(snapshot.assets)).not.toThrow();
     expect(() => structuredClone(snapshot.assets)).not.toThrow();
@@ -324,7 +328,10 @@ describe('SCAN-07: read-only, gechunkt, klonbar', () => {
   it('Chunking mit setTimeout-Fallback: Case kehrt zurück, bevor die Arbeit erledigt ist; >= ceil(N/500) Ticks', () => {
     const sb = makeLoaderSandbox({ syntheticGlobals: 20000, manualTimers: true });
     sb.send({ type: 'GET_GAME_INVENTORY', reqId: 'gi_test_1' });
-    const n0 = Object.getOwnPropertyNames(sb.ctx).length;
+    // Von INNEN gemessen (evalIn) — vm-Kontexte zeigen von außen ~66
+    // Intrinsics (Map/RegExp/Promise/...) weniger als von innen, eine
+    // Node-Plattformeigenheit, keine loader.js-Eigenschaft.
+    const n0 = evalIn(sb.ctx, 'Object.getOwnPropertyNames(window).length');
     expect(sb.posts.some((p) => p.msg.type === 'GAME_INVENTORY_DATA')).toBe(false);
     expect(sb.timerQueue.length).toBeGreaterThanOrEqual(1);
     const ticks = sb.runUntil(() => sb.posts.some((p) => p.msg.type === 'GAME_INVENTORY_DATA'));
