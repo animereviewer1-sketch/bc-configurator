@@ -122,7 +122,14 @@ Plans:
   4. Während des Scans bleibt der Spiel-Tab bedienbar; die Enumeration ruft keine entdeckten Funktionen auf, meidet Getter mit Nebenwirkungen, ist in Tiefe und Umfang begrenzt und läuft gechunkt
   5. Jeder Scan liegt danach als Snapshot mit BC-Version, Zeitstempel und Mod-Liste in IndexedDB; frühere Snapshots bleiben unverändert erhalten und werden nie automatisch entfernt
 
-**Plans**: TBD
+**Plans:** 3 plans
+**UI hint**: yes
+
+Plans:
+
+- [ ] 05-01-PLAN.md — Wave 0: `tests/helpers/loaderSandbox.js` (loader.js läuft erstmals in-process, Stubs + Fixtures + `hits`-Zähler) + Smoke-Test; IDB v3 mit additivem Store `snapshots` und add-only `idbSnapshotPut/GetAll/Get/Keys` (keine Lösch-API), v3-Nachzug in Migrationstest (RED → GREEN); SCAN-13 als erfüllt dokumentiert (SCAN-13, SCAN-08 Speicherhälfte) — Wave 1
+- [ ] 05-02-PLAN.md — Enumerator `buildGameInventory(reqId, post)` in loader.js: deskriptorbasiert (Getter nie gelesen), gechunkt à 500 (rIC/`setTimeout 0`), Asset-Allowlist ohne Zirkel, `bcModSdk` ohne Funktionswerte, fünf Mod-Probes, Chat-Hook-Probe; Case `GET_GAME_INVENTORY` → `GAME_INVENTORY_PROGRESS`/`GAME_INVENTORY_DATA`; `structuredClone`-/Zähler-Beweise (RED → GREEN), Diff rein additiv, Origin-Test unverändert (SCAN-02..07, SCAN-01 Loader-Hälfte) — Wave 2
+- [ ] 05-03-PLAN.md — `game-scan.js`: Button „🔎 Spiel scannen“ + `#gameScanInfo` im Tweaks-Panel (index.html nur Einfügungen), reqId-Korrelation, Fortschritt, Snapshot-Datensatz `{id, ts, gameVersion, modCount, mods, sizeBytes, inventory}` add-only mit Größenlog, sichtbare Fehlerpfade; Ladeordnung (`CORE_SCRIPTS`, docs/LOAD-ORDER.md); End-of-Phase-Human-Checks (SCAN-01 Tool-Hälfte, SCAN-08) — Wave 3
 
 ### Phase 6: Scan-Tab & Analyse
 
@@ -150,5 +157,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | 2. Speicher-Sicherheit | 0/3 | Planned | - |
 | 3. Bridge-Härtung | 0/3 | Planned | - |
 | 4. Entflechtung | 4/4 | In Progress|  |
-| 5. Gamecode-Inventar | 0/TBD | Not started | - |
+| 5. Gamecode-Inventar | 0/3 | Planned | - |
 | 6. Scan-Tab & Analyse | 0/TBD | Not started | - |
