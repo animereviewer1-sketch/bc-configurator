@@ -6,9 +6,10 @@
 //  Klassisches Skript: Funktionsdeklarationen sind implizite Globals;
 //  der Schwanz unten exportiert zusätzlich für Vitest/CJS (Dual-Export,
 //  RESEARCH Pattern 1). Kein type="module" — bricht unter file://.
+//  v3 (SCAN-08): additiver Object-Store 'snapshots' für Spiel-Scans, add-only.
 // ══════════════════════════════════════════════════════
 const _IDB_NAME    = 'BCKonfigurator';
-const _IDB_VERSION = 2; // v2: Object-Store 'screenshots' (SPLIT-05/06). Nie senken – IDB kennt kein Downgrade.
+const _IDB_VERSION = 3; // v3: Object-Store 'snapshots' (SCAN-08). Nie senken – IDB kennt kein Downgrade.
 const _IDB_STORE   = 'kv';
 let   _IDB_DB      = null;
 let   _IDB_OPENING = null;
@@ -24,6 +25,11 @@ const SCREENSHOT_LEGACY_KEYS = {
 };
 const SCREENSHOT_MIGRATION_KEY = 'BC_SCREENSHOT_MIGRATION_v1';
 
+// Snapshot-Store (SCAN-08): ein Datensatz je Spiel-Scan, id = Zeitstempel (Tool-Uhr).
+// Add-only – nie überschreiben, nie automatisch löschen (Kernwert); Löschen mit
+// Bestätigung folgt in Phase 6 (SCAN-11).
+const _IDB_SNAPSHOTS = 'snapshots';
+
 function _idbOpen() {
   if (_IDB_DB) return Promise.resolve(_IDB_DB);
   if (_IDB_OPENING) return _IDB_OPENING;
@@ -33,6 +39,7 @@ function _idbOpen() {
       const db = e.target.result;
       if (!db.objectStoreNames.contains(_IDB_STORE)) db.createObjectStore(_IDB_STORE);
       if (!db.objectStoreNames.contains(_IDB_SCREENSHOTS)) db.createObjectStore(_IDB_SCREENSHOTS, { keyPath: 'id' });
+      if (!db.objectStoreNames.contains(_IDB_SNAPSHOTS)) db.createObjectStore(_IDB_SNAPSHOTS, { keyPath: 'id' });
     };
     req.onblocked = () => {
       // SPLIT-06: sichtbar machen statt still zu haengen oder den anderen Tab
@@ -167,6 +174,76 @@ async function idbScreenshotKeys() {
   } catch (err) { console.warn('[IDB] screenshots keys:', err); return []; }
 }
 
+// ── Snapshot-Store: ein Datensatz je Spiel-Scan (SCAN-08) ──
+// Add-only: `add` statt `put` — ein zweiter Schreibversuch mit derselben id
+// scheitert sichtbar (ConstraintError → _idbSchreibfehler), der erste
+// Datensatz bleibt unverändert. Keine Lösch-/Leer-Funktion in dieser Phase
+// (Kernwert „nie automatisch entfernt“, Phase 6 bringt die Lösch-API mit
+// Bestätigung, SCAN-11).
+async function idbSnapshotPut(record) {
+  if (!record || typeof record.id !== 'number') {
+    _idbSchreibfehler('Spiel-Snapshot', new Error('ungültiger Snapshot-Datensatz'));
+    return false;
+  }
+  try {
+    const db = await _idbOpen();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(_IDB_SNAPSHOTS, 'readwrite');
+      try {
+        tx.objectStore(_IDB_SNAPSHOTS).add(record);
+      } catch (err) {
+        try { tx.abort(); } catch (e) {}
+        reject(err);
+        return;
+      }
+      tx.oncomplete = () => resolve();
+      tx.onerror    = e => reject(e.target.error);
+      tx.onabort    = e => reject(tx.error || e.target.error);
+    });
+    return true;
+  } catch (err) {
+    _idbSchreibfehler('Spiel-Snapshot', err);
+    return false;
+  }
+}
+
+async function idbSnapshotGetAll() {
+  try {
+    const db = await _idbOpen();
+    const records = await new Promise((resolve, reject) => {
+      const tx  = db.transaction(_IDB_SNAPSHOTS, 'readonly');
+      const req = tx.objectStore(_IDB_SNAPSHOTS).getAll();
+      req.onsuccess = () => resolve(req.result || []);
+      req.onerror   = e => reject(e.target.error);
+    });
+    return records.sort((a, b) => (a.ts ?? a.id) - (b.ts ?? b.id));
+  } catch (err) { console.warn('[IDB] snapshots getAll:', err); return []; }
+}
+
+async function idbSnapshotGet(id) {
+  try {
+    const db = await _idbOpen();
+    return await new Promise((resolve, reject) => {
+      const tx  = db.transaction(_IDB_SNAPSHOTS, 'readonly');
+      const req = tx.objectStore(_IDB_SNAPSHOTS).get(id);
+      req.onsuccess = e => resolve(e.target.result ?? null);
+      req.onerror   = e => reject(e.target.error);
+    });
+  } catch (err) { console.warn('[IDB] snapshots get:', err); return null; }
+}
+
+async function idbSnapshotKeys() {
+  try {
+    const db = await _idbOpen();
+    return await new Promise((resolve, reject) => {
+      const tx  = db.transaction(_IDB_SNAPSHOTS, 'readonly');
+      const req = tx.objectStore(_IDB_SNAPSHOTS).getAllKeys();
+      req.onsuccess = () => resolve(req.result || []);
+      req.onerror   = e => reject(e.target.error);
+    });
+  } catch (err) { console.warn('[IDB] snapshots keys:', err); return []; }
+}
+
 // Additive, verifizierte, idempotente Migration der drei Alt-Blobs in den
 // Screenshot-Store. Alt-Blobs werden NUR gelesen — nie geschrieben, nie
 // geloescht (Kernwert). Marker wird erst nach erfolgreicher Verifikation
@@ -289,6 +366,7 @@ if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     idbGet, idbSet, _idbOpen, _debounce,
     idbScreenshotBatch, idbScreenshotPut, idbScreenshotDelete, idbScreenshotGetAll, idbScreenshotKeys,
+    idbSnapshotPut, idbSnapshotGetAll, idbSnapshotGet, idbSnapshotKeys,
     _screenshotStoreReady, _migrateScreenshotsToStore,
     SCREENSHOT_KINDS, SCREENSHOT_LEGACY_KEYS, SCREENSHOT_MIGRATION_KEY,
   };
