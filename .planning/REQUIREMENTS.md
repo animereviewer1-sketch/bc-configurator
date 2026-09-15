@@ -54,7 +54,7 @@ Requirements for this milestone. Each maps to roadmap phases.
 - [ ] **SCAN-10**: Ein Scan-Tab zeigt die Fundliste durchsuchbar und nach Kategorie gefiltert, jeder Eintrag mit Badge „bereits genutzt“ oder „neu“ gegenüber dem Baseline-Manifest
 - [ ] **SCAN-11**: Der Nutzer kann Snapshots im Scan-Tab manuell und nur mit Bestätigung löschen
 - [ ] **SCAN-12**: Ein einmaliges Analyse-Dokument (`.planning/analysis/GAME-INVENTORY.md`) gleicht einen echten Snapshot mit dem Baseline-Manifest ab und listet konkrete Vorschläge für neue Bot-Aktionen, -Trigger und Tab-Funktionen
-- [ ] **SCAN-13**: Vor der Implementierung des Enumerators werden die offenen Fragen (bcModSdk-Rückgabeform, WCE/FBC-Global, Getter-Nebenwirkungen, Asset-Verschachtelungstiefe) per Konsolenbefehl im Spiel geklärt; die Befehle und Ergebnisse sind dokumentiert
+- [x] **SCAN-13**: Vor der Implementierung des Enumerators werden die offenen Fragen (bcModSdk-Rückgabeform, WCE/FBC-Global, Getter-Nebenwirkungen, Asset-Verschachtelungstiefe) per Konsolenbefehl im Spiel geklärt; die Befehle und Ergebnisse sind dokumentiert
 
 ## v2 Requirements
 
@@ -134,7 +134,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SCAN-10 | Phase 6 | Pending |
 | SCAN-11 | Phase 6 | Pending |
 | SCAN-12 | Phase 6 | Pending |
-| SCAN-13 | Phase 5 | Pending |
+| SCAN-13 | Phase 5 | Complete |
 
 **Coverage:**
 

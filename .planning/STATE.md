@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 5
 current_phase_name: Gamecode-Inventar
 status: executing
-stopped_at: Completed 04-04-PLAN.md
-last_updated: "2026-09-15T10:48:01.882Z"
+stopped_at: Completed 05-01-PLAN.md
+last_updated: "2026-09-15T11:04:24.689Z"
 last_activity: 2026-09-15
 last_activity_desc: Phase 5 execution started
-state_head: 53812d65f20dced3b83062e89e0570cbd7635a5a
+state_head: 876302c8ec9094ab42cce826f78a871f155ac8b8
 progress:
   total_phases: 6
   completed_phases: 0
   total_plans: 16
-  completed_plans: 13
+  completed_plans: 14
   percent: 0
 ---
 
@@ -28,8 +28,8 @@ See: .planning/PROJECT.md (updated 2026-09-12)
 ## Current Position
 
 Phase: 5 (Gamecode-Inventar) — EXECUTING
-Plan: 1 of 3
-Status: Executing Phase 5
+Plan: 2 of 3
+Status: Ready to execute
 Last activity: 2026-09-15 — Phase 5 execution started
 
 Progress: [░░░░░░░░░░] 0%
@@ -71,6 +71,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 04-entflechtung P02 | 29min | 3 tasks | 13 files |
 | Phase 04-entflechtung P03 | 22 min | 2 tasks | 2 files |
 | Phase 04 P04 | 25min | 3 tasks | 9 files |
+| Phase 05-gamecode-inventar P01 | 11min | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -106,6 +107,9 @@ Recent decisions affecting current work:
 - [Phase 04]: Marker BC_SCREENSHOT_MIGRATION_v1 gated Screenshot-Migrations-Idempotenz, nicht die IDB-Versionsnummer - ein Teilfehler nach dem Versionsbump wiederholt die Migration beim naechsten Start zuverlaessig (SPLIT-06)
 - [Phase 04]: _IDB_OPENING-Memoisierung in persistence.js verhindert parallele indexedDB.open()-Aufrufe (items.js feuert ~10 idbGet zur Parse-Zeit) - genau eine Verbindung pro Sandbox/Tab, die bei versionchange auch wirklich schliesst
 - [Phase 04]: Screenshot-Speicherpfad auf Shadow-Diff-Flush umgestellt: drei In-Memory-Maps bleiben unveraenderter Lese-Cache, _screenshotFlush(kind, map) schreibt nur die Differenz zum zuletzt persistierten Stand als put/delete je Bild statt das ganze Objekt (SPLIT-05)
+- [Phase 5]: LOADER_TOOL_ORIGIN wird per Regex aus loader.js POPUP_URL abgeleitet, nie hartcodiert (konsistent mit STAB-06).
+- [Phase 5]: manualTimers/requestIdleCallback sind Opt-in-Flags: Default sind reale Host-Timer und ein abwesendes requestIdleCallback (Safari-Realitaet).
+- [Phase 5]: Snapshot-Store-keyPath ist id (Plan-Text/must_haves), nicht ts wie im RESEARCH-Codebeispiel skizziert.
 
 ### Pending Todos
 
@@ -128,6 +132,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-14T22:22:30.656Z
-Stopped at: Completed 04-04-PLAN.md
+Last session: 2026-09-15T11:04:10.809Z
+Stopped at: Completed 05-01-PLAN.md
 Resume file: None
