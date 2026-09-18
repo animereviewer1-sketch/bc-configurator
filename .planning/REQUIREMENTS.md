@@ -43,12 +43,12 @@ Requirements for this milestone. Each maps to roadmap phases.
 ### Gamecode-Scan (SCAN)
 
 - [ ] **SCAN-01**: Der Nutzer kann im Tool einen Scan auslösen; der Loader erstellt daraufhin ein Inventar des laufenden Spiels und sendet es über die Bridge zurück (`GET_GAME_INVENTORY` / `GAME_INVENTORY_DATA`)
-- [ ] **SCAN-02**: Das Inventar enthält die Core-Globals und -Funktionen des Spiels (Player, ChatRoom, Inventory*, Character*, Server* u.a.) mit Typ und Signatur (Parameteranzahl)
-- [ ] **SCAN-03**: Das Inventar enthält den Asset-Katalog: Gruppen, Items, Eigenschaften, Sperren, Farben/Layer — auch solche, die der bestehende Cache nicht abdeckt
-- [ ] **SCAN-04**: Das Inventar enthält die registrierten Chat-Handler und Ereignis-Hooks (u.a. `ChatRoomRegisterMessageHandler`)
-- [ ] **SCAN-05**: Das Inventar liest `bcModSdk.getModsInfo()` und `getPatchingInfo()` aus: registrierte Mods mit Version sowie jede gehookte Spielfunktion und welche Mods sie hooken
-- [ ] **SCAN-06**: Bekannte Mods, die nicht (nur) über bcModSdk registrieren (`window.bcx`, `globalThis.mbs`, LSCG, WCE/FBC), werden per Fallback-Probe erkannt und ihre öffentliche API mit erfasst
-- [ ] **SCAN-07**: Die Enumeration ist read-only, ruft keine entdeckten Funktionen auf, meidet Getter mit Nebenwirkungen, begrenzt Tiefe und Umfang und läuft gechunkt, sodass der Spiel-Tab nicht einfriert
+- [x] **SCAN-02**: Das Inventar enthält die Core-Globals und -Funktionen des Spiels (Player, ChatRoom, Inventory*, Character*, Server* u.a.) mit Typ und Signatur (Parameteranzahl)
+- [x] **SCAN-03**: Das Inventar enthält den Asset-Katalog: Gruppen, Items, Eigenschaften, Sperren, Farben/Layer — auch solche, die der bestehende Cache nicht abdeckt
+- [x] **SCAN-04**: Das Inventar enthält die registrierten Chat-Handler und Ereignis-Hooks (u.a. `ChatRoomRegisterMessageHandler`)
+- [x] **SCAN-05**: Das Inventar liest `bcModSdk.getModsInfo()` und `getPatchingInfo()` aus: registrierte Mods mit Version sowie jede gehookte Spielfunktion und welche Mods sie hooken
+- [x] **SCAN-06**: Bekannte Mods, die nicht (nur) über bcModSdk registrieren (`window.bcx`, `globalThis.mbs`, LSCG, WCE/FBC), werden per Fallback-Probe erkannt und ihre öffentliche API mit erfasst
+- [x] **SCAN-07**: Die Enumeration ist read-only, ruft keine entdeckten Funktionen auf, meidet Getter mit Nebenwirkungen, begrenzt Tiefe und Umfang und läuft gechunkt, sodass der Spiel-Tab nicht einfriert
 - [ ] **SCAN-08**: Jeder Scan wird als versionierter Snapshot (BC-Version, Zeitstempel, Mod-Liste) gespeichert; Snapshots werden nie automatisch entfernt
 - [ ] **SCAN-09**: Ein Baseline-Manifest listet, welche Spielfunktionen, Assets und Hooks das Tool und der Bot-Editor heute bereits nutzen
 - [ ] **SCAN-10**: Ein Scan-Tab zeigt die Fundliste durchsuchbar und nach Kategorie gefiltert, jeder Eintrag mit Badge „bereits genutzt“ oder „neu“ gegenüber dem Baseline-Manifest
