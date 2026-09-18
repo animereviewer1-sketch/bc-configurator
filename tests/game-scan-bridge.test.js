@@ -224,6 +224,36 @@ describe('GAME_INVENTORY_DATA → Snapshot (SCAN-08)', () => {
     expect(adds.filter((x) => x.store === 'snapshots').length).toBe(0);
   });
 
+  it('Regression CR-01: zwei Scans in derselben Millisekunde → zwei Datensätze, keiner geht verloren (Kernwert)', async () => {
+    const { ctx, opener } = await boot();
+    const n0 = (await ctx.idbSnapshotKeys()).length;
+    const fixedNow = Date.now();
+    // Sandbox-Uhr einfrieren → identischer ts für beide Speichervorgänge (Date lebt im vm-Realm, daher evalIn)
+    evalIn(ctx, 'globalThis.__origNow = Date.now; Date.now = function () { return ' + fixedNow + '; }');
+    try {
+      const a = ctx.triggerGameScan();
+      const b = ctx.triggerGameScan();
+      recv(ctx, opener, { type: 'GAME_INVENTORY_DATA', reqId: a, snapshot: inventory() });
+      recv(ctx, opener, { type: 'GAME_INVENTORY_DATA', reqId: b, snapshot: inventory({ gameVersion: 'R132' }) });
+      await settle(120);
+    } finally { evalIn(ctx, 'Date.now = globalThis.__origNow'); }
+    const keys = await ctx.idbSnapshotKeys();
+    expect(keys.length).toBe(n0 + 2);
+    for (const call of ctx.showStatus.mock.calls) expect(call[1]).not.toBe('error');
+  });
+
+  it('Regression WR-01: Scan-Button ist während eines laufenden Scans gesperrt und danach wieder frei', async () => {
+    const { ctx, opener } = await boot();
+    const btn = makeElementStub();
+    const prevGet = ctx.document.getElementById;
+    ctx.document.getElementById = (id) => (id === 'gameScanBtn' ? btn : prevGet(id));
+    const a = ctx.triggerGameScan();
+    expect(btn.disabled).toBe(true);
+    recv(ctx, opener, { type: 'GAME_INVENTORY_DATA', reqId: a, snapshot: inventory() });
+    await settle(50);
+    expect(btn.disabled).toBe(false);
+  });
+
   it('unbekannte reqId: kein add, kein Status (T-5-04)', async () => {
     const { ctx, opener } = await boot();
     installAddSpy();
