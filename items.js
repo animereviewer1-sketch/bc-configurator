@@ -6948,12 +6948,17 @@ function _lscgMerge(ziel, quelle) {
   for (const [mk, entry] of Object.entries(quelle || {})) {
     if (!entry) continue;
     const cur = ziel[mk];
-    if (!cur) { ziel[mk] = entry; neu += (entry.versions || []).length; continue; }
+    if (!cur) {
+      // Fehlender/0-Zeitstempel → jetzt, sonst zeigt die UI 01.01.1970
+      for (const v of (entry.versions || [])) { if (v && !v.ts) v.ts = Date.now(); }
+      ziel[mk] = entry; neu += (entry.versions || []).length; continue;
+    }
     if (!Array.isArray(cur.versions)) cur.versions = [];
     const bekannt = new Set(cur.versions.map(v => v.fingerprint ?? v.code));
     for (const v of (entry.versions || [])) {
       const id = v.fingerprint ?? v.code;
       if (id != null && bekannt.has(id)) continue;
+      if (!v.ts) v.ts = Date.now();
       cur.versions.push(v);
       if (id != null) bekannt.add(id);
       neu++;
