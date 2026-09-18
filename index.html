@@ -2481,6 +2481,15 @@ button { cursor: pointer; }
   </div>
 
   <div>
+    <div class="tweaks-section-title">🔎 Spiel-Scan</div>
+    <div style="font-size:.6875rem;color:var(--text3);margin-bottom:7px">Read-only-Inventar des laufenden Spiels (Globals, Assets, Mods, Hooks). Jeder Scan wird als Snapshot in IndexedDB gespeichert und nie automatisch gelöscht – der Spiel-Tab bleibt währenddessen bedienbar.</div>
+    <div class="tweaks-btn-group">
+      <button class="tweaks-btn" id="gameScanBtn" onclick="triggerGameScan()" title="Inventar des laufenden Spiels read-only erheben und als Snapshot speichern">🔎 Spiel scannen</button>
+    </div>
+    <div id="gameScanInfo" style="font-size:.6875rem;color:var(--text3);margin-top:5px;line-height:1.5">–</div>
+  </div>
+
+  <div>
     <div class="tweaks-section-title">📦 Item-Katalog</div>
     <div style="font-size:.6875rem;color:var(--text3);margin-bottom:7px">Exportiert jedes Item &amp; jede Klamotte aus dem Cache mit allen Infos + Bild-URL als JSON.</div>
     <button class="tweaks-btn" style="width:100%" onclick="itemsExportCatalog()" title="Alle Items mit allen Feldern und Vorschaubild-URLs als JSON exportieren">⬇️ Katalog exportieren</button>
@@ -3094,13 +3103,14 @@ button { cursor: pointer; }
   </div>
 </div>
 
-<!-- LADEREIHENFOLGE (nicht umstellen): bc-icons.js, bc-icons-ergaenzung.js (head) → persistence.js → bridge.js → items.js → money.js → rank.js → shop.js → inventar.js → bot-data.js → bot-ui.js → bot-engine.js → outfit-import.js → bc-autobackup.js. Details und Guard: docs/LOAD-ORDER.md -->
+<!-- LADEREIHENFOLGE (nicht umstellen): bc-icons.js, bc-icons-ergaenzung.js (head) → persistence.js → bridge.js → items.js → game-scan.js → money.js → rank.js → shop.js → inventar.js → bot-data.js → bot-ui.js → bot-engine.js → outfit-import.js → bc-autobackup.js. Details und Guard: docs/LOAD-ORDER.md -->
 <script>
 // Cache-Buster: jede Seite lädt immer die aktuelle JS-Version (kein Browser-Cache)
 var _cbv = Date.now();
 document.write('<scr'+'ipt src="persistence.js?_='+_cbv+'"><\/scr'+'ipt>');
 document.write('<scr'+'ipt src="bridge.js?_='+_cbv+'"><\/scr'+'ipt>');
 document.write('<scr'+'ipt src="items.js?_='+_cbv+'"><\/scr'+'ipt>');
+document.write('<scr'+'ipt src="game-scan.js?_='+_cbv+'"><\/scr'+'ipt>');
 </script>
 
 

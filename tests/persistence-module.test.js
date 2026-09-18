@@ -95,15 +95,16 @@ describe('persistence.js als klassisches Skript in der vm-Sandbox', () => {
 });
 
 describe('loadScript expandiert die Kern-Reihenfolge (CORE_SCRIPTS)', () => {
-  it('CORE_SCRIPTS beginnt mit persistence.js und endet mit items.js', () => {
+  it('CORE_SCRIPTS beginnt mit persistence.js und endet mit game-scan.js (Phase 5: nach items.js)', () => {
     expect(CORE_SCRIPTS[0]).toBe('persistence.js');
-    expect(CORE_SCRIPTS.at(-1)).toBe('items.js');
+    expect(CORE_SCRIPTS.at(-1)).toBe('game-scan.js');
+    expect(CORE_SCRIPTS.indexOf('items.js')).toBeLessThan(CORE_SCRIPTS.indexOf('game-scan.js'));
   });
 
   it('expandLoadOrder fügt fehlende Vorläufer vor dem ersten items.js ein und lässt alles andere unangetastet', () => {
     expect(expandLoadOrder(['items.js'])).toEqual([...CORE_SCRIPTS]);
     expect(expandLoadOrder(['items.js', 'bot-data.js'])).toEqual([...CORE_SCRIPTS, 'bot-data.js']);
-    expect(expandLoadOrder(['persistence.js', 'items.js'])).toEqual(['persistence.js', 'bridge.js', 'items.js']);
+    expect(expandLoadOrder(['persistence.js', 'items.js'])).toEqual(['persistence.js', 'bridge.js', 'items.js', 'game-scan.js']);
     expect(expandLoadOrder(['bot-data.js'])).toEqual(['bot-data.js']);
     expect(expandLoadOrder([])).toEqual([]);
     const inp = ['items.js'];

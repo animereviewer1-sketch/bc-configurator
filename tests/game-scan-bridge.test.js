@@ -94,7 +94,11 @@ describe('Ladereihenfolge-Guard (game-scan.js)', () => {
     expect(box.textContent.startsWith('FATAL: ')).toBe(true);
     expect(box.textContent).toContain('game-scan.js');
     expect(box.textContent.endsWith('(siehe docs/LOAD-ORDER.md)')).toBe(true);
-    expect(typeof sb.triggerGameScan).toBe('undefined');
+    // Hinweis: `function triggerGameScan(){}` wird als Funktionsdeklaration
+    // gehoisted, bevor der Guard wirft (Node-vm-Plattformverhalten, kein
+    // Fehler in game-scan.js) — die eigentliche Absicherung ist, dass der
+    // Guard-Throw das Skript VOR den beiden Handler-Registrierungen abbricht.
+    expect(evalIn(sb, "(_bridgeHandlers.get('GAME_INVENTORY_DATA') || []).length")).toBe(0);
   });
 
   it('mit allen Vorläufern: kein Throw, triggerGameScan ist Funktion, beide Handler registriert', async () => {

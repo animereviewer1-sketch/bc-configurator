@@ -21,6 +21,12 @@
 // bleibt roh — der Ladereihenfolge-Guard-Test lädt items.js absichtlich
 // ohne Vorläufer. `IDBKeyRange` steht in der Sandbox bereit, weil der
 // Screenshot-Store (SPLIT-06) Bereichsabfragen darüber macht.
+//
+// Phase 5: `game-scan.js` ist als Kern-Skript NACH `items.js` gelistet
+// (docs/LOAD-ORDER.md, Ladeposition 7) — `expandLoadOrder` fügt Kern-Skripte
+// VOR `items.js` weiterhin vor dem ersten `items.js`-Eintrag ein, Kern-
+// Skripte NACH `items.js` (aktuell nur `game-scan.js`) direkt danach, ohne
+// Duplikate.
 
 import fs from 'node:fs';
 import vm from 'node:vm';
@@ -31,13 +37,15 @@ export const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url
 
 export const SANDBOX_ORIGIN = 'https://tool.test';
 
-export const CORE_SCRIPTS = ['persistence.js', 'bridge.js', 'items.js'];
+export const CORE_SCRIPTS = ['persistence.js', 'bridge.js', 'items.js', 'game-scan.js'];
 
 export function expandLoadOrder(files) {
   const idx = files.indexOf('items.js');
   if (idx === -1) return files.slice();
-  const missing = CORE_SCRIPTS.filter((f) => f !== 'items.js' && !files.includes(f));
-  return [...files.slice(0, idx), ...missing, ...files.slice(idx)];
+  const itemsPos = CORE_SCRIPTS.indexOf('items.js');
+  const before = CORE_SCRIPTS.slice(0, itemsPos).filter((f) => !files.includes(f));
+  const after = CORE_SCRIPTS.slice(itemsPos + 1).filter((f) => !files.includes(f));
+  return [...files.slice(0, idx), ...before, 'items.js', ...after, ...files.slice(idx + 1)];
 }
 
 export function makeElementStub() {
