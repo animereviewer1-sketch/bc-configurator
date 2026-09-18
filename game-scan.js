@@ -48,13 +48,22 @@ function _gameScanKb(bytes) {
 }
 
 // ── Trigger (SCAN-01) ────────────────────────────────────────────────────
+function _giSetBusy(busy) {
+  const btn = (typeof document !== 'undefined') && document.getElementById('gameScanBtn');
+  if (btn) btn.disabled = !!busy; // Review WR-01: kein Doppelklick während eines laufenden Scans
+}
+function _giAnyPending() {
+  for (const k in _giPending) if (_giPending[k]) return true;
+  return false;
+}
 function triggerGameScan() {
   const reqId = 'gi_' + Date.now() + '_' + (++_giSeq);
   if (!bcSend({ type: 'GET_GAME_INVENTORY', reqId })) {
     _gameScanInfo('❌ Nicht verbunden – erst 🔄 Verbinden, dann erneut scannen');
     return null;
   }
-  _giPending[reqId] = { startedAt: Date.now() };
+  _giPending[reqId] = { startedAt: Date.now(), reqId };
+  _giSetBusy(true);
   _gameScanInfo('Scan läuft… (angefordert ' + _gameScanFormatTs(Date.now()) + ')');
   return reqId;
 }
@@ -72,6 +81,7 @@ onBridgeMessage('GAME_INVENTORY_DATA', function (ev) {
   if (!_giPendingHas(d.reqId)) return;
   const meta = _giPending[d.reqId];
   _giPending[d.reqId] = null; // verbraucht — kein zweiter Speichervorgang für dieselbe reqId
+  if (!_giAnyPending()) _giSetBusy(false);
   if (d.err || !d.snapshot || typeof d.snapshot !== 'object') {
     const why = d.err ? String(d.err) : 'keine Daten empfangen';
     showStatus('❌ Spiel-Scan fehlgeschlagen: ' + why, 'error');
@@ -83,12 +93,15 @@ onBridgeMessage('GAME_INVENTORY_DATA', function (ev) {
 
 async function _saveGameInventorySnapshot(inventory, meta) {
   const ts = Date.now();
+  // Review CR-01: id muss auch bei zwei Scans in derselben Millisekunde eindeutig sein —
+  // der add-only Store würde den zweiten Snapshot sonst still verwerfen (ConstraintError).
+  const id = String(ts) + '_' + String((meta && meta.reqId) || ('x' + (++_giSeq)));
   const modsRaw = Array.isArray(inventory.mods) ? inventory.mods : [];
   const mods = modsRaw.map(function (m) { return { name: String((m && m.name) ?? ''), version: String((m && m.version) ?? '') }; });
   let sizeBytes = null;
   try { sizeBytes = JSON.stringify(inventory).length; } catch (e) { sizeBytes = null; }
   const record = {
-    id: ts,
+    id,
     ts,
     gameVersion: typeof inventory.gameVersion === 'string' ? inventory.gameVersion : null,
     modCount: mods.length,
@@ -116,8 +129,10 @@ async function _renderGameScanInfo(last) {
     if (last) {
       text = 'Letzter Scan ' + _gameScanFormatTs(last.ts) + ' · BC ' + (last.gameVersion || '?') + ' · ' + last.modCount + ' Mods · ' + _gameScanKb(last.sizeBytes) + ' KB · ' + n + ' Snapshot' + (n === 1 ? '' : 's') + ' gespeichert';
     } else if (n > 0) {
-      const numericKeys = keys.filter(function (k) { return typeof k === 'number'; });
-      text = n + ' Snapshot' + (n === 1 ? '' : 's') + ' gespeichert · letzter ' + _gameScanFormatTs(Math.max.apply(null, numericKeys));
+      // Schlüssel sind '<ts>_<reqId>' (Review CR-01) oder Zahlen (ältere Datensätze) — Zeitstempel-Präfix lesen.
+      // Review WR-02: bei fehlendem Zeitstempel keine Math.max-RangeError-Falle.
+      const stamps = keys.map(function (k) { return typeof k === 'number' ? k : parseInt(String(k), 10); }).filter(function (v) { return Number.isFinite(v); });
+      text = n + ' Snapshot' + (n === 1 ? '' : 's') + ' gespeichert' + (stamps.length ? ' · letzter ' + _gameScanFormatTs(Math.max.apply(null, stamps)) : '');
     } else {
       text = 'Noch kein Scan gespeichert';
     }

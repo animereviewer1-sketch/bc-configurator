@@ -168,7 +168,7 @@ describe('GAME_INVENTORY_DATA → Snapshot (SCAN-08)', () => {
     expect(snapAdds.length).toBe(1);
     const rec = snapAdds[0].arg;
     expect(Object.keys(rec).sort()).toEqual(['gameVersion', 'id', 'inventory', 'modCount', 'mods', 'sizeBytes', 'ts']);
-    expect(rec.id).toBe(rec.ts);
+    expect(String(rec.id).startsWith(String(rec.ts) + '_')).toBe(true); // Review CR-01: ts + reqId-Suffix, eindeutig
     expect(typeof rec.ts).toBe('number');
     expect(Math.abs(rec.ts - Date.now())).toBeLessThan(5000);
     expect(rec.gameVersion).toBe('R131');

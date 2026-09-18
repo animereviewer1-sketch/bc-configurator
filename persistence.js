@@ -181,7 +181,9 @@ async function idbScreenshotKeys() {
 // (Kernwert „nie automatisch entfernt“, Phase 6 bringt die Lösch-API mit
 // Bestätigung, SCAN-11).
 async function idbSnapshotPut(record) {
-  if (!record || typeof record.id !== 'number') {
+  // id: Zahl (Zeitstempel) oder nicht-leerer String (Zeitstempel + reqId-Suffix, Review CR-01)
+  const idOk = record && (typeof record.id === 'number' || (typeof record.id === 'string' && record.id.length > 0));
+  if (!idOk) {
     _idbSchreibfehler('Spiel-Snapshot', new Error('ungültiger Snapshot-Datensatz'));
     return false;
   }
