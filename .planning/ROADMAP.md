@@ -129,7 +129,7 @@ Plans:
 
 - [x] 05-01-PLAN.md — Wave 0: `tests/helpers/loaderSandbox.js` (loader.js läuft erstmals in-process, Stubs + Fixtures + `hits`-Zähler) + Smoke-Test; IDB v3 mit additivem Store `snapshots` und add-only `idbSnapshotPut/GetAll/Get/Keys` (keine Lösch-API), v3-Nachzug in Migrationstest (RED → GREEN); SCAN-13 als erfüllt dokumentiert (SCAN-13, SCAN-08 Speicherhälfte) — Wave 1
 - [x] 05-02-PLAN.md — Enumerator `buildGameInventory(reqId, post)` in loader.js: deskriptorbasiert (Getter nie gelesen), gechunkt à 500 (rIC/`setTimeout 0`), Asset-Allowlist ohne Zirkel, `bcModSdk` ohne Funktionswerte, fünf Mod-Probes, Chat-Hook-Probe; Case `GET_GAME_INVENTORY` → `GAME_INVENTORY_PROGRESS`/`GAME_INVENTORY_DATA`; `structuredClone`-/Zähler-Beweise (RED → GREEN), Diff rein additiv, Origin-Test unverändert (SCAN-02..07, SCAN-01 Loader-Hälfte) — Wave 2
-- [ ] 05-03-PLAN.md — `game-scan.js`: Button „🔎 Spiel scannen“ + `#gameScanInfo` im Tweaks-Panel (index.html nur Einfügungen), reqId-Korrelation, Fortschritt, Snapshot-Datensatz `{id, ts, gameVersion, modCount, mods, sizeBytes, inventory}` add-only mit Größenlog, sichtbare Fehlerpfade; Ladeordnung (`CORE_SCRIPTS`, docs/LOAD-ORDER.md); End-of-Phase-Human-Checks (SCAN-01 Tool-Hälfte, SCAN-08) — Wave 3
+- [x] 05-03-PLAN.md — `game-scan.js`: Button „🔎 Spiel scannen“ + `#gameScanInfo` im Tweaks-Panel (index.html nur Einfügungen), reqId-Korrelation, Fortschritt, Snapshot-Datensatz `{id, ts, gameVersion, modCount, mods, sizeBytes, inventory}` add-only mit Größenlog, sichtbare Fehlerpfade; Ladeordnung (`CORE_SCRIPTS`, docs/LOAD-ORDER.md); End-of-Phase-Human-Checks (SCAN-01 Tool-Hälfte, SCAN-08) — Wave 3
 
 ### Phase 6: Scan-Tab & Analyse
 

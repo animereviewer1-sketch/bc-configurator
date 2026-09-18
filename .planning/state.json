@@ -26,7 +26,7 @@
     {
       "number": "5",
       "name": "Gamecode-Inventar",
-      "status": "pending"
+      "status": "in_progress"
     },
     {
       "number": "6",
@@ -36,8 +36,8 @@
   ],
   "next": {
     "command": "/gsd:progress --next",
-    "label": "Advance to the next step",
-    "reason": "Phase 5 of 6 · 0% · executing"
+    "label": "Advance to the next step (verify)",
+    "reason": "Phase 5 of 6 · 0% · ready to verify"
   },
-  "updated_at": "2026-09-18T22:07:48.700Z"
+  "updated_at": "2026-09-18T22:19:12.506Z"
 }

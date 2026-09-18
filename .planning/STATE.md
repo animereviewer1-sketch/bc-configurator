@@ -2,17 +2,17 @@
 gsd_state_version: "1.0"
 current_phase: 5
 current_phase_name: Gamecode-Inventar
-status: executing
-stopped_at: Completed 05-01-PLAN.md
-last_updated: "2026-09-18T22:07:48.649Z"
+status: verifying
+stopped_at: Completed 05-03-PLAN.md
+last_updated: "2026-09-18T22:19:51.049Z"
 last_activity: 2026-09-15
 last_activity_desc: Phase 5 execution started
-state_head: 1594a7b1a963195bac7498672200081b13e70bbd
+state_head: d2e83513952052808fd824deb67cd2ca97dcf232
 progress:
   total_phases: 6
   completed_phases: 0
   total_plans: 16
-  completed_plans: 15
+  completed_plans: 16
   percent: 0
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-09-12)
 
 Phase: 5 (Gamecode-Inventar) — EXECUTING
 Plan: 3 of 3
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-09-15 — Phase 5 execution started
 
 Progress: [░░░░░░░░░░] 0%
@@ -72,6 +72,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 04-entflechtung P03 | 22 min | 2 tasks | 2 files |
 | Phase 04 P04 | 25min | 3 tasks | 9 files |
 | Phase 05-gamecode-inventar P01 | 11min | 3 tasks | 5 files |
+| Phase 05-gamecode-inventar P03 | 22min | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -110,6 +111,8 @@ Recent decisions affecting current work:
 - [Phase 5]: LOADER_TOOL_ORIGIN wird per Regex aus loader.js POPUP_URL abgeleitet, nie hartcodiert (konsistent mit STAB-06).
 - [Phase 5]: manualTimers/requestIdleCallback sind Opt-in-Flags: Default sind reale Host-Timer und ein abwesendes requestIdleCallback (Safari-Realitaet).
 - [Phase 5]: Snapshot-Store-keyPath ist id (Plan-Text/must_haves), nicht ts wie im RESEARCH-Codebeispiel skizziert.
+- [Phase 5]: Plain-Object statt Map fuer die Pending-Korrelation in game-scan.js (statisches Loesch-Verbot-Gate zaehlt jede Loesch-Operation im Quelltext)
+- [Phase 5]: Testassertion aus Task 1 korrigiert: typeof triggerGameScan === undefined nach Guard-Throw ist wegen Funktionsdeklarations-Hoisting in Node-vm technisch nicht erreichbar
 
 ### Pending Todos
 
@@ -132,6 +135,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-15T11:04:10.809Z
-Stopped at: Completed 05-01-PLAN.md
+Last session: 2026-09-18T22:19:50.902Z
+Stopped at: Completed 05-03-PLAN.md
 Resume file: None
