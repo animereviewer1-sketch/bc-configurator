@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-09-12)
 Phase: 5 (Gamecode-Inventar) — EXECUTING
 Plan: 3 of 3
 Status: Phase complete — ready for verification
-Last activity: 2026-09-15 — Phase 5 execution started
+Last activity: 2026-09-19 - Completed quick task 260919-1ez: LSCG-Merge/Import: fehlende Zeitstempel auf Date.now() setzen
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -124,6 +124,12 @@ None yet.
 - [Phase 3]: Nach Origin-Pinning Live-Smoke-Test aller Bridge-Flows (Cache, EXEC, Screenshot, Raum-Scan) nötig — nur der Nutzer kann das im Spiel prüfen
 - [Repo]: ~900 uncommittete lokale Änderungen (Kontrast-/Theme-Durchgang in `index.html`, Modulanpassungen) — nie durch Planning-Commits stagen; nur `.planning/`-Dateien committen
 - [Phase 4]: tests/load-order-guard.test.js (Plan 04-01, nicht Teil dieses Plans) zeigt eine gelegentliche Vitest-Worker-Teardown-Race (EnvironmentTeardownError bei onUserConsoleLog), ausgeloest durch die in Task 04-04-03 neu eingefuehrten automatischen _screenshotStoreReady()-Ladepfade in items.js. Alle Tests melden weiterhin "passed" - nur der Prozess-Exitcode ist gelegentlich 1. Empfehlung: die Sandbox-Erzeuger in dieser Testdatei sollten IDB-Verbindungen schliessen oder auf _screenshotStoreReady() warten. Kein Blocker fuer diesen Plan oder die Phase, siehe 04-04-SUMMARY.md "Issues Encountered".
+
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 260919-1ez | LSCG-Merge/Import: fehlende Zeitstempel auf Date.now() setzen | 2026-09-19 | 6056437 | [260919-1ez-lscg-merge-import-fehlende-zeitstempel-a](./quick/260919-1ez-lscg-merge-import-fehlende-zeitstempel-a/) |
 
 ## Deferred Items
 
