@@ -8574,7 +8574,8 @@ function importLscgDB() {
           for (const v of entry.versions) {
             const fp  = v.fingerprint;
             const dup = fp ? existing.versions.find(function(ev){ return ev.fingerprint === fp; }) : null;
-            if (!dup) { existing.versions.push(v); vAdded++; }
+            // Fehlender/0-Zeitstempel → jetzt, sonst zeigt die UI 01.01.1970
+            if (!dup) { if (!v.ts) v.ts = Date.now(); existing.versions.push(v); vAdded++; }
           }
           if (existing.versions.length > LSCG_MAX_VERSIONS)
             existing.versions = existing.versions.slice(-LSCG_MAX_VERSIONS);
