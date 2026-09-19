@@ -118,8 +118,258 @@ async function exportGameSnapshot(id) {
   }
 }
 
+// ── Rendering (SCAN-10) ───────────────────────────────────────────────────
+// Reine Funktionen (kein DOM, kein Global außer Argumenten) zuerst — die
+// nutzt auch tools/analyze-snapshot.js (Plan 06-03) über den Dual-Export.
+const SCAN_PAGE_SIZE = 300;
+const SCAN_CATEGORIES = ['globals', 'assets', 'groups', 'hooks', 'mods', 'patching', 'probes'];
+const SCAN_BADGE_LABEL = { genutzt: 'bereits genutzt', neu: 'neu', unbekannt: 'unbekannt' };
+let _scanState = { records: [], selectedId: null, rowsForId: null, rows: [], shown: SCAN_PAGE_SIZE };
+let _scanRenderDebounced = null;
+
+function _scanFlatten(inventory) {
+  if (!inventory || typeof inventory !== 'object') return [];
+  const rows = [];
+  function push(category, kind, name, detail, extra) {
+    const n = String(name ?? '');
+    if (!n) return;
+    const row = { category: category, kind: kind, name: n, detail: String(detail ?? '') };
+    if (extra) Object.assign(row, extra);
+    rows.push(row);
+  }
+
+  const globals = inventory.globals || {};
+  (globals.getters || []).forEach(function (g) { push('globals', 'getter', g, ''); });
+  (globals.functions || []).forEach(function (f) { push('globals', 'function', f && f.name, 'Arität ' + (f && f.arity)); });
+  (globals.values || []).forEach(function (v) { push('globals', 'value', v && v.name, v && v.type); });
+
+  const assets = inventory.assets || {};
+  (assets.items || []).forEach(function (it) {
+    const group = String((it && it.Group) ?? '');
+    push('assets', 'item', it && it.Name, 'Gruppe ' + group, { group: group });
+  });
+  (assets.groups || []).forEach(function (g) {
+    push('groups', 'group', g && g.Name, (g && g.assetCount != null) ? (g.assetCount + ' Assets') : '');
+  });
+
+  const chatHooks = inventory.chatHooks || {};
+  if (chatHooks.ChatRoomRegisterMessageHandler) {
+    const h = chatHooks.ChatRoomRegisterMessageHandler;
+    push('hooks', 'api', 'ChatRoomRegisterMessageHandler', h.exists ? ('vorhanden · Arität ' + h.arity) : 'fehlt');
+  }
+  const registry = chatHooks.registry || {};
+  (registry.handlers || []).forEach(function (h) {
+    push('hooks', 'handler', (h && h.Description) || '(ohne Beschreibung)', 'Priority ' + (h && h.Priority));
+  });
+  (chatHooks.hookedChatFunctions || []).forEach(function (f) {
+    push('hooks', 'hooked', f && f.name, 'gehookt von ' + ((f && f.hookedByMods) || []).join(', '));
+  });
+
+  (inventory.mods || []).forEach(function (m) {
+    push('mods', 'mod', m && m.name, ((m && m.version) || '') + ((m && m.fullName) ? (' · ' + m.fullName) : ''));
+  });
+
+  const modSdk = inventory.modSdk || {};
+  (modSdk.patching || []).forEach(function (p) {
+    const hookDetail = 'gehookt von ' + ((p && p.hookedByMods) || []).join(', ');
+    const patchedDetail = (p && p.patchedByMods && p.patchedByMods.length) ? (' · gepatcht von ' + p.patchedByMods.join(', ')) : '';
+    push('patching', 'patch', p && p.name, hookDetail + patchedDetail);
+  });
+
+  const probes = inventory.probes || {};
+  Object.keys(probes).filter(function (k) { return k !== 'sweep'; }).forEach(function (key) {
+    const p = probes[key] || {};
+    push('probes', 'probe', key, p.present ? ('vorhanden' + (p.version ? (' · ' + p.version) : '')) : 'nicht vorhanden', { probe: key });
+    const names = p.functions || p.api || (p.screenFunctions && p.screenFunctions.sample) || p.sample || [];
+    names.forEach(function (fn) {
+      push('probes', 'probe-api', key + '.' + fn, '', { probe: key });
+    });
+  });
+  (probes.sweep || []).forEach(function (name) {
+    push('probes', 'sweep', name, 'Global mit Mod-Präfix', { probe: '' });
+  });
+
+  return rows;
+}
+
+function _scanBaselineSets(manifest) {
+  if (!manifest) return null;
+  const ids = Array.isArray(manifest.identifiers) ? manifest.identifiers : [];
+  const identifiers = new Set(ids.map(function (e) { return e && e.name; }));
+  const modProbes = new Set((manifest.modProbes || []).map(function (s) { return String(s).toLowerCase(); }));
+  const counts = { identifiers: ids.length, function: 0, assetGroup: 0, unknown: 0 };
+  ids.forEach(function (e) {
+    const kind = e && e.kind;
+    if (kind === 'function') counts.function++;
+    else if (kind === 'assetGroup') counts.assetGroup++;
+    else counts.unknown++;
+  });
+  return { identifiers: identifiers, modProbes: modProbes, counts: counts };
+}
+
+function _scanBadge(row, sets) {
+  if (!row || !sets) return 'unbekannt';
+  let used;
+  if (row.category === 'assets') {
+    used = sets.identifiers.has(row.group);
+  } else if (row.category === 'mods') {
+    used = sets.modProbes.has(String(row.name).toLowerCase());
+  } else if (row.category === 'probes') {
+    used = !!(row.probe && sets.modProbes.has(String(row.probe).toLowerCase()));
+  } else {
+    used = sets.identifiers.has(row.name);
+  }
+  return used ? 'genutzt' : 'neu';
+}
+
+function _scanFilter(rows, query, category) {
+  const list = Array.isArray(rows) ? rows : [];
+  const q = String(query || '').trim().toLowerCase();
+  const cat = category || 'all';
+  return list.filter(function (r) {
+    if (cat !== 'all' && r.category !== cat) return false;
+    if (!q) return true;
+    const hay = (r.name + ' ' + (r.detail || '')).toLowerCase();
+    return hay.includes(q);
+  });
+}
+
+function _scanCountBadges(rows, sets) {
+  const list = Array.isArray(rows) ? rows : [];
+  const result = { all: { total: 0, genutzt: 0, neu: 0, unbekannt: 0 } };
+  SCAN_CATEGORIES.forEach(function (cat) { result[cat] = { total: 0, genutzt: 0, neu: 0, unbekannt: 0 }; });
+  list.forEach(function (r) {
+    const badge = _scanBadge(r, sets);
+    result.all.total++;
+    result.all[badge]++;
+    if (result[r.category]) {
+      result[r.category].total++;
+      result[r.category][badge]++;
+    }
+  });
+  return result;
+}
+
+// ── DOM-Teil (nur im Browser aufgerufen) ─────────────────────────────────
+function _scanEl(id) {
+  return document.getElementById(id);
+}
+
+function _scanManifest() {
+  return (typeof BASELINE_MANIFEST !== 'undefined') ? BASELINE_MANIFEST : null;
+}
+
+async function renderScanTab() {
+  const records = await idbSnapshotGetAll();
+  _scanState.records = records;
+  if (!records.find(function (r) { return r.id === _scanState.selectedId; })) {
+    _scanState.selectedId = records.length ? records[records.length - 1].id : null;
+  }
+  _scanApplySelection();
+}
+
+function _scanApplySelection() {
+  const rec = _scanState.records.find(function (r) { return r.id === _scanState.selectedId; });
+  if (rec) {
+    if (_scanState.rowsForId !== rec.id) {
+      _scanState.rows = _scanFlatten(rec.inventory);
+      _scanState.rowsForId = rec.id;
+    }
+  } else {
+    _scanState.rows = [];
+    _scanState.rowsForId = null;
+  }
+  _scanState.shown = SCAN_PAGE_SIZE;
+  _scanRenderSnapshots();
+  _scanRenderBaselineInfo();
+  _scanRender();
+}
+
+function _scanRenderSnapshots() {
+  const el = _scanEl('scanSnapshotList');
+  const records = _scanState.records;
+  if (!records.length) {
+    el.innerHTML = `<div class="scan-empty">Noch kein Snapshot – ⚙️ Tweaks → 🔎 Spiel scannen`
+      + (typeof triggerGameScan === 'function' ? ` <button class="scan-btn" onclick="triggerGameScan()">🔎 Neuer Scan</button>` : '')
+      + `</div>`;
+    return;
+  }
+  const rowsHtml = records.slice().reverse().map(function (r) {
+    const active = r.id === _scanState.selectedId;
+    return `<div class="scan-snap${active ? ' scan-snap-active' : ''}" onclick="scanSelectSnapshot('${escJsAttr(r.id)}')">`
+      + `📸 ${escHtml(_scanFormatTs(r.ts))}`
+      + ` · BC ${escHtml(r.gameVersion || '?')}`
+      + ` · ${escHtml(String(r.modCount))} Mods`
+      + ` · ${escHtml(String(_scanKb(r.sizeBytes)))} KB`
+      + `<button class="scan-btn" onclick="event.stopPropagation(); exportGameSnapshot('${escJsAttr(r.id)}')">⬇ Exportieren</button>`
+      + `<button class="scan-btn scan-btn-danger" onclick="event.stopPropagation(); deleteGameSnapshot('${escJsAttr(r.id)}')">🗑 Löschen</button>`
+      + `</div>`;
+  }).join('');
+  el.innerHTML = rowsHtml;
+}
+
+function _scanRenderBaselineInfo() {
+  const el = _scanEl('scanBaselineInfo');
+  const manifest = _scanManifest();
+  if (!manifest) {
+    el.textContent = '⚠️ baseline-manifest.js nicht geladen – Badges zeigen „unbekannt“';
+    return;
+  }
+  const sets = _scanBaselineSets(manifest);
+  const c = sets.counts;
+  el.textContent = `Baseline: ${c.identifiers} Bezeichner (${c.function} Funktionen, ${c.assetGroup} Asset-Gruppen, ${c.unknown} unklassifiziert) · „bereits genutzt“ = Name steht im Baseline-Manifest des Tools; Assets nach Gruppe (gruppenweise Präzision)`;
+}
+
+function _scanRender() {
+  const query = _scanEl('scanSearch')?.value ?? '';
+  const category = _scanEl('scanCategory')?.value || 'all';
+  const manifest = _scanManifest();
+  const sets = _scanBaselineSets(manifest);
+  const filtered = _scanFilter(_scanState.rows, query, category);
+  const shown = _scanState.shown;
+  const slice = filtered.slice(0, shown);
+  let html = slice.map(function (r) {
+    const badge = _scanBadge(r, sets);
+    return `<div class="scan-row">`
+      + `<span class="scan-cat">${escHtml(r.category)}</span>`
+      + `<span class="scan-kind">${escHtml(r.kind)}</span>`
+      + `<span class="scan-name">${escHtml(r.name)}</span>`
+      + `<span class="scan-detail">${escHtml(r.detail || '')}</span>`
+      + `<span class="scan-badge scan-badge-${badge}">${SCAN_BADGE_LABEL[badge]}</span></div>`;
+  }).join('');
+  if (filtered.length > shown) {
+    html += `<button class="scan-btn" onclick="scanLoadMore()">mehr laden (${filtered.length - shown} weitere)</button>`;
+  }
+  _scanEl('scanList').innerHTML = html;
+  const c = _scanCountBadges(filtered, sets);
+  _scanEl('scanCount').textContent = `${slice.length} von ${filtered.length} Einträgen (${c.all.genutzt} genutzt · ${c.all.neu} neu)`;
+}
+
+function scanSelectSnapshot(id) {
+  _scanState.selectedId = id;
+  _scanApplySelection();
+}
+
+function scanOnSearch() {
+  _scanState.shown = SCAN_PAGE_SIZE;
+  if (!_scanRenderDebounced) _scanRenderDebounced = _debounce(_scanRender, 150);
+  _scanRenderDebounced();
+}
+
+function scanOnFilter() {
+  _scanState.shown = SCAN_PAGE_SIZE;
+  _scanRender();
+}
+
+function scanLoadMore() {
+  _scanState.shown += SCAN_PAGE_SIZE;
+  _scanRender();
+}
+
 // Dual-Export für Vitest (CJS-Require); im Browser ist `module` undefined.
-// Plan 06-03 erweitert diese Liste um die Rendering-Funktionen.
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { deleteGameSnapshot, exportGameSnapshot, _scanFormatTs, _scanKb, _scanSafeName, _scanExportName };
+  module.exports = {
+    deleteGameSnapshot, exportGameSnapshot, _scanFormatTs, _scanKb, _scanSafeName, _scanExportName,
+    SCAN_PAGE_SIZE, SCAN_CATEGORIES, _scanFlatten, _scanBaselineSets, _scanBadge, _scanFilter, _scanCountBadges,
+  };
 }

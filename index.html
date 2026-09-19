@@ -2553,6 +2553,7 @@ button { cursor: pointer; }
   <button class="tab-btn"        id="tab-itemdefs-btn"      onclick="switchTab('itemdefs')">🎁 Items</button>
   <button class="tab-btn"        id="tab-inventar-btn"      onclick="switchTab('inventar')">🎒 Inventar</button>
   <button class="tab-btn"        id="tab-variablen-btn"     onclick="switchTab('variablen')">🔢 Variablen</button>
+  <button class="tab-btn"        id="tab-scan-btn"          onclick="switchTab('scan')">🔎 Scan</button>
 </div>
 </div>
 
@@ -3103,7 +3104,7 @@ button { cursor: pointer; }
   </div>
 </div>
 
-<!-- LADEREIHENFOLGE (nicht umstellen): bc-icons.js, bc-icons-ergaenzung.js (head) → persistence.js → bridge.js → items.js → game-scan.js → money.js → rank.js → shop.js → inventar.js → bot-data.js → bot-ui.js → bot-engine.js → outfit-import.js → bc-autobackup.js. Details und Guard: docs/LOAD-ORDER.md -->
+<!-- LADEREIHENFOLGE (nicht umstellen): bc-icons.js, bc-icons-ergaenzung.js (head) → persistence.js → bridge.js → items.js → game-scan.js → baseline-manifest.js → scan-tab.js → money.js → rank.js → shop.js → inventar.js → bot-data.js → bot-ui.js → bot-engine.js → outfit-import.js → bc-autobackup.js. Details und Guard: docs/LOAD-ORDER.md -->
 <script>
 // Cache-Buster: jede Seite lädt immer die aktuelle JS-Version (kein Browser-Cache)
 var _cbv = Date.now();
@@ -3111,6 +3112,8 @@ document.write('<scr'+'ipt src="persistence.js?_='+_cbv+'"><\/scr'+'ipt>');
 document.write('<scr'+'ipt src="bridge.js?_='+_cbv+'"><\/scr'+'ipt>');
 document.write('<scr'+'ipt src="items.js?_='+_cbv+'"><\/scr'+'ipt>');
 document.write('<scr'+'ipt src="game-scan.js?_='+_cbv+'"><\/scr'+'ipt>');
+document.write('<scr'+'ipt src="baseline-manifest.js?_='+_cbv+'"><\/scr'+'ipt>');
+document.write('<scr'+'ipt src="scan-tab.js?_='+_cbv+'"><\/scr'+'ipt>');
 </script>
 
 
@@ -3959,6 +3962,50 @@ document.write('<scr'+'ipt src="bc-autobackup.js?_='+_cbv+'"><\/scr'+'ipt>');
     <div id="variablen-list"></div>
   </div>
 </div>
+
+<!-- Scan (SCAN-10) -->
+<style>
+.scan-row{display:grid;grid-template-columns:78px 70px minmax(0,1fr) minmax(0,1fr) 120px;gap:8px;padding:3px 6px;font-size:.75rem;border-bottom:1px solid rgba(255,255,255,.06)}
+.scan-name{font-family:monospace;overflow-wrap:anywhere}
+.scan-cat,.scan-kind,.scan-detail{color:var(--text3)}
+.scan-badge{border-radius:6px;padding:1px 6px;text-align:center;font-size:.6875rem}
+.scan-badge-genutzt{background:rgba(74,222,128,.15);color:#4ade80}
+.scan-badge-neu{background:rgba(251,191,36,.15);color:#fbbf24}
+.scan-badge-unbekannt{color:var(--text3);border:1px solid rgba(255,255,255,.12)}
+.scan-snap{display:flex;align-items:center;gap:10px;padding:6px 8px;border:1px solid rgba(255,255,255,.08);border-radius:6px;margin-bottom:4px;cursor:pointer;font-size:.75rem}
+.scan-snap-active{border-color:var(--accent, #7c9cff);background:rgba(124,156,255,.08)}
+.scan-btn{background:none;border:1px solid rgba(255,255,255,0.12);border-radius:6px;color:var(--text2);font-size:.6875rem;padding:2px 8px;cursor:pointer}
+.scan-btn-danger{color:#f87171}
+#scanSearch,#scanCategory{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.12);border-radius:6px;color:var(--text1);font-size:.75rem;padding:4px 8px}
+</style>
+<div id="tab-scan" class="tab-pane">
+  <div style="padding:16px 18px">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+      <span class="pane-title" style="font-size:.875rem;font-weight:800;color:var(--text1)">&#128269; Scan</span>
+      <span id="scanCount" style="font-size:.75rem;color:var(--text3)"></span>
+      <button style="margin-left:auto;background:none;border:1px solid rgba(255,255,255,0.12);border-radius:6px;color:var(--text2);font-size:.75rem;padding:4px 10px;cursor:pointer" onclick="renderScanTab()">&#8635; Aktualisieren</button>
+    </div>
+    <div style="font-size:.6875rem;color:var(--text3);margin-bottom:14px;line-height:1.5">
+      Fundliste des letzten Spiel-Scans (&#9881;&#65039; Tweaks &rarr; &#128269; Spiel scannen). Badge &bdquo;bereits genutzt&ldquo; = der Name steht im Baseline-Manifest des Tools (Assets: nach Gruppe). Snapshots werden nie automatisch gel&ouml;scht &ndash; &#128465; fragt immer nach.
+    </div>
+    <div id="scanSnapshotList"></div>
+    <div id="scanBaselineInfo" style="font-size:.6875rem;color:var(--text3);margin:6px 0"></div>
+    <div style="display:flex;gap:8px;margin:10px 0">
+      <input id="scanSearch" type="search" placeholder="Suchen (Name, Detail)&hellip;" oninput="scanOnSearch()" style="flex:1">
+      <select id="scanCategory" onchange="scanOnFilter()">
+        <option value="all">Alle Kategorien</option>
+        <option value="globals">Globals</option>
+        <option value="assets">Assets</option>
+        <option value="groups">Asset-Gruppen</option>
+        <option value="hooks">Chat-Hooks</option>
+        <option value="mods">Mods</option>
+        <option value="patching">Patching</option>
+        <option value="probes">Probes</option>
+      </select>
+    </div>
+    <div id="scanList"></div>
+  </div>
+</div><!-- /tab-scan -->
 
 <style>
 /* ── Lock / Timer Dashboard ── */

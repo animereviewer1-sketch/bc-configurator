@@ -15,15 +15,17 @@ Das Tool hat keinen Bundler und keinen Build-Schritt (siehe `.claude/CLAUDE.md`,
 | 5 | `bridge.js` | `APP`, `bcSend`, `onBridgeMessage`, `offBridgeMessage`, `_bridgeSenderOk`, `manualReconnect`, `startPingRetry`, `_heartbeatCheck`, `_connected`/`_bcOrigin` | — zur Parse-Zeit nichts; zur Laufzeit `showStatus`, `stopRoomScan`, `_execLogAppend`, `_botRueckschreibStart` aus items.js (alle `typeof`-geguardet oder erst nach dem Handshake erreichbar) |
 | 6 | `items.js` | Koordinator: Tabs, Rendering, `showStatus`, 35 `onBridgeMessage`-Registrierungen, Batch-Scheduler | persistence.js (`idbGet`/`idbSet`/`_debounce`), bridge.js (`bcSend`/`onBridgeMessage`) |
 | 7 | `game-scan.js` | Spiel-Scan: `triggerGameScan`, Handler `GAME_INVENTORY_PROGRESS`/`GAME_INVENTORY_DATA`, Snapshot-Speicherung (`idbSnapshotPut`), Statuszeile `#gameScanInfo` | persistence.js (`idbSnapshotPut`/`idbSnapshotKeys`), bridge.js (`bcSend`/`onBridgeMessage`), items.js (`showStatus`) |
-| 8 | `money.js` | Geld-Tab | idbGet/idbSet (persistence.js), Globals aus items.js |
-| 9 | `rank.js` | Rang-Tab | idbGet/idbSet (persistence.js), Globals aus items.js |
-| 10 | `shop.js` | Shop-Tab | idbGet/idbSet (persistence.js), Globals aus items.js |
-| 11 | `inventar.js` | Inventar/Keywarden-Tab | idbGet/idbSet (persistence.js), Globals aus items.js |
-| 12 | `bot-data.js` | Bot-Trigger/Aktions-Definitionen | idbGet/idbSet (persistence.js), Globals aus items.js |
-| 13 | `bot-ui.js` | Bot-Editor-UI | idbGet/idbSet (persistence.js), bcSend/onBridgeMessage (bridge.js), Globals aus items.js/bot-data.js |
-| 14 | `bot-engine.js` | Bot-Code-Generator | Globals aus items.js/bot-data.js |
-| 15 | `outfit-import.js` | Outfit-Code-Parser | idbGet/idbSet (persistence.js), Globals aus items.js |
-| 16 | `bc-autobackup.js` | Automatische Backups | idbGet/idbSet (persistence.js), Globals aus items.js |
+| 8 | `baseline-manifest.js` | `BASELINE_MANIFEST` — generiert per `npm run baseline`, nicht von Hand editieren | — |
+| 9 | `scan-tab.js` | `renderScanTab`, `deleteGameSnapshot` (einzige Aufrufstelle von `idbSnapshotDelete`, hinter `confirm()`), `exportGameSnapshot`, `scanOnSearch`/`scanOnFilter`/`scanLoadMore`/`scanSelectSnapshot` | persistence.js (`idbSnapshotGetAll`/`idbSnapshotGet`/`idbSnapshotDelete`/`_debounce`), items.js (`showStatus`/`escHtml`/`escJsAttr`/`_jsonParts`), optional game-scan.js (`triggerGameScan`, `typeof`-geguardet), baseline-manifest.js (`typeof`-geguardet) |
+| 10 | `money.js` | Geld-Tab | idbGet/idbSet (persistence.js), Globals aus items.js |
+| 11 | `rank.js` | Rang-Tab | idbGet/idbSet (persistence.js), Globals aus items.js |
+| 12 | `shop.js` | Shop-Tab | idbGet/idbSet (persistence.js), Globals aus items.js |
+| 13 | `inventar.js` | Inventar/Keywarden-Tab | idbGet/idbSet (persistence.js), Globals aus items.js |
+| 14 | `bot-data.js` | Bot-Trigger/Aktions-Definitionen | idbGet/idbSet (persistence.js), Globals aus items.js |
+| 15 | `bot-ui.js` | Bot-Editor-UI | idbGet/idbSet (persistence.js), bcSend/onBridgeMessage (bridge.js), Globals aus items.js/bot-data.js |
+| 16 | `bot-engine.js` | Bot-Code-Generator | Globals aus items.js/bot-data.js |
+| 17 | `outfit-import.js` | Outfit-Code-Parser | idbGet/idbSet (persistence.js), Globals aus items.js |
+| 18 | `bc-autobackup.js` | Automatische Backups | idbGet/idbSet (persistence.js), Globals aus items.js |
 
 ## Guard-Verhalten (SPLIT-04)
 
@@ -34,6 +36,8 @@ Das Tool hat keinen Bundler und keinen Build-Schritt (siehe `.claude/CLAUDE.md`,
 3. Ein `Error` wird geworfen — das ladende Skript bricht sofort ab, statt mit fehlenden Funktionen weiterzulaufen.
 
 Der Guard ist bewusst ohne Abhängigkeit zu den geprüften Modulen geschrieben (kein Aufruf von `idbGet(...)`/`onBridgeMessage(...)`, nur ein `typeof`-Check), damit er auch dann funktioniert, wenn genau das geprüfte Modul fehlt.
+
+`scan-tab.js` prüft dieselbe Kette wie `game-scan.js`, aber ohne `bridge.js` (persistence.js → items.js): `idbSnapshotGetAll`/`idbSnapshotGet`/`idbSnapshotDelete` aus persistence.js, `showStatus`/`escHtml`/`escJsAttr`/`_jsonParts` aus items.js. In Node (ohne `window`) springt der Guard als erste Anweisung ohne Prüfung heraus und lädt ohne Throw — das macht die Datei über `require('../scan-tab.js')` für `tools/analyze-snapshot.js` (Plan 06-03) direkt nutzbar (Dual-Export der reinen Badge-/Flatten-Funktionen).
 
 ## Neuen Nachrichtentyp registrieren (SPLIT-02, Erfolgskriterium 1)
 
@@ -55,11 +59,13 @@ Lebendes Beispiel seit Phase 5: `game-scan.js` registriert `GAME_INVENTORY_PROGR
 1. Neue `document.write('<scr'+'ipt src="modul.js?_='+_cbv+'"><\/scr'+'ipt>');`-Zeile im richtigen `<script>`-Block von `index.html` einfügen (vor allem, was das neue Modul braucht; nach allem, was es selbst braucht).
 2. Diese Tabelle um eine Zeile erweitern.
 3. Falls das neue Modul eine Laufzeit-Voraussetzung für `items.js` oder `bot-ui.js` ist: die jeweilige `required`-Tabelle im Ladereihenfolge-Guard (`const required = [['idbGet', 'persistence.js'], ...]`) um `['<globalName>', 'modul.js']` ergänzen.
-4. `CORE_SCRIPTS` in `tests/helpers/loadScript.js` um `'modul.js'` ergänzen, an der richtigen Position relativ zu `persistence.js`/`bridge.js`/`items.js` — Skripte, die NACH `items.js` laden, stehen in `CORE_SCRIPTS` hinter `'items.js'` und werden von `expandLoadOrder` direkt nach dem ersten `items.js` eingefügt.
+4. `CORE_SCRIPTS` in `tests/helpers/loadScript.js` um `'modul.js'` ergänzen, an der richtigen Position relativ zu `persistence.js`/`bridge.js`/`items.js` — Skripte, die NACH `items.js` laden, stehen in `CORE_SCRIPTS` hinter `'items.js'` und werden von `expandLoadOrder` direkt nach dem ersten `items.js` eingefügt. Wichtig: `CORE_SCRIPTS` ist nur für **Kern-Skripte** gedacht — Laufzeit-Voraussetzungen von `items.js`/`bot-ui.js` oder Skripte, die jede `items.js`-Sandbox ohnehin braucht. Blatt-Module ohne diese Eigenschaft (z. B. `money.js`, `rank.js`, `scan-tab.js`) gehören NICHT in `CORE_SCRIPTS` — Tests laden sie explizit über `loadScript([...])`.
 5. Diese Doku-Datei nachziehen.
 
 ## Tests
 
 `tests/helpers/loadScript.js` exportiert `CORE_SCRIPTS` (aktuell `['persistence.js', 'bridge.js', 'items.js', 'game-scan.js']`) und `expandLoadOrder(files)`. `loadScript(files)` ruft `expandLoadOrder` intern auf und fügt fehlende Kern-Vorläufer automatisch vor dem ersten `'items.js'`-Eintrag ein, fehlende Kern-Nachläufer (aktuell nur `game-scan.js`) direkt danach — bestehende Testaufrufe wie `loadScript(['items.js'])` mussten deshalb nicht angepasst werden, obwohl `persistence.js`/`bridge.js`/`game-scan.js` jetzt existieren.
+
+Blatt-Module wie `scan-tab.js` werden in Tests explizit geladen, z. B. `loadScript(['items.js', 'baseline-manifest.js', 'scan-tab.js'])` — `expandLoadOrder` fügt `persistence.js`/`bridge.js`/`items.js`/`game-scan.js` automatisch davor ein, `baseline-manifest.js` und `scan-tab.js` bleiben in der angegebenen Reihenfolge dahinter.
 
 `loadInto(sandbox, file)` bleibt bewusst **roh** und expandiert nichts — genau das macht `tests/load-order-guard.test.js` testbar: es lädt `items.js`/`bot-ui.js` absichtlich ohne Vorläufer in eine frische Sandbox und prüft, dass der jeweilige Guard greift (`#loadOrderFatal`-Box + Throw), statt einen rohen `... is not defined`-Fehler durchzulassen.

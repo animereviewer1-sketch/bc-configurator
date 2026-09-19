@@ -4222,7 +4222,7 @@ let _activeTab = 'items';
 // Obertab-Gruppen: welche Untertabs gehören zu welchem Obertab
 const TAB_GROUPS = {
   items: ['items','outfit','curse','outfit-scan','lscg-wheel','outfit-import','locks'],
-  bots:  ['bot','shop','rank','money','itemdefs','inventar','log','spieler','variablen'],
+  bots:  ['bot','shop','rank','money','itemdefs','inventar','log','spieler','variablen','scan'],
 };
 let _activeGroup = 'items';
 function _tabGroupOf(tab){
@@ -4250,7 +4250,7 @@ function switchTab(tab) {
   // Sichtbarkeits-Schleife nur, wenn sich der Obertab wirklich ändert (verhindert Lag bei Tab-Wechsel innerhalb einer Gruppe)
   const _grp = _tabGroupOf(tab);
   if (_grp !== _activeGroup) _applyGroupUI(_grp);
-  ['items','outfit','curse','bot','log','money','events','rank','shop','outfit-import','outfit-scan','lscg-wheel','locks','spieler','variablen','itemdefs','inventar'].forEach(t => {
+  ['items','outfit','curse','bot','log','money','events','rank','shop','outfit-import','outfit-scan','lscg-wheel','locks','spieler','variablen','itemdefs','inventar','scan'].forEach(t => {
     document.getElementById('tab-'+t)?.classList.toggle('active', t===tab);
     document.getElementById('tab-'+t+'-btn')?.classList.toggle('active', t===tab);
   });
@@ -4264,6 +4264,7 @@ function switchTab(tab) {
   if (tab === 'shop')          { renderShopTab(); }
   if (tab === 'itemdefs')      { if (typeof renderItemDefsTab === 'function') renderItemDefsTab(); }
   if (tab === 'inventar')      { if (typeof renderInventarTab === 'function') renderInventarTab(); }
+  if (tab === 'scan')          { if (typeof renderScanTab === 'function') renderScanTab(); }
   if (tab === 'outfit-import') { renderOutfitImportTab(); }
   if (tab === 'outfit-scan')   { renderOutfitScanTab(); }
   if (tab === 'lscg-wheel')   { if (_mbsWheelData.length) _renderMbsWheelTab(); scanWheelOutfits(); }
