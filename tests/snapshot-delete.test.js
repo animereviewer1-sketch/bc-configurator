@@ -192,7 +192,8 @@ describe('audit: genau eine Lösch-Operation, genau eine bestätigte Aufrufstell
     expect(count(body, 'confirm(')).toBe(1);
     expect(body.indexOf('confirm(')).toBeLessThan(body.indexOf('idbSnapshotDelete('));
     expect(body).toContain('typeof confirm');
-    expect(body.indexOf('idbSnapshotGet(')).toBeLessThan(body.indexOf('confirm('));
+    expect(body.indexOf('_scanGetSnapshot(')).toBeGreaterThan(-1);
+    expect(body.indexOf('_scanGetSnapshot(')).toBeLessThan(body.indexOf('confirm('));
     expect(
       count(body, 'for (') + count(body, 'while (') + count(body, '.forEach(') + count(body, '.map(') + count(body, 'Promise.all(')
     ).toBe(0);

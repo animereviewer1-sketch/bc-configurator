@@ -50,7 +50,7 @@ export function inv(extra = {}) {
     probes: {
       wce: { present: true, version: '6', functions: ['fbcVersion'] },
       bcx: { present: false, loaded: null, version: null, api: [] },
-      mbs: { present: true, version: '2', apiVersion: 1, api: ['getActive'] },
+      mbs: { present: true, version: '2', apiVersion: 1, api: [{ name: 'getActive', kind: 'function' }] }, // Objektform wie loader.js giDescribeApi (Review WR-03)
       lscg: { present: false, loaded: null, api: [], screenFunctions: { count: 0, sample: [] } },
       themed: { present: false, loaded: null, screenFunctionCount: 0, sample: [] },
       sweep: ['FUSAM'],

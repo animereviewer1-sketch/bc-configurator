@@ -35,7 +35,9 @@
 
 // ── Helfer ────────────────────────────────────────────────────────────────
 function _scanFormatTs(ts) {
-  return new Date(ts).toISOString().slice(0, 16).replace('T', ' ') + ' UTC';
+  const d = new Date(ts);
+  if (!Number.isFinite(d.getTime())) return '(ungültiger Zeitstempel)';
+  return d.toISOString().slice(0, 16).replace('T', ' ') + ' UTC';
 }
 
 function _scanKb(bytes) {
@@ -52,11 +54,24 @@ function _scanExportName(rec) {
 }
 
 // ── Löschen mit Bestätigung (SCAN-11) ────────────────────────────────────
+// onclick-Handler liefern ids immer als String; persistence.js erlaubt aber
+// auch numerische ids. Zuerst exakt suchen, dann – nur wenn nichts gefunden
+// und die id rein numerisch ist – als Zahl. Ein String-Datensatz hat Vorrang.
+async function _scanGetSnapshot(id) {
+  const rec = await idbSnapshotGet(id);
+  if (rec) return rec;
+  if (typeof id === 'string' && /^\d+$/.test(id)) {
+    const n = Number(id);
+    if (Number.isSafeInteger(n)) return idbSnapshotGet(n);
+  }
+  return null;
+}
+
 // Einzige Aufrufstelle von idbSnapshotDelete im Repo. Existenz-Prüfung vor
 // der Bestätigung; ohne verfügbare confirm-Funktion wird fail-closed nichts
 // gelöscht. Kein „alle löschen“ — keine Schleife um diese Funktion.
 async function deleteGameSnapshot(id) {
-  const rec = await idbSnapshotGet(id);
+  const rec = await _scanGetSnapshot(id);
   if (!rec) {
     showStatus('⚠️ Snapshot nicht gefunden', 'info');
     return false;
@@ -65,7 +80,7 @@ async function deleteGameSnapshot(id) {
   if (!confirm('Snapshot vom ' + _scanFormatTs(rec.ts) + ' (BC ' + (rec.gameVersion || '?') + ', ' + rec.modCount + ' Mods) wirklich löschen? Das kann nicht rückgängig gemacht werden.')) {
     return false;
   }
-  const ok = await idbSnapshotDelete(id);
+  const ok = await idbSnapshotDelete(rec.id);
   if (!ok) {
     showStatus('❌ Snapshot konnte nicht gelöscht werden', 'error');
     return false;
@@ -78,7 +93,7 @@ async function deleteGameSnapshot(id) {
 // ── Export eines einzelnen Snapshots (SCAN-12-Eingabe) ───────────────────
 // Nur Lesezugriffe; Muster exportScreenshotsOnly (items.js, Plan 04-03).
 async function exportGameSnapshot(id) {
-  const rec = await idbSnapshotGet(id);
+  const rec = await _scanGetSnapshot(id);
   if (!rec) {
     showStatus('⚠️ Snapshot nicht gefunden', 'info');
     return false;
@@ -180,7 +195,11 @@ function _scanFlatten(inventory) {
   Object.keys(probes).filter(function (k) { return k !== 'sweep'; }).forEach(function (key) {
     const p = probes[key] || {};
     push('probes', 'probe', key, p.present ? ('vorhanden' + (p.version ? (' · ' + p.version) : '')) : 'nicht vorhanden', { probe: key });
-    const names = p.functions || p.api || (p.screenFunctions && p.screenFunctions.sample) || p.sample || [];
+    // loader.js (giDescribeApi) liefert api-Einträge als {name, kind}; functions/
+    // sample sind Strings. Alle Quellen zusammen, nicht exklusiv (CR-01).
+    const names = [].concat(p.functions || [], p.api || [], (p.screenFunctions && p.screenFunctions.sample) || [], p.sample || [])
+      .map(function (fn) { return (fn && typeof fn === 'object') ? fn.name : fn; })
+      .filter(function (n) { return typeof n === 'string' && n.length > 0; });
     names.forEach(function (fn) {
       push('probes', 'probe-api', key + '.' + fn, '', { probe: key });
     });
@@ -346,7 +365,10 @@ function _scanRender() {
 }
 
 function scanSelectSnapshot(id) {
-  _scanState.selectedId = id;
+  // onclick liefert Strings – auf die echte id des Datensatzes zurückführen
+  const hit = _scanState.records.find(function (r) { return r.id === id; })
+    || _scanState.records.find(function (r) { return String(r.id) === String(id); });
+  _scanState.selectedId = hit ? hit.id : id;
   _scanApplySelection();
 }
 

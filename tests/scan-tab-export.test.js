@@ -210,7 +210,7 @@ describe('exportGameSnapshot(): Payload und Download (SCAN-11-Eingabe)', () => {
     expect(body).toContain('.download = ');
     expect(body).toContain('.click()');
     expect(body).toContain('revokeObjectURL(');
-    expect(body).toContain('idbSnapshotGet(');
+    expect(body).toContain('_scanGetSnapshot('); // liest via idbSnapshotGet (Review WR-01: numerische ids)
     expect(count(body, 'idbSnapshotDelete')).toBe(0);
     expect(count(s, 'idbSnapshotPut(')).toBe(0);
     expect(count(s, 'idbSet(')).toBe(0);
