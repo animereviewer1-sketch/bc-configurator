@@ -143,8 +143,14 @@ Plans:
   3. Snapshots lassen sich im Scan-Tab nur manuell und nach Bestätigungsdialog löschen; ohne Bestätigung bleibt alles erhalten
   4. `.planning/analysis/GAME-INVENTORY.md` gleicht einen echten Snapshot mit dem Baseline-Manifest ab und nennt konkrete Vorschläge für neue Bot-Aktionen, -Trigger und Tab-Funktionen
 
-**Plans**: TBD
+**Plans**: 4 plans
 **UI hint**: yes
+
+Plans:
+- [ ] 06-01-PLAN.md — Baseline-Manifest: `tools/build-baseline.js` (`npm run baseline`), deterministische `baseline-manifest.json`/`.js`, Frische-Diff-Test (SCAN-09)
+- [ ] 06-02-PLAN.md — `idbSnapshotDelete` (einzige Lösch-Operation) + `deleteGameSnapshot` hinter `confirm()` + `exportGameSnapshot` + statischer Audit (SCAN-11)
+- [ ] 06-03-PLAN.md — Scan-Tab: Snapshot-Liste, Kategorie-Filter, debounced Suche, Paging, Badges „bereits genutzt“/„neu“, Verdrahtung items.js/index.html, `tools/analyze-snapshot.js` (SCAN-10)
+- [ ] 06-04-PLAN.md — Checkpoint: echten Snapshot exportieren; `.planning/analysis/GAME-INVENTORY.md` mit Übersichtszahlen und ≥ 15 Vorschlägen (SCAN-12)
 
 ## Progress
 
@@ -158,4 +164,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | 3. Bridge-Härtung | 0/3 | Planned | - |
 | 4. Entflechtung | 4/4 | In Progress|  |
 | 5. Gamecode-Inventar | 2/3 | In Progress|  |
-| 6. Scan-Tab & Analyse | 0/TBD | Not started | - |
+| 6. Scan-Tab & Analyse | 0/4 | Planned | - |

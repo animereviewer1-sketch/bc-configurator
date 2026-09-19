@@ -19,8 +19,8 @@ created: "2026-09-19"
 |----------|-------|
 | **Framework** | Vitest 5.0.0 |
 | **Config file** | `vitest.config.js` |
-| **Quick run command** | `npx vitest run tests/scan-tab.test.js tests/snapshot-delete.test.js` |
-| **Full suite command** | `npm test` (323 passed + 2 expected fail, 23 files before this phase — must never drop) |
+| **Quick run command** | `npx vitest run tests/baseline-manifest.test.js tests/snapshot-delete.test.js tests/scan-tab-export.test.js tests/scan-tab.test.js tests/analyze-snapshot.test.js` |
+| **Full suite command** | `npm test` (323 passed + 2 expected fail, 23 files before this phase — must never drop; after Plan 01: 24 files, Plan 02: 26, Plan 03: 28) |
 | **Estimated runtime** | ~12 seconds |
 
 ---
@@ -38,11 +38,15 @@ created: "2026-09-19"
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| 6-01-01 | 01 | 1 | SCAN-09 | T-6-01 | `tools/build-baseline.js` (dev-only, not deployed) extracts identifiers from injected-code strings + loader.js, classifies function/assetGroup/unknown, writes `baseline-manifest.json` deterministically; test regenerates and diffs (can't go stale) | unit (RED→GREEN) | `npx vitest run tests/baseline-manifest.test.js` | ❌ W0 | ⬜ pending |
-| 6-02-01 | 02 | 2 | SCAN-11 | T-6-02, T-6-03 | `idbSnapshotDelete(id)` in persistence.js (single `.delete(` site on `snapshots`); `deleteGameSnapshot(id)` calls `confirm()` first; false → store untouched; static audit for the store | unit (RED→GREEN) | `npx vitest run tests/snapshot-delete.test.js` | ❌ W0 | ⬜ pending |
-| 6-02-02 | 02 | 2 | SCAN-12 (input) | T-6-04 | `exportGameSnapshot(id)` JSON download of one record (fields intact) | unit (RED→GREEN) | `npx vitest run tests/scan-tab-export.test.js` | ❌ W0 | ⬜ pending |
-| 6-03-01 | 03 | 3 | SCAN-10 | T-6-05, T-6-06 | `scan-tab.js`: snapshot selector, category filter, debounced search, paged rendering (≤300 rows + „mehr"), badges via baseline set membership, `escHtml` on every untrusted string; tab wiring in items.js (TAB_GROUPS, visibility array, render hook) + index.html insertions only | unit (RED→GREEN) + static | `npx vitest run tests/scan-tab.test.js && node --check scan-tab.js items.js` | ❌ W0 | ⬜ pending |
-| 6-04-01 | 04 | 4 | SCAN-12 | — | Human step: user exports a real snapshot to `.planning/analysis/snapshot.json`; agent writes `.planning/analysis/GAME-INVENTORY.md` (categories, used/new counts, concrete proposals for bot actions/triggers/tabs with rationale) | human + doc | — (checkpoint:human-action, then doc review) | n/a | ⬜ pending |
+| 6-01-01 | 01 | 1 | SCAN-09 | T-6-01 | RED: `tests/baseline-manifest.test.js` — Frische-Diff (JSON `toEqual`, JS byte-identisch), Determinismus (kein Zeitstempel), Klassifikation function/assetGroup/unknown (classif), Sandbox-Ladbarkeit von `baseline-manifest.js`, statische Gates (CJS, dev-only, npm-Script) | unit (RED) | `npx vitest run tests/baseline-manifest.test.js` (rot) | ❌ W0 | ⬜ pending |
+| 6-01-02 | 01 | 1 | SCAN-09 | T-6-01 | GREEN: `tools/build-baseline.js` (dev-only, not deployed, `npm run baseline`) extrahiert Bezeichner aus bot-engine/items/bot-ui/bot-data/loader.js, klassifiziert statisch, schreibt deterministisch `baseline-manifest.json` + `baseline-manifest.js` (`const BASELINE_MANIFEST`); beide committet | unit (GREEN) | `npx vitest run tests/baseline-manifest.test.js && npm run baseline && git diff --quiet -- baseline-manifest.json baseline-manifest.js` | ❌ W0 | ⬜ pending |
+| 6-02-01 | 02 | 2 | SCAN-11 | T-6-02, T-6-03, T-6-04 | RED: `tests/snapshot-delete.test.js` (confirm false/true/fehlt, unbekannte id, Fehlerpfad, Audit: genau eine Lösch-Operation/Aufrufstelle, readdir-Gate), `tests/scan-tab-export.test.js` (Payload `{_meta, snapshot}`, Dateiname, Fehlerpfade, Mutationsfreiheit); Nachzug `tests/persistence-module.test.js` | unit (RED) | `npx vitest run tests/snapshot-delete.test.js tests/scan-tab-export.test.js tests/persistence-module.test.js` (rot) | ❌ W0 | ⬜ pending |
+| 6-02-02 | 02 | 2 | SCAN-11 | T-6-02, T-6-03, T-6-10, T-6-11 | GREEN: `idbSnapshotDelete(id)` in persistence.js (einzige Lösch-Operation auf `snapshots`); `scan-tab.js` Teil 1: Guard, `deleteGameSnapshot(id)` (Existenz → `confirm()` → Löschen → Status, fail-closed ohne confirm, keine Schleife), `exportGameSnapshot(id)` (`_jsonParts`/Blob/Anker) | unit (GREEN) + static | `npx vitest run tests/snapshot-delete.test.js tests/scan-tab-export.test.js tests/persistence-module.test.js && node --check persistence.js scan-tab.js` | ❌ W0 | ⬜ pending |
+| 6-03-01 | 03 | 3 | SCAN-10 | T-6-05, T-6-06 | RED: `tests/scan-tab.test.js` (Node-Export, Flatten/Badges/Filter/Zähler, DOM: leer, Vorauswahl, Badges mit echtem Manifest, XSS `<img onerror>`, filter, Paging 300, Debounce 150 ms, ohne Manifest, Snapshot-Wechsel, statische Gates items.js/index.html/docs/Quelle), `tests/analyze-snapshot.test.js` | unit (RED) | `npx vitest run tests/scan-tab.test.js tests/analyze-snapshot.test.js` (rot) | ❌ W0 | ⬜ pending |
+| 6-03-02 | 03 | 3 | SCAN-10 | T-6-05, T-6-06, T-6-12, T-6-13 | GREEN: `scan-tab.js` Rendering (Snapshot-Liste mit ⬇/🗑 je Snapshot, Kategorie-Filter, debounced Suche, Slice 300 + „mehr laden“, Badges aus `BASELINE_MANIFEST`, `escHtml`/`escJsAttr` überall); items.js genau 3 Zeilen; index.html nur Einfügungen (+ Kommentarzeile); docs/LOAD-ORDER.md; `CORE_SCRIPTS` unverändert | unit (GREEN) + static | `npx vitest run tests/scan-tab.test.js tests/snapshot-delete.test.js tests/load-order-guard.test.js tests/game-scan-bridge.test.js && node --check scan-tab.js items.js` | ❌ W0 | ⬜ pending |
+| 6-03-03 | 03 | 3 | SCAN-12 (input) | T-6-15 | GREEN: `tools/analyze-snapshot.js` (`npm run analyze -- <export.json>`) nutzt `_scanFlatten`/`_scanBaselineSets`/`_scanBadge`/`_scanCountBadges` aus scan-tab.js (Dual-Export) — Zahlen identisch mit dem Tab; Markdown-Ausgabe, CLI | unit (GREEN) | `npx vitest run tests/analyze-snapshot.test.js && node --check tools/analyze-snapshot.js` | ❌ W0 | ⬜ pending |
+| 6-04-01 | 04 | 4 | SCAN-12 | — | Checkpoint (human-action, blocking-human): Nutzer exportiert einen echten Snapshot über ⬇ und legt ihn als `.planning/analysis/snapshot.json` ab | human | `node -e` Schema-Check (`inventory.schema === 1`, `modCount > 0`) + `npm run analyze -- .planning/analysis/snapshot.json --limit 5` | n/a | ⬜ pending |
+| 6-04-02 | 04 | 4 | SCAN-12 | T-6-07, T-6-15, T-6-16 | Doc: `.planning/analysis/GAME-INVENTORY.md` — Übersichtstabelle byte-gleich aus `npm run analyze`, ≥ 15 Vorschläge (Bot-Aktionen/-Trigger/Tab-Funktionen je ≥ 5, Name · Badge · Nutzen · Aufwand), lohnende Mods, Nicht übernommen, Sicherheitshinweis, Methodik; keine Fenced-Code-Blöcke; kein Code geändert | doc (automated gates) + human review | Gate `DOC-OK`/`NO-CODE-OK` aus 06-04-PLAN.md Task 2 | n/a | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -50,10 +54,12 @@ created: "2026-09-19"
 
 ## Wave 0 Requirements
 
-- [ ] `tools/build-baseline.js` + `baseline-manifest.json` + `tests/baseline-manifest.test.js` (Plan 01)
-- [ ] `tests/snapshot-delete.test.js`, `tests/scan-tab-export.test.js` (Plan 02)
-- [ ] `tests/scan-tab.test.js` (Plan 03) — override `document.getElementById` before rendering (fresh-stub pitfall)
-- [ ] `scan-tab.js` is NOT added to CORE_SCRIPTS (not a runtime prerequisite of items.js) — tests load it explicitly
+- [ ] `tools/build-baseline.js` + `baseline-manifest.json` + `baseline-manifest.js` + `tests/baseline-manifest.test.js` + package.json-Script `baseline` (Plan 01)
+- [ ] `tests/snapshot-delete.test.js`, `tests/scan-tab-export.test.js`, Nachzug `tests/persistence-module.test.js` (Export-Listen, statisches Gate) (Plan 02)
+- [ ] `tests/scan-tab.test.js`, `tests/analyze-snapshot.test.js` (Plan 03) — override `document.getElementById` before rendering (fresh-stub pitfall); „ohne Snapshot“-Fall zuerst (fake-indexeddb pro Datei geteilt)
+- [ ] `scan-tab.js` is NOT added to CORE_SCRIPTS (not a runtime prerequisite of items.js) — tests load it explicitly (`loadScript(['items.js', 'baseline-manifest.js', 'scan-tab.js'])`)
+- [ ] `tools/analyze-snapshot.js` + package.json-Script `analyze` (Plan 03) — Voraussetzung für die Zahlen in Plan 04
+- [ ] `.planning/analysis/snapshot.json` (Plan 04, Nutzer-Checkpoint) — nie per Read in den Kontext laden
 
 ---
 
