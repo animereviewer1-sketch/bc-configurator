@@ -1,3 +1,7 @@
 node_modules/
 coverage/
 .vitest/
+
+# GSD runtime artefacts (nicht versionieren)
+.gsd/
+.planning/milestone.lock
