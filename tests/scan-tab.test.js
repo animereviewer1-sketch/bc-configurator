@@ -343,7 +343,11 @@ describe('statisch: items.js-Verdrahtung, index.html, docs, scan-tab.js-Quelle',
     expect(visLine).toContain("'inventar','scan']");
     expect(count(items, "if (tab === 'scan')")).toBe(1);
     expect(count(items, "typeof renderScanTab === 'function'")).toBe(1);
-    expect(count(items, 'renderScanTab')).toBe(1);
+    // Die geguardete Zeile nennt renderScanTab zweimal (typeof-Check + Aufruf) —
+    // genau eine Zeile, kein zweiter Aufrufort (Rule 1 - Fix am Test selbst,
+    // gefunden während der Task-2-Verifikation: die ursprüngliche Erwartung
+    // "=== 1" widersprach der vorgeschriebenen Guard-Zeile aus <key_links>).
+    expect(count(items, 'renderScanTab')).toBe(2);
   });
 
   it('index.html: Button, Pane, ids, Handler, Optionen, Styles, Write-Zeilen, Kommentar; keine Direktaufrufe der Persistenz', () => {
