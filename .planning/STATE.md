@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 6
 current_phase_name: Scan-Tab & Analyse
 status: executing
-stopped_at: Completed 06-02-PLAN.md
-last_updated: "2026-09-19T08:29:46.018Z"
+stopped_at: Completed 06-scan-tab-analyse-03-PLAN.md
+last_updated: "2026-09-19T08:53:24.563Z"
 last_activity: 2026-09-19
 last_activity_desc: Phase 6 execution started
-state_head: 28ea9db8f408acc0e9c46da3d61a124c8191a46d
+state_head: 43c2e2ed7a964bf39ecfe251a740d55e85cf7367
 progress:
   total_phases: 6
   completed_phases: 0
   total_plans: 20
-  completed_plans: 18
+  completed_plans: 19
   percent: 0
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-09-12)
 ## Current Position
 
 Phase: 6 (Scan-Tab & Analyse) — EXECUTING
-Plan: 3 of 4
+Plan: 4 of 4
 Status: Ready to execute
 Last activity: 2026-09-19 — Phase 6 execution started
 
@@ -75,6 +75,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 05-gamecode-inventar P03 | 22min | 2 tasks | 6 files |
 | Phase 06-scan-tab-analyse P01 | 15min | 2 tasks | 6 files |
 | Phase 06-scan-tab-analyse P02 | 13min | 2 tasks | 6 files |
+| Phase 06-scan-tab-analyse P03 | 62min | 3 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -118,6 +119,8 @@ Recent decisions affecting current work:
 - [Phase 6]: package.json-Script baseline zwischen test:watch und coverage eingefügt (nicht wörtlich nach coverage), um das Plan-eigene Diff-Gate (genau 1 hinzugefügte, 0 gelöschte Zeile ggü. 49e4365) zu erfüllen
 - [Phase 6]: Suite-Ist-Stand vor Phase 6 Plan 1 war 24 Dateien/331 passed statt der dokumentierten 23/323 (Quick-Task 260919-1ez landete nach RESEARCH-Zaehlung) - 06-VALIDATION.md korrigiert, keine Regression
 - [Phase 6]: [Phase 6]: Zwei stale Plan-Verify-Literale (49e4365-Diff-Basis fuer unveraenderte Dateien, 'Test Files +26 passed') gegen den tatsaechlichen Ist-Stand korrigiert (Rule 1, analog 06-01) - items.js weicht bereits vor Phase 6 durch Quick-Task 260919-1ez von 49e4365 ab, Suite lag vor Plan 06-02 schon bei 25 statt 24 Dateien
+- [Phase 6]: Diff-Gate-Basis für items.js/index.html im Task-2-Verify auf den echten Plan-Start-HEAD (c7fd69b) statt 49e4365 umgestellt, wegen bereits dokumentierter planunabhängiger Drift (Quick-Task 260919-1ez).
+- [Phase 6]: escHtml-Aufrufe im Scan-Tab-Rendering bewusst auf 8 einzelne Zeilen verteilt (defense-in-depth auch für numerische Snapshot-Felder), damit zeilen- und vorkommensbasierte Zählweisen übereinstimmen.
 
 ### Pending Todos
 
@@ -146,6 +149,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-19T08:29:45.887Z
-Stopped at: Completed 06-02-PLAN.md
+Last session: 2026-09-19T08:53:24.436Z
+Stopped at: Completed 06-scan-tab-analyse-03-PLAN.md
 Resume file: None

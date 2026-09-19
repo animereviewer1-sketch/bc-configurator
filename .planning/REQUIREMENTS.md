@@ -51,7 +51,7 @@ Requirements for this milestone. Each maps to roadmap phases.
 - [x] **SCAN-07**: Die Enumeration ist read-only, ruft keine entdeckten Funktionen auf, meidet Getter mit Nebenwirkungen, begrenzt Tiefe und Umfang und läuft gechunkt, sodass der Spiel-Tab nicht einfriert
 - [x] **SCAN-08**: Jeder Scan wird als versionierter Snapshot (BC-Version, Zeitstempel, Mod-Liste) gespeichert; Snapshots werden nie automatisch entfernt
 - [x] **SCAN-09**: Ein Baseline-Manifest listet, welche Spielfunktionen, Assets und Hooks das Tool und der Bot-Editor heute bereits nutzen
-- [ ] **SCAN-10**: Ein Scan-Tab zeigt die Fundliste durchsuchbar und nach Kategorie gefiltert, jeder Eintrag mit Badge „bereits genutzt“ oder „neu“ gegenüber dem Baseline-Manifest
+- [x] **SCAN-10**: Ein Scan-Tab zeigt die Fundliste durchsuchbar und nach Kategorie gefiltert, jeder Eintrag mit Badge „bereits genutzt“ oder „neu“ gegenüber dem Baseline-Manifest
 - [x] **SCAN-11**: Der Nutzer kann Snapshots im Scan-Tab manuell und nur mit Bestätigung löschen
 - [ ] **SCAN-12**: Ein einmaliges Analyse-Dokument (`.planning/analysis/GAME-INVENTORY.md`) gleicht einen echten Snapshot mit dem Baseline-Manifest ab und listet konkrete Vorschläge für neue Bot-Aktionen, -Trigger und Tab-Funktionen
 - [x] **SCAN-13**: Vor der Implementierung des Enumerators werden die offenen Fragen (bcModSdk-Rückgabeform, WCE/FBC-Global, Getter-Nebenwirkungen, Asset-Verschachtelungstiefe) per Konsolenbefehl im Spiel geklärt; die Befehle und Ergebnisse sind dokumentiert
@@ -131,7 +131,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SCAN-07 | Phase 5 | Complete |
 | SCAN-08 | Phase 5 | Complete |
 | SCAN-09 | Phase 6 | Complete |
-| SCAN-10 | Phase 6 | Pending |
+| SCAN-10 | Phase 6 | Complete |
 | SCAN-11 | Phase 6 | Complete |
 | SCAN-12 | Phase 6 | Pending |
 | SCAN-13 | Phase 5 | Complete |
