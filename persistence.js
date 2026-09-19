@@ -177,9 +177,11 @@ async function idbScreenshotKeys() {
 // ── Snapshot-Store: ein Datensatz je Spiel-Scan (SCAN-08) ──
 // Add-only: `add` statt `put` — ein zweiter Schreibversuch mit derselben id
 // scheitert sichtbar (ConstraintError → _idbSchreibfehler), der erste
-// Datensatz bleibt unverändert. Keine Lösch-/Leer-Funktion in dieser Phase
-// (Kernwert „nie automatisch entfernt“, Phase 6 bringt die Lösch-API mit
-// Bestätigung, SCAN-11).
+// Datensatz bleibt unverändert. Löschen eines einzelnen Snapshots ist
+// ausschließlich über idbSnapshotDelete möglich, das nur aus dem
+// bestätigten UI-Pfad deleteGameSnapshot (scan-tab.js) aufgerufen wird
+// (Phase 6, SCAN-11) — keine Leer-/Sammellösch-Funktion (Kernwert „nie
+// automatisch entfernt“).
 async function idbSnapshotPut(record) {
   // id: Zahl (Zeitstempel) oder nicht-leerer String (Zeitstempel + reqId-Suffix, Review CR-01)
   const idOk = record && (typeof record.id === 'number' || (typeof record.id === 'string' && record.id.length > 0));
@@ -244,6 +246,34 @@ async function idbSnapshotKeys() {
       req.onerror   = e => reject(e.target.error);
     });
   } catch (err) { console.warn('[IDB] snapshots keys:', err); return []; }
+}
+
+// Löscht genau einen Snapshot (SCAN-11). Einzige Lösch-Operation auf diesem
+// Store im gesamten Repo — der Aufrufer (scan-tab.js, deleteGameSnapshot)
+// bestätigt vorher per confirm(). Ungültige id: false, ohne IDB-Zugriff.
+async function idbSnapshotDelete(id) {
+  const idOk = typeof id === 'number' || (typeof id === 'string' && id.length > 0);
+  if (!idOk) return false;
+  try {
+    const db = await _idbOpen();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(_IDB_SNAPSHOTS, 'readwrite');
+      try {
+        tx.objectStore(_IDB_SNAPSHOTS).delete(id);
+      } catch (err) {
+        try { tx.abort(); } catch (e) {}
+        reject(err);
+        return;
+      }
+      tx.oncomplete = () => resolve();
+      tx.onerror    = e => reject(e.target.error);
+      tx.onabort    = e => reject(tx.error || e.target.error);
+    });
+    return true;
+  } catch (err) {
+    console.warn('[IDB] snapshot delete:', err);
+    return false;
+  }
 }
 
 // Additive, verifizierte, idempotente Migration der drei Alt-Blobs in den
@@ -368,7 +398,7 @@ if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     idbGet, idbSet, _idbOpen, _debounce,
     idbScreenshotBatch, idbScreenshotPut, idbScreenshotDelete, idbScreenshotGetAll, idbScreenshotKeys,
-    idbSnapshotPut, idbSnapshotGetAll, idbSnapshotGet, idbSnapshotKeys,
+    idbSnapshotPut, idbSnapshotGetAll, idbSnapshotGet, idbSnapshotKeys, idbSnapshotDelete,
     _screenshotStoreReady, _migrateScreenshotsToStore,
     SCREENSHOT_KINDS, SCREENSHOT_LEGACY_KEYS, SCREENSHOT_MIGRATION_KEY,
   };
