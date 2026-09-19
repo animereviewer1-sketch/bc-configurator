@@ -43,7 +43,7 @@ describe('persistence.js per CJS-Require (Dual-Export, Pattern B)', () => {
       'SCREENSHOT_KINDS', 'SCREENSHOT_LEGACY_KEYS', 'SCREENSHOT_MIGRATION_KEY',
       '_debounce', '_idbOpen', '_migrateScreenshotsToStore', '_screenshotStoreReady',
       'idbGet', 'idbScreenshotBatch', 'idbScreenshotDelete', 'idbScreenshotGetAll', 'idbScreenshotKeys', 'idbScreenshotPut',
-      'idbSet', 'idbSnapshotGet', 'idbSnapshotGetAll', 'idbSnapshotKeys', 'idbSnapshotPut',
+      'idbSet', 'idbSnapshotDelete', 'idbSnapshotGet', 'idbSnapshotGetAll', 'idbSnapshotKeys', 'idbSnapshotPut',
     ]);
   });
 
@@ -83,7 +83,7 @@ describe('persistence.js als klassisches Skript in der vm-Sandbox', () => {
       'SCREENSHOT_KINDS', 'SCREENSHOT_LEGACY_KEYS', 'SCREENSHOT_MIGRATION_KEY',
       '_debounce', '_idbOpen', '_migrateScreenshotsToStore', '_screenshotStoreReady',
       'idbGet', 'idbScreenshotBatch', 'idbScreenshotDelete', 'idbScreenshotGetAll', 'idbScreenshotKeys', 'idbScreenshotPut',
-      'idbSet', 'idbSnapshotGet', 'idbSnapshotGetAll', 'idbSnapshotKeys', 'idbSnapshotPut',
+      'idbSet', 'idbSnapshotDelete', 'idbSnapshotGet', 'idbSnapshotGetAll', 'idbSnapshotKeys', 'idbSnapshotPut',
     ]);
   });
 
@@ -160,9 +160,9 @@ describe('statisches Extraktions-Gate (Pitfall 2: keine Doppeldefinition)', () =
 // SCAN-08 (Speicherhälfte): IndexedDB v3 mit dem additiven Object-Store
 // `snapshots` (keyPath 'id') und den add-only-Primitiven idbSnapshotPut/
 // GetAll/Get/Keys. Add-only ist Kernwert: ein Snapshot wird NIE überschrieben
-// (add statt put), Fehler laufen sichtbar über _idbSchreibfehler. Es gibt in
-// dieser Phase keine Lösch-API (Phase 6, SCAN-11) — Test 7 ist das statische
-// Gate dafür.
+// (add statt put), Fehler laufen sichtbar über _idbSchreibfehler. Löschen
+// ausschließlich über idbSnapshotDelete hinter Bestätigung (Phase 6, SCAN-11;
+// Verhalten + Audit in tests/snapshot-delete.test.js).
 describe('Snapshot-Store (SCAN-08, IDB v3)', () => {
   const origAdd = globalThis.IDBObjectStore.prototype.add;
 
@@ -280,16 +280,17 @@ describe('Snapshot-Store (SCAN-08, IDB v3)', () => {
     warn.mockRestore();
   });
 
-  it('statisch: keine Lösch-API für Snapshots, Version 3, Store additiv, add statt put', () => {
+  it('statisch: Lösch-API nur idbSnapshotDelete (SCAN-11), Version 3, Store additiv, add statt put', () => {
     const persistenceSrc = src('persistence.js');
     expect(count(persistenceSrc, 'const _IDB_VERSION = 3;')).toBe(1);
     expect(count(persistenceSrc, "const _IDB_SNAPSHOTS = 'snapshots';")).toBe(1);
     expect(count(persistenceSrc, "createObjectStore(_IDB_SNAPSHOTS, { keyPath: 'id' })")).toBe(1);
     expect(count(persistenceSrc, 'objectStore(_IDB_SNAPSHOTS).add(')).toBe(1);
     expect(count(persistenceSrc, 'objectStore(_IDB_SNAPSHOTS).put(')).toBe(0);
-    expect(count(persistenceSrc, 'objectStore(_IDB_SNAPSHOTS).delete(')).toBe(0);
+    expect(count(persistenceSrc, 'objectStore(_IDB_SNAPSHOTS).delete(')).toBe(1);
     expect(count(persistenceSrc, 'objectStore(_IDB_SNAPSHOTS).clear(')).toBe(0);
-    expect(count(persistenceSrc, 'idbSnapshotDelete')).toBe(0);
+    expect(count(persistenceSrc, 'async function idbSnapshotDelete(id)')).toBe(1);
+    expect(count(persistenceSrc, 'idbSnapshotDelete')).toBeGreaterThanOrEqual(2);
     expect(count(persistenceSrc, 'deleteDatabase')).toBe(0);
     expect(count(persistenceSrc, "_idbSchreibfehler('Spiel-Snapshot'")).toBeGreaterThanOrEqual(1);
   });
