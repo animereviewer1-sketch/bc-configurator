@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 6
 current_phase_name: Scan-Tab & Analyse
 status: executing
-stopped_at: Completed 05-03-PLAN.md
-last_updated: "2026-09-19T08:01:58.463Z"
+stopped_at: Completed 06-01-PLAN.md
+last_updated: "2026-09-19T08:13:52.034Z"
 last_activity: 2026-09-19
 last_activity_desc: Phase 6 execution started
-state_head: b5a610cd7bc0819c70974c41e79309fa05282ec7
+state_head: b0b670736eaaa4bc690138dde62efd86f063174c
 progress:
   total_phases: 6
   completed_phases: 0
   total_plans: 20
-  completed_plans: 16
+  completed_plans: 17
   percent: 0
 ---
 
@@ -28,8 +28,8 @@ See: .planning/PROJECT.md (updated 2026-09-12)
 ## Current Position
 
 Phase: 6 (Scan-Tab & Analyse) — EXECUTING
-Plan: 1 of 4
-Status: Executing Phase 6
+Plan: 2 of 4
+Status: Ready to execute
 Last activity: 2026-09-19 — Phase 6 execution started
 
 Progress: [░░░░░░░░░░] 0%
@@ -73,6 +73,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 04 P04 | 25min | 3 tasks | 9 files |
 | Phase 05-gamecode-inventar P01 | 11min | 3 tasks | 5 files |
 | Phase 05-gamecode-inventar P03 | 22min | 2 tasks | 6 files |
+| Phase 06-scan-tab-analyse P01 | 15min | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -113,6 +114,8 @@ Recent decisions affecting current work:
 - [Phase 5]: Snapshot-Store-keyPath ist id (Plan-Text/must_haves), nicht ts wie im RESEARCH-Codebeispiel skizziert.
 - [Phase 5]: Plain-Object statt Map fuer die Pending-Korrelation in game-scan.js (statisches Loesch-Verbot-Gate zaehlt jede Loesch-Operation im Quelltext)
 - [Phase 5]: Testassertion aus Task 1 korrigiert: typeof triggerGameScan === undefined nach Guard-Throw ist wegen Funktionsdeklarations-Hoisting in Node-vm technisch nicht erreichbar
+- [Phase 6]: package.json-Script baseline zwischen test:watch und coverage eingefügt (nicht wörtlich nach coverage), um das Plan-eigene Diff-Gate (genau 1 hinzugefügte, 0 gelöschte Zeile ggü. 49e4365) zu erfüllen
+- [Phase 6]: Suite-Ist-Stand vor Phase 6 Plan 1 war 24 Dateien/331 passed statt der dokumentierten 23/323 (Quick-Task 260919-1ez landete nach RESEARCH-Zaehlung) - 06-VALIDATION.md korrigiert, keine Regression
 
 ### Pending Todos
 
@@ -141,6 +144,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-18T22:19:50.902Z
-Stopped at: Completed 05-03-PLAN.md
+Last session: 2026-09-19T08:13:51.899Z
+Stopped at: Completed 06-01-PLAN.md
 Resume file: None

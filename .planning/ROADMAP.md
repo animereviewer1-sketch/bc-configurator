@@ -147,7 +147,8 @@ Plans:
 **UI hint**: yes
 
 Plans:
-- [ ] 06-01-PLAN.md — Baseline-Manifest: `tools/build-baseline.js` (`npm run baseline`), deterministische `baseline-manifest.json`/`.js`, Frische-Diff-Test (SCAN-09)
+
+- [x] 06-01-PLAN.md — Baseline-Manifest: `tools/build-baseline.js` (`npm run baseline`), deterministische `baseline-manifest.json`/`.js`, Frische-Diff-Test (SCAN-09)
 - [ ] 06-02-PLAN.md — `idbSnapshotDelete` (einzige Lösch-Operation) + `deleteGameSnapshot` hinter `confirm()` + `exportGameSnapshot` + statischer Audit (SCAN-11)
 - [ ] 06-03-PLAN.md — Scan-Tab: Snapshot-Liste, Kategorie-Filter, debounced Suche, Paging, Badges „bereits genutzt“/„neu“, Verdrahtung items.js/index.html, `tools/analyze-snapshot.js` (SCAN-10)
 - [ ] 06-04-PLAN.md — Checkpoint: echten Snapshot exportieren; `.planning/analysis/GAME-INVENTORY.md` mit Übersichtszahlen und ≥ 15 Vorschlägen (SCAN-12)
