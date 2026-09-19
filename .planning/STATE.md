@@ -2,17 +2,17 @@
 gsd_state_version: "1.0"
 current_phase: 6
 current_phase_name: Scan-Tab & Analyse
-status: executing
-stopped_at: Completed 06-scan-tab-analyse-03-PLAN.md
-last_updated: "2026-09-19T08:53:24.563Z"
+status: verifying
+stopped_at: Phase 6 ausgeführt (4/4 Pläne), Review-Fix bbc7854, Verifier human_needed — UAT 06-UAT.md offen
+last_updated: "2026-09-19T13:14:51.638Z"
 last_activity: 2026-09-19
-last_activity_desc: Phase 6 execution started
-state_head: 43c2e2ed7a964bf39ecfe251a740d55e85cf7367
+last_activity_desc: Phase 6 executed + reviewed + verified (human_needed); awaiting UAT
+state_head: 30df95c454ba07c3756ecce94621f26dd93c5f09
 progress:
   total_phases: 6
   completed_phases: 0
   total_plans: 20
-  completed_plans: 19
+  completed_plans: 20
   percent: 0
 ---
 
@@ -27,10 +27,10 @@ See: .planning/PROJECT.md (updated 2026-09-12)
 
 ## Current Position
 
-Phase: 6 (Scan-Tab & Analyse) — EXECUTING
-Plan: 4 of 4
-Status: Ready to execute
-Last activity: 2026-09-19 — Phase 6 execution started
+Phase: 6 (Scan-Tab & Analyse) — VERIFYING (human_needed)
+Plan: 4 of 4 complete
+Status: UAT offen (06-UAT.md, 5 Tests); Phasen 2–5 ebenfalls human_needed
+Last activity: 2026-09-19 — Phase 6 executed, review fixes committed, verifier 11/11
 
 Progress: [░░░░░░░░░░] 0%
 
