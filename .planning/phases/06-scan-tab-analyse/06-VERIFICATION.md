@@ -1,6 +1,6 @@
 ---
 phase: 06-scan-tab-analyse
-verified: 2026-09-19T13:06:28Z
+verified: 2026-09-19T13:14:25Z
 status: human_needed
 score: 11/11 must-haves verified
 covered_files:
@@ -15,6 +15,8 @@ covered_files:
   - .planning/phases/06-scan-tab-analyse/06-04-PLAN.md
   - .planning/phases/06-scan-tab-analyse/06-04-SUMMARY.md
   - .planning/phases/06-scan-tab-analyse/06-RESEARCH.md
+  - .planning/phases/06-scan-tab-analyse/06-REVIEW.md
+  - .planning/phases/06-scan-tab-analyse/06-UAT.md
   - .planning/phases/06-scan-tab-analyse/06-VALIDATION.md
   - baseline-manifest.js
   - baseline-manifest.json
@@ -29,11 +31,12 @@ covered_files:
   - tests/helpers/scanFixtures.js
   - tests/persistence-module.test.js
   - tests/scan-tab-export.test.js
+  - tests/scan-tab-review.test.js
   - tests/scan-tab.test.js
   - tests/snapshot-delete.test.js
   - tools/analyze-snapshot.js
   - tools/build-baseline.js
-covered_digest: "v1:sha256:1c53cdebea35dfea0614022e51ab1c4f25389f6e059453c2a0c7397960e37aa2"
+covered_digest: "v1:sha256:a3e112eeba17ff2bca955b97417a8c6fa5cbdb8cfe1d4869671b8ce830b2b6c3"
 behavior_unverified: 0
 overrides_applied: 0
 decision_coverage:
