@@ -37,7 +37,7 @@ key-decisions:
   - "Das Dokument wurde nach dem ersten Entwurf (113 Zeilen) auf 202 Zeilen erweitert, um die Plan-Vorgabe 150–350 zu erfüllen — mit zwei inhaltlichen Blöcken (Tabelle aller 38 Mods mit Hook-/Patch-Zahlen und Badge; Chat-Handler-Pipeline mit Prioritäten), beide aus dem Snapshot generiert, kein Fülltext."
   - "NO-CODE-Gate gegen den 06-03-Analyse-Skript-Commit meldet ein Delta in `vitest.config.js` — das ist der bereits vor diesem Plan committete Flaky-Fix `2399a7a` (disableConsoleIntercept), kein Inhalt von 06-04 (Rule 1). Der 06-04-Commit selbst enthält exakt die zwei Analyse-Dateien."
   - "Erwarteter Dateizähler „28 Dateien“ im NO-CODE-Gate auf den Ist-Stand 29 korrigiert (derselbe Drift wie in 06-01/02/03-SUMMARY)."
-  - "Mod-Tabelle im Abschnitt „lohnende Mods“ auf 8 Mods (statt Minimum 4) erweitert, weil ULTRAbc (158 Hooks, 13 Patches inkl. Safeword-Funktionen), die Echo-Erweiterungen (44 eigene Asset-Gruppen) und BCAR+ (Chat-Handler @600) direkte Auswirkungen auf konkrete Vorschläge haben."
+  - "Mod-Tabelle im Abschnitt „lohnende Mods“ auf 8 Mods (statt Minimum 4) erweitert, weil ULTRAbc (158 Hooks, 13 Patches inkl. Safeword-Funktionen), die Echo-Erweiterungen (35 eigene Luzi-Asset-Gruppen) und BCAR+ (Chat-Handler @600) direkte Auswirkungen auf konkrete Vorschläge haben."
 
 patterns-established:
   - "Snapshot-Analyse-Workflow: (1) Schema-Check per node-Einzeiler, (2) `npm run analyze -- <file> --limit N`, (3) gezielte Skripte je Frage, (4) Tabellen generieren statt tippen."
@@ -50,7 +50,7 @@ coverage:
     requirement: "SCAN-12"
     verification:
       - kind: integration
-        ref: "node -e Schema-Check → OK R132 38 Mods; `npm run analyze -- .planning/analysis/snapshot.json --limit 5` druckt `| all | 19942 | 1536 | 18406 | 0 |`"
+        ref: "node -e Schema-Check → OK R132 38 Mods; `npm run analyze -- .planning/analysis/snapshot.json --limit 5` druckt `| all | 19960 | 1554 | 18406 | 0 |`"
         status: pass
     human_judgment: false
   - id: D2
@@ -101,7 +101,7 @@ status: complete
 ## Accomplishments
 
 - **Task 1 (Nutzer-Checkpoint):** `.planning/analysis/snapshot.json` liegt vor — R132 statt des erwarteten R131, 38 statt 28 Mods (die Session hatte inzwischen mehr Addons); `durationMs` 322, `errors` leer. Damit sind auch UAT-Punkte 1–2 aus Phase 5 faktisch belegt (Scan lief, Export funktioniert).
-- **Task 2:** GAME-INVENTORY.md — Übersicht: 19.942 Bezeichner, 1.536 genutzt, 18.406 neu; 12.146 Funktionen auf `window`, davon 19 im Tool; 130 Asset-Gruppen, 102 ohne Tool-Bezug (44 aus der Echo-Kleidungserweiterung); 588 gehookte Funktionen, `ChatRoomMessage` von 19 Mods.
+- **Task 2:** GAME-INVENTORY.md — Übersicht: 19.960 Bezeichner, 1.554 genutzt, 18.406 neu (nach Review-Fix CR-01; Erstfassung 19.942/1.536); 12.146 Funktionen auf `window`, davon 19 im Tool; 130 Asset-Gruppen, 102 ohne Tool-Bezug (35 Luzi-Gruppen der Echo-Kleidungserweiterung + 10 weitere Mod-Gruppen); 588 gehookte Funktionen, `ChatRoomMessage` von 19 Mods.
 - Vorschläge: 10 Bot-Aktionen (Gesichtsausdruck, Pose, nativer Item-Timer, Zufalls-Item/-Schloss, Alles lösen, Raum-Meldung, Aktivität, Beep, Admin-Aktion), 9 Bot-Trigger (Spieler verlässt, Orgasmus, Item-Änderung, Safeword, Map-Reichweite, Edge/verschlossene Fessel, Beziehung, Status, Handler-Registry), 8 Tab-Funktionen (Craft-Backup, Wardrobe-Import, Chat-Pipeline-Ansicht, Mod-Konflikte-Ansicht, Effekt-Filter, Mod-Gruppen-Warnung, Leinen-Status, Reputation/Skill lesen).
 - Mods: LSCG (API `Outfits`/`HypnoTriggers`/`ExportSettings`…), MBS (`wheelOutfits`, `_toItemBundles`), WCE (`fbcChatNotify`, `fbcSendAction`), BCX (API nicht-enumerierbar → nur über Konsole), ULTRAbc (Safeword-Patches), Echo-Erweiterungen, BCOM, BCAR+.
 
@@ -130,6 +130,8 @@ Siehe `key-decisions` im Frontmatter (Erweiterung auf 202 Zeilen mit generierten
 
 ## Issues Encountered
 
+- **Code-Review CR-01** (nach Plan-Abschluss): `_scanFlatten` zählte Mod-API-Objekte als `[object Object]` und verlor `LSCG_*`-Screen-Funktionen. Fix in `scan-tab.js` + WR-01 (numerische ids via `_scanGetSnapshot`) + WR-02 (`_scanFormatTs` ohne RangeError) + WR-03 (Fixture in Objektform); 9 Regressionstests in `tests/scan-tab-review.test.js`; GAME-INVENTORY.md-Tabelle neu aus `npm run analyze` übernommen (probes 184/99/85, all 19960/1554/18406). Verifier-Info „44 Gruppen“ → 35 Luzi-Gruppen + 10 weitere korrigiert.
+
 - `ls` zeigt `snapshot.json` als „M“ gegenüber `5d1296d`: der Nutzer hatte die Datei zunächst über GitHub angelegt und danach lokal durch den echten Export ersetzt; der finale Stand ist in `979f5fa` committet.
 
 ## User Setup Required
@@ -148,7 +150,7 @@ Keine.
 ## End-of-Phase-Human-Checks (nicht blockierend)
 
 1. GAME-INVENTORY.md lesen: Vorschläge konkret und plausibel?
-2. Scan-Tab, Kategorie „Alle“, leeres Suchfeld: Zählzeile „N von N Einträgen (G genutzt · U neu)“ beim Snapshot `1789820318831_gi_1789820315130_1` gegen `| all | 19942 | 1536 | 18406 | 0 |` prüfen.
+2. Scan-Tab, Kategorie „Alle“, leeres Suchfeld: Zählzeile „N von N Einträgen (G genutzt · U neu)“ beim Snapshot `1789820318831_gi_1789820315130_1` gegen `| all | 19960 | 1554 | 18406 | 0 |` prüfen.
 3. Aus 06-03 weiterhin offen: Suche „ChatRoom“ + Filter „Mods“ (38 Zeilen), 🗑 mit „Abbrechen“ beantworten.
 
 ## Self-Check: PASSED
