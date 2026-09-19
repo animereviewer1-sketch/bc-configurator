@@ -9,6 +9,7 @@
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
+    "baseline": "node tools/build-baseline.js",
     "coverage": "vitest run --coverage"
   },
   "devDependencies": {
