@@ -7373,35 +7373,48 @@ async function _backupDateiParsen(file, aufFortschritt) {
 
   try {
     if (await ws() !== '{') throw new Error('Die Datei beginnt nicht mit einem JSON-Objekt');
-    i++;
-    const ergebnis = {};
-    for (;;) {
+    // Rekursiv in JEDER Tiefe Wert fuer Wert lesen. Frueher nur zwei Ebenen
+    // (oberste + eine Sammlung) – beim Auto-Backup liegt aber alles unter
+    // "daten" bzw. "geaendert", dann wurde z. B. die komplette Screenshot-
+    // Sammlung als EIN String gelesen → "Invalid string length" (V8 ~512 MB).
+    // Jetzt ist der groesste Einzelstring ein einzelner Blattwert (ein Bild).
+    const setze = (obj, k, v) => {
+      // "__proto__" als Schluessel wuerde sonst den Prototyp setzen statt ein Feld
+      if (k === '__proto__') Object.defineProperty(obj, k, { value: v, enumerable: true, writable: true, configurable: true });
+      else obj[k] = v;
+    };
+    async function leseWert(pfad) {
       const c = await ws();
-      if (c === null) throw new Error('Datei unvollstaendig – vermutlich abgebrochener Download');
-      if (c === '}') { i++; break; }
-      if (c === ',') { i++; continue; }
-      if (c !== '"') throw new Error('Unerwartetes Zeichen "' + c + '" auf oberster Ebene');
-      const schluessel = await leseSchluessel('oberster Ebene');
-
-      if (await ws() === '{') {
-        i++;                               // Sammlung Feld fuer Feld lesen
+      if (c === null) throw new Error('Datei unvollstaendig – vermutlich abgebrochener Download' + (pfad ? ' (in "' + pfad + '")' : ''));
+      if (c === '{') {
+        i++;
         const obj = {};
         for (;;) {
           const d = await ws();
-          if (d === null) throw new Error('Datei unvollstaendig in "' + schluessel + '"');
-          if (d === '}') { i++; break; }
+          if (d === null) throw new Error('Datei unvollstaendig in "' + (pfad || 'oberster Ebene') + '"');
+          if (d === '}') { i++; return obj; }
           if (d === ',') { i++; continue; }
-          if (d !== '"') throw new Error('Unerwartetes Zeichen "' + d + '" in "' + schluessel + '"');
-          const k2 = await leseSchluessel('"' + schluessel + '"');
-          obj[k2] = JSON.parse(await leseRohwert());
+          if (d !== '"') throw new Error('Unerwartetes Zeichen "' + d + '" in "' + (pfad || 'oberster Ebene') + '"');
+          const k = await leseSchluessel('"' + (pfad || 'oberster Ebene') + '"');
+          setze(obj, k, await leseWert(pfad ? pfad + '.' + k : k));
           await vielleichtPause();
         }
-        ergebnis[schluessel] = obj;
-      } else {
-        ergebnis[schluessel] = JSON.parse(await leseRohwert());
       }
-      if (aufFortschritt) aufFortschritt(gelesen + i, file.size);
+      if (c === '[') {
+        i++;
+        const arr = [];
+        for (;;) {
+          const d = await ws();
+          if (d === null) throw new Error('Datei unvollstaendig in "' + pfad + '"');
+          if (d === ']') { i++; return arr; }
+          if (d === ',') { i++; continue; }
+          arr.push(await leseWert(pfad + '[' + arr.length + ']'));
+          await vielleichtPause();
+        }
+      }
+      return JSON.parse(await leseRohwert());   // String / Zahl / true / false / null
     }
+    const ergebnis = await leseWert('');
     return ergebnis;
   } finally {
     try { await leser.cancel(); } catch (e) {}
