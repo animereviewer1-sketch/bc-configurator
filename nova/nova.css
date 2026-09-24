@@ -812,3 +812,65 @@ html[data-ui="nova"] .nv-cmdk-head input,
 @media (max-width: 1100px) {
   html[data-ui="nova"] .outfit-tab-layout { grid-template-columns: 1fr 330px; }
 }
+
+/* ══════════════════════════════════════════════════════════
+   LADEZUSTAND BEIM TAB-WECHSEL (nova.js → navigate)
+   Nur transform/opacity-Animationen: die laufen auf dem Compositor
+   weiter, während switchTab() den Hauptthread blockiert.
+   ══════════════════════════════════════════════════════════ */
+html[data-ui="nova"][data-nv-loading] .tab-pane.active { visibility: hidden; }
+
+.nv-progress {
+  position: fixed; top: var(--nv-top); left: var(--nv-side); right: 0; height: 2px;
+  z-index: 125; pointer-events: none; opacity: 0; overflow: hidden;
+  transition: opacity .35s ease .1s;
+}
+.nv-progress i {
+  position: absolute; inset: 0; transform-origin: left center; transform: scaleX(0);
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  box-shadow: 0 0 12px var(--nv-glow);
+}
+.nv-progress.on { opacity: 1; transition: none; }
+.nv-progress.on i { animation: nvProg 2.4s cubic-bezier(.08, .8, .2, 1) forwards; }
+.nv-progress.done { opacity: 0; transition: opacity .35s ease .15s; }
+.nv-progress.done i { animation: none; transform: scaleX(1); transition: transform .2s ease-out; }
+@keyframes nvProg { from { transform: scaleX(0); } to { transform: scaleX(.92); } }
+
+.nv-loader {
+  position: fixed; top: var(--nv-top); left: var(--nv-side); right: 0; bottom: 0; z-index: 105;
+  display: grid; place-items: center; pointer-events: none;
+  opacity: 0; visibility: hidden; transition: opacity .2s ease, visibility 0s linear .2s;
+}
+.nv-loader.on { opacity: 1; visibility: visible; transition: opacity .15s ease; }
+.nv-loader-card { display: flex; flex-direction: column; align-items: center; gap: 16px; transform: translateY(-4vh); }
+.nv-loader-ring { position: relative; width: 64px; height: 64px; display: grid; place-items: center; }
+.nv-loader-ring::before {
+  content: ''; position: absolute; inset: 0; border-radius: 50%;
+  background: conic-gradient(from 0deg, transparent 0 55%, var(--accent) 85%, var(--accent-2) 100%);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2px));
+  animation: nvRot .9s linear infinite;
+}
+.nv-loader-ring::after {
+  content: ''; position: absolute; inset: 8px; border-radius: 50%;
+  background: radial-gradient(circle, oklch(76% 0.15 var(--nv-h) / .22), transparent 70%);
+  animation: nvGlow 1.6s ease-in-out infinite;
+}
+.nv-loader-ico { position: relative; z-index: 1; color: var(--accent-text); display: grid; place-items: center; }
+.nv-loader-ico svg { width: 22px; height: 22px; }
+.nv-loader-txt { font-size: .82rem; font-weight: 500; color: var(--text2); letter-spacing: .01em; }
+.nv-loader-skel { display: flex; flex-direction: column; gap: 8px; width: 220px; }
+.nv-loader-skel i {
+  position: relative; display: block; height: 8px; border-radius: 99px; overflow: hidden;
+  background: rgba(255,255,255,.05);
+}
+.nv-loader-skel i:nth-child(2) { width: 80%; }
+.nv-loader-skel i:nth-child(3) { width: 55%; }
+.nv-loader-skel i::after {
+  content: ''; position: absolute; inset: 0; transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.1), transparent);
+  animation: nvShimmer 1.3s ease-in-out infinite;
+}
+@keyframes nvRot { to { transform: rotate(360deg); } }
+@keyframes nvGlow { 0%, 100% { opacity: .5; transform: scale(.9); } 50% { opacity: 1; transform: scale(1.05); } }
+@keyframes nvShimmer { to { transform: translateX(100%); } }
