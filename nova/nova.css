@@ -105,7 +105,7 @@ html[data-ui="nova"][data-theme="hc"] body {
 .nv-bg.ready { opacity: 1; }
 html[data-nv-bg="off"] .nv-bg { opacity: 0 !important; }
 .nv-grain {
-  position: fixed; inset: -50%; z-index: -1; pointer-events: none; opacity: .05;
+  position: fixed; inset: 0; z-index: -1; pointer-events: none; opacity: .05;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 .9 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 .nv-vignette {
@@ -158,10 +158,10 @@ html[data-ui="nova"] {
   position: fixed; left: 0; top: 0; bottom: 0; width: var(--nv-side);
   z-index: 130; display: flex; flex-direction: column;
   padding: 14px 12px 12px;
+  /* Bewusst OHNE backdrop-filter: die Aurora dahinter bewegt sich, der Browser
+     muesste die ganze Leiste bei jedem Frame neu weichzeichnen (Performance). */
   background:
-    linear-gradient(180deg, rgba(12,14,22,.82), rgba(8,9,14,.9));
-  backdrop-filter: blur(22px) saturate(150%);
-  -webkit-backdrop-filter: blur(22px) saturate(150%);
+    linear-gradient(180deg, rgba(12,14,22,.96), rgba(8,9,14,.98));
   border-right: 1px solid rgba(160,170,255,.08);
   box-shadow: 1px 0 0 rgba(255,255,255,.02), 20px 0 60px -30px rgba(0,0,0,.8);
   transition: width .5s var(--nv-ease);
@@ -185,13 +185,13 @@ html[data-ui="nova"] {
 .nv-brand-mark img { width: 26px; height: 26px; }
 .nv-brand-mark::after {
   content: ''; position: absolute; inset: -1px; border-radius: inherit; padding: 1px;
-  background: conic-gradient(from var(--nv-spin, 0deg), transparent 0 70%, var(--accent) 85%, transparent 100%);
+  background: conic-gradient(from 0deg, transparent 0 70%, var(--accent) 85%, transparent 100%);
   -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
   -webkit-mask-composite: xor; mask-composite: exclude;
   animation: nvSpin 6s linear infinite; opacity: .8;
 }
-@property --nv-spin { syntax: '<angle>'; initial-value: 0deg; inherits: false; }
-@keyframes nvSpin { to { --nv-spin: 360deg; } }
+/* transform statt animierter Custom Property – laeuft auf dem Compositor, kein Repaint */
+@keyframes nvSpin { to { transform: rotate(360deg); } }
 .nv-brand-text { overflow: hidden; }
 .nv-brand-name {
   font-family: var(--nv-display); font-weight: 750; font-size: 1.02rem; letter-spacing: -0.02em;
@@ -353,9 +353,8 @@ html[data-nv-side="collapsed"] .nv-sidebar .nv-brand { justify-content: center; 
 html[data-ui="nova"] {
   & .topbar {
     height: var(--nv-top); padding: 0 18px 0 16px; gap: 10px;
-    background: linear-gradient(180deg, rgba(8,9,14,.78), rgba(8,9,14,.55));
-    backdrop-filter: blur(20px) saturate(160%);
-    -webkit-backdrop-filter: blur(20px) saturate(160%);
+    /* ohne backdrop-filter – siehe .nv-sidebar */
+    background: linear-gradient(180deg, rgba(8,9,14,.95), rgba(8,9,14,.86));
     border-bottom: 1px solid rgba(160,170,255,.07);
     z-index: 120;
   }
@@ -431,10 +430,9 @@ html[data-ui="nova"] {
 html[data-ui="nova"] {
   & .room-panel {
     margin: 12px 16px 0; min-height: 46px; padding: 6px 8px 6px 14px; gap: 10px;
-    position: relative; z-index: 110; /* Dropdown über den Karten halten (backdrop-filter bildet Stacking-Kontext) */
-    background: rgba(12,14,22,.55); border: 0; border-radius: 14px;
+    position: relative; z-index: 110; /* Dropdown über den Karten halten */
+    background: rgba(12,14,22,.85); border: 0; border-radius: 14px;
     box-shadow: var(--nv-edge);
-    backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
   }
   & .room-label {
     font-size: .66rem; font-weight: 650; letter-spacing: .14em; text-transform: uppercase; color: var(--text3);

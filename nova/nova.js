@@ -697,7 +697,7 @@
   // ══════════════════════════════════════════════════════════
   var bg = (function () {
     var canvas, gl, prog, uRes, uTime, uMouse, uC1, uC2, uC3, raf = 0, running = false, t0 = performance.now(), last = 0;
-    var mouse = [0.5, 0.8], mouseT = [0.5, 0.8], hue = 58, SCALE = 0.35, FRAME = 1000 / 30;
+    var mouse = [0.5, 0.8], mouseT = [0.5, 0.8], hue = 58, SCALE = 0.25, FRAME = 1000 / 20;
 
     function oklch(L, C, H) {
       var a = C * Math.cos(H * Math.PI / 180), b = C * Math.sin(H * Math.PI / 180);
@@ -716,7 +716,7 @@
       'float hash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}',
       'float noise(vec2 p){vec2 i=floor(p),f=fract(p);vec2 u=f*f*(3.-2.*f);',
       ' return mix(mix(hash(i),hash(i+vec2(1.,0.)),u.x),mix(hash(i+vec2(0.,1.)),hash(i+vec2(1.,1.)),u.x),u.y);}',
-      'float fbm(vec2 p){float v=0.,a=.5;for(int i=0;i<5;i++){v+=a*noise(p);p=p*2.03+vec2(1.7,9.2);a*=.5;}return v;}',
+      'float fbm(vec2 p){float v=0.,a=.5;for(int i=0;i<3;i++){v+=a*noise(p);p=p*2.03+vec2(1.7,9.2);a*=.5;}return v;}',
       'void main(){',
       ' vec2 uv=gl_FragCoord.xy/uRes;vec2 p=uv;p.x*=uRes.x/uRes.y;',
       ' float t=uTime*.035;',
@@ -757,6 +757,9 @@
       addEventListener('resize', resize);
       addEventListener('pointermove', function (e) { mouseT = [e.clientX / innerWidth, 1 - e.clientY / innerHeight]; }, { passive: true });
       document.addEventListener('visibilitychange', function () { if (document.hidden) pause(); else if (wanted()) start(); });
+      // Popup neben dem Spiel: ohne Fokus steht das Bild still, damit das Spiel die Grafikleistung bekommt
+      addEventListener('blur', function () { pause(); });
+      addEventListener('focus', function () { if (wanted()) start(); });
       return true;
     }
     function resize() {
@@ -792,7 +795,7 @@
       var ok = init();
       canvas.classList.add('ready');
       if (!ok) return;
-      if (RM.matches || document.hidden) { draw(performance.now()); return; }
+      if (RM.matches || document.hidden || (document.hasFocus && !document.hasFocus())) { draw(performance.now()); return; }
       if (!running) { running = true; raf = requestAnimationFrame(loop); }
     }
     function pause() { running = false; cancelAnimationFrame(raf); }
