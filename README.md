@@ -131,6 +131,20 @@ Zeit von selbst auf.
 
 ---
 
+## Design: Nova ↔ Klassisch
+
+Das Tool hat zwei Oberflächen, umschaltbar ohne Neuladen – die Wahl bleibt gespeichert (`localStorage`: `BC_UI_Design`):
+
+- **Nova** (Standard): Seitenleiste mit allen Bereichen, großer Seitentitel, Glas-Karten, WebGL-Aurora im Hintergrund (in der Akzentfarbe), Toasts statt Statuspille, Mikro-Animationen (GSAP).
+  - **Strg/⌘ K** öffnet die Befehlspalette: zu jedem Tab springen, „Laden“, „Verbinden“, Backups, Exporte …
+  - Seitenleiste einklappbar (Icon links oben); unter 1100 px Breite automatisch kompakt.
+  - Hintergrund-Animation abschaltbar in den Einstellungen; „Bewegung reduzieren“ des Systems wird respektiert.
+- **Klassisch**: das bisherige Layout, unverändert.
+
+Umschalten: unten in der Seitenleiste, oben in den Einstellungen, über die Befehlspalette oder im klassischen Design über das ✨-Icon neben dem Zahnrad. Nova ändert keine Daten, IDs oder Funktionen – es ist eine reine Präsentationsschicht.
+
+---
+
 ## Hinweise
 
 - Der Scanner erfasst nur Personen im **selben Raum**. In der Lobby wird nichts gefunden.
@@ -153,4 +167,6 @@ shop.js rank.js money.js   Shop-, Rang- und Money-System
 outfit-import.js           Stapelimport von Outfit-Codes
 bc-icons.js                Icon-Set (Stroke-Icons, ersetzt Emojis)
 bc-icons-ergaenzung.js     Ergänzende Icons und Selektoren
+nova/                      Nova-Design (neue Oberfläche, umschaltbar – siehe „Design“)
+vendor/gsap.min.js         GSAP 3.13 für die Nova-Animationen (lokal, kein CDN)
 ```
