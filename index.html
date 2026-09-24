@@ -11,6 +11,9 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js"></script>
   <script src="bc-icons.js"></script>
   <script src="bc-icons-ergaenzung.js"></script>
+  <!-- Nova-Design: Boot setzt data-ui vor dem ersten Zeichnen (kein Flackern); CSS ist komplett unter html[data-ui="nova"] gescoped -->
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300..800&family=Geist+Mono:wght@400..600&family=Bricolage+Grotesque:opsz,wght@12..96,500..800&display=swap" rel="stylesheet">
+  <script src="nova/nova-boot.js?_=2"></script>
   <style>
 
 :root {
@@ -4267,4 +4270,9 @@ document.write('<scr'+'ipt src="bc-autobackup.js?_='+_cbv+'"><\/scr'+'ipt>');
   addEventListener('DOMContentLoaded', () => setTimeout(_bcBackupZeigeStatus, 1500));
 </script>
 
+<!-- Nova-Design (Präsentationsschicht, nach allen Modulen): GSAP lokal, dann nova.js -->
+<script>
+document.write('<scr'+'ipt src="vendor/gsap.min.js"><\/scr'+'ipt>');
+document.write('<scr'+'ipt src="nova/nova.js?_='+_cbv+'"><\/scr'+'ipt>');
+</script>
 </body>
