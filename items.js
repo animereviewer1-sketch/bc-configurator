@@ -7422,26 +7422,85 @@ async function _backupDateiLesen(file, aufFortschritt) {
   }
 }
 
+/* Automatische Backups (bc-autobackup.js) haben ein anderes Format als der
+   manuelle Export – der Restore las sie bisher als "leer" und meldete trotzdem
+   Erfolg:
+     BC_Voll_*.json   { _meta:{art:'voll'}, daten:{ lscgDB, profiles, … } }
+     BC_Inkr_*.json   { _meta:{art:'inkrement'}, geaendert:{…}, geloescht:{…}, komplett:{…} }
+     Export/Rekonstr. { _meta:{…}, lscgDB, profiles, … }   (flach)
+   Hier wird eine beliebige Auswahl davon (chronologisch nach _meta.exportedAt)
+   zu EINEM flachen Datensatz zusammengefuehrt. Loeschungen aus Inkrementen
+   ('geloescht') werden bewusst NICHT angewandt: der Restore fuehrt nur
+   zusammen und darf nie etwas entfernen – gerade wenn ein Inkrement nach
+   einem Datenverlust geschrieben wurde, wuerde es den Verlust sonst
+   "wiederherstellen". LSCG-Outfits und das Wheel werden versionsweise
+   gemerged, damit keine Version einer frueheren Datei verloren geht. */
+function _backupZuExport(teile) {
+  const gueltig = (teile || []).filter(d => d && typeof d === 'object' && d._meta);
+  if (!gueltig.length) return null;
+  gueltig.sort((a, b) => String(a._meta.exportedAt ?? '').localeCompare(String(b._meta.exportedAt ?? '')));
+  const ziel = {};
+  const mischen = (quelle) => {
+    if (!quelle || typeof quelle !== 'object') return;
+    for (const [k, v] of Object.entries(quelle)) {
+      if (k === '_meta' || v == null) continue;
+      if (k === 'lscgDB') { ziel.lscgDB = ziel.lscgDB || {}; _lscgMerge(ziel.lscgDB, v); }
+      else if (k === 'mbsWheel' && Array.isArray(v)) { ziel.mbsWheel = ziel.mbsWheel || []; _mbsMerge(ziel.mbsWheel, v); }
+      else if (Array.isArray(v) && Array.isArray(ziel[k]) && /Fav|favourites/i.test(k)) {
+        ziel[k] = [...new Set([...ziel[k], ...v])];
+      }
+      else if (v && typeof v === 'object' && !Array.isArray(v) && ziel[k] && typeof ziel[k] === 'object' && !Array.isArray(ziel[k])
+               && ['profiles','curseDatabase','lscgTable','lscgCache','curseComments','curseOutfitFlags','lscgSlots','lscgScreenshots','profileScreenshots','mbsWheelShots'].includes(k)) {
+        Object.assign(ziel[k], v);
+      }
+      else ziel[k] = v;   // Einzelwerte/kleine Bestaende: neuere Datei gewinnt
+    }
+  };
+  for (const d of gueltig) {
+    const art = d._meta.art;
+    if (art === 'voll') mischen(d.daten);
+    else if (art === 'inkrement') { mischen(d.geaendert); mischen(d.komplett); }
+    else mischen(d);
+  }
+  const letzte = gueltig[gueltig.length - 1]._meta;
+  ziel._meta = Object.assign({}, letzte, { dateien: gueltig.length,
+    arten: gueltig.map(d => d._meta.art || 'export') });
+  return ziel;
+}
+
 function importAllData() {
   const inp = document.createElement('input');
-  inp.type = 'file'; inp.accept = '.json';
+  inp.type = 'file'; inp.accept = '.json'; inp.multiple = true;
   inp.onchange = async e => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
     try {
         showStatus('⏳ Backup wird gelesen…', 'info');
-        const d = await _backupDateiLesen(file, (fertig, gesamt) => {
-          if (gesamt) showStatus('⏳ Backup wird gelesen… ' + Math.floor(fertig / gesamt * 100) + '%', 'info');
-        });
-        if (!d || !d._meta) {
+        const gelesen = [];
+        for (let i = 0; i < files.length; i++) {
+          const pre = files.length > 1 ? '(' + (i + 1) + '/' + files.length + ') ' : '';
+          gelesen.push(await _backupDateiLesen(files[i], (fertig, gesamt) => {
+            if (gesamt) showStatus('⏳ Backup wird gelesen… ' + pre + Math.floor(fertig / gesamt * 100) + '%', 'info');
+          }));
+        }
+        const ohneMeta = gelesen.filter(x => !x || !x._meta).length;
+        const d = _backupZuExport(gelesen);
+        if (!d) {
           showStatus('❌ Keine gültige Backup-Datei', 'error');
           return;
         }
+        const lscgSpieler = Object.keys(d.lscgDB ?? {}).length;
+        const lscgVersionen = Object.values(d.lscgDB ?? {}).reduce((n, x) => n + (x?.versions?.length ?? 0), 0);
+        const nurInkr = d._meta.arten.every(a => a === 'inkrement');
         if (!confirm(
-          'Komplett-Backup vom ' + d._meta.exportedAt?.slice(0, 10) + ' einspielen?\n'
+          (files.length > 1 ? files.length + ' Backup-Dateien' : 'Komplett-Backup')
+          + ' (Stand ' + d._meta.exportedAt?.slice(0, 10) + ') einspielen?\n'
           + 'Profile: ' + Object.keys(d.profiles ?? {}).length + '\n'
-          + 'Curse-Einträge: ' + Object.keys(d.curseDatabase ?? {}).length + '\n\n'
-          + 'Bestehende Daten werden zusammengeführt.'
+          + 'Curse-Einträge: ' + Object.keys(d.curseDatabase ?? {}).length + '\n'
+          + 'LSCG-Outfits: ' + lscgSpieler + ' Spieler, ' + lscgVersionen + ' Versionen\n'
+          + (ohneMeta ? '⚠ ' + ohneMeta + ' Datei(en) ohne Backup-Kennung übersprungen\n' : '')
+          + (nurInkr ? '⚠ Nur Inkremente gewählt – sie enthalten nur Änderungen. Für den vollen Bestand die passende BC_Voll_…-Datei mit auswählen.\n' : '')
+          + '\nBestehende Daten werden zusammengeführt, nichts wird gelöscht.'
         )) return;
 
         // Profile zusammenführen
@@ -7463,7 +7522,8 @@ function importAllData() {
         if (d.curseDatabase) _saveCurseDB();
 
         // v2-Felder: LSCG-DB, Wheel-DB, Screenshots, Favoriten, Standard-Outfit
-        if (d.lscgDB) { _lscgMerge(LSCG_DB, d.lscgDB); _saveLscgDB(); }
+        let lscgNeu = 0;
+        if (d.lscgDB) { lscgNeu = _lscgMerge(LSCG_DB, d.lscgDB); _saveLscgDB(); }
         if (d.lscgSlots)          { Object.assign(_lscgSlots, d.lscgSlots); _saveLscgSlots(); }
         if (d.lscgScreenshots)    { Object.assign(LSCG_SCREENSHOTS, d.lscgScreenshots); _saveLscgScreenshots(); }
         if (d.profileScreenshots) { Object.assign(PROFILE_SCREENSHOTS, d.profileScreenshots); _saveProfileScreenshots(); }
@@ -7506,7 +7566,8 @@ function importAllData() {
         ].filter(Boolean).join(', ');
         showStatus('✅ Backup eingespielt: '
           + Object.keys(PROFILES).length + ' Profile, '
-          + Object.keys(CURSE_DB).length + ' Curse-Einträge'
+          + Object.keys(CURSE_DB).length + ' Curse-Einträge, '
+          + Object.keys(LSCG_DB).length + ' LSCG-Spieler (' + lscgNeu + ' Versionen neu)'
           + (nebenText ? ', neu: ' + nebenText : ''), 'success');
       } catch(err) {
         console.error('[importAllData]', err);
@@ -8233,6 +8294,13 @@ const LSCG_SLOTS_KEY    = 'BC_LSCG_SLOTS_v1';         // Persistierte LSCG-Outfi
 // eines solchen Spielers alles ausser den letzten 30 verworfen.
 const LSCG_MAX_VERSIONS = 1500;
 let LSCG_DB = {};
+// Lade-Sperre: Bis der gespeicherte Bestand aus IDB gelesen und in LSCG_DB
+// zusammengefuehrt ist, darf _saveLscgDB() NICHT schreiben. Sonst ueberschreibt
+// z. B. der Auto-Scan beim Verbinden (_handleOutfitScanData → _saveLscgDB) den
+// gespeicherten Bestand mit dem fast leeren RAM-Stand – und das Laden liest
+// danach genau diesen Stand. So gingen alle LSCG-Outfits verloren.
+let _lscgLoaded = false;
+let _lscgSavePending = false;
 // Synchrones localStorage-Preload entfernt: JSON.parse eines großen LSCG_DB blockiert den UI-Thread.
 // IDB lädt async in der IIFE unten (<50ms) – kein spürbarer Unterschied für den Nutzer.
 const _osOpenSet  = new Set();
@@ -8447,6 +8515,23 @@ function toggleOsChar(mk, hdrEl) {
 }
 
 (async () => {
+  // LSCG-Bestand ZUERST laden (vor Screenshots/Slots, die bei grossem Bestand
+  // Sekunden dauern) – das haelt das Fenster der Lade-Sperre kurz.
+  try {
+    const saved = await idbGet(LSCG_IDB_KEY);
+    if (saved && typeof saved === 'object' && Object.keys(saved).length) {
+      // Versionsweise zusammenfuehren. Ein  LSCG_DB = saved  haette Outfits
+      // verworfen, die waehrend des Ladens vom Scanner hereinkamen.
+      const _neu = _lscgMerge(LSCG_DB, saved);
+      console.log('[BCU] LSCG-DB geladen:', Object.keys(LSCG_DB).length, 'Spieler,', _neu, 'Versionen ergaenzt');
+    }
+    _lscgLoaded = true;
+    if (_lscgSavePending) { _lscgSavePending = false; _saveLscgDB(); }
+  } catch (e) {
+    // Sperre bleibt aktiv: lieber neue Scans nicht speichern als den Bestand ueberschreiben
+    console.error('[LSCG] Laden fehlgeschlagen – Speichern bleibt gesperrt:', e);
+    if (typeof showStatus === 'function') showStatus('❌ LSCG-Outfits konnten nicht geladen werden – Speichern gesperrt, bitte Tool neu laden', 'error');
+  }
   await _loadIgnoreSettings();
   const favSaved = await idbGet(LSCG_FAV_KEY);
   if (Array.isArray(favSaved)) _osFavs = new Set(favSaved);
@@ -8465,13 +8550,6 @@ function toggleOsChar(mk, hdrEl) {
     _lscgSlots = Object.assign({}, slotsSaved, _lscgSlots);
     _rebuildFpMapFromSlots();
     console.log('[BCU] LSCG Slots geladen:', Object.keys(_lscgSlots).length);
-  }
-  const saved = await idbGet(LSCG_IDB_KEY);
-  if (saved && typeof saved === 'object' && Object.keys(saved).length) {
-    // Versionsweise zusammenfuehren. Ein  LSCG_DB = saved  haette Outfits
-    // verworfen, die waehrend des Ladens vom Scanner hereinkamen.
-    const _neu = _lscgMerge(LSCG_DB, saved);
-    console.log('[BCU] LSCG-DB geladen:', Object.keys(LSCG_DB).length, 'Spieler,', _neu, 'Versionen ergaenzt');
   }
   if (Object.keys(LSCG_DB).length) {
     // Fingerprints werden NICHT mehr synchron neu berechnet (blockiert UI bei großer DB).
@@ -8511,6 +8589,8 @@ function toggleOsChar(mk, hdrEl) {
 })();
 
 async function _saveLscgDB() {
+  // Vor dem Laden nur vormerken – siehe _lscgLoaded
+  if (!_lscgLoaded) { _lscgSavePending = true; return; }
   await idbSet(LSCG_IDB_KEY, LSCG_DB);
   // localStorage-Backup absichtlich entfernt: JSON.stringify/parse eines großen LSCG_DB
   // blockiert den UI-Thread. IDB ist zuverlässig genug als primäre Quelle.

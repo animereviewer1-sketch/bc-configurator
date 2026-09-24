@@ -223,13 +223,127 @@
     }
   }
 
+  function markNav(tab, instant) {
+    $$('.nv-nav-item[data-tab]', sidebar).forEach(function (b) { b.classList.toggle('active', b.getAttribute('data-tab') === tab); });
+    movePill(instant);
+  }
+
   function onTab(tab, animate) {
     if (!TABS[tab]) return;
-    $$('.nv-nav-item[data-tab]', sidebar).forEach(function (b) { b.classList.toggle('active', b.getAttribute('data-tab') === tab); });
-    movePill(!animate);
+    // Während navigate() läuft, haben Seitenleiste und Titel schon reagiert,
+    // das Einblenden übernimmt hideLoader() – hier nur den Zustand merken.
+    if (navBusy) { lastTab = tab; return; }
+    markNav(tab, !animate);
     setHeader(tab, animate && tab !== lastTab);
     if (animate && tab !== lastTab) animatePane(tab);
     lastTab = tab;
+  }
+
+  // ══════════════════════════════════════════════════════════
+  //  LADEZUSTAND BEIM TAB-WECHSEL
+  //  Nur für Wechsel aus Seitenleiste/Befehlspalette. switchTab()
+  //  selbst bleibt synchron, weil anderer Code direkt nach dem Aufruf
+  //  mit dem neuen Tab weiterarbeitet (z. B. „zum Outfit hinzufügen“).
+  //  Ablauf: Inhalt ausblenden + Ladebalken zeigen → zeichnen lassen →
+  //  Original-switchTab rendert (blockiert den Hauptthread; Balken und
+  //  Spinner laufen als CSS-Animation auf dem Compositor weiter) →
+  //  verzögerte Renderer (setTimeout 0) und sichtbare Bilder abwarten →
+  //  fertigen Inhalt auf einmal einblenden.
+  // ══════════════════════════════════════════════════════════
+  var navBusy = false, navToken = 0, loader = null, progress = null, loaderTimer = 0;
+  var fastTabs = {};          // Tabs, deren Render zuletzt < FAST_MS dauerte → ohne Ladebildschirm
+  var FAST_MS = 60, MAX_WAIT_MS = 6000, IMG_WAIT_MS = 900;
+
+  function nextFrame() { return new Promise(function (r) { requestAnimationFrame(function () { r(); }); }); }
+  function tick() { return new Promise(function (r) { setTimeout(r, 0); }); }
+
+  function waitImages(tab, max) {
+    var pane = document.getElementById('tab-' + tab);
+    if (!pane) return Promise.resolve();
+    var imgs = $$('img', pane).filter(function (i) { return !i.complete && i.offsetParent !== null; }).slice(0, 40);
+    if (!imgs.length) return Promise.resolve();
+    var all = Promise.all(imgs.map(function (i) {
+      return new Promise(function (r) { i.addEventListener('load', r, { once: true }); i.addEventListener('error', r, { once: true }); });
+    }));
+    return Promise.race([all, new Promise(function (r) { setTimeout(r, max); })]);
+  }
+
+  function buildLoader() {
+    progress = h('<div class="nv-progress nv-only" aria-hidden="true"><i></i></div>');
+    loader = h('<div class="nv-loader nv-only" role="status" aria-live="polite">' +
+      '<div class="nv-loader-card">' +
+        '<div class="nv-loader-ring"><span class="nv-loader-ico"></span></div>' +
+        '<div class="nv-loader-txt"></div>' +
+        '<div class="nv-loader-skel"><i></i><i></i><i></i></div>' +
+      '</div></div>');
+    document.body.appendChild(progress);
+    document.body.appendChild(loader);
+  }
+
+  function showLoader(tab) {
+    var m = TABS[tab] || { t: tab, i: 'clock' };
+    $('.nv-loader-ico', loader).innerHTML = ico(m.i, 22);
+    $('.nv-loader-txt', loader).textContent = m.t + ' wird geladen…';
+    // Animationen neu starten
+    progress.classList.remove('on', 'done'); loader.classList.remove('on');
+    void progress.offsetWidth;
+    progress.classList.add('on');
+    loader.classList.add('on');
+    root.setAttribute('data-nv-loading', '1');
+  }
+
+  function hideLoader(tab) {
+    clearTimeout(loaderTimer);
+    progress.classList.add('done');
+    loader.classList.remove('on');
+    root.removeAttribute('data-nv-loading');
+    setTimeout(function () { if (!root.hasAttribute('data-nv-loading')) progress.classList.remove('on', 'done'); }, 450);
+    if (tab) animatePane(tab);
+  }
+
+  function navigate(tab) {
+    if (typeof window.switchTab !== 'function' || !TABS[tab]) return;
+    var cur = currentTab();
+    if (!isNova() || tab === cur) { window.switchTab(tab); return; }
+
+    // Schnelle Tabs direkt wechseln – ein Ladebildschirm wäre hier nur ein Flackern
+    if (fastTabs[tab]) {
+      var f0 = performance.now();
+      window.switchTab(tab);
+      if (performance.now() - f0 > FAST_MS) delete fastTabs[tab];
+      return;
+    }
+
+    var my = ++navToken;
+    navBusy = true;
+    markNav(tab, false);
+    setHeader(tab, true);
+    showLoader(tab);
+    // Notbremse: nie länger als MAX_WAIT_MS im Ladezustand hängen
+    clearTimeout(loaderTimer);
+    loaderTimer = setTimeout(function () { if (my === navToken) { navBusy = false; hideLoader(tab); } }, MAX_WAIT_MS);
+
+    nextFrame().then(nextFrame).then(function () {
+      if (my !== navToken) return;
+      var t0 = performance.now();
+      try { window.switchTab(tab); }
+      catch (e) { console.warn('[Nova] Tab-Wechsel:', e); }
+      // verzögerte Renderer aus switchTab (setTimeout 0) + Bilder abwarten
+      return tick().then(tick).then(function () {
+        // Render-Zeit inkl. verzögerter Renderer, ohne Bild-Wartezeit
+        var dt = performance.now() - t0;
+        return waitImages(tab, IMG_WAIT_MS).then(function () {
+          if (my !== navToken) return;
+          if (dt < FAST_MS) fastTabs[tab] = true; else delete fastTabs[tab];
+          navBusy = false;
+          lastTab = tab;
+          hideLoader(tab);
+        });
+      });
+    }).catch(function (e) {
+      console.warn('[Nova] Ladezustand:', e);
+      if (my === navToken) { navBusy = false; hideLoader(tab); }
+    });
   }
 
   function hookSwitchTab() {
@@ -350,7 +464,7 @@
     var list = [];
     GROUPS.forEach(function (g) {
       g.tabs.forEach(function (t) {
-        list.push({ sec: 'Springen zu', t: TABS[t].t, d: TABS[t].d, i: TABS[t].i, run: function () { window.switchTab(t); } });
+        list.push({ sec: 'Springen zu', t: TABS[t].t, d: TABS[t].d, i: TABS[t].i, run: function () { navigate(t); } });
       });
     });
     var A = [
@@ -724,7 +838,7 @@
     if (el.hasAttribute('data-design')) { e.preventDefault(); setDesign(el.getAttribute('data-design'), el); return; }
     if (el.hasAttribute('data-tab') && el.classList.contains('nv-nav-item')) {
       var t = el.getAttribute('data-tab');
-      if (typeof window.switchTab === 'function') window.switchTab(t);
+      navigate(t);
       return;
     }
     switch (el.getAttribute('data-nv')) {
@@ -760,6 +874,7 @@
     buildTweaksSection();
     buildLayers();
     buildPalette();
+    buildLoader();
     $$('.nv-seg button').forEach(function (b) { b.classList.toggle('on', b.getAttribute('data-design') === root.getAttribute('data-ui')); });
 
     hookSwitchTab();
