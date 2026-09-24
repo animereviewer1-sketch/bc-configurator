@@ -98,3 +98,31 @@ describe('_backupZuExport: automatische Backups werden verstanden', () => {
     expect(ctx._backupZuExport([{ foo: 1 }])).toBeNull();
   });
 });
+
+describe('_backupDateiParsen: verschachtelte Auto-Backups stückweise lesen', () => {
+  it('liefert exakt JSON.parse – auch unter "daten", über Chunk-Grenzen, mit Escapes/Unicode/Arrays', async () => {
+    const ctx = loadScript(['items.js'], {
+      console: quiet, Blob, File, TextDecoderStream,
+    });
+    ctx.showStatus = () => {};
+    const bild = 'data:image/png;base64,' + 'A'.repeat(200 * 1024);   // > Stream-Chunk (64 KB)
+    const quelle = {
+      _meta: { art: 'voll', exportedAt: '2026-09-01T10:00:00.000Z', version: 3 },
+      daten: {
+        lscgScreenshots: { '555|F1': bild, '555|F2': bild.slice(0, 1000) + 'Ende' },
+        lscgDB: { '555': { name: 'Ä "Zitat" \\ Back\nZeile 😀', versions: [{ code: 'c1', fingerprint: 'F1\u001f\u001e', ts: 1 }, { code: null, ts: -2.5e3 }] } },
+        leer: {}, leerArr: [], zahlen: [1, 2.5, -3, true, false, null],
+        verschachtelt: [[{ a: [{}] }]],
+      },
+    };
+    // "__proto__" darf kein Prototyp werden, sondern muss ein normales Feld bleiben
+    const text = JSON.stringify(quelle).replace('"leer":{}', '"leer":{"__proto__":{"x":1}}');
+    const erwartet = JSON.parse(text);
+    const file = new File([text], 'BC_Voll_test.json', { type: 'application/json' });
+    const d = await ctx._backupDateiParsen(file, null);
+    expect(JSON.stringify(d)).toBe(JSON.stringify(erwartet));
+    expect(Object.prototype.hasOwnProperty.call(d.daten.leer, '__proto__')).toBe(true);
+    expect(d.daten.leer.x).toBeUndefined();
+    expect(d.daten.lscgScreenshots['555|F1'].length).toBe(bild.length);
+  });
+});
