@@ -7,11 +7,10 @@
   <link rel="icon" type="image/svg+xml" href="bc-favicon.svg">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&family=Inter:wght@400;500&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js"></script>
   <script src="bc-icons.js"></script>
   <script src="bc-icons-ergaenzung.js"></script>
-  <!-- Nova-Design: Boot setzt data-ui vor dem ersten Zeichnen (kein Flackern); CSS ist komplett unter html[data-ui="nova"] gescoped -->
+  <!-- Oberfläche: Boot setzt data-ui="nova" vor dem ersten Zeichnen und lädt nova/nova.css (altes Design: Branch archiv/klassisches-design) -->
   <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300..800&family=Geist+Mono:wght@400..600&family=Bricolage+Grotesque:opsz,wght@12..96,500..800&display=swap" rel="stylesheet">
   <script src="nova/nova-boot.js?_=2"></script>
   <style>
@@ -4270,9 +4269,8 @@ document.write('<scr'+'ipt src="bc-autobackup.js?_='+_cbv+'"><\/scr'+'ipt>');
   addEventListener('DOMContentLoaded', () => setTimeout(_bcBackupZeigeStatus, 1500));
 </script>
 
-<!-- Nova-Design (Präsentationsschicht, nach allen Modulen): GSAP lokal, dann nova.js -->
+<!-- Oberfläche (Präsentationsschicht, nach allen Modulen) -->
 <script>
-document.write('<scr'+'ipt src="vendor/gsap.min.js"><\/scr'+'ipt>');
 document.write('<scr'+'ipt src="nova/nova.js?_='+_cbv+'"><\/scr'+'ipt>');
 </script>
 </body>

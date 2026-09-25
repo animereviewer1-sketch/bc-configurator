@@ -100,9 +100,17 @@
 
   /* Select-Optionen behalten ihr Emoji nicht: <option> kann kein SVG enthalten.
      Dort das Emoji ersatzlos streichen – die Beschriftung trägt die Bedeutung. */
+  /* Treffer im Teilbaum plus das Element selbst – bcIconsAuto uebergibt nur
+     die neu eingefuegten Knoten, das kann auch direkt eine <option> sein. */
+  function mitSelbst(scope, sel) {
+    var liste = Array.prototype.slice.call((scope || document).querySelectorAll(sel));
+    if (scope && scope.nodeType === 1 && scope.matches && scope.matches(sel)) liste.push(scope);
+    return liste;
+  }
+
   root.bcStripOptionEmojis = function (scope) {
     var re = /(?:▶▶|[←-⇿⌀-➿⬀-⯿️\u{1F000}-\u{1FAFF}])+\s*/gu;
-    var opts = (scope || document).querySelectorAll('option');
+    var opts = mitSelbst(scope, 'option');
     for (var i = 0; i < opts.length; i++) {
       var t = opts[i].textContent;
       var c = t.replace(re, '').trim();
@@ -117,7 +125,7 @@
      das darf nicht gestrippt werden. */
   root.bcStripPlaceholderEmojis = function (scope) {
     var re = /^[^\w\s]*\s*/u;
-    var ins = (scope || document).querySelectorAll('.search-wrap input[placeholder]');
+    var ins = mitSelbst(scope, '.search-wrap input[placeholder]');
     for (var i = 0; i < ins.length; i++) {
       var p = ins[i].getAttribute('placeholder');
       if (/[\u{1F000}-\u{1FAFF}←-➿]/u.test(p)) {

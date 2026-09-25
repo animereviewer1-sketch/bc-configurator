@@ -128,10 +128,17 @@
       'aria-hidden="true" focusable="false">' + p + '</svg>';
   }
 
+  // Vorlage je Icon einmal parsen, danach nur klonen (innerHTML pro Button
+  // war bei tausenden Karten-Buttons ein spuerbarer Teil der Renderzeit)
+  var TPL = {};
   function iconNode(name) {
-    var wrap = document.createElement('span');
-    wrap.innerHTML = bcIcon(name);
-    return wrap.firstChild;
+    var t = TPL[name];
+    if (!t) {
+      var wrap = document.createElement('span');
+      wrap.innerHTML = bcIcon(name);
+      t = TPL[name] = wrap.firstChild;
+    }
+    return t.cloneNode(true);
   }
 
   function lookup(key) {
@@ -167,7 +174,14 @@
    */
   function bcIconsApply(scope) {
     var root = scope || document;
-    var els = root.querySelectorAll(selector());
+    var sel = selector();
+    var els = Array.prototype.slice.call(root.querySelectorAll(sel));
+    // Bei einem Teilbaum auch das Element selbst bzw. den umgebenden Button
+    // pruefen (z. B. wenn nur der Text eines Buttons neu gesetzt wurde)
+    if (scope && scope.nodeType === 1 && scope.closest) {
+      var hit = scope.closest(sel);
+      if (hit) els.unshift(hit);
+    }
     for (var i = 0; i < els.length; i++) {
       var el = els[i];
       // Nicht nur auf das Flag verlassen: App-Code wie _updateCurseDefaultOutfitBtn()
@@ -199,17 +213,46 @@
    * Der Observer wird während des eigenen Umbaus pausiert, damit die von
    * bcIconsApply erzeugten Mutationen keine Endlosschleife auslösen.
    */
+  /* Nur die tatsaechlich eingefuegten Knoten durchsuchen. Frueher lief bei
+     JEDER DOM-Aenderung (Timer-Text, Raum-Scan alle 5 s, Toasts …) ein Sweep
+     ueber das komplette Dokument inkl. aller <option>-Eintraege – bei grossen
+     Listen der teuerste Dauerposten der Oberflaeche. */
+  var pending = [];
+  function sammeln(records) {
+    for (var r = 0; r < records.length; r++) {
+      var added = records[r].addedNodes;
+      for (var n = 0; n < added.length; n++) {
+        var node = added[n];
+        var el = node.nodeType === 1 ? node : node.parentElement;
+        if (el) pending.push(el);
+      }
+    }
+  }
   function bcIconsAuto() {
     if (observer) return observer;
-    observer = new MutationObserver(function () {
-      if (queued) return;
+    observer = new MutationObserver(function (records) {
+      sammeln(records);
+      if (queued || !pending.length) return;
       queued = true;
       // setTimeout statt requestAnimationFrame: rAF pausiert in Hintergrund-Tabs,
       // die Icons würden dort erst beim Zurückwechseln erscheinen.
       setTimeout(function () {
         queued = false;
+        sammeln(observer.takeRecords());
+        var liste = pending; pending = [];
         observer.disconnect();
-        try { sweep(); }
+        try {
+          // Doppelte und bereits in einem anderen Eintrag enthaltene Knoten auslassen
+          var gesehen = new Set();
+          for (var i = 0; i < liste.length; i++) {
+            var el = liste[i];
+            if (gesehen.has(el) || !el.isConnected) continue;
+            gesehen.add(el);
+            var p = el.parentElement, drin = false;
+            while (p) { if (gesehen.has(p)) { drin = true; break; } p = p.parentElement; }
+            if (!drin) sweep(el);
+          }
+        }
         finally { observer.observe(document.body, { childList: true, subtree: true }); }
       }, 16);
     });
