@@ -185,3 +185,42 @@ describe('Große Backups: Bilder werden beim Lesen abgezweigt, nie überschriebe
     expect(d._meta.exportedAt).toBe('2026-09-02');
   });
 });
+
+describe('Nur LSCG-Outfits: Parser überspringt alles andere ohne es aufzubauen', () => {
+  it('behält nur _meta und lscgDB – Werte exakt, Rest übersprungen (auch Escapes über Chunk-Grenzen)', async () => {
+    const ctx = loadScript(['items.js'], { console: quiet, Blob, File, TextDecoderStream });
+    ctx.showStatus = () => {};
+    const bild = 'data:image/jpeg;base64,' + 'C'.repeat(130 * 1024);
+    const knifflig = 'a'.repeat(65533) + '\\"}]{[,' + '\\\\' + '"' + 'z'.repeat(70000);
+    const lscg = {
+      '7': { name: 'Sieben "7" \\ ✓', versions: [{ code: 'k1', fingerprint: 'F7a', ts: 1 }, { code: 'k2', fingerprint: 'F7b', ts: 2 }] },
+      '8': { name: 'Acht', versions: [] },
+    };
+    const quelle = {
+      _meta: { art: 'voll', exportedAt: '2026-08-01T00:00:00.000Z', version: 3 },
+      daten: {
+        profiles: { A: { code: knifflig, liste: [1, [2, { x: knifflig }], null] } },
+        lscgScreenshots: { '7|F7a': bild, '7|F7b': bild },
+        curseDatabase: Object.fromEntries(Array.from({ length: 3000 }, (_, i) => ['c' + i, { t: 'x"y\\z', n: i }])),
+        lscgDB: lscg,
+        botLogs: [knifflig, { a: knifflig }],
+      },
+    };
+    const file = new File([JSON.stringify(quelle)], 'BC_Voll_nurlscg.json');
+    const d = await ctx._backupDateiParsen(file, null, null, ctx._nurLscgPfad);
+    expect(Object.keys(d).sort()).toEqual(['_meta', 'daten']);
+    expect(Object.keys(d.daten)).toEqual(['lscgDB']);
+    expect(JSON.stringify(d.daten.lscgDB)).toBe(JSON.stringify(lscg));
+    expect(d._meta.art).toBe('voll');
+    expect(ctx._lscgAusBackup(d)).toBe(d.daten.lscgDB);
+  });
+
+  it('_lscgAusBackup kennt Voll, Inkrement und flachen Export', () => {
+    const ctx = loadScript(['items.js'], { console: quiet });
+    const x = { '1': { versions: [] } };
+    expect(ctx._lscgAusBackup({ _meta: { art: 'voll' }, daten: { lscgDB: x } })).toBe(x);
+    expect(ctx._lscgAusBackup({ _meta: { art: 'inkrement' }, geaendert: { lscgDB: x } })).toBe(x);
+    expect(ctx._lscgAusBackup({ _meta: {}, lscgDB: x })).toBe(x);
+    expect(ctx._lscgAusBackup({ foo: 1 })).toBeNull();
+  });
+});

@@ -377,7 +377,8 @@
       ['triggerGameScan',      'Spiel scannen',               'Read-only-Snapshot des Spiels speichern',       'search'],
       ['exportAllData',        'Komplett-Backup exportieren', 'Alle Daten in eine Datei sichern',              'download'],
       ['exportScreenshotsOnly','Screenshots exportieren',     'Alle Bild-Sammlungen als JSON sichern',         'camera'],
-      ['itemsExportCatalog',   'Item-Katalog exportieren',    'Alle Items mit Bild-URLs als JSON',             'package']
+      ['itemsExportCatalog',   'Item-Katalog exportieren',    'Alle Items mit Bild-URLs als JSON',             'package'],
+      ['importLscgOutfits',    'Nur LSCG-Outfits wiederherstellen', 'Aus Backup-Dateien (auch sehr große) nur die Outfits zurückholen', 'layers']
     ].forEach(function (a) {
       var f = fn(a[0]);
       if (f) list.push({ sec: 'Aktionen', t: a[1], d: a[2], i: a[3], run: function () { f(); } });

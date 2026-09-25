@@ -7320,7 +7320,7 @@ function exportScreenshotsOnly() {
    JSON.parse liefern wuerde. Werte auf oberster Ebene, die selbst Objekte sind
    (Screenshot-Sammlungen), werden Feld fuer Feld gelesen; damit bleibt jeder
    Einzelwert so klein wie das, was er enthaelt – ein Bild statt aller Bilder. */
-async function _backupDateiParsen(file, aufFortschritt, bilder) {
+async function _backupDateiParsen(file, aufFortschritt, bilder, behalten) {
   const leser = file.stream().pipeThrough(new TextDecoderStream()).getReader();
   let buf = '', i = 0, ende = false, gelesen = 0, seitPause = 0;
   let bsPos = -2;   // Position des naechsten Backslash im aktuellen Puffer (-2 = unbekannt, -1 = keiner)
@@ -7405,6 +7405,41 @@ async function _backupDateiParsen(file, aufFortschritt, bilder) {
     }
     return teile.join('');
   }
+  // Einen kompletten JSON-Wert ueberspringen, OHNE ihn aufzubauen (behalten()
+  // sagt nein). Strings werden per indexOf uebersprungen, nichts wird kopiert –
+  // so kostet ein 1-GB-Screenshot-Block nur Lesezeit, keinen Speicher.
+  async function ueberspringeString() {
+    let escape = false;
+    i++;                                   // oeffnendes "
+    for (;;) {
+      while (i < buf.length) {
+        if (escape) { escape = false; i++; continue; }
+        if (bsPos !== -1 && bsPos < i) bsPos = buf.indexOf('\\', i);
+        const q = buf.indexOf('"', i);
+        if (bsPos !== -1 && (q === -1 || bsPos < q)) { i = bsPos + 1; escape = true; continue; }
+        if (q === -1) { i = buf.length; break; }
+        i = q + 1; return;
+      }
+      if (!(await nachfuellen())) throw new Error('Datei endet mitten in einer Zeichenkette');
+    }
+  }
+  async function ueberspringe() {
+    const c = await ws();
+    if (c === null) throw new Error('Datei endet, wo ein Wert stehen muesste');
+    if (c === '"') return ueberspringeString();
+    if (c !== '{' && c !== '[') { await leseRohwert(); return; }
+    let tiefe = 0;
+    for (;;) {
+      if (!(await nachfuellen())) throw new Error('Datei endet mitten in einer Klammer');
+      const z = buf[i];
+      if (z === '"') { await ueberspringeString(); continue; }
+      i++;
+      if (z === '{' || z === '[') tiefe++;
+      else if (z === '}' || z === ']') { if (--tiefe === 0) return; }
+      if (++seitPause >= 20000) { seitPause = 0; if (aufFortschritt) aufFortschritt(gelesen + i, file.size); await new Promise(r => setTimeout(r, 0)); }
+    }
+  }
+
   // Gelegentlich die Kontrolle abgeben, sonst friert die Oberflaeche ein.
   async function vielleichtPause() {
     if (++seitPause < 400) return;
@@ -7462,7 +7497,9 @@ async function _backupDateiParsen(file, aufFortschritt, bilder) {
           if (d === ',') { i++; continue; }
           if (d !== '"') throw new Error('Unerwartetes Zeichen "' + d + '" in "' + (pfad || 'oberster Ebene') + '"');
           const k = await leseSchluessel('"' + (pfad || 'oberster Ebene') + '"');
-          const wert = await leseWert(pfad ? pfad + '.' + k : k);
+          const kpfad = pfad ? pfad + '.' + k : k;
+          if (behalten && !behalten(kpfad)) { await ueberspringe(); await vielleichtPause(); continue; }
+          const wert = await leseWert(kpfad);
           if (wert !== undefined) setze(obj, k, wert);   // undefined = abgezweigte Bild-Sammlung
           await vielleichtPause();
         }
@@ -7621,6 +7658,88 @@ function _backupSammler() {
       return ziel;
     },
   };
+}
+
+/* ══ Nur LSCG-Outfits aus Backups zurueckholen ═══════════════════════════
+   Fuer den Fall "LSCG-Outfits weg, alles andere da": liest beliebig viele und
+   grosse Backup-Dateien (auch 15 × 1 GB), behaelt dabei aber NUR lscgDB. Alles
+   andere – Screenshots, Curse-DB, Profile, Caches – wird beim Lesen
+   uebersprungen, ohne es in den Speicher zu laden (behalten-Filter im
+   Stream-Parser). Der volle Restore scheiterte bei 2,7 GB Auswahl ohne
+   Meldung, vermutlich am Speicher.
+   Es wird nur ergaenzt (_lscgMerge), nichts geloescht oder ueberschrieben. */
+function _nurLscgPfad(p) {
+  return p === '_meta' || p.startsWith('_meta.') || p === 'daten' || p === 'geaendert'
+    || /^(?:(?:daten|geaendert)\.)?lscgDB(?:\.|$)/.test(p);
+}
+function _lscgAusBackup(d) {
+  if (!d || !d._meta) return null;
+  if (d._meta.art === 'voll') return d.daten?.lscgDB ?? null;
+  if (d._meta.art === 'inkrement') return d.geaendert?.lscgDB ?? null;
+  return d.lscgDB ?? null;
+}
+function importLscgOutfits() {
+  const inp = document.createElement('input');
+  inp.type = 'file'; inp.accept = '.json'; inp.multiple = true;
+  inp.onchange = async e => {
+    const files = Array.from(e.target.files || [])
+      .sort((a, b) => (a.lastModified - b.lastModified) || a.name.localeCompare(b.name));
+    if (!files.length) return;
+    try {
+      if (!_lscgLoaded) { alert('LSCG-Bestand wird noch geladen – bitte ein paar Sekunden warten und erneut versuchen.'); return; }
+      const ziel = {};
+      let mitDaten = 0, ohneMeta = 0;
+      for (let n = 0; n < files.length; n++) {
+        const f = files[n];
+        const pre = '(' + (n + 1) + '/' + files.length + ') ';
+        showStatus('⏳ LSCG-Outfits suchen… ' + pre + f.name, 'info');
+        let d = null;
+        if (f.size <= 100 * 1024 * 1024) {
+          try { d = JSON.parse(await f.text()); }
+          catch (err) { if (!(err instanceof RangeError)) throw err; }
+        }
+        if (!d) d = await _backupDateiParsen(f, (fertig, gesamt) => {
+          if (gesamt) showStatus('⏳ LSCG-Outfits suchen… ' + pre + Math.floor(fertig / gesamt * 100) + '%', 'info');
+        }, null, _nurLscgPfad);
+        if (!d || !d._meta) { ohneMeta++; continue; }
+        const q = _lscgAusBackup(d);
+        if (q && Object.keys(q).length) { _lscgMerge(ziel, q); mitDaten++; }
+        console.info('[LSCG-Restore]', f.name, '→', q ? Object.keys(q).length : 0, 'Spieler');
+        d = null;
+      }
+      let versionen = 0, neu = 0, ohneBild = 0;
+      for (const [mk, e] of Object.entries(ziel)) {
+        const bekannt = new Set((LSCG_DB[mk]?.versions || []).map(v => v.fingerprint ?? v.code));
+        for (const v of (e?.versions || [])) {
+          versionen++;
+          if (!bekannt.has(v.fingerprint ?? v.code)) neu++;
+          if (v.fingerprint && !((mk + '|' + v.fingerprint) in LSCG_SCREENSHOTS)) ohneBild++;
+        }
+      }
+      if (!versionen) {
+        alert('In den ' + files.length + ' gewählten Datei(en) stehen keine LSCG-Outfits.'
+          + (ohneMeta ? '\n(' + ohneMeta + ' Datei(en) ohne Backup-Kennung übersprungen)' : ''));
+        return;
+      }
+      if (!confirm('LSCG-Outfits aus ' + mitDaten + ' von ' + files.length + ' Datei(en) gefunden:\n'
+        + Object.keys(ziel).length + ' Spieler, ' + versionen + ' Versionen\n'
+        + 'Davon noch nicht vorhanden: ' + neu + ' Versionen\n'
+        + (ohneBild ? 'Ohne Screenshot: ' + ohneBild + ' (lassen sich über den normalen Restore oder neu aufnehmen)\n' : '')
+        + (ohneMeta ? '⚠ ' + ohneMeta + ' Datei(en) ohne Backup-Kennung übersprungen\n' : '')
+        + '\nEinspielen? Es wird nur ergänzt, nichts gelöscht oder überschrieben.')) return;
+      const hinzu = _lscgMerge(LSCG_DB, ziel);
+      if (!(await idbSet(LSCG_IDB_KEY, LSCG_DB))) {
+        alert('❌ LSCG-Outfits konnten nicht gespeichert werden (Browser-Speicher voll?). Sie sind bis zum Neuladen im Tool sichtbar – bitte sofort „⬇️ Alles“ exportieren.');
+      }
+      if (_activeTab === 'outfit-scan') renderOutfitScanTab();
+      showStatus('✅ LSCG-Outfits wiederhergestellt: ' + hinzu + ' Versionen ergänzt, jetzt ' + Object.keys(LSCG_DB).length + ' Spieler', 'success');
+    } catch (err) {
+      console.error('[importLscgOutfits]', err);
+      alert('❌ LSCG-Outfits konnten nicht eingelesen werden.\n\n' + (err && err.message ? err.message : err)
+        + '\n\nEs wurde nichts verändert.');
+    }
+  };
+  inp.click();
 }
 
 function importAllData() {
