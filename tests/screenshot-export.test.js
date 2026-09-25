@@ -146,10 +146,14 @@ describe('exportScreenshotsOnly(): Payload und Download (SPLIT-07)', () => {
 
   it('Payload ist restore-kompatibel: importAllData liest genau diese Feldnamen (statisch)', () => {
     const text = src('items.js');
+    // Der Restore liest Bild-Sammlungen ueber _BILD_SAMMLUNGEN/_bildEinspieler
+    // (stueckweise, nur ergaenzend) – dort muessen genau diese Feldnamen stehen.
     const importBody = text.slice(text.indexOf('function importAllData'));
-    expect(importBody).toContain('d.profileScreenshots');
-    expect(importBody).toContain('d.lscgScreenshots');
-    expect(importBody).toContain('d.mbsWheelShots');
+    expect(importBody).toContain('_bildEinspieler()');
+    const sammlungen = text.slice(text.indexOf('const _BILD_SAMMLUNGEN'), text.indexOf('const _BILD_SAMMLUNGEN') + 200);
+    expect(sammlungen).toContain('profileScreenshots:');
+    expect(sammlungen).toContain('lscgScreenshots:');
+    expect(sammlungen).toContain('mbsWheelShots:');
 
     const startIdx = text.indexOf('function exportScreenshotsOnly');
     expect(startIdx).toBeGreaterThan(-1);

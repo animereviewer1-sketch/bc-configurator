@@ -126,3 +126,62 @@ describe('_backupDateiParsen: verschachtelte Auto-Backups stückweise lesen', ()
     expect(d.daten.lscgScreenshots['555|F1'].length).toBe(bild.length);
   });
 });
+
+describe('Große Backups: Bilder werden beim Lesen abgezweigt, nie überschrieben', () => {
+  it('Parser reicht Bild-Einträge an bilder.add durch und behält sie nicht im Ergebnis', async () => {
+    const ctx = loadScript(['items.js'], { console: quiet, Blob, File, TextDecoderStream });
+    ctx.showStatus = () => {};
+    const bild = 'data:image/jpeg;base64,' + 'B'.repeat(150 * 1024);
+    // Escapes direkt an Chunk-Grenzen: viele kurze Strings mit \" und \\ rund um 64-KB-Grenzen
+    const lang = 'x'.repeat(65530) + '\\"\\\\"' + 'y'.repeat(10);
+    const quelle = {
+      _meta: { art: 'voll', exportedAt: '2026-09-01T10:00:00.000Z', version: 3 },
+      daten: {
+        lscgScreenshots: { '1|F1': bild, '1|F2': bild + 'x' },
+        profileScreenshots: { 'Profil A': bild },
+        lscgDB: { '1': { name: lang, versions: [{ code: 'c', fingerprint: 'F1', ts: 1 }] } },
+      },
+    };
+    const text = JSON.stringify(quelle);
+    const angekommen = [];
+    const bilder = { add: async (s, k, v) => { angekommen.push([s, k, v.length]); } };
+    const d = await ctx._backupDateiParsen(new File([text], 'BC_Voll_x.json'), null, bilder);
+    expect(angekommen).toEqual([
+      ['lscgScreenshots', '1|F1', bild.length], ['lscgScreenshots', '1|F2', bild.length + 1],
+      ['profileScreenshots', 'Profil A', bild.length],
+    ]);
+    expect(d.daten.lscgScreenshots).toBeUndefined();
+    expect(d.daten.profileScreenshots).toBeUndefined();
+    expect(d.daten.lscgDB['1'].name).toBe(quelle.daten.lscgDB['1'].name);
+  });
+
+  it('_bildEinspieler ergänzt nur fehlende Bilder und schreibt sie in die IDB', async () => {
+    const ctx = loadScript(['items.js'], { console: quiet });
+    ctx.showStatus = () => {};
+    await settle(300);
+    evalIn(ctx, `LSCG_SCREENSHOTS['vorhanden'] = 'ALT';`);
+    const e = ctx._bildEinspieler();
+    await e.add('lscgScreenshots', 'vorhanden', 'NEU');
+    await e.add('lscgScreenshots', 'fehlt', 'BILD');
+    await e.add('mbsWheelShots', 'w1', 'WHEEL');
+    await e.flush();
+    expect(evalIn(ctx, `LSCG_SCREENSHOTS['vorhanden']`)).toBe('ALT');
+    expect(evalIn(ctx, `LSCG_SCREENSHOTS['fehlt']`)).toBe('BILD');
+    expect(e.neu).toEqual({ lscg: 1, profile: 0, wheel: 1 });
+    const gespeichert = await ctx.idbScreenshotGetAll('lscg');
+    expect(gespeichert.fehlt).toBe('BILD');
+  });
+
+  it('_backupSammler: Dateien einzeln nacheinander, Ergebnis wie bei Gesamtauswahl', () => {
+    const ctx = loadScript(['items.js'], { console: quiet });
+    const s = ctx._backupSammler();
+    expect(s.ergebnis()).toBeNull();
+    expect(s.add({ foo: 1 })).toBe(false);
+    s.add({ _meta: { art: 'voll', exportedAt: '2026-09-01' }, daten: { lscgDB: { '1': { name: 'A', versions: [{ code: 'a', fingerprint: 'FA', ts: 1 }] } } } });
+    s.add({ _meta: { art: 'inkrement', exportedAt: '2026-09-02' }, geaendert: { lscgDB: { '1': { name: 'A', versions: [{ code: 'b', fingerprint: 'FB', ts: 2 }] } } }, geloescht: { lscgDB: ['1'] }, komplett: {} });
+    const d = s.ergebnis();
+    expect(d.lscgDB['1'].versions.map((v) => v.fingerprint)).toEqual(['FA', 'FB']);
+    expect(d._meta.dateien).toBe(2);
+    expect(d._meta.exportedAt).toBe('2026-09-02');
+  });
+});
