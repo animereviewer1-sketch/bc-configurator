@@ -26,10 +26,6 @@ Das Tool hat keinen Bundler und keinen Build-Schritt (siehe `.claude/CLAUDE.md`,
 | 16 | `bot-engine.js` | Bot-Code-Generator | Globals aus items.js/bot-data.js |
 | 17 | `outfit-import.js` | Outfit-Code-Parser | idbGet/idbSet (persistence.js), Globals aus items.js |
 | 18 | `bc-autobackup.js` | Automatische Backups | idbGet/idbSet (persistence.js), Globals aus items.js |
-| 19 | `vendor/gsap.min.js` | GSAP 3.13 (lokal, Animationen des Nova-Designs) | — |
-| 20 | `nova/nova.js` | Nova-Design: Seitenleiste, Befehlspalette, Toasts, WebGL-Hintergrund, Umschalter alt ↔ neu. Umhüllt `switchTab`/`showStatus` (ruft das Original immer zuerst auf) | zur Laufzeit `switchTab`, `showStatus`, `toggleTweaksPanel` aus items.js/index.html, `bcIcon` aus bc-icons.js (alle `typeof`-geguardet) — muss deshalb **nach** allen Feature-Modulen stehen |
-
-`nova/nova-boot.js` steht zusätzlich als plain `<script src>` im `<head>` (vor dem ersten `<style>`): Es setzt `data-ui="nova" | "classic"` auf `<html>` und schreibt den Stylesheet-Link `nova/nova.css` mit Cache-Buster, bevor der Body gezeichnet wird. Alle Regeln in `nova/nova.css` sind unter `html[data-ui="nova"]` gescoped (Test: `tests/nova-design.test.js`) — im klassischen Design ist Nova wirkungslos.
 
 ## Guard-Verhalten (SPLIT-04)
 
