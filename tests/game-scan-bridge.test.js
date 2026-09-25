@@ -315,7 +315,9 @@ describe('GAME_INVENTORY_DATA → Snapshot (SCAN-08)', () => {
 });
 
 describe('statisch: Ladeordnung, index.html, docs, game-scan.js', () => {
-  it('index.html: Write-Zeile direkt nach items.js im ersten _cbv-Block, Kommentar nennt game-scan.js, Sektion 🔎 Spiel-Scan genau einmal zwischen Screenshot-Speicher und Item-Katalog', () => {
+  // Der Spiel-Scan-Knopf liegt seit dem Umbau der Einstellungen im Scan-Tab selbst
+  // (Snapshots links, Fundliste rechts) statt im Einstellungs-Panel.
+  it('index.html: Write-Zeile direkt nach items.js im ersten _cbv-Block, Kommentar nennt game-scan.js, Spiel-Scan-Knopf und Status genau einmal im Scan-Tab', () => {
     const html = src('index.html');
     expect(count(html, 'game-scan.js?_=')).toBe(1);
     expect(html.indexOf('items.js?_=')).toBeLessThan(html.indexOf('game-scan.js?_='));
@@ -326,8 +328,12 @@ describe('statisch: Ladeordnung, index.html, docs, game-scan.js', () => {
     expect(count(html, 'id="gameScanInfo"')).toBe(1);
     expect(count(html, '🔎 Spiel scannen')).toBe(1);
     expect(count(html, '🔎 Spiel-Scan')).toBe(1);
-    expect(html.indexOf('id="screenshotStoreInfo"')).toBeLessThan(html.indexOf('id="gameScanInfo"'));
-    expect(html.indexOf('id="gameScanInfo"')).toBeLessThan(html.indexOf('📦 Item-Katalog'));
+    const scanTab = html.indexOf('id="tab-scan"');
+    const scanEnde = html.indexOf('<!-- /tab-scan -->');
+    for (const needle of ['id="gameScanInfo"', 'id="gameScanBtn"', 'onclick="triggerGameScan()"']) {
+      expect(html.indexOf(needle)).toBeGreaterThan(scanTab);
+      expect(html.indexOf(needle)).toBeLessThan(scanEnde);
+    }
   });
 
   it('docs/LOAD-ORDER.md + CORE_SCRIPTS + game-scan.js-Quelle', () => {

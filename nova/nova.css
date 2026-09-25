@@ -340,12 +340,12 @@ html[data-ui="nova"] {
   & .tab-pane.nv-enter { animation: nvFade .16s ease-out; }
 
   /* Arbeitsflächen: deckend, damit Scrollen per Compositor läuft */
-  & .layout, & .bot-wrap, & .rank-wrap, & .shop-wrap, & .outfit-tab-layout {
+  & .layout, & .bot-wrap, & .rank-wrap, & .shop-wrap, & .outfit-tab-layout, & .scan-layout {
     border-radius: 16px; overflow: hidden;
     background: var(--nv-surface);
     border: 1px solid var(--nv-line);
   }
-  & .tab-pane.active:not(:has(> .layout, > .bot-wrap, > .rank-wrap, > .shop-wrap, > .outfit-tab-layout)) {
+  & .tab-pane.active:not(:has(> .layout, > .bot-wrap, > .rank-wrap, > .shop-wrap, > .outfit-tab-layout, > .scan-layout)) {
     margin: 12px 16px 16px; padding: 18px 20px;
     min-height: calc(100vh - var(--nv-chrome));
     border-radius: 16px; background: var(--nv-surface); border: 1px solid var(--nv-line);
@@ -493,25 +493,66 @@ html[data-ui="nova"] {
 @keyframes nvPop { from { opacity: 0; transform: translateY(6px) scale(.98); } to { opacity: 1; transform: none; } }
 
 /* ══════════════════════════════════════════════════════════
-   EINSTELLUNGEN (Tweaks-Schublade)
+   EINSTELLUNGEN – ganzseitige Ansicht neben der Seitenleiste
+   (#tweaksPanel, toggleTweaksPanel() setzt .open). Reiter per nova.js.
    ══════════════════════════════════════════════════════════ */
 html[data-ui="nova"] {
   & .tweaks-panel {
-    top: 10px; right: 10px; bottom: 10px; width: 340px; padding: 22px 18px; gap: 22px;
-    border-radius: 18px; border: 1px solid #2a2f40; z-index: 160;
-    background: #0f1119;
-    box-shadow: var(--shadow-lg);
-    transform: translateX(calc(100% + 24px));
-    transition: transform .28s var(--nv-ease);
+    position: fixed; top: 0; bottom: 0; left: var(--nv-side); right: 0; width: auto;
+    padding: 0; gap: 0; border: 0; border-left: 1px solid var(--nv-line); border-radius: 0; z-index: 140;
+    display: flex; flex-direction: column; overflow: hidden;
+    background: var(--bg); box-shadow: none;
+    transform: none; opacity: 0; visibility: hidden;
+    transition: opacity .15s ease, visibility 0s linear .15s;
   }
-  & .tweaks-panel.open { transform: none; }
-  & .tweaks-panel > div + div { padding-top: 18px; border-top: 1px solid var(--nv-line) !important; }
-  & .tweaks-section-title { font-size: .66rem; letter-spacing: .14em; color: var(--text3); }
+  & .tweaks-panel.open { opacity: 1; visibility: visible; transition: opacity .15s ease; }
+  & .tweaks-section-title { font-size: .7rem; font-weight: 650; letter-spacing: .12em; color: var(--text2); margin: 0; }
   & .accent-swatch { width: 28px; height: 28px; }
   & .accent-swatch.on { border-color: #fff; }
+  & .tweaks-panel .tweaks-btn-group { display: flex; gap: 6px; }
+  & .tweaks-panel .tweaks-btn { flex: 0 0 auto; padding: 7px 12px; }
+  & .tweaks-panel .set-danger { color: #fda4b4; border-color: #5a2433; background: #1c0f14; }
+  & .tweaks-panel .set-danger:hover { background: #2a131b; }
 }
-.nv-scrim { position: fixed; inset: 0; z-index: 150; background: rgba(3,4,8,.5); opacity: 0; pointer-events: none; transition: opacity .2s; }
-.nv-scrim.on { opacity: 1; pointer-events: auto; }
+.set-head { display: flex; align-items: center; gap: 12px; height: var(--nv-top); padding: 0 28px; border-bottom: 1px solid var(--nv-line); flex-shrink: 0; }
+.set-title { font-family: var(--nv-display); font-size: 1.28rem; font-weight: 700; letter-spacing: -.025em; color: #fff; }
+.set-sub { font-size: .78rem; color: var(--text3); }
+.set-close { margin-left: auto; width: 34px; height: 34px; border-radius: 10px; border: 0; background: none; color: var(--text2); cursor: pointer; font-size: 15px; }
+.set-close:hover { background: #151823; color: #fff; }
+.set-tabs { display: flex; gap: 4px; padding: 0 28px; border-bottom: 1px solid var(--nv-line); flex-shrink: 0; }
+.set-tab { padding: 12px 12px 11px; border: 0; background: none; cursor: pointer; font: inherit; font-size: .84rem; font-weight: 500; color: var(--text3); border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.set-tab:hover { color: var(--text2); }
+.set-tab.on { color: var(--text); border-bottom-color: var(--accent); }
+.set-tab-gefahr { color: #c97983; }
+.set-tab-gefahr.on { color: #fda4b4; border-bottom-color: #f2707a; }
+.set-body { flex: 1; overflow-y: auto; padding: 20px 28px 40px; }
+.set-page { display: none; max-width: 920px; }
+.set-page.on { display: block; animation: nvFade .15s ease-out; }
+.set-card { background: var(--nv-card); border: 1px solid #1d2130; border-radius: 14px; margin-bottom: 12px; overflow: hidden; }
+.set-card-h { display: flex; align-items: center; gap: 10px; padding: 12px 16px; min-height: 52px; }
+.set-card-h + .set-card-b { border-top: 1px solid var(--nv-line); }
+.set-card-b { padding: 12px 16px; }
+.set-r { margin-left: auto; display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
+.set-hint { font-size: .76rem; color: var(--text3); line-height: 1.5; margin-top: 2px; }
+.set-info { font-size: .76rem; color: var(--text2); line-height: 1.55; margin-top: 4px; }
+.set-2col { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+.set-2col b, .set-li b { font-weight: 600; font-size: .86rem; color: var(--text); }
+.set-2col .tweaks-btn-group { margin-top: 10px; }
+.set-list { padding: 0; }
+.set-li { display: flex; align-items: center; gap: 14px; padding: 12px 16px; }
+.set-li + .set-li { border-top: 1px solid var(--nv-line); }
+.set-li > div:first-child { min-width: 0; }
+.set-card-h .tweaks-section-title, .set-li b { display: inline-flex; align-items: center; gap: 8px; }
+.set-card-h .tweaks-section-title svg.bci, .set-li b svg.bci { margin: 0; color: var(--accent-text); }
+.set-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 14px; }
+.set-stat { padding: 12px 14px; border-radius: 12px; background: var(--nv-card); border: 1px solid #1d2130; }
+.set-stat span { font-size: .72rem; color: var(--text3); }
+.set-stat b { display: block; font-size: 1.1rem; font-weight: 650; margin-top: 2px; color: #fff; }
+.set-bar { height: 6px; border-radius: 99px; background: #1d2130; overflow: hidden; margin-top: 8px; }
+.set-bar i { display: block; height: 100%; width: 0; border-radius: 99px; background: var(--accent); transition: width .3s var(--nv-ease); }
+.set-warn { padding: 11px 14px; border-radius: 12px; margin-bottom: 12px; font-size: .8rem; color: #fbd5d9; background: #1f1115; border: 1px solid #4a2030; }
+.set-card-gefahr { border-color: #3a1d27; }
+
 .nv-tw-design { display: flex; flex-direction: column; gap: 10px; }
 .nv-tw-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: .78rem; color: var(--text2); }
 .nv-switch { position: relative; width: 38px; height: 22px; flex-shrink: 0; border-radius: 99px; border: 0; cursor: pointer; background: #262b3b; transition: background-color .2s; }
@@ -645,4 +686,61 @@ html[data-ui="nova"][data-nv-loading] .tab-pane.active { visibility: hidden; }
 /* Schmale Fenster (Popup neben dem Spiel): Code-Spalte etwas schmaler */
 @media (max-width: 1100px) {
   html[data-ui="nova"] .outfit-tab-layout { grid-template-columns: 1fr 330px; }
+}
+
+/* ══════════════════════════════════════════════════════════
+   SPIEL-SCAN: Snapshots links, Fundliste rechts
+   ══════════════════════════════════════════════════════════ */
+html[data-ui="nova"] {
+  & .scan-layout { display: grid; grid-template-columns: 300px 1fr; height: calc(100vh - var(--nv-chrome)); }
+  & .scan-side { background: var(--nv-card-2); border-right: 1px solid var(--nv-line); padding: 16px 14px; overflow-y: auto; }
+  & .scan-side-head { display: flex; flex-direction: column; align-items: stretch; gap: 10px; }
+  & .scan-side-head .btn { justify-content: center; height: 36px; }
+  & .scan-side-head .tweaks-section-title { display: inline-flex; align-items: center; gap: 8px; }
+  & .scan-side-head .tweaks-section-title svg.bci { margin: 0; color: var(--accent-text); }
+  & .scan-info { font-size: .74rem; color: var(--text2); line-height: 1.5; margin: 8px 2px 4px; }
+  & .scan-side-sub { display: flex; align-items: center; justify-content: space-between; margin: 16px 2px 8px;
+    font-size: .66rem; font-weight: 650; letter-spacing: .14em; text-transform: uppercase; color: var(--text3); }
+  & .scan-snap { display: flex; align-items: center; gap: 8px; padding: 9px 10px; margin-bottom: 6px; border-radius: 10px;
+    border: 1px solid #1d2130; background: var(--nv-card); cursor: pointer; font-size: .8rem; transition: border-color .15s; }
+  & .scan-snap:hover { border-color: #2e3346; }
+  & .scan-snap-active { border-color: var(--accent-line); background: oklch(76% 0.15 var(--nv-h) / .08); box-shadow: inset 3px 0 0 var(--accent); }
+  & .scan-snap-main { flex: 1; min-width: 0; }
+  & .scan-snap-main b { font-weight: 600; color: var(--text); font-size: .8rem; }
+  & .scan-snap-meta { display: block; color: var(--text3); font-size: .72rem; margin-top: 2px; }
+  & .scan-snap-neu { font-size: .64rem; font-weight: 700; padding: 1px 6px; border-radius: 5px; background: var(--accent-soft); color: var(--accent-text); }
+  & .scan-snap-acts { display: flex; gap: 4px; opacity: .55; transition: opacity .15s; }
+  & .scan-snap:hover .scan-snap-acts, & .scan-snap-active .scan-snap-acts { opacity: 1; }
+  & .scan-btn { border-radius: 7px; border: 1px solid #262b3b; background: #131620; color: var(--text2); padding: 3px 7px; font-size: .74rem; cursor: pointer; }
+  & .scan-btn:hover { color: #fff; border-color: #343a50; }
+  & .scan-btn-danger { color: #fda4b4; }
+  & .scan-hint { font-size: .72rem; color: var(--text3); line-height: 1.5; margin-top: 12px; }
+  & .scan-empty { font-size: .8rem; color: var(--text2); line-height: 1.6; padding: 12px; border: 1px dashed #2a2f40; border-radius: 10px; }
+  & .scan-main { display: flex; flex-direction: column; min-width: 0; padding: 14px 18px; overflow: hidden; }
+  & .scan-toolbar { display: flex; align-items: center; gap: 10px; }
+  & .scan-toolbar .search-wrap { flex: 1; max-width: 380px; }
+  & .scan-toolbar .search-wrap input { width: 100%; height: 34px; padding-left: 34px !important; }
+  & .scan-toolbar #scanCategory { display: none; }   /* ersetzt durch die Chips, bleibt als Zustandsträger */
+  & .scan-count { margin-left: auto; font-size: .74rem; color: var(--text3); white-space: nowrap; }
+  & .scan-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0; }
+  & .scan-chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 99px; border: 1px solid #23283a; background: none;
+    color: var(--text2); font: inherit; font-size: .76rem; font-weight: 500; cursor: pointer; }
+  & .scan-chip em { font-style: normal; font-family: var(--font-mono); font-size: .68rem; color: var(--text3); }
+  & .scan-chip:hover { border-color: #343a50; color: #fff; }
+  & .scan-chip.on { background: var(--text); color: var(--bg); border-color: var(--text); }
+  & .scan-chip.on em { color: var(--bg); opacity: .7; }
+  & .scan-chip-sep { width: 1px; background: #23283a; margin: 2px 4px; }
+  & .scan-head, & .scan-row { display: grid; grid-template-columns: 110px 90px minmax(0,1.3fr) minmax(0,1fr) 120px; gap: 10px; align-items: center; }
+  & .scan-head { padding: 8px 12px; border: 1px solid #1d2130; border-bottom: 0; border-radius: 12px 12px 0 0; background: #0d1018;
+    font-size: .64rem; font-weight: 650; letter-spacing: .1em; text-transform: uppercase; color: var(--text3); }
+  & #scanList { flex: 1; overflow-y: auto; border: 1px solid #1d2130; border-radius: 0 0 12px 12px; background: var(--nv-card); }
+  & .scan-row { padding: 7px 12px; font-size: .78rem; border-bottom: 1px solid #1a1d28; }
+  & .scan-row:hover { background: #141722; }
+  & .scan-name { font-family: var(--font-mono); font-size: .76rem; color: var(--text); overflow-wrap: anywhere; }
+  & .scan-cat, & .scan-kind, & .scan-detail { color: var(--text3); }
+  & .scan-badge { justify-self: start; border-radius: 6px; padding: 2px 8px; font-size: .68rem; font-weight: 600; }
+  & .scan-badge-genutzt { background: #0f2a20; color: #7fe3b5; }
+  & .scan-badge-neu { background: var(--accent-soft); color: var(--accent-text); }
+  & .scan-badge-unbekannt { color: var(--text3); border: 1px solid #2a2f40; }
+  & #scanList > .scan-btn { margin: 10px 12px; }
 }

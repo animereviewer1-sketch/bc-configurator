@@ -83,7 +83,7 @@
   var EMOJI = {
     '⚡': 'zap',        '🔄': 'refresh',   '🔃': 'refresh',   '⟳': 'refresh',
     '↺': 'undo',       '↩': 'undo',       '🗑️': 'trash',     '🗑': 'trash',
-    '🔍': 'search',    '⏰': 'clock',     '📝': 'edit',      '✏️': 'edit',
+    '🔍': 'search',    '🔎': 'search',    '⏰': 'clock',     '📝': 'edit',      '✏️': 'edit',
     '✏': 'edit',       '🏠': 'home',      '📋': 'clipboard', '▶': 'play',
     '▶️': 'play',      '▶▶': 'forward',   '⏩': 'forward',   '⏹': 'stop',
     '⏸': 'pause',      '⏮': 'prev',       '⏭': 'next',       '📷': 'camera',

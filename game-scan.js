@@ -117,6 +117,8 @@ async function _saveGameInventorySnapshot(inventory, meta) {
   }
   showStatus('✅ Spiel-Scan gespeichert – ' + mods.length + ' Mods, ' + _gameScanKb(sizeBytes) + ' KB', 'success');
   await _renderGameScanInfo(record);
+  // Scan-Tab offen? Neuen Snapshot sofort anzeigen (vorher: erst nach „Aktualisieren“)
+  try { if (typeof renderScanTab === 'function' && typeof _activeTab !== 'undefined' && _activeTab === 'scan') renderScanTab(); } catch (e) {}
   return true;
 }
 

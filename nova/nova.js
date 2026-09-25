@@ -74,7 +74,7 @@
   // ══════════════════════════════════════════════════════════
   //  SHELL AUFBAUEN
   // ══════════════════════════════════════════════════════════
-  var sidebar, nav, pill, crumbTitle, crumbGroup, crumbDesc, crumbBox, scrim, toastBox, cmdk, loader, progress;
+  var sidebar, nav, pill, crumbTitle, crumbGroup, crumbDesc, crumbBox, toastBox, cmdk, loader, progress;
 
   function buildSidebar() {
     var navHtml = '<div class="nv-pill"></div>';
@@ -131,18 +131,58 @@
   }
 
   function buildTweaksSection() {
+    var page = $('#tweaksPanel [data-set-page="darstellung"]');
+    if (!page) return;
+    page.appendChild(h(
+      '<div class="set-card">' +
+        '<div class="set-card-h"><span class="tweaks-section-title">Seitenleiste kompakt</span>' +
+        '<div class="set-r"><button class="nv-switch" data-nv="collapse" role="switch" aria-checked="' +
+          (root.getAttribute('data-nv-side') === 'collapsed' ? 'true' : 'false') + '" title="Nur Icons zeigen"></button></div></div>' +
+        '<div class="set-card-b set-hint">Nur Icons in der Seitenleiste – mehr Platz im schmalen Popup. Unter 1100 px Breite automatisch.</div>' +
+      '</div>'));
+  }
+
+  // ── Einstellungen: Reiter + Kennzahlen ──
+  var SET_TAB_KEY = 'BC_UI_SetTab';
+  function setTab(name) {
     var panel = $('#tweaksPanel');
-    if (!panel) return;
-    panel.insertBefore(h(
-      '<div class="nv-tw-design">' +
-        '<div class="tweaks-section-title">Oberfläche</div>' +
-        '<div class="nv-tw-row"><span>Seitenleiste kompakt</span><button class="nv-switch" data-nv="collapse" role="switch" aria-checked="' +
-          (root.getAttribute('data-nv-side') === 'collapsed' ? 'true' : 'false') + '" title="Nur Icons zeigen"></button></div>' +
-      '</div>'), panel.firstChild);
+    if (!panel || !$('[data-set-page="' + name + '"]', panel)) name = 'darstellung';
+    $$('.set-tab', panel).forEach(function (t) { t.classList.toggle('on', t.getAttribute('data-set-tab') === name); });
+    $$('.set-page', panel).forEach(function (p) { p.classList.toggle('on', p.getAttribute('data-set-page') === name); });
+    store(SET_TAB_KEY, name);
+    if (name === 'daten') fillSetStats();
+  }
+  function mb(bytes) {
+    if (!isFinite(bytes)) return '–';
+    return bytes >= 1073741824 ? (bytes / 1073741824).toFixed(1).replace('.', ',') + ' GB' : Math.round(bytes / 1048576) + ' MB';
+  }
+  function fillSetStats() {
+    var sp = $('#setStatSpeicher'), bar = $('#setStatSpeicherBar'), bk = $('#setStatBackup'), bi = $('#setStatBilder');
+    try {
+      if (navigator.storage && navigator.storage.estimate) navigator.storage.estimate().then(function (e) {
+        if (!sp) return;
+        sp.innerHTML = esc(mb(e.usage)) + ' <span style="font-size:.72rem;font-weight:500;color:var(--text3)">von ' + esc(mb(e.quota)) + '</span>';
+        if (bar && e.quota) bar.style.width = Math.min(100, Math.max(1, e.usage / e.quota * 100)).toFixed(1) + '%';
+      });
+    } catch (e) {}
+    try {
+      if (typeof window.bcBackupStatus === 'function') window.bcBackupStatus().then(function (st) {
+        if (bk) bk.textContent = st && st.ordner ? (st.zuletzt || 'nie') : 'kein Ordner';
+      });
+    } catch (e) {}
+    try {
+      var n = 0;
+      if (typeof LSCG_SCREENSHOTS !== 'undefined') n += Object.keys(LSCG_SCREENSHOTS).length;
+      if (typeof PROFILE_SCREENSHOTS !== 'undefined') n += Object.keys(PROFILE_SCREENSHOTS).length;
+      if (typeof _mbsWheelShots !== 'undefined') n += Object.keys(_mbsWheelShots).length;
+      if (bi) bi.textContent = n.toLocaleString('de-DE');
+    } catch (e) {}
+    ['_speicherZeigeStatus', '_bcBackupZeigeStatus', '_renderScreenshotStoreInfo'].forEach(function (f) {
+      try { if (typeof window[f] === 'function') window[f](); } catch (e) {}
+    });
   }
 
   function buildLayers() {
-    scrim = h('<div class="nv-scrim" data-nv="scrim"></div>');
     toastBox = h('<div class="nv-toasts" aria-live="polite"></div>');
     progress = h('<div class="nv-progress" aria-hidden="true"><i></i></div>');
     loader = h('<div class="nv-loader" role="status" aria-live="polite">' +
@@ -150,7 +190,7 @@
         '<div class="nv-loader-ring"><span class="nv-loader-ico"></span></div>' +
         '<div class="nv-loader-txt"></div>' +
       '</div></div>');
-    [scrim, toastBox, progress, loader].forEach(function (el) { document.body.appendChild(el); });
+    [toastBox, progress, loader].forEach(function (el) { document.body.appendChild(el); });
   }
 
   // ══════════════════════════════════════════════════════════
@@ -252,6 +292,7 @@
 
   function navigate(tab) {
     if (typeof window.switchTab !== 'function' || !TABS[tab]) return;
+    closeSettings();   // Einstellungen liegen über dem Inhalt – beim Navigieren schließen
     if (tab === currentTab()) { window.switchTab(tab); return; }
     if (fastTabs[tab]) {
       var f0 = performance.now();
@@ -502,9 +543,19 @@
     var p = $('#tweaksPanel');
     if (p && !p.classList.contains('open') && typeof window.toggleTweaksPanel === 'function') window.toggleTweaksPanel();
   }
+  var panelWasOpen = false;
   function onPanelChange() {
     var p = $('#tweaksPanel');
-    if (scrim) scrim.classList.toggle('on', !!(p && p.classList.contains('open')));
+    var open = !!(p && p.classList.contains('open'));
+    if (open && !panelWasOpen) {
+      var t = null; try { t = localStorage.getItem(SET_TAB_KEY); } catch (e) {}
+      setTab(t || 'darstellung');
+    }
+    panelWasOpen = open;
+  }
+  function closeSettings() {
+    var p = $('#tweaksPanel');
+    if (p && p.classList.contains('open') && typeof window.toggleTweaksPanel === 'function') window.toggleTweaksPanel();
   }
 
   // Höhe von Kopfzeile + Raumleiste → Arbeitsflächen füllen den Rest
@@ -524,12 +575,13 @@
 
   // ── Ereignisse (delegiert, keine Maus-Bewegungs-Handler) ──
   function onClick(e) {
-    var el = e.target.closest && e.target.closest('[data-nv], .nv-nav-item[data-tab]');
+    var el = e.target.closest && e.target.closest('[data-nv], .nv-nav-item[data-tab], [data-set-tab]');
     if (!el) return;
-    if (el.hasAttribute('data-tab')) { navigate(el.getAttribute('data-tab')); return; }
+    if (el.hasAttribute('data-set-tab')) { setTab(el.getAttribute('data-set-tab')); return; }
+    if (el.hasAttribute('data-tab')) { closeSettings(); navigate(el.getAttribute('data-tab')); return; }
     switch (el.getAttribute('data-nv')) {
       case 'palette': openPalette(); break;
-      case 'settings': case 'scrim': if (typeof window.toggleTweaksPanel === 'function') window.toggleTweaksPanel(); break;
+      case 'settings': if (typeof window.toggleTweaksPanel === 'function') window.toggleTweaksPanel(); break;
       case 'collapse': toggleCollapse(); break;
     }
   }
