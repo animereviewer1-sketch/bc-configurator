@@ -7320,9 +7320,10 @@ function exportScreenshotsOnly() {
    JSON.parse liefern wuerde. Werte auf oberster Ebene, die selbst Objekte sind
    (Screenshot-Sammlungen), werden Feld fuer Feld gelesen; damit bleibt jeder
    Einzelwert so klein wie das, was er enthaelt – ein Bild statt aller Bilder. */
-async function _backupDateiParsen(file, aufFortschritt) {
+async function _backupDateiParsen(file, aufFortschritt, bilder) {
   const leser = file.stream().pipeThrough(new TextDecoderStream()).getReader();
   let buf = '', i = 0, ende = false, gelesen = 0, seitPause = 0;
+  let bsPos = -2;   // Position des naechsten Backslash im aktuellen Puffer (-2 = unbekannt, -1 = keiner)
 
   // Sorgt dafuer, dass buf[i] existiert. false = Datei zu Ende.
   async function nachfuellen() {
@@ -7330,7 +7331,7 @@ async function _backupDateiParsen(file, aufFortschritt) {
       if (ende) return false;
       const { value, done } = await leser.read();
       if (done) { ende = true; return false; }
-      gelesen += buf.length; buf = value; i = 0;
+      gelesen += buf.length; buf = value; i = 0; bsPos = -2;
     }
     return true;
   }
@@ -7344,15 +7345,21 @@ async function _backupDateiParsen(file, aufFortschritt) {
     }
   }
   // Zeichenkette ab buf[i] === '"' roh einlesen (mit Anfuehrungszeichen).
+  // Springt per indexOf von Anfuehrungszeichen zu Anfuehrungszeichen statt
+  // Zeichen fuer Zeichen – Screenshots sind Base64 ohne Escapes, bei 1 GB war
+  // die Zeichenschleife der teuerste Teil des Einlesens.
   async function leseStringRoh() {
     const teile = []; let start = i, escape = false;
     i++;                                   // oeffnendes "
     for (;;) {
       while (i < buf.length) {
-        const c = buf[i]; i++;
-        if (escape)          { escape = false; continue; }
-        if (c === '\\')      { escape = true;  continue; }
-        if (c === '"')       { teile.push(buf.slice(start, i)); return teile.join(''); }
+        if (escape) { escape = false; i++; continue; }
+        if (bsPos !== -1 && bsPos < i) bsPos = buf.indexOf('\\', i);
+        const q = buf.indexOf('"', i);
+        if (bsPos !== -1 && (q === -1 || bsPos < q)) { i = bsPos + 1; escape = true; continue; }
+        if (q === -1) { i = buf.length; break; }
+        i = q + 1;
+        teile.push(buf.slice(start, i)); return teile.join('');
       }
       teile.push(buf.slice(start, i));
       if (!(await nachfuellen())) throw new Error('Datei endet mitten in einer Zeichenkette');
@@ -7428,6 +7435,23 @@ async function _backupDateiParsen(file, aufFortschritt) {
     async function leseWert(pfad) {
       const c = await ws();
       if (c === null) throw new Error('Datei unvollstaendig – vermutlich abgebrochener Download' + (pfad ? ' (in "' + pfad + '")' : ''));
+      // Bild-Sammlungen nicht festhalten, sondern Eintrag fuer Eintrag direkt
+      // weiterreichen (bilder.add speichert stueckweise) – so bleibt auch bei
+      // GB-grossen Backups nur ein Bild gleichzeitig im Speicher.
+      const abzweig = (c === '{' && bilder) ? _bildSammlungVonPfad(pfad) : null;
+      if (abzweig) {
+        i++;
+        for (;;) {
+          const d = await ws();
+          if (d === null) throw new Error('Datei unvollstaendig in "' + pfad + '"');
+          if (d === '}') { i++; return undefined; }
+          if (d === ',') { i++; continue; }
+          if (d !== '"') throw new Error('Unerwartetes Zeichen "' + d + '" in "' + pfad + '"');
+          const k = await leseSchluessel('"' + pfad + '"');
+          await bilder.add(abzweig, k, await leseWert(pfad + '.' + k));
+          await vielleichtPause();
+        }
+      }
       if (c === '{') {
         i++;
         const obj = {};
@@ -7438,7 +7462,8 @@ async function _backupDateiParsen(file, aufFortschritt) {
           if (d === ',') { i++; continue; }
           if (d !== '"') throw new Error('Unerwartetes Zeichen "' + d + '" in "' + (pfad || 'oberster Ebene') + '"');
           const k = await leseSchluessel('"' + (pfad || 'oberster Ebene') + '"');
-          setze(obj, k, await leseWert(pfad ? pfad + '.' + k : k));
+          const wert = await leseWert(pfad ? pfad + '.' + k : k);
+          if (wert !== undefined) setze(obj, k, wert);   // undefined = abgezweigte Bild-Sammlung
           await vielleichtPause();
         }
       }
@@ -7465,15 +7490,72 @@ async function _backupDateiParsen(file, aufFortschritt) {
 
 /* Waehlt den Weg: kleine Dateien direkt (schnell), grosse ueber den Stream.
    Scheitert JSON.parse doch an der Stringlaenge, wird umgeschaltet. */
-async function _backupDateiLesen(file, aufFortschritt) {
+async function _backupDateiLesen(file, aufFortschritt, bilder) {
   const GRENZE = 100 * 1024 * 1024;
-  if (file.size > GRENZE) return _backupDateiParsen(file, aufFortschritt);
+  if (file.size > GRENZE) return _backupDateiParsen(file, aufFortschritt, bilder);
+  let d;
   try {
-    return JSON.parse(await file.text());
+    d = JSON.parse(await file.text());
   } catch (err) {
     if (!(err instanceof RangeError)) throw err;
     console.warn('[Import] Datei zu gross für JSON.parse – lese stückweise');
-    return _backupDateiParsen(file, aufFortschritt);
+    return _backupDateiParsen(file, aufFortschritt, bilder);
+  }
+  if (bilder) await _bilderAbzweigen(d, bilder);
+  return d;
+}
+
+/* ── Bilder beim Einlesen direkt uebernehmen ────────────────────────────
+   Bild-Sammlungen machen fast die ganze Groesse eines Backups aus (1 GB+).
+   Frueher wurde jede Datei komplett in den Speicher gelesen – bei mehreren
+   GB-Dateien stuerzte der Tab still ab, bevor die Rueckfrage kam. Jetzt
+   wandert jedes Bild sofort in seine Map und wird stueckweise in die IDB
+   geschrieben. Es wird nur ERGAENZT: ein vorhandenes Bild wird nie ersetzt. */
+const _BILD_SAMMLUNGEN = { lscgScreenshots: 'lscg', profileScreenshots: 'profile', mbsWheelShots: 'wheel' };
+function _bildSammlungVonPfad(pfad) {
+  const m = /^(?:(?:daten|geaendert)\.)?(lscgScreenshots|profileScreenshots|mbsWheelShots)$/.exec(pfad || '');
+  return m ? m[1] : null;
+}
+function _bildMap(kind) {
+  return kind === 'lscg' ? LSCG_SCREENSHOTS : kind === 'profile' ? PROFILE_SCREENSHOTS : _mbsWheelShots;
+}
+function _bildEinspieler() {
+  const neu = { lscg: 0, profile: 0, wheel: 0 };
+  let offen = 0;
+  async function flush() {
+    offen = 0;
+    for (const kind of ['lscg', 'profile', 'wheel']) {
+      const ok = await _screenshotFlush(kind, _bildMap(kind));
+      if (!ok) throw new Error('Bilder konnten nicht gespeichert werden (Browser-Speicher voll?) – Import abgebrochen, bisher Eingelesenes bleibt erhalten');
+    }
+  }
+  return {
+    neu,
+    flush,
+    async add(sammlung, key, wert) {
+      const kind = _BILD_SAMMLUNGEN[sammlung];
+      if (!kind || typeof wert !== 'string' || !wert) return;
+      const map = _bildMap(kind);
+      if (Object.prototype.hasOwnProperty.call(map, key)) return;   // nie ueberschreiben
+      map[key] = wert;
+      neu[kind]++;
+      offen += wert.length;
+      if (offen > 48 * 1024 * 1024) await flush();                   // alle ~48 MB wegschreiben
+    },
+  };
+}
+// Schneller Pfad (kleine Datei, schon komplett geparst): Bild-Sammlungen
+// herausloesen und durch denselben Einspieler schicken.
+async function _bilderAbzweigen(d, bilder) {
+  if (!d || typeof d !== 'object') return;
+  for (const behaelter of [d, d.daten, d.geaendert]) {
+    if (!behaelter || typeof behaelter !== 'object') continue;
+    for (const sammlung of Object.keys(_BILD_SAMMLUNGEN)) {
+      const quelle = behaelter[sammlung];
+      if (!quelle || typeof quelle !== 'object') continue;
+      delete behaelter[sammlung];
+      for (const [k, v] of Object.entries(quelle)) await bilder.add(sammlung, k, v);
+    }
   }
 }
 
@@ -7494,7 +7576,18 @@ function _backupZuExport(teile) {
   const gueltig = (teile || []).filter(d => d && typeof d === 'object' && d._meta);
   if (!gueltig.length) return null;
   gueltig.sort((a, b) => String(a._meta.exportedAt ?? '').localeCompare(String(b._meta.exportedAt ?? '')));
+  const sammler = _backupSammler();
+  for (const d of gueltig) sammler.add(d);
+  return sammler.ergebnis();
+}
+
+/* Fuehrt Backup-Dateien EINZELN nacheinander zusammen – nach add() kann die
+   gelesene Datei verworfen werden. (Vorher lagen alle Dateien gleichzeitig im
+   Speicher.) Reihenfolge = Aufrufreihenfolge (aelteste zuerst). */
+function _backupSammler() {
   const ziel = {};
+  const arten = [];
+  let letzte = null;
   const mischen = (quelle) => {
     if (!quelle || typeof quelle !== 'object') return;
     for (const [k, v] of Object.entries(quelle)) {
@@ -7511,37 +7604,60 @@ function _backupZuExport(teile) {
       else ziel[k] = v;   // Einzelwerte/kleine Bestaende: neuere Datei gewinnt
     }
   };
-  for (const d of gueltig) {
-    const art = d._meta.art;
-    if (art === 'voll') mischen(d.daten);
-    else if (art === 'inkrement') { mischen(d.geaendert); mischen(d.komplett); }
-    else mischen(d);
-  }
-  const letzte = gueltig[gueltig.length - 1]._meta;
-  ziel._meta = Object.assign({}, letzte, { dateien: gueltig.length,
-    arten: gueltig.map(d => d._meta.art || 'export') });
-  return ziel;
+  return {
+    add(d) {
+      if (!d || typeof d !== 'object' || !d._meta) return false;
+      const art = d._meta.art;
+      if (art === 'voll') mischen(d.daten);
+      else if (art === 'inkrement') { mischen(d.geaendert); mischen(d.komplett); }
+      else mischen(d);
+      arten.push(art || 'export');
+      if (!letzte || String(d._meta.exportedAt ?? '') >= String(letzte.exportedAt ?? '')) letzte = d._meta;
+      return true;
+    },
+    ergebnis() {
+      if (!arten.length) return null;
+      ziel._meta = Object.assign({}, letzte, { dateien: arten.length, arten: arten.slice() });
+      return ziel;
+    },
+  };
 }
 
 function importAllData() {
   const inp = document.createElement('input');
   inp.type = 'file'; inp.accept = '.json'; inp.multiple = true;
   inp.onchange = async e => {
-    const files = Array.from(e.target.files || []);
+    // Aelteste zuerst (Dateidatum = Sicherungszeitpunkt), damit bei Einzelwerten
+    // die neueste Datei gewinnt
+    const files = Array.from(e.target.files || [])
+      .sort((a, b) => (a.lastModified - b.lastModified) || a.name.localeCompare(b.name));
     if (!files.length) return;
+    const gesamtMB = files.reduce((n, f) => n + f.size, 0) / 1048576;
+    // Grosse Auswahl: Bilder werden schon beim Lesen ergaenzt – vorher sagen
+    if (gesamtMB > 50 && !confirm(
+      files.length + ' Datei(en), ' + Math.round(gesamtMB) + ' MB einlesen?\n\n'
+      + 'Screenshots werden schon beim Lesen ergänzt (vorhandene Bilder werden nie ersetzt).\n'
+      + 'Danach kommt eine Übersicht mit Rückfrage für alle übrigen Daten (LSCG-Outfits, Profile, Curse …).\n\n'
+      + 'Das kann bei großen Dateien einige Minuten dauern – Fenster bitte offen lassen.'
+    )) return;
     try {
         showStatus('⏳ Backup wird gelesen…', 'info');
-        const gelesen = [];
+        const bilder = _bildEinspieler();
+        const sammler = _backupSammler();
+        let ohneMeta = 0;
         for (let i = 0; i < files.length; i++) {
           const pre = files.length > 1 ? '(' + (i + 1) + '/' + files.length + ') ' : '';
-          gelesen.push(await _backupDateiLesen(files[i], (fertig, gesamt) => {
+          const teil = await _backupDateiLesen(files[i], (fertig, gesamt) => {
             if (gesamt) showStatus('⏳ Backup wird gelesen… ' + pre + Math.floor(fertig / gesamt * 100) + '%', 'info');
-          }));
+          }, bilder);
+          if (!sammler.add(teil)) ohneMeta++;
+          // teil wird hier verworfen – nur der zusammengefuehrte Rest bleibt
         }
-        const ohneMeta = gelesen.filter(x => !x || !x._meta).length;
-        const d = _backupZuExport(gelesen);
+        await bilder.flush();
+        const bilderNeu = bilder.neu.lscg + bilder.neu.profile + bilder.neu.wheel;
+        const d = sammler.ergebnis();
         if (!d) {
-          showStatus('❌ Keine gültige Backup-Datei', 'error');
+          showStatus('❌ Keine gültige Backup-Datei' + (bilderNeu ? ' (' + bilderNeu + ' Bilder wurden ergänzt)' : ''), 'error');
           return;
         }
         const lscgSpieler = Object.keys(d.lscgDB ?? {}).length;
@@ -7553,6 +7669,7 @@ function importAllData() {
           + 'Profile: ' + Object.keys(d.profiles ?? {}).length + '\n'
           + 'Curse-Einträge: ' + Object.keys(d.curseDatabase ?? {}).length + '\n'
           + 'LSCG-Outfits: ' + lscgSpieler + ' Spieler, ' + lscgVersionen + ' Versionen\n'
+          + (bilderNeu ? 'Bereits ergänzte Bilder: ' + bilder.neu.lscg + ' LSCG, ' + bilder.neu.profile + ' Profile, ' + bilder.neu.wheel + ' Wheel\n' : '')
           + (ohneMeta ? '⚠ ' + ohneMeta + ' Datei(en) ohne Backup-Kennung übersprungen\n' : '')
           + (nurInkr ? '⚠ Nur Inkremente gewählt – sie enthalten nur Änderungen. Für den vollen Bestand die passende BC_Voll_…-Datei mit auswählen.\n' : '')
           + '\nBestehende Daten werden zusammengeführt, nichts wird gelöscht.'
@@ -7580,8 +7697,7 @@ function importAllData() {
         let lscgNeu = 0;
         if (d.lscgDB) { lscgNeu = _lscgMerge(LSCG_DB, d.lscgDB); _saveLscgDB(); }
         if (d.lscgSlots)          { Object.assign(_lscgSlots, d.lscgSlots); _saveLscgSlots(); }
-        if (d.lscgScreenshots)    { Object.assign(LSCG_SCREENSHOTS, d.lscgScreenshots); _saveLscgScreenshots(); }
-        if (d.profileScreenshots) { Object.assign(PROFILE_SCREENSHOTS, d.profileScreenshots); _saveProfileScreenshots(); }
+        // Screenshots (lscg/profile/wheel) wurden schon beim Lesen ergaenzt – _bildEinspieler
         if (d.profileFavs)        { d.profileFavs.forEach(k => PROFILE_FAVS.add(k)); try { localStorage.setItem('BC_PROFILE_FAVS_v1', JSON.stringify([...PROFILE_FAVS])); } catch {} }
         if (Array.isArray(d.mbsWheel)) {
           _mbsMerge(_mbsWheelData, d.mbsWheel);
@@ -7590,7 +7706,6 @@ function importAllData() {
         }
         if (d.mbsWheelFavs)       { d.mbsWheelFavs.forEach(k => _mbsWheelFavs.add(_mbsNum(k))); _saveMbsWheelFavs(); }
         if (d.mbsWheelOutfitFavs) { d.mbsWheelOutfitFavs.forEach(k => _mbsWheelOutfitFavs.add(k)); _saveMbsWheelOutfitFavs(); }
-        if (d.mbsWheelShots) { Object.assign(_mbsWheelShots, d.mbsWheelShots); _saveMbsWheelShots(); }
         if (d.defaultOutfit?.code && !CURSE_DEFAULT_OUTFIT_CODE) {
           CURSE_DEFAULT_OUTFIT_CODE = d.defaultOutfit.code;
           CURSE_DEFAULT_OUTFIT_DATE = d.defaultOutfit.date || null;
@@ -7623,10 +7738,15 @@ function importAllData() {
           + Object.keys(PROFILES).length + ' Profile, '
           + Object.keys(CURSE_DB).length + ' Curse-Einträge, '
           + Object.keys(LSCG_DB).length + ' LSCG-Spieler (' + lscgNeu + ' Versionen neu)'
+          + (bilderNeu ? ', ' + bilderNeu + ' Bilder ergänzt' : '')
           + (nebenText ? ', neu: ' + nebenText : ''), 'success');
       } catch(err) {
         console.error('[importAllData]', err);
         showStatus('❌ Import fehlgeschlagen: ' + err.message, 'error');
+        // Ein Toast verschwindet nach 4 s und ging zwischen anderen Meldungen unter –
+        // ein gescheiterter Restore muss unuebersehbar sein.
+        alert('❌ Backup konnte nicht eingespielt werden.\n\n' + (err && err.message ? err.message : err)
+          + '\n\nBereits ergänzte Bilder bleiben erhalten, sonst wurde nichts verändert.');
     }
   };
   inp.click();
