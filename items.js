@@ -2299,7 +2299,7 @@ function renderProfileList() {
       const letter = escHtml((shortName[0] || '?').toUpperCase());
 
       const thumbContent = img
-        ? '<img src="' + escHtml(img) + '" alt="">'
+        ? _lazyImg('pf', name)
         : '<div class="pc-placeholder">' + letter + '</div>';
 
       const dupSiblings = (isDup || isOrg)
@@ -2348,6 +2348,7 @@ function renderProfileList() {
   }).join('');
 
   el.innerHTML = html;
+  _lazyImgBeobachten(el, true);
 
   // Duplikat-Button ein-/ausblenden
   const dupBtn = document.getElementById('profileDupBtn');
@@ -6507,6 +6508,47 @@ function escHtml(s) {
                   .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 
+// ── Lazy-Bilder ─────────────────────────────────────────────────────────
+// Screenshots sind Data-URLs (je 50–500 KB). Frueher standen sie direkt im
+// HTML: bei tausenden Karten entstanden hunderte MB HTML-Text, und der Browser
+// dekodierte JEDES Bild sofort – auch weit ausserhalb des Sichtbereichs.
+// Jetzt steht nur der Schluessel im HTML (data-lz = Sammlung, data-lk = Key);
+// ein IntersectionObserver setzt src erst kurz bevor das Bild sichtbar wird.
+const _LAZY_IMG_QUELLEN = {
+  os: k => (typeof LSCG_SCREENSHOTS    !== 'undefined' ? LSCG_SCREENSHOTS[k]    : null),
+  pf: k => (typeof PROFILE_SCREENSHOTS !== 'undefined' ? PROFILE_SCREENSHOTS[k] : null),
+  mw: k => (typeof _mbsWheelShots      !== 'undefined' ? _mbsWheelShots[k]      : null),
+};
+function _lazyImg(quelle, key) {
+  return '<img data-lz="' + quelle + '" data-lk="' + escHtml(key) + '" alt="" decoding="async">';
+}
+function _lazyImgLaden(img) {
+  const q = _LAZY_IMG_QUELLEN[img.dataset.lz];
+  const src = q ? q(img.dataset.lk) : null;
+  if (src) img.src = src;
+}
+// Pro Container ein Observer. neu=true beim kompletten Neu-Rendern: der alte
+// Observer wird getrennt, damit er keine abgehaengten Elemente festhaelt.
+const _lazyImgIOs = new Map();
+function _lazyImgBeobachten(container, neu) {
+  if (!container) return;
+  const imgs = container.querySelectorAll('img[data-lk]:not([src])');
+  if (typeof IntersectionObserver === 'undefined') { imgs.forEach(_lazyImgLaden); return; }
+  let io = _lazyImgIOs.get(container);
+  if (io && neu) { io.disconnect(); io = null; }
+  if (!io) {
+    io = new IntersectionObserver(function (entries) {
+      for (const e of entries) {
+        if (!e.isIntersecting) continue;
+        io.unobserve(e.target);
+        _lazyImgLaden(e.target);
+      }
+    }, { rootMargin: '600px 400px' });
+    _lazyImgIOs.set(container, io);
+  }
+  imgs.forEach(i => io.observe(i));
+}
+
 /* Fuer Werte, die INNERHALB eines JS-String-Literals in einem Inline-Handler
    stehen, also  onclick="f('<hier>')" . Zwei Ebenen: erst JS-Escaping, damit
    das Literal nicht bricht, dann HTML-Escaping, damit das Attribut nicht
@@ -9736,7 +9778,7 @@ function _renderMbsWheelTab() {
         ? '<span class="os-card-tag saved" style="background:var(--green,#4ade80);color:#000">NEU</span>'
         : (others.length ? '<span class="os-card-tag" title="Identisches Outfit auch bei: ' + escHtml(others.map(x => x.name + ' #' + x.mn).join(', ')) + '">⧉ ' + others.length + '</span>' : '');
       const thumbContent = shot
-        ? '<img src="' + shot + '" alt="">'
+        ? _lazyImg('mw', fp)
         : '<div class="os-card-placeholder">' + letter + '</div>';
       const hintIcon = shot ? '<span class="os-card-hint">🔍</span>' : '<span class="os-card-hint">📸</span>';
       const thumbClick = shot
@@ -9784,6 +9826,7 @@ function _renderMbsWheelTab() {
   // Chunk-Rendering wie bei LSCG: erste 30 sofort, Rest nachladen (kein UI-Freeze)
   const CHUNK = 30;
   body.innerHTML = entries.slice(0, CHUNK).map(_buildWheelMemberHtml).join('');
+  _lazyImgBeobachten(body, true);
   if (entries.length > CHUNK) {
     const rest = entries.slice(CHUNK);
     setTimeout(function _more() {
@@ -9791,6 +9834,7 @@ function _renderMbsWheelTab() {
       const slice = rest.splice(0, CHUNK);
       if (!slice.length) return;
       body.insertAdjacentHTML('beforeend', slice.map(_buildWheelMemberHtml).join(''));
+      _lazyImgBeobachten(body);
       if (rest.length) setTimeout(_more, 30);
     }, 30);
   }
@@ -10364,6 +10408,7 @@ function _osItemCount(code, cacheKey) {
   } catch(e) { _itemCountCache[k] = 0; return 0; }
 }
 
+let _osStripIO = null;   // Observer fuer noch leere Spieler-Streifen (renderOutfitScanTab)
 function renderOutfitScanTab() {
   const body = document.getElementById('outfitScanBody');
   if (!body) return;
@@ -10399,13 +10444,14 @@ function renderOutfitScanTab() {
     return (LSCG_DB[a].name ?? '').localeCompare(LSCG_DB[b].name ?? '');
   });
 
-  // Hilfsfunktion: einen Member-Block als HTML-String bauen
-  function _buildMemberHtml(mk) {
+  // Karten eines Spielers als HTML (wird erst gebaut, wenn der Block in die
+  // Naehe des Sichtbereichs kommt – siehe _osStripIO unten)
+  function _buildCardsHtml(mk) {
     const entry = LSCG_DB[mk];
+    if (!entry || !Array.isArray(entry.versions)) return '';
     const isFav = _osFavs.has(mk);
     const letter = escHtml(((entry.name ?? mk)[0] ?? '?').toUpperCase());
-
-    const cards = [...entry.versions].reverse().map(function(v, i) {
+    return [...entry.versions].reverse().map(function(v, i) {
       const realIdx  = entry.versions.length - 1 - i;
       const vNum     = entry.versions.length - i;
       const d        = new Date(v.ts);
@@ -10422,7 +10468,7 @@ function renderOutfitScanTab() {
         ? '<span class="os-card-tag saved" title="' + saved.map(function(k){return escHtml(k);}).join(', ') + '">✅ PROFIL</span>'
         : '<span class="os-card-tag">v' + vNum + '</span>';
       const thumbContent = vThumb
-        ? '<img src="' + escHtml(vThumb) + '" alt="">'
+        ? _lazyImg('os', vKey)
         : (isBroken
             ? '<div class="os-card-placeholder broken">⚠️</div>'
             : '<div class="os-card-placeholder">' + letter + '</div>');
@@ -10462,6 +10508,14 @@ function renderOutfitScanTab() {
         + '</div>'
         + '</div>';
     }).join('');
+  }
+
+  // Hilfsfunktion: einen Member-Block als HTML-String bauen.
+  // lazy=true → leerer Streifen mit Platzhalterhoehe, Karten folgen bei Sichtkontakt.
+  function _buildMemberHtml(mk, lazy) {
+    const entry = LSCG_DB[mk];
+    const isFav = _osFavs.has(mk);
+    const cards = lazy ? '' : _buildCardsHtml(mk);
 
     const nameHtml = escHtml(entry.name ?? mk)
       + (entry.nickname ? ' <span class="os-member-nick">„' + escHtml(entry.nickname) + '“</span>' : '');
@@ -10474,26 +10528,42 @@ function renderOutfitScanTab() {
       + '<button class="os-member-fav' + (isFav ? ' on' : '') + '" onclick="event.stopPropagation();toggleOsFav(\'' + mk + '\')">' + (isFav ? '⭐' : '☆') + '</button>'
       + '<span class="os-member-chevron">▶</span>'
       + '</div>'
-      + '<div class="os-member-rows"><div class="os-strip">' + cards + '</div></div>'
+      + '<div class="os-member-rows"><div class="os-strip"' + (lazy ? ' data-os-lazy="' + escHtml(mk) + '"' : '') + '>' + cards + '</div></div>'
       + '</div>';
   }
 
-  // Erst die ersten 30 sofort rendern, Rest via setTimeout nachladen
-  // → Main-Thread bleibt responsiv, kein 5s-Freeze bei großen DBs
-  const CHUNK = 30;
+  // Alle Kopfzeilen sofort (kleine Strings), Karten nur fuer die ersten
+  // SOFORT Spieler; der Rest wird befuellt, sobald ein Block sich dem
+  // Sichtbereich naehert. Vorher: alle Karten aller Spieler auf einmal →
+  // zehntausende DOM-Knoten und jedes Bild dekodiert.
+  const SOFORT = 8;
   try {
-    body.innerHTML = members.slice(0, CHUNK).map(_buildMemberHtml).join('');
-    if (members.length > CHUNK) {
-      const rest = members.slice(CHUNK);
-      let i = 0;
-      function _renderChunk() {
-        const slice = rest.slice(i, i + CHUNK);
-        if (!slice.length) return;
-        body.insertAdjacentHTML('beforeend', slice.map(_buildMemberHtml).join(''));
-        i += CHUNK;
-        if (i < rest.length) setTimeout(_renderChunk, 0);
+    if (_osStripIO) { _osStripIO.disconnect(); _osStripIO = null; }
+    body.innerHTML = members.map(function(mk, i) { return _buildMemberHtml(mk, i >= SOFORT); }).join('');
+    _lazyImgBeobachten(body, true);
+    // Platzhalterhoehe = echte Streifenhoehe, damit beim Befuellen nichts springt
+    const echt = body.querySelector('.os-strip:not([data-os-lazy])');
+    if (echt && echt.offsetHeight) body.style.setProperty('--os-strip-h', echt.offsetHeight + 'px');
+    const lazyStrips = body.querySelectorAll('.os-strip[data-os-lazy]');
+    if (lazyStrips.length) {
+      const fuellen = function(strip) {
+        const mk = strip.getAttribute('data-os-lazy');
+        strip.removeAttribute('data-os-lazy');
+        strip.innerHTML = _buildCardsHtml(mk);
+        _lazyImgBeobachten(body);
+      };
+      if (typeof IntersectionObserver === 'undefined') { lazyStrips.forEach(fuellen); }
+      else {
+        const io = _osStripIO = new IntersectionObserver(function(entries) {
+          for (const e of entries) {
+            if (!e.isIntersecting) continue;
+            io.unobserve(e.target);
+            const strip = e.target.querySelector('.os-strip[data-os-lazy]');
+            if (strip) fuellen(strip);
+          }
+        }, { rootMargin: '800px 0px' });
+        lazyStrips.forEach(function(s) { io.observe(s.closest('.os-member-block')); });
       }
-      setTimeout(_renderChunk, 0);
     }
   } catch(err) {
     console.error('[BCU] renderOutfitScanTab error:', err);

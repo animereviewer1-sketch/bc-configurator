@@ -1,12 +1,13 @@
-// Nova-Design — reine Präsentationsschicht mit Umschalter alt ↔ neu.
+// Oberfläche (Nova) – einzige Oberfläche, auf Leistung ausgelegt.
+// Das alte Design liegt im Branch archiv/klassisches-design.
 // Abgesichert wird:
-//   1. nova-boot.js setzt data-ui vor dem ersten Zeichnen (Default nova,
-//      'classic' bleibt 'classic') und übernimmt Seitenleiste/Hintergrund.
-//   2. Jede Regel in nova/nova.css ist gescoped – das alte Design bleibt
-//      unverändert, solange data-ui="classic" gesetzt ist.
+//   1. nova-boot.js setzt data-ui="nova" vor dem ersten Zeichnen und übernimmt
+//      die gemerkte Seitenleisten-Breite.
+//   2. Leistungs-Leitplanken: kein WebGL/Canvas, kein GSAP, keine Endlos-
+//      Animationen außer dem Ladespinner, kein backdrop-filter, keine
+//      Maus-Bewegungs-Handler, kein fixed-Hintergrund.
 //   3. index.html lädt nova.js NACH allen Feature-Modulen (sonst fehlen
-//      switchTab/showStatus zum Umhüllen), und die Kern-Ladereihenfolge
-//      bleibt unberührt.
+//      switchTab/showStatus zum Umhüllen).
 
 import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
@@ -33,21 +34,20 @@ function runBoot(stored) {
 }
 
 describe('nova-boot.js', () => {
-  it('ohne gespeicherte Wahl → Nova', () => {
+  it('setzt immer Nova und lädt das Stylesheet mit Cache-Buster', () => {
     const { attrs, written } = runBoot({});
     expect(attrs['data-ui']).toBe('nova');
     expect(attrs['data-nv-side']).toBeUndefined();
     expect(written.join('')).toMatch(/nova\/nova\.css\?_=\d+/);
   });
 
-  it("'classic' bleibt klassisch, Seitenleiste/Hintergrund werden übernommen", () => {
-    const { attrs } = runBoot({ BC_UI_Design: 'classic', BC_UI_NovaSide: 'collapsed', BC_UI_NovaBg: 'off' });
-    expect(attrs['data-ui']).toBe('classic');
+  it("eine alte Wahl 'classic' wird ignoriert, die Seitenleisten-Breite übernommen", () => {
+    const { attrs } = runBoot({ BC_UI_Design: 'classic', BC_UI_NovaSide: 'collapsed' });
+    expect(attrs['data-ui']).toBe('nova');
     expect(attrs['data-nv-side']).toBe('collapsed');
-    expect(attrs['data-nv-bg']).toBe('off');
   });
 
-  it('localStorage wirft (z. B. blockiert) → kein Absturz, Nova', () => {
+  it('localStorage wirft (z. B. blockiert) → kein Absturz', () => {
     const attrs = {};
     vm.runInNewContext(src('nova/nova-boot.js'), {
       get localStorage() { throw new Error('blocked'); },
@@ -57,54 +57,33 @@ describe('nova-boot.js', () => {
   });
 });
 
-// Top-Level-Selektoren (auch innerhalb von @media/@supports) einsammeln.
-// Verschachtelte Regeln (`& …`) erben den Scope ihres Elternblocks.
-function topLevelSelectors(css) {
-  css = css.replace(/\/\*[\s\S]*?\*\//g, '');
-  const out = [];
-  const stack = []; // 'at' | 'keyframes' | 'rule'
-  let buf = '';
-  for (const ch of css) {
-    if (ch === '{') {
-      const prelude = buf.trim();
-      buf = '';
-      if (prelude.startsWith('@keyframes') || prelude.startsWith('@property')) stack.push('keyframes');
-      else if (prelude.startsWith('@')) stack.push('at');
-      else {
-        if (stack.every((s) => s === 'at')) out.push(prelude);
-        stack.push('rule');
-      }
-    } else if (ch === '}') {
-      stack.pop();
-      buf = '';
-    } else if (ch === ';') {
-      buf = '';
-    } else {
-      buf += ch;
-    }
-  }
-  return out;
-}
+describe('Leistungs-Leitplanken', () => {
+  const css = src('nova/nova.css').replace(/\/\*[\s\S]*?\*\//g, '');
+  const js = src('nova/nova.js').replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
 
-describe('nova/nova.css ist vollständig gescoped', () => {
-  const ALLOWED = [
-    /^html\[data-ui="nova"\]/,
-    /^html:not\(\[data-ui="nova"\]\)/,
-    /^html\[data-nv-(side|bg)="[a-z]+"\] \.nv-/,
-    /^\.nv-[a-z]/,
-    /^::view-transition-(old|new)\(root\)$/,
-  ];
-  it('jede Top-Level-Regel trifft nur Nova oder Nova-eigene Elemente', () => {
-    const sels = topLevelSelectors(src('nova/nova.css'))
-      .flatMap((s) => s.split(',').map((x) => x.trim()))
-      .filter(Boolean);
-    expect(sels.length).toBeGreaterThan(50);
-    const bad = sels.filter((s) => !ALLOWED.some((re) => re.test(s)));
-    expect(bad).toEqual([]);
+  it('kein WebGL/Canvas, kein GSAP, keine rAF-Schleife, keine Maus-Bewegungs-Handler', () => {
+    expect(js).not.toMatch(/getContext\(|webgl|gsap|requestAnimationFrame\(\s*loop/i);
+    // Keine globalen Bewegungs-/Scroll-Handler (die Palette hat einen mousemove
+    // nur auf ihrer eigenen Liste – der läuft nur, solange sie offen ist)
+    expect(js).not.toMatch(/(document|window)\.addEventListener\(\s*['"](pointermove|mousemove|scroll)['"]/);
+    expect(js).not.toMatch(/(^|[^.\w])addEventListener\(\s*['"](pointermove|mousemove|scroll)['"]/m);
+    expect(fs.existsSync(path.join(REPO_ROOT, 'vendor/gsap.min.js'))).toBe(false);
+    expect(src('index.html')).not.toMatch(/gsap/i);
+  });
+
+  it('Endlos-Animation nur für den Ladespinner (läuft nur, solange er sichtbar ist)', () => {
+    const endlos = css.match(/animation:[^;]*infinite[^;]*;/g) || [];
+    expect(endlos).toEqual(['animation: nvRot .8s linear infinite;']);
+  });
+
+  it('kein backdrop-filter (außer ausdrücklich abgeschaltet) und kein fixed-Hintergrund', () => {
+    const bf = css.match(/backdrop-filter:[^;]*;/g) || [];
+    expect(bf.every((d) => /:\s*none/.test(d))).toBe(true);
+    expect(css).not.toMatch(/background-attachment:\s*fixed/);
   });
 });
 
-describe('index.html bindet Nova korrekt ein', () => {
+describe('index.html bindet die Oberfläche korrekt ein', () => {
   const html = src('index.html');
   it('Boot im <head>, vor dem ersten <style>', () => {
     const boot = html.indexOf('nova/nova-boot.js');
@@ -112,15 +91,10 @@ describe('index.html bindet Nova korrekt ein', () => {
     expect(boot).toBeLessThan(html.indexOf('<style>'));
     expect(boot).toBeLessThan(html.indexOf('<body>'));
   });
-  it('GSAP und nova.js nach bc-autobackup.js (letztes Feature-Modul)', () => {
+  it('nova.js nach bc-autobackup.js (letztes Feature-Modul)', () => {
     const last = html.indexOf('bc-autobackup.js?_=');
-    const gsap = html.indexOf('vendor/gsap.min.js');
     const nova = html.indexOf('nova/nova.js?_=');
     expect(last).toBeGreaterThan(-1);
-    expect(gsap).toBeGreaterThan(last);
-    expect(nova).toBeGreaterThan(gsap);
-  });
-  it('vendor/gsap.min.js liegt lokal im Repo (kein CDN-Ausfallrisiko)', () => {
-    expect(fs.existsSync(path.join(REPO_ROOT, 'vendor/gsap.min.js'))).toBe(true);
+    expect(nova).toBeGreaterThan(last);
   });
 });

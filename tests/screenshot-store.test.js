@@ -214,8 +214,10 @@ describe('Screenshot-Store (SPLIT-05) — ein Datensatz je Bild, Alt-Blob frozen
     // (unveraendert vor/nach Task 3) ist das, was zaehlt; Task 3s eigenes
     // `<verify>`-Gate vergleicht ohnehin PRE- gegen POST-Stand per grep -Fc,
     // nicht gegen einen fixen Wert.
-    expect(count(src, 'PROFILE_SCREENSHOTS[')).toBe(34); // +1: additive Ladeschleife (Review CR-01)
-    expect(count(src, 'LSCG_SCREENSHOTS[')).toBe(24);
-    expect(count(src, '_mbsWheelShots[')).toBe(10);
+    // je +1: reine Lesestelle in _LAZY_IMG_QUELLEN (Lazy-Bilder, Performance) –
+    // das Bild wird erst beim Sichtkontakt aus der Map gelesen statt ins HTML kopiert
+    expect(count(src, 'PROFILE_SCREENSHOTS[')).toBe(35); // +1: additive Ladeschleife (Review CR-01)
+    expect(count(src, 'LSCG_SCREENSHOTS[')).toBe(25);
+    expect(count(src, '_mbsWheelShots[')).toBe(11);
   });
 });

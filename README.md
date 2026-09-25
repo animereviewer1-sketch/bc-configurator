@@ -131,17 +131,17 @@ Zeit von selbst auf.
 
 ---
 
-## Design: Nova ↔ Klassisch
+## Oberfläche
 
-Das Tool hat zwei Oberflächen, umschaltbar ohne Neuladen – die Wahl bleibt gespeichert (`localStorage`: `BC_UI_Design`):
+Eine Oberfläche, ausgelegt auf flüssiges, sparsames Arbeiten neben dem Spiel:
 
-- **Nova** (Standard): Seitenleiste mit allen Bereichen, großer Seitentitel, Glas-Karten, WebGL-Aurora im Hintergrund (in der Akzentfarbe), Toasts statt Statuspille, Mikro-Animationen (GSAP).
-  - **Strg/⌘ K** öffnet die Befehlspalette: zu jedem Tab springen, „Laden“, „Verbinden“, Backups, Exporte …
-  - Seitenleiste einklappbar (Icon links oben); unter 1100 px Breite automatisch kompakt.
-  - Hintergrund-Animation abschaltbar in den Einstellungen; „Bewegung reduzieren“ des Systems wird respektiert.
-- **Klassisch**: das bisherige Layout, unverändert.
+- Seitenleiste mit allen Bereichen (einklappbar; unter 1100 px Breite automatisch kompakt), großer Seitentitel, Toasts statt Statuspille.
+- **Strg/⌘ K** öffnet die Befehlspalette: zu jedem Tab springen, „Laden“, „Verbinden“, Backups, Exporte …
+- Beim Wechsel über die Seitenleiste erscheint ein Ladebalken, bis der Tab fertig ist.
+- Große Sammlungen (LSCG-Outfits, Profile, MBS Wheel) bauen Karten und Bilder erst, wenn sie in die Nähe des Sichtbereichs kommen – der Aufwand hängt vom Bildschirm ab, nicht von der Menge.
+- Im Leerlauf läuft nichts: keine Hintergrund-Animation, kein WebGL, keine Endlos-Animationen.
 
-Umschalten: unten in der Seitenleiste, oben in den Einstellungen, über die Befehlspalette oder im klassischen Design über das ✨-Icon neben dem Zahnrad. Nova ändert keine Daten, IDs oder Funktionen – es ist eine reine Präsentationsschicht.
+Das frühere (klassische) Design samt Umschalter liegt im Branch `archiv/klassisches-design`.
 
 ---
 
@@ -167,6 +167,5 @@ shop.js rank.js money.js   Shop-, Rang- und Money-System
 outfit-import.js           Stapelimport von Outfit-Codes
 bc-icons.js                Icon-Set (Stroke-Icons, ersetzt Emojis)
 bc-icons-ergaenzung.js     Ergänzende Icons und Selektoren
-nova/                      Nova-Design (neue Oberfläche, umschaltbar – siehe „Design“)
-vendor/gsap.min.js         GSAP 3.13 für die Nova-Animationen (lokal, kein CDN)
+nova/                      Oberfläche (Seitenleiste, Palette, Toasts, Ladezustand – siehe „Oberfläche“)
 ```
