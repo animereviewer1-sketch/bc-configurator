@@ -2378,135 +2378,135 @@ button { cursor: pointer; }
 </div>
 
 <!-- TWEAKS PANEL -->
-<div class="tweaks-panel" id="tweaksPanel">
-  <div>
-    <div class="tweaks-section-title">Theme</div>
-    <div class="tweaks-btn-group">
-      <button class="tweaks-btn on" id="tw-dark"  onclick="setTheme('dark')">Dark</button>
-      <button class="tweaks-btn"    id="tw-hc"    onclick="setTheme('hc')">HC</button>
-    </div>
+<div class="tweaks-panel" id="tweaksPanel" role="dialog" aria-label="Einstellungen">
+  <div class="set-head">
+    <div><div class="set-title">Einstellungen</div><div class="set-sub">Darstellung, Daten und Werkzeuge</div></div>
+    <button class="set-close" onclick="toggleTweaksPanel()" title="Schließen (Esc)">✕</button>
   </div>
-  <div>
-    <div class="tweaks-section-title">Accent-Farbe</div>
-    <div class="accent-swatches">
-      <div class="accent-swatch on" data-hue="58"  style="background:oklch(72% 0.13 58)"  onclick="setAccentHue(58)"  title="Amber"></div>
-      <div class="accent-swatch"    data-hue="30"  style="background:oklch(72% 0.13 30)"  onclick="setAccentHue(30)"  title="Orange-Rot"></div>
-      <div class="accent-swatch"    data-hue="160" style="background:oklch(72% 0.13 160)" onclick="setAccentHue(160)" title="Grün"></div>
-      <div class="accent-swatch"    data-hue="195" style="background:oklch(72% 0.13 195)" onclick="setAccentHue(195)" title="Teal"></div>
-      <div class="accent-swatch"    data-hue="265" style="background:oklch(72% 0.13 265)" onclick="setAccentHue(265)" title="Lila"></div>
-      <div class="accent-swatch"    data-hue="220" style="background:oklch(72% 0.13 220)" onclick="setAccentHue(220)" title="Blau"></div>
-    </div>
+  <div class="set-tabs" role="tablist">
+    <button class="set-tab on" data-set-tab="darstellung" role="tab">Darstellung</button>
+    <button class="set-tab" data-set-tab="daten" role="tab">Daten &amp; Backup</button>
+    <button class="set-tab" data-set-tab="werkzeuge" role="tab">Werkzeuge</button>
+    <button class="set-tab set-tab-gefahr" data-set-tab="gefahr" role="tab">Gefahrenzone</button>
   </div>
-  <div>
-    <div class="tweaks-section-title">Eck-Radius</div>
-    <div class="tweaks-btn-group">
-      <button class="tweaks-btn"    id="tw-r-sharp"   onclick="setRadius('sharp')">Eckig</button>
-      <button class="tweaks-btn on" id="tw-r-default"  onclick="setRadius('default')">Normal</button>
-      <button class="tweaks-btn"    id="tw-r-round"   onclick="setRadius('round')">Rund</button>
-    </div>
-    <div class="radius-preview" style="margin-top:10px;gap:8px">
-      <div class="radius-demo" style="border-radius:var(--r-sm)"></div>
-      <div class="radius-demo" style="border-radius:var(--r-md)"></div>
-      <div class="radius-demo" style="border-radius:var(--r-lg)"></div>
-    </div>
-  </div>
+  <div class="set-body">
 
-  <div style="border-top:1px solid var(--border);padding-top:16px">
-    <div class="tweaks-section-title">📦 Craft &amp; Curse</div>
-    <div class="tweaks-btn-group">
-      <button class="tweaks-btn" onclick="curseExport()" title="Curse-Datenbank exportieren">⬇️ Export</button>
-      <button class="tweaks-btn" onclick="curseImport()" title="Curse-Datenbank importieren">⬆️ Import</button>
+  <!-- ── Darstellung ── -->
+  <section class="set-page on" data-set-page="darstellung">
+    <div class="set-card">
+      <div class="set-card-h"><span class="tweaks-section-title">Theme</span>
+        <div class="tweaks-btn-group set-r">
+          <button class="tweaks-btn on" id="tw-dark"  onclick="setTheme('dark')">Dark</button>
+          <button class="tweaks-btn"    id="tw-hc"    onclick="setTheme('hc')">HC</button>
+        </div></div>
+      <div class="set-card-b set-hint">HC = höherer Kontrast für Texte und Rahmen.</div>
     </div>
-    <div style="margin-top:10px">
-      <div class="tweaks-section-title" style="margin-bottom:4px">🧪 Debug</div>
-      <div style="font-size:.6875rem;color:var(--text3);margin-bottom:7px">„Neu"-Timestamps löschen — alle Einträge verlieren das Neu-Badge sofort (umgeht die 1h).</div>
-      <button class="tweaks-btn" style="width:100%;color:#f87171;border-color:rgba(248,113,113,0.3)" onclick="curseResetNeuTimestamps()">🗑️ Neu-Timestamps zurücksetzen</button>
+    <div class="set-card">
+      <div class="set-card-h"><span class="tweaks-section-title">Accent-Farbe</span>
+        <div class="accent-swatches set-r">
+          <div class="accent-swatch on" data-hue="58"  style="background:oklch(72% 0.13 58)"  onclick="setAccentHue(58)"  title="Amber"></div>
+          <div class="accent-swatch"    data-hue="30"  style="background:oklch(72% 0.13 30)"  onclick="setAccentHue(30)"  title="Orange-Rot"></div>
+          <div class="accent-swatch"    data-hue="160" style="background:oklch(72% 0.13 160)" onclick="setAccentHue(160)" title="Grün"></div>
+          <div class="accent-swatch"    data-hue="195" style="background:oklch(72% 0.13 195)" onclick="setAccentHue(195)" title="Teal"></div>
+          <div class="accent-swatch"    data-hue="265" style="background:oklch(72% 0.13 265)" onclick="setAccentHue(265)" title="Lila"></div>
+          <div class="accent-swatch"    data-hue="220" style="background:oklch(72% 0.13 220)" onclick="setAccentHue(220)" title="Blau"></div>
+        </div></div>
     </div>
-  </div>
-
-  <div>
-    <div class="tweaks-section-title">👗 Outfit &amp; Profile</div>
-    <div class="tweaks-btn-group">
-      <button class="tweaks-btn" onclick="profilesExportAll()" title="Alle Profile exportieren">⬇️ Export</button>
-      <button class="tweaks-btn" onclick="profilesImport()" title="Profile importieren">⬆️ Import</button>
+    <div class="set-card">
+      <div class="set-card-h"><span class="tweaks-section-title">Eck-Radius</span>
+        <div class="tweaks-btn-group set-r">
+          <button class="tweaks-btn"    id="tw-r-sharp"   onclick="setRadius('sharp')">Eckig</button>
+          <button class="tweaks-btn on" id="tw-r-default"  onclick="setRadius('default')">Normal</button>
+          <button class="tweaks-btn"    id="tw-r-round"   onclick="setRadius('round')">Rund</button>
+        </div></div>
+      <div class="set-card-b"><div class="radius-preview" style="gap:8px">
+        <div class="radius-demo" style="border-radius:var(--r-sm)"></div>
+        <div class="radius-demo" style="border-radius:var(--r-md)"></div>
+        <div class="radius-demo" style="border-radius:var(--r-lg)"></div>
+      </div></div>
     </div>
-  </div>
+  </section>
 
-  <div>
-    <div class="tweaks-section-title">🔗 UserID anreichern</div>
-    <div style="font-size:.6875rem;color:var(--text3);line-height:1.5;margin-bottom:8px">Ergänzt #ID in Outfit- &amp; Profilnamen aus Craft/Curse-Daten.<br><span style="color:var(--text2)">Ada → Ada #219508</span></div>
-    <button class="tweaks-btn" style="width:100%;margin-bottom:6px" onclick="enrichProfileNamesWithIDs()">✨ Namen anreichern</button>
-    <div id="enrichPreviewBox" style="display:none;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r-sm);padding:8px;font-size:.6875rem;color:var(--text2);max-height:160px;overflow-y:auto;margin-top:4px"></div>
-  </div>
-
-  <div>
-    <div class="tweaks-section-title">💾 Komplett-Backup</div>
-    <div class="tweaks-btn-group">
-      <button class="tweaks-btn" onclick="exportAllData()" title="Alle Daten in einer Datei sichern">⬇️ Alles</button>
-      <button class="tweaks-btn" onclick="importAllData()" title="Backup einlesen – auch BC_Voll_/BC_Inkr_-Dateien aus dem automatischen Backup, mehrere Dateien auf einmal möglich. Führt nur zusammen, löscht nichts.">⬆️ Restore</button>
+  <!-- ── Daten & Backup ── -->
+  <section class="set-page" data-set-page="daten">
+    <div class="set-stats">
+      <div class="set-stat"><span>Browser-Speicher</span><b id="setStatSpeicher">–</b><div class="set-bar"><i id="setStatSpeicherBar"></i></div></div>
+      <div class="set-stat"><span>Letztes Auto-Backup</span><b id="setStatBackup">–</b></div>
+      <div class="set-stat"><span>Screenshots</span><b id="setStatBilder">–</b></div>
     </div>
-    <button class="tweaks-btn" style="width:100%;margin-top:6px" onclick="importLscgOutfits()" title="Nur die LSCG-Outfits aus beliebig vielen/großen Backup-Dateien zurückholen (BC_Voll_/BC_Inkr_ auswählen). Alles andere wird übersprungen – braucht kaum Speicher.">🧬 Nur LSCG-Outfits wiederherstellen</button>
-  </div>
-
-  <div>
-    <div class="tweaks-section-title">🔁 Automatisches Backup</div>
-    <div class="tweaks-btn-group">
-      <button class="tweaks-btn" onclick="bcBackupOrdnerWaehlen().then(_bcBackupZeigeStatus)" title="Zielordner festlegen – z. B. der Google-Drive-Ordner. Danach sichert das Tool einmal täglich beim ersten Start.">📁 Ordner</button>
-      <button class="tweaks-btn" onclick="bcBackupJetzt().then(_bcBackupZeigeStatus)" title="Sofort ein Voll-Backup schreiben">💾 Jetzt</button>
+    <div class="set-card">
+      <div class="set-card-h"><span class="tweaks-section-title">🔁 Automatisches Backup</span>
+        <div class="tweaks-btn-group set-r">
+          <button class="tweaks-btn" onclick="bcBackupOrdnerWaehlen().then(_bcBackupZeigeStatus)" title="Zielordner festlegen – z. B. der Google-Drive-Ordner. Danach sichert das Tool einmal täglich beim ersten Start.">📁 Ordner</button>
+          <button class="tweaks-btn" onclick="bcBackupJetzt().then(_bcBackupZeigeStatus)" title="Sofort ein Voll-Backup schreiben">💾 Jetzt sichern</button>
+        </div></div>
+      <div class="set-card-b"><div id="bcBackupInfo" class="set-info">–</div></div>
     </div>
-    <div id="bcBackupInfo" style="font-size:.6875rem;color:var(--text3);margin-top:5px;line-height:1.5">–</div>
-  </div>
-
-  <div>
-    <div class="tweaks-section-title">📊 Speicher</div>
-    <div class="tweaks-btn-group">
-      <button class="tweaks-btn" onclick="_speicherZeigeStatus()" title="Belegten und verfügbaren Browser-Speicher neu abfragen">🔄 Aktualisieren</button>
+    <div class="set-card">
+      <div class="set-card-h"><span class="tweaks-section-title">💾 Komplett-Backup</span></div>
+      <div class="set-card-b set-2col">
+        <div><b>Alles exportieren</b><div class="set-hint">Eine Datei mit allen Daten.</div>
+          <div class="tweaks-btn-group"><button class="tweaks-btn" onclick="exportAllData()" title="Alle Daten in einer Datei sichern">⬇️ Exportieren</button></div></div>
+        <div><b>Wiederherstellen</b><div class="set-hint">Ergänzt nur – löscht nie etwas. Auch BC_Voll_/BC_Inkr_-Dateien, mehrere auf einmal.</div>
+          <div class="tweaks-btn-group">
+            <button class="tweaks-btn" onclick="importAllData()" title="Backup einlesen – auch BC_Voll_/BC_Inkr_-Dateien aus dem automatischen Backup, mehrere Dateien auf einmal möglich. Führt nur zusammen, löscht nichts.">⬆️ Komplett</button>
+            <button class="tweaks-btn" onclick="importLscgOutfits()" title="Nur die LSCG-Outfits aus beliebig vielen/großen Backup-Dateien zurückholen (BC_Voll_/BC_Inkr_ auswählen). Alles andere wird übersprungen – braucht kaum Speicher.">🧬 Nur LSCG-Outfits</button>
+          </div></div>
+      </div>
     </div>
-    <div id="storageInfo" style="font-size:.6875rem;color:var(--text3);margin-top:5px;line-height:1.5">–</div>
-  </div>
-
-  <div>
-    <div class="tweaks-section-title">📜 EXEC-Log</div>
-    <div style="font-size:.6875rem;color:var(--text3);margin-bottom:7px">Jeder an das Spiel gesendete EXEC mit Zeitstempel und Kurzbeschreibung (Ringpuffer, 200 Einträge).</div>
-    <div class="tweaks-btn-group">
-      <button class="tweaks-btn" onclick="_renderExecLog()" title="EXEC-Log neu aufbauen">🔄 Aktualisieren</button>
+    <div class="set-card">
+      <div class="set-card-h"><span class="tweaks-section-title">📦 Einzelne Bereiche</span></div>
+      <div class="set-card-b set-list">
+        <div class="set-li"><div><b>Craft &amp; Curse</b><div class="set-hint">Curse-Datenbank</div></div>
+          <div class="tweaks-btn-group set-r"><button class="tweaks-btn" onclick="curseExport()" title="Curse-Datenbank exportieren">⬇️ Export</button><button class="tweaks-btn" onclick="curseImport()" title="Curse-Datenbank importieren">⬆️ Import</button></div></div>
+        <div class="set-li"><div><b>Outfit &amp; Profile</b><div class="set-hint">Alle gespeicherten Profile</div></div>
+          <div class="tweaks-btn-group set-r"><button class="tweaks-btn" onclick="profilesExportAll()" title="Alle Profile exportieren">⬇️ Export</button><button class="tweaks-btn" onclick="profilesImport()" title="Profile importieren">⬆️ Import</button></div></div>
+        <div class="set-li"><div><b>🖼️ Screenshot-Speicher</b><div class="set-hint">Alle Profil-, Outfit-Scan- und Wheel-Bilder als JSON – empfohlen vor jedem Tool-Update, über „Komplett“ wieder einspielbar.</div><div id="screenshotStoreInfo" class="set-info">–</div></div>
+          <div class="tweaks-btn-group set-r"><button class="tweaks-btn" onclick="exportScreenshotsOnly()" title="Nur die Screenshot-Sammlungen als JSON exportieren (restore-fähig)">📷 Exportieren</button></div></div>
+        <div class="set-li"><div><b>📦 Item-Katalog</b><div class="set-hint">Jedes Item aus dem Cache mit allen Infos und Bild-URL als JSON.</div></div>
+          <div class="tweaks-btn-group set-r"><button class="tweaks-btn" onclick="itemsExportCatalog()" title="Alle Items mit allen Feldern und Vorschaubild-URLs als JSON exportieren">⬇️ Exportieren</button></div></div>
+      </div>
     </div>
-    <div id="execLogInfo" style="font-size:.6875rem;color:var(--text3);margin-top:5px;line-height:1.5;white-space:pre-wrap;max-height:180px;overflow:auto;font-family:monospace">–</div>
-  </div>
-
-  <div>
-    <div class="tweaks-section-title">🖼️ Screenshot-Speicher</div>
-    <div style="font-size:.6875rem;color:var(--text3);margin-bottom:7px">Alle Profil-, Outfit-Scan- und Wheel-Bilder als JSON sichern – empfohlen vor jedem Tool-Update. Die Datei lässt sich über ⬆️ Restore wieder einspielen.</div>
-    <div class="tweaks-btn-group">
-      <button class="tweaks-btn" onclick="exportScreenshotsOnly()" title="Nur die Screenshot-Sammlungen als JSON exportieren (restore-fähig)">📷 Screenshots exportieren</button>
+    <div class="set-card">
+      <div class="set-card-h"><span class="tweaks-section-title">📊 Speicher</span>
+        <div class="tweaks-btn-group set-r"><button class="tweaks-btn" onclick="_speicherZeigeStatus()" title="Belegten und verfügbaren Browser-Speicher neu abfragen">🔄 Aktualisieren</button></div></div>
+      <div class="set-card-b"><div id="storageInfo" class="set-info">–</div></div>
     </div>
-    <div id="screenshotStoreInfo" style="font-size:.6875rem;color:var(--text3);margin-top:5px;line-height:1.5">–</div>
-  </div>
+  </section>
 
-  <div>
-    <div class="tweaks-section-title">🔎 Spiel-Scan</div>
-    <div style="font-size:.6875rem;color:var(--text3);margin-bottom:7px">Read-only-Inventar des laufenden Spiels (Globals, Assets, Mods, Hooks). Jeder Scan wird als Snapshot in IndexedDB gespeichert und nie automatisch gelöscht – der Spiel-Tab bleibt währenddessen bedienbar.</div>
-    <div class="tweaks-btn-group">
-      <button class="tweaks-btn" id="gameScanBtn" onclick="triggerGameScan()" title="Inventar des laufenden Spiels read-only erheben und als Snapshot speichern">🔎 Spiel scannen</button>
+  <!-- ── Werkzeuge ── -->
+  <section class="set-page" data-set-page="werkzeuge">
+    <div class="set-card">
+      <div class="set-card-h"><span class="tweaks-section-title">🔗 UserID anreichern</span>
+        <div class="tweaks-btn-group set-r"><button class="tweaks-btn" onclick="enrichProfileNamesWithIDs()">✨ Namen anreichern</button></div></div>
+      <div class="set-card-b"><div class="set-hint">Ergänzt #ID in Outfit- &amp; Profilnamen aus Craft/Curse-Daten: <span style="color:var(--text2)">Ada → Ada #219508</span></div>
+        <div id="enrichPreviewBox" style="display:none;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r-sm);padding:8px;font-size:.6875rem;color:var(--text2);max-height:160px;overflow-y:auto;margin-top:8px"></div></div>
     </div>
-    <div id="gameScanInfo" style="font-size:.6875rem;color:var(--text3);margin-top:5px;line-height:1.5">–</div>
-  </div>
+    <div class="set-card">
+      <div class="set-card-h"><span class="tweaks-section-title">📜 EXEC-Log</span>
+        <div class="tweaks-btn-group set-r"><button class="tweaks-btn" onclick="_renderExecLog()" title="EXEC-Log neu aufbauen">🔄 Aktualisieren</button></div></div>
+      <div class="set-card-b"><div class="set-hint">Jeder an das Spiel gesendete EXEC mit Zeitstempel und Kurzbeschreibung (Ringpuffer, 200 Einträge).</div>
+        <div id="execLogInfo" class="set-info" style="white-space:pre-wrap;max-height:260px;overflow:auto;font-family:var(--font-mono)">–</div></div>
+    </div>
+    <div class="set-card">
+      <div class="set-card-h"><span class="tweaks-section-title">Spiel-Scan ist umgezogen</span></div>
+      <div class="set-card-b set-hint">Liegt jetzt im Tab <b>Scan</b> (Seitenleiste → Spieler → Spiel-Scan).</div>
+    </div>
+  </section>
 
-  <div>
-    <div class="tweaks-section-title">📦 Item-Katalog</div>
-    <div style="font-size:.6875rem;color:var(--text3);margin-bottom:7px">Exportiert jedes Item &amp; jede Klamotte aus dem Cache mit allen Infos + Bild-URL als JSON.</div>
-    <button class="tweaks-btn" style="width:100%" onclick="itemsExportCatalog()" title="Alle Items mit allen Feldern und Vorschaubild-URLs als JSON exportieren">⬇️ Katalog exportieren</button>
-  </div>
+  <!-- ── Gefahrenzone ── -->
+  <section class="set-page" data-set-page="gefahr">
+    <div class="set-warn">Diese Aktionen verändern Spiel- oder Tool-Daten sofort. Nur benutzen, wenn du genau weißt, warum.</div>
+    <div class="set-card set-card-gefahr">
+      <div class="set-li"><div><b>🧪 „Neu“-Markierungen zurücksetzen</b><div class="set-hint">Alle Craft/Curse-Einträge verlieren das Neu-Badge sofort (umgeht die 1 h).</div></div>
+        <div class="set-r"><button class="tweaks-btn set-danger" onclick="curseResetNeuTimestamps()">🗑️ Zurücksetzen</button></div></div>
+      <div class="set-li"><div><b>🔓 DOGS-Schlösser entfernen</b><div class="set-hint">Alle DOGS Padlocks vom eigenen Charakter entfernen.</div><div id="dogsLockStatus" class="set-info"></div></div>
+        <div class="set-r"><button class="tweaks-btn set-danger" id="dogsLockRemoverBtn" onclick="removeAllDOGSLocks()" title="Alle DOGS Padlocks vom eigenen Charakter entfernen">🔓 Entfernen</button></div></div>
+      <div class="set-li"><div><b>🤖 DTS Drone-Status zurücksetzen</b><div class="set-hint">Setzt den DTS-Drone-Status des eigenen Charakters zurück.</div><div id="dtsResetStatus" class="set-info"></div></div>
+        <div class="set-r"><button class="tweaks-btn set-danger" id="dtsResetBtn" onclick="dtsResetDrone()" title="DTS Drone-Status zurücksetzen">🤖 Zurücksetzen</button></div></div>
+    </div>
+  </section>
 
-  <div>
-    <div class="tweaks-section-title">🔓 DOGS</div>
-    <button class="tweaks-btn" id="dogsLockRemoverBtn" style="width:100%;color:var(--red);border-color:rgba(251,113,133,0.3)" onclick="removeAllDOGSLocks()" title="Alle DOGS Padlocks vom eigenen Charakter entfernen">🔓 Locks entfernen</button>
-    <div id="dogsLockStatus" style="font-size:.75rem;color:var(--text3);margin-top:5px;min-height:14px"></div>
-  </div>
-  <div>
-    <div class="tweaks-section-title">🤖 DTS</div>
-    <button class="tweaks-btn" id="dtsResetBtn" style="width:100%;color:var(--red);border-color:rgba(251,113,133,0.3)" onclick="dtsResetDrone()" title="DTS Drone-Status zurücksetzen">🤖 Drone-Status zurücksetzen</button>
-    <div id="dtsResetStatus" style="font-size:.75rem;color:var(--text3);margin-top:5px;min-height:14px"></div>
   </div>
 </div>
 
@@ -3982,31 +3982,37 @@ document.write('<scr'+'ipt src="bc-autobackup.js?_='+_cbv+'"><\/scr'+'ipt>');
 #scanSearch,#scanCategory{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.12);border-radius:6px;color:var(--text1);font-size:.75rem;padding:4px 8px}
 </style>
 <div id="tab-scan" class="tab-pane">
-  <div style="padding:16px 18px">
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
-      <span class="pane-title" style="font-size:.875rem;font-weight:800;color:var(--text1)">&#128269; Scan</span>
-      <span id="scanCount" style="font-size:.75rem;color:var(--text3)"></span>
-      <button style="margin-left:auto;background:none;border:1px solid rgba(255,255,255,0.12);border-radius:6px;color:var(--text2);font-size:.75rem;padding:4px 10px;cursor:pointer" onclick="renderScanTab()">&#8635; Aktualisieren</button>
-    </div>
-    <div style="font-size:.6875rem;color:var(--text3);margin-bottom:14px;line-height:1.5">
-      Fundliste des letzten Spiel-Scans (&#9881;&#65039; Tweaks &rarr; &#128269; Spiel scannen). Badge &bdquo;bereits genutzt&ldquo; = der Name steht im Baseline-Manifest des Tools (Assets: nach Gruppe). Snapshots werden nie automatisch gel&ouml;scht &ndash; &#128465; fragt immer nach.
-    </div>
-    <div id="scanSnapshotList"></div>
-    <div id="scanBaselineInfo" style="font-size:.6875rem;color:var(--text3);margin:6px 0"></div>
-    <div style="display:flex;gap:8px;margin:10px 0">
-      <input id="scanSearch" type="search" placeholder="Suchen (Name, Detail)&hellip;" oninput="scanOnSearch()" style="flex:1">
-      <select id="scanCategory" onchange="scanOnFilter()">
-        <option value="all">Alle Kategorien</option>
-        <option value="globals">Globals</option>
-        <option value="assets">Assets</option>
-        <option value="groups">Asset-Gruppen</option>
-        <option value="hooks">Chat-Hooks</option>
-        <option value="mods">Mods</option>
-        <option value="patching">Patching</option>
-        <option value="probes">Probes</option>
-      </select>
-    </div>
-    <div id="scanList"></div>
+  <div class="scan-layout">
+    <aside class="scan-side">
+      <div class="scan-side-head">
+        <span class="tweaks-section-title">🔎 Spiel-Scan</span>
+        <button class="btn btn-primary" id="gameScanBtn" onclick="triggerGameScan()" title="Inventar des laufenden Spiels read-only erheben und als Snapshot speichern">🔎 Spiel scannen</button>
+      </div>
+      <div id="gameScanInfo" class="scan-info">–</div>
+      <div class="scan-side-sub">Snapshots <button class="scan-btn" onclick="renderScanTab()" title="Liste neu laden">↻</button></div>
+      <div id="scanSnapshotList"></div>
+      <div class="scan-hint">Read-only-Inventar des Spiels (Globals, Assets, Mods, Hooks). Jeder Scan wird als Snapshot gespeichert und nie automatisch gelöscht – das Spiel bleibt währenddessen bedienbar.</div>
+    </aside>
+    <section class="scan-main">
+      <div class="scan-toolbar">
+        <div class="search-wrap" data-icon="search"><input id="scanSearch" type="search" placeholder="Suchen (Name, Detail)&hellip;" oninput="scanOnSearch()"></div>
+        <select id="scanCategory" onchange="scanOnFilter()" title="Kategorie">
+          <option value="all">Alle Kategorien</option>
+          <option value="globals">Globals</option>
+          <option value="assets">Assets</option>
+          <option value="groups">Asset-Gruppen</option>
+          <option value="hooks">Chat-Hooks</option>
+          <option value="mods">Mods</option>
+          <option value="patching">Patching</option>
+          <option value="probes">Probes</option>
+        </select>
+        <span id="scanCount" class="scan-count"></span>
+      </div>
+      <div id="scanChips" class="scan-chips"></div>
+      <div class="scan-head"><span>Kategorie</span><span>Art</span><span>Name</span><span>Detail</span><span>Status</span></div>
+      <div id="scanList"></div>
+      <div id="scanBaselineInfo" class="scan-hint"></div>
+    </section>
   </div>
 </div><!-- /tab-scan -->
 

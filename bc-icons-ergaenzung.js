@@ -85,6 +85,8 @@
     '.arch-badge', '.info-box', '.warn', '.hint', '.room-label', '.fav-hdr',
     '.log-badge', '.cond-when-lbl', '.trig-label', '.be-empty-icon', '.outfit-target-label',
     '.section-hdr2', '.oi-title', '.search-wrap',
+    /* Einstellungen: Zeilentitel in „Einzelne Bereiche“ und „Gefahrenzone“ */
+    '.set-li b',
     /* zusätzlich aus der Bestandsaufnahme im laufenden Tool: Statistik-Kacheln,
        Konfig-Überschriften, Leer-Zustände und Formular-Labels */
     '.curse-stat', '.cfp-row', '.rank-cfg-title', '.shop-cfg-title',

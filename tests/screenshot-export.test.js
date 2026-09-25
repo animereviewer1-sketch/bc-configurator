@@ -169,14 +169,19 @@ describe('exportScreenshotsOnly(): Payload und Download (SPLIT-07)', () => {
   });
 });
 
-describe('Tweaks-Panel: Sektion 🖼️ Screenshot-Speicher (index.html)', () => {
-  it('Button und Status-Div genau einmal, zwischen EXEC-Log und Item-Katalog', () => {
+describe('Einstellungen: 🖼️ Screenshot-Speicher (index.html)', () => {
+  // Einstellungen sind in Reiter gegliedert – der Screenshot-Export gehört zu „Daten & Backup“
+  it('Button und Status-Div genau einmal, im Reiter „Daten & Backup“', () => {
     const html = src('index.html');
     expect(count(html, 'onclick="exportScreenshotsOnly()"')).toBe(1);
-    expect(count(html, '📷 Screenshots exportieren')).toBe(1);
     expect(count(html, 'id="screenshotStoreInfo"')).toBe(1);
     expect(count(html, '🖼️ Screenshot-Speicher')).toBe(1);
-    expect(html.indexOf('id="execLogInfo"')).toBeLessThan(html.indexOf('id="screenshotStoreInfo"'));
-    expect(html.indexOf('id="screenshotStoreInfo"')).toBeLessThan(html.indexOf('📦 Item-Katalog'));
+    const daten = html.indexOf('data-set-page="daten"');
+    const werkzeuge = html.indexOf('data-set-page="werkzeuge"');
+    expect(daten).toBeGreaterThan(-1);
+    for (const needle of ['onclick="exportScreenshotsOnly()"', 'id="screenshotStoreInfo"']) {
+      expect(html.indexOf(needle)).toBeGreaterThan(daten);
+      expect(html.indexOf(needle)).toBeLessThan(werkzeuge);
+    }
   });
 });

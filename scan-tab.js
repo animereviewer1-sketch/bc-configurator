@@ -139,7 +139,8 @@ async function exportGameSnapshot(id) {
 const SCAN_PAGE_SIZE = 300;
 const SCAN_CATEGORIES = ['globals', 'assets', 'groups', 'hooks', 'mods', 'patching', 'probes'];
 const SCAN_BADGE_LABEL = { genutzt: 'bereits genutzt', neu: 'neu', unbekannt: 'unbekannt' };
-let _scanState = { records: [], selectedId: null, rowsForId: null, rows: [], shown: SCAN_PAGE_SIZE };
+let _scanState = { records: [], selectedId: null, rowsForId: null, rows: [], shown: SCAN_PAGE_SIZE, badge: 'all' };
+const SCAN_CAT_LABEL = { globals: 'Globals', assets: 'Assets', groups: 'Asset-Gruppen', hooks: 'Chat-Hooks', mods: 'Mods', patching: 'Patching', probes: 'Probes' };
 let _scanRenderDebounced = null;
 
 function _scanFlatten(inventory) {
@@ -313,16 +314,18 @@ function _scanRenderSnapshots() {
       + `</div>`;
     return;
   }
-  const rowsHtml = records.slice().reverse().map(function (r) {
+  // Karte je Snapshot: Datum oben, Eckdaten darunter, Export/Löschen als kleine Icon-Knöpfe
+  const rowsHtml = records.slice().reverse().map(function (r, i) {
     const active = r.id === _scanState.selectedId;
     return `<div class="scan-snap${active ? ' scan-snap-active' : ''}" onclick="scanSelectSnapshot('${escJsAttr(r.id)}')">`
-      + `📸 ${escHtml(_scanFormatTs(r.ts))}`
-      + ` · BC ${escHtml(r.gameVersion || '?')}`
+      + `<div class="scan-snap-main"><b>${escHtml(_scanFormatTs(r.ts))}</b>${i === 0 ? ' <span class="scan-snap-neu">neuester</span>' : ''}`
+      + `<span class="scan-snap-meta">BC ${escHtml(r.gameVersion || '?')}`
       + ` · ${escHtml(String(r.modCount))} Mods`
-      + ` · ${escHtml(String(_scanKb(r.sizeBytes)))} KB`
-      + `<button class="scan-btn" onclick="event.stopPropagation(); exportGameSnapshot('${escJsAttr(r.id)}')">⬇ Exportieren</button>`
-      + `<button class="scan-btn scan-btn-danger" onclick="event.stopPropagation(); deleteGameSnapshot('${escJsAttr(r.id)}')">🗑 Löschen</button>`
-      + `</div>`;
+      + ` · ${escHtml(String(_scanKb(r.sizeBytes)))} KB</span></div>`
+      + `<div class="scan-snap-acts">`
+      + `<button class="scan-btn" title="Snapshot exportieren" onclick="event.stopPropagation(); exportGameSnapshot('${escJsAttr(r.id)}')">⬇</button>`
+      + `<button class="scan-btn scan-btn-danger" title="Snapshot löschen" onclick="event.stopPropagation(); deleteGameSnapshot('${escJsAttr(r.id)}')">🗑</button>`
+      + `</div></div>`;
   }).join('');
   el.innerHTML = rowsHtml;
 }
@@ -344,13 +347,17 @@ function _scanRender() {
   const category = _scanEl('scanCategory')?.value || 'all';
   const manifest = _scanManifest();
   const sets = _scanBaselineSets(manifest);
-  const filtered = _scanFilter(_scanState.rows, query, category);
+  const nachKategorie = _scanFilter(_scanState.rows, query, category);
+  // Status-Filter (Chips „Neu“/„Genutzt“) – Standard 'all' = unverändert
+  const filtered = _scanState.badge === 'all'
+    ? nachKategorie
+    : nachKategorie.filter(function (r) { return _scanBadge(r, sets) === _scanState.badge; });
   const shown = _scanState.shown;
   const slice = filtered.slice(0, shown);
   let html = slice.map(function (r) {
     const badge = _scanBadge(r, sets);
     return `<div class="scan-row">`
-      + `<span class="scan-cat">${escHtml(r.category)}</span>`
+      + `<span class="scan-cat">${escHtml(SCAN_CAT_LABEL[r.category] || r.category)}</span>`
       + `<span class="scan-kind">${escHtml(r.kind)}</span>`
       + `<span class="scan-name">${escHtml(r.name)}</span>`
       + `<span class="scan-detail">${escHtml(r.detail || '')}</span>`
@@ -362,6 +369,38 @@ function _scanRender() {
   _scanEl('scanList').innerHTML = html;
   const c = _scanCountBadges(filtered, sets);
   _scanEl('scanCount').textContent = `${slice.length} von ${filtered.length} Einträgen (${c.all.genutzt} genutzt · ${c.all.neu} neu)`;
+  _scanRenderChips(query, category, sets);
+}
+
+// Filter-Chips: Kategorien mit Anzahl (bei aktueller Suche) + Status Neu/Genutzt
+function _scanRenderChips(query, category, sets) {
+  const el = _scanEl('scanChips');
+  if (!el) return;
+  const alle = _scanCountBadges(_scanFilter(_scanState.rows, query, 'all'), sets);
+  const chip = function (on, label, n, onclick) {
+    return `<button class="scan-chip${on ? ' on' : ''}" onclick="${onclick}">${escHtml(label)}<em>${n}</em></button>`;
+  };
+  let html = chip(category === 'all', 'Alle', alle.all.total, "scanSetCategory('all')");
+  SCAN_CATEGORIES.forEach(function (cat) {
+    if (alle[cat] && alle[cat].total) html += chip(category === cat, SCAN_CAT_LABEL[cat] || cat, alle[cat].total, "scanSetCategory('" + cat + "')");
+  });
+  const k = category === 'all' ? alle.all : (alle[category] || alle.all);
+  html += '<span class="scan-chip-sep"></span>'
+    + chip(_scanState.badge === 'neu', 'Neu', k.neu, "scanSetBadge('neu')")
+    + chip(_scanState.badge === 'genutzt', 'Genutzt', k.genutzt, "scanSetBadge('genutzt')");
+  el.innerHTML = html;
+}
+
+function scanSetCategory(cat) {
+  const sel = _scanEl('scanCategory');
+  if (sel) sel.value = cat;
+  scanOnFilter();
+}
+
+function scanSetBadge(b) {
+  _scanState.badge = _scanState.badge === b ? 'all' : b;   // erneuter Klick hebt den Filter auf
+  _scanState.shown = SCAN_PAGE_SIZE;
+  _scanRender();
 }
 
 function scanSelectSnapshot(id) {
