@@ -2489,6 +2489,272 @@ function _applyHairBaseline(items) {
   return { filteredItems, keepHairGroups };
 }
 
+// ── Spiel-Server-Wächter: laufende Abläufe bei DC pausieren ─────────────────
+// Verliert BC die Verbindung zum Server ("Server connection lost" → Relog),
+// lebt der Loader weiter – die Bridge merkt davon nichts. Der Loader meldet den
+// Zustand darum per GAME_STATE (bei jeder Änderung), PONG und PLAYER_DATA:
+//   { online, loggedIn, screen, inRoom, room }
+// Lange Abläufe (Auto-Screenshot, Bilderserien, Curse-Test, Import-Serie)
+// melden sich hier an. Fällt der Server (oder die Bridge) weg, werden sie
+// angehalten und ihr laufender Schritt zurück in die Warteschlange gelegt.
+// Weiter geht es erst, wenn BC wieder eingeloggt ist, – falls der Ablauf im
+// Raum gestartet wurde – wieder in einem Raum steht und das DC_SETTLE_MS lang
+// stabil bleibt (nach dem Relog braucht BC Zeit für Raum-Sync und Aussehen).
+// Den Raum freiwillig verlassen hält nur alwaysRoom-Abläufe an (Curse-Test –
+// ohne Raum-Chat erkennt er keine Curses); alle anderen prüfen den Raum erst
+// bei der Rückkehr nach einem DC.
+// Alter Loader ohne GAME_STATE: _gameState bleibt null → Verhalten wie bisher.
+const DC_SETTLE_MS = 5000;
+let _gameState = null;
+const _dcJobs = {};  // id → { label, active(), pause(reason), resume(), alwaysRoom, needRoom, paused, readySince, waitMsg }
+
+function _gameOk(needRoom) {
+  if (!_connected) return false;
+  const g = _gameState;
+  if (!g) return true;
+  if (!g.online || !g.loggedIn) return false;
+  return !needRoom || g.inRoom;
+}
+
+function _gameWaitReason(needRoom) {
+  if (!_connected) return 'Verbindung zum BC-Tab verloren';
+  const g = _gameState;
+  if (!g) return '';
+  if (!g.online) return 'BC-Server getrennt';
+  if (!g.loggedIn) return 'BC noch nicht wieder eingeloggt';
+  if (needRoom && !g.inRoom) return 'nicht in einem Raum';
+  return '';
+}
+
+function _dcRegisterJob(id, job) {
+  _dcJobs[id] = Object.assign({ alwaysRoom: false, needRoom: false, paused: false, readySince: 0, waitMsg: '' }, job);
+}
+
+// Beim Start eines Ablaufs: im Raum begonnen → muss nach einem DC wieder im Raum sein
+function _dcJobStart(id) {
+  const j = _dcJobs[id];
+  if (!j) return;
+  j.paused = false; j.readySince = 0; j.waitMsg = '';
+  j.needRoom = j.alwaysRoom || !!_gameState?.inRoom;
+}
+
+function _dcIsPaused(id) { return !!_dcJobs[id]?.paused; }
+
+// Vor jedem Schritt eines Ablaufs: BC nicht erreichbar → anhalten, true zurück
+function _dcHalt(id) {
+  const j = _dcJobs[id];
+  const needRoom = !!j?.alwaysRoom;
+  if (_gameOk(needRoom)) return false;
+  _dcPauseJob(id, _gameWaitReason(needRoom));
+  return true;
+}
+
+// Anhalten – vom Wächter selbst oder von außen (z. B. Screenshot-Timeout).
+// Die Wiederaufnahme übernimmt immer _dcEvaluate.
+function _dcPauseJob(id, reason) {
+  const j = _dcJobs[id];
+  if (!j || j.paused) return;
+  j.paused = true; j.readySince = 0; j.waitMsg = reason || '';
+  try { j.pause(reason); } catch (e) { console.warn('[DC] Pause fehlgeschlagen:', id, e); }
+  console.warn('[DC] ' + j.label + ' pausiert:', reason);
+  showStatus('⏸ ' + j.label + ' pausiert – ' + (reason || 'wartet') + ' · läuft danach automatisch weiter', 'info');
+  _dcPopupNote('⏸ ' + j.label + ' pausiert');
+  if (_dcPopupIsOpen()) _dcPopupRender(_dcLinkState());
+}
+
+function _dcEvaluate() {
+  _dcPopupTick();
+  const now = Date.now();
+  for (const id of Object.keys(_dcJobs)) {
+    const j = _dcJobs[id];
+    let active = false;
+    try { active = !!j.active(); } catch (e) {}
+    if (!active) { j.paused = false; j.readySince = 0; j.waitMsg = ''; continue; }
+    if (!j.paused) {
+      if (!_gameOk(j.alwaysRoom)) _dcPauseJob(id, _gameWaitReason(j.alwaysRoom));
+      continue;
+    }
+    if (!_gameOk(j.needRoom)) {
+      j.readySince = 0;
+      const why = _gameWaitReason(j.needRoom);
+      if (why && why !== j.waitMsg) {
+        j.waitMsg = why;
+        showStatus('⏸ ' + j.label + ' wartet – ' + why, 'info');
+      }
+      continue;
+    }
+    if (!j.readySince) { j.readySince = now; continue; }
+    if (now - j.readySince < DC_SETTLE_MS) continue;
+    j.paused = false; j.readySince = 0; j.waitMsg = '';
+    const room = _gameState?.room;
+    console.log('[DC] ' + j.label + ' wird fortgesetzt', room ? '(Raum ' + room + ')' : '');
+    showStatus('▶ ' + j.label + ' läuft weiter' + (room ? ' (Raum „' + room + '“)' : ''), 'info');
+    _dcPopupNote('▶ ' + j.label + ' läuft weiter');
+    try { j.resume(); } catch (e) { console.warn('[DC] Fortsetzen fehlgeschlagen:', id, e); }
+    if (_dcPopupIsOpen()) _dcPopupRender(_dcLinkState());
+  }
+}
+setInterval(_dcEvaluate, 1000);
+
+function _gameStateBadge() {
+  const cs = document.getElementById('connStatus');
+  if (!cs || !_connected) return;
+  const g = _gameState;
+  if (!g || (g.online && g.loggedIn)) { cs.textContent = 'Verbunden'; cs.dataset.conn = 'on'; return; }
+  cs.textContent = g.online ? 'BC: Relog…' : 'BC-Server getrennt';
+  cs.dataset.conn = 'warn';
+}
+
+function _gameStateSet(g) {
+  const prev = _gameState;
+  _gameState = (g && typeof g === 'object')
+    ? { online: g.online !== false, loggedIn: !!g.loggedIn, screen: String(g.screen || ''), inRoom: !!g.inRoom, room: g.room ? String(g.room) : null }
+    : null;
+  if (_gameState && prev?.online !== _gameState.online) {
+    if (!_gameState.online) console.warn('[BCK-Popup] BC-Server getrennt');
+    else if (prev) console.log('[BCK-Popup] BC-Server wieder verbunden');
+  }
+  _gameStateBadge();
+  _dcEvaluate();
+}
+
+// ── Disconnect-Popup (Einstellungen → Werkzeuge → Verbindungswächter) ──────
+// Zur eigenen Kontrolle: Popup mit Verlauf vom DC bis zur Rückkehr und den
+// pausierten Abläufen. Rein informativ – das Pausieren läuft immer, auch aus.
+// Bridge-Verlust zählt erst nach 3 s, weil "🔄 Verbinden" absichtlich kurz trennt.
+const DC_POPUP_KEY = 'BC_DC_POPUP_v1';
+const DC_BRIDGE_GRACE_MS = 3000;
+const _DC_LINK_TEXT = {
+  bridge: 'Verbindung zum BC-Tab verloren',
+  server: 'BC-Server getrennt',
+  relog:  'Server wieder da – BC im Relog',
+  noroom: 'Eingeloggt – nicht in einem Raum',
+  ok:     'Wieder verbunden',
+};
+let _dcPopupOn = true;
+try { _dcPopupOn = localStorage.getItem(DC_POPUP_KEY) !== '0'; } catch (e) {}
+let _dcLinkPrev    = null;  // letzter Verbindungszustand; null = noch nie verbunden
+let _dcBridgeSince = 0;
+let _dcPopupSeit   = 0;     // Beginn des aktuellen DCs
+
+function _dcLinkState() {
+  if (_playerAbgelehnt) return 'aus';
+  if (!_connected) return 'bridge';
+  const g = _gameState;
+  if (!g) return 'ok';
+  if (!g.online) return 'server';
+  if (!g.loggedIn) return 'relog';
+  return g.inRoom ? 'ok' : 'noroom';
+}
+
+function _dcPopupIsOpen() {
+  return document.getElementById('dcPopup')?.style.display === 'flex';
+}
+
+function _dcPopupNote(text) {
+  if (!_dcPopupIsOpen()) return;
+  const el = document.getElementById('dcPopupLog');
+  if (!el) return;
+  const t = new Date().toLocaleTimeString('de-DE');
+  el.textContent += (el.textContent ? '\n' : '') + t + '  ' + text;
+  el.scrollTop = el.scrollHeight;
+}
+
+function _dcPopupRender(st) {
+  const title = document.getElementById('dcPopupTitle');
+  const state = document.getElementById('dcPopupState');
+  const jobs  = document.getElementById('dcPopupJobs');
+  const weg = st === 'bridge' || st === 'server' || st === 'relog';
+  if (title) title.textContent = weg ? '⚠️ Verbindung getrennt' : '✅ ' + (_DC_LINK_TEXT[st] || 'Verbunden');
+  if (state) {
+    let txt = _DC_LINK_TEXT[st] || st;
+    if (st === 'ok' && _gameState?.room) txt += ' – Raum „' + _gameState.room + '“';
+    if (_dcPopupSeit) {
+      const s = Math.round((Date.now() - _dcPopupSeit) / 1000);
+      txt += ' · ' + (weg ? 'seit ' : 'Dauer ') + Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0') + ' min';
+    }
+    state.textContent = txt;
+  }
+  if (jobs) {
+    const pausiert = Object.values(_dcJobs).filter(j => j.paused).map(j => j.label);
+    jobs.textContent = pausiert.length ? '⏸ Pausiert: ' + pausiert.join(', ') : 'Keine laufenden Abläufe pausiert.';
+  }
+}
+
+function _dcPopupOpen(st) {
+  const box = document.getElementById('dcPopup');
+  if (!box) return;
+  const log = document.getElementById('dcPopupLog');
+  if (log) log.textContent = '';
+  box.style.display = 'flex';
+  _dcPopupNote(_DC_LINK_TEXT[st] || st);
+  _dcPopupRender(st);
+  try { window.focus(); } catch (e) {}
+}
+
+function dcPopupClose() {
+  const box = document.getElementById('dcPopup');
+  if (box) box.style.display = 'none';
+}
+
+function dcPopupTest() {
+  const box = document.getElementById('dcPopup');
+  if (!box) return;
+  document.getElementById('dcPopupLog').textContent = '';
+  box.style.display = 'flex';
+  _dcPopupNote('TEST – so meldet sich ein Disconnect');
+  document.getElementById('dcPopupTitle').textContent = '⚠️ Verbindung getrennt (Test)';
+  document.getElementById('dcPopupState').textContent = 'Aktuell: ' + (_DC_LINK_TEXT[_dcLinkState()] || 'nicht verbunden');
+  const pausiert = Object.values(_dcJobs).filter(j => j.paused).map(j => j.label);
+  document.getElementById('dcPopupJobs').textContent = pausiert.length ? '⏸ Pausiert: ' + pausiert.join(', ') : 'Keine laufenden Abläufe pausiert.';
+}
+
+function dcPopupSetOn(on) {
+  _dcPopupOn = !!on;
+  try { localStorage.setItem(DC_POPUP_KEY, _dcPopupOn ? '1' : '0'); } catch (e) {}
+  _dcPopupSyncButtons();
+  showStatus(_dcPopupOn ? '🔌 Disconnect-Popup an' : '🔌 Disconnect-Popup aus', 'info');
+}
+
+function _dcPopupSyncButtons() {
+  document.getElementById('dcPopupOnBtn')?.classList.toggle('on', _dcPopupOn);
+  document.getElementById('dcPopupOffBtn')?.classList.toggle('on', !_dcPopupOn);
+}
+try {
+  if (document.readyState !== 'loading') _dcPopupSyncButtons();
+  else document.addEventListener('DOMContentLoaded', _dcPopupSyncButtons);
+} catch (e) {}
+
+// Läuft bei jeder Auswertung des Wächters (Zustandsmeldung + 1-s-Takt)
+function _dcPopupTick() {
+  const st = _dcLinkState();
+  if (st === 'aus') { _dcLinkPrev = null; _dcBridgeSince = 0; return; }
+  if (st === 'bridge') {
+    if (!_dcBridgeSince) _dcBridgeSince = Date.now();
+    if (Date.now() - _dcBridgeSince < DC_BRIDGE_GRACE_MS) return;
+  } else {
+    _dcBridgeSince = 0;
+  }
+  if (_dcLinkPrev === null) {            // erst ab der ersten echten Verbindung zählen
+    if (st !== 'bridge') _dcLinkPrev = st;
+    return;
+  }
+  if (st === _dcLinkPrev) {
+    if (_dcPopupIsOpen()) _dcPopupRender(st);  // Dauer mitlaufen lassen
+    return;
+  }
+  const prev = _dcLinkPrev;
+  _dcLinkPrev = st;
+  const warDa  = prev === 'ok' || prev === 'noroom';
+  const istWeg = st === 'bridge' || st === 'server' || st === 'relog';
+  if (warDa && istWeg) {
+    _dcPopupSeit = Date.now();
+    if (_dcPopupOn && !_dcPopupIsOpen()) { _dcPopupOpen(st); return; }
+  }
+  _dcPopupNote(_DC_LINK_TEXT[st] || st);
+  if (_dcPopupIsOpen()) _dcPopupRender(st);
+}
+
 // ── Profile Screenshot: Canvas-Capture via BC ────────
 const _pendingScreenshot = {}; // reqId → profileName
 
@@ -2558,10 +2824,7 @@ function toggleProfileSlideshow() {
 
 function _startProfileSlideshow() {
   if (!_connected) { showStatus('❌ Nicht verbunden mit BC', 'error'); return; }
-  _slideshowRunning = true;
-  // Originaloutfit vor dem Start sichern – wird vor jedem Profil wiederhergestellt
-  // damit Haare/Slots aus Profil N nicht in Profil N+1 überlaufen.
-  bcSend({ type: 'EXEC', code: '(function(){window.__BCU_slideshowOrig=Player.Appearance.slice();})();' }, true);
+  if (!_gameOk(false)) { showStatus('❌ ' + _gameWaitReason(false) + ' – Auto-Screenshot nicht gestartet', 'error'); return; }
   // Alle Profile ohne Screenshot sammeln
   _slideshowQueue = Object.keys(PROFILES).filter(n => !PROFILE_SCREENSHOTS[n]);
   _slideshowTotal  = _slideshowQueue.length;
@@ -2569,6 +2832,12 @@ function _startProfileSlideshow() {
     showStatus('✅ Alle Profile haben bereits einen Screenshot', 'info');
     return;
   }
+  _slideshowRunning = true;
+  _slideshowPaused  = false;
+  _dcJobStart('slideshow');
+  // Originaloutfit vor dem Start sichern – wird vor jedem Profil wiederhergestellt
+  // damit Haare/Slots aus Profil N nicht in Profil N+1 überlaufen.
+  bcSend({ type: 'EXEC', code: '(function(){window.__BCU_slideshowOrig=Player.Appearance.slice();})();' }, true);
   const btn = document.getElementById('profileSlideshowBtn');
   if (btn) { btn.textContent = '⏹ Stop (' + _slideshowTotal + ')'; btn.classList.add('btn-red'); btn.classList.remove('btn-primary'); }
   showStatus('📸 Auto-Screenshot gestartet – ' + _slideshowTotal + ' Profile', 'info');
@@ -2576,17 +2845,21 @@ function _startProfileSlideshow() {
 }
 
 function _runNextSlideshow() {
+  // Verspätete Timer nach Stop/Pause dürfen nichts mehr anstoßen
+  if (!_slideshowRunning || _slideshowPaused) return;
   if (!_slideshowQueue.length) {
     _stopProfileSlideshow();
     showStatus('✅ Auto-Screenshot fertig – alle Screenshots generiert!', 'success');
     return;
   }
+  // Server/Bridge weg → pausieren, der Wächter setzt fort (Profil bleibt in der Queue)
+  if (_dcHalt('slideshow')) return;
   const name = _slideshowQueue.shift();
   const remaining = _slideshowQueue.length;
   const done = _slideshowTotal - remaining;
   // Profil ausführen (lädt Outfit in BC)
   const p = PROFILES[name];
-  if (p && _connected) {
+  if (p) {
     // Restore-Präambel: stellt Originaloutfit wieder her bevor das Profil-Outfit angewendet wird.
     // So überlaufen Haare/Slots aus Profil N nicht in Profil N+1.
     const restorePreamble = ''
@@ -2611,18 +2884,47 @@ function _runNextSlideshow() {
     const btn = document.getElementById('profileSlideshowBtn');
     if (btn) btn.textContent = '⏹ Stop (' + remaining + ')';
     // Kein _slideshowTimer mehr – _handleCanvasPreviewData ruft _runNextSlideshow() nach Capture auf
-  } else if (!_connected) {
-    // Nicht verbunden → Slideshow pausieren, Profil zurück in Queue
-    _slideshowQueue.unshift(name);
-    _slideshowPaused = true;
-    showStatus('⏸ Slideshow pausiert – warte auf Reconnect…', 'info');
-    const pauseBtn = document.getElementById('profileSlideshowBtn');
-    if (pauseBtn) pauseBtn.textContent = '⏸ Pausiert (' + _slideshowQueue.length + ')';
   } else {
     // Profil nicht vorhanden → überspringen
     _runNextSlideshow();
   }
 }
+
+// DC-Pause: laufende Aufnahme verwerfen (sie könnte mitten im Relog entstehen)
+// und das Profil vorne wieder einreihen – nichts wird übersprungen.
+function _slideshowPause() {
+  _slideshowPaused = true;
+  clearTimeout(_slideshowTimer);
+  _slideshowTimer = null;
+  Object.keys(_pendingProfileCapture).forEach(k => {
+    const e = _pendingProfileCapture[k];
+    clearTimeout(e?.timeoutId);
+    delete _pendingProfileCapture[k];
+    const n = e?.name ?? e;
+    if (n && !_slideshowQueue.includes(n)) _slideshowQueue.unshift(n);
+  });
+  const btn = document.getElementById('profileSlideshowBtn');
+  if (btn) btn.textContent = '⏸ Pausiert (' + _slideshowQueue.length + ')';
+}
+
+function _slideshowResume() {
+  _slideshowPaused = false;
+  const btn = document.getElementById('profileSlideshowBtn');
+  if (btn) btn.textContent = '⏹ Stop (' + _slideshowQueue.length + ')';
+  // Originaloutfit nur neu sichern, wenn es fehlt (BC-Tab neu geladen). Nach
+  // einem Relog lädt BC das Aussehen vom Server – das ist das Original, weil der
+  // Durchlauf nie synchronisiert. Ein erneutes Sichern könnte sonst ein gerade
+  // lokal angelegtes Profil-Outfit zum "Original" machen.
+  bcSend({ type: 'EXEC', code: '(function(){if(!window.__BCU_slideshowOrig)window.__BCU_slideshowOrig=Player.Appearance.slice();})();' }, true);
+  setTimeout(_runNextSlideshow, 500);
+}
+
+_dcRegisterJob('slideshow', {
+  label: 'Auto-Screenshot',
+  active: () => _slideshowRunning,
+  pause: _slideshowPause,
+  resume: _slideshowResume,
+});
 
 function _stopProfileSlideshow() {
   clearTimeout(_slideshowTimer);
@@ -2634,8 +2936,9 @@ function _stopProfileSlideshow() {
   // Laufende Canvas-Captures abbrechen + Timeouts clearen
   Object.values(_pendingProfileCapture).forEach(e => clearTimeout(e?.timeoutId));
   Object.keys(_pendingProfileCapture).forEach(k => delete _pendingProfileCapture[k]);
-  // Originaloutfit nach dem Slideshow wiederherstellen + Server-Sync
-  if (_connected) {
+  // Originaloutfit nach dem Slideshow wiederherstellen + Server-Sync.
+  // Ist BC gerade vom Server getrennt, lädt der Relog das Original ohnehin vom Server.
+  if (_connected && _gameOk(false)) {
     bcSend({ type: 'EXEC', code: '(function(){'
       + 'if(!window.__BCU_slideshowOrig)return;'
       + 'Player.Appearance.splice(0,Player.Appearance.length);'
@@ -5957,22 +6260,16 @@ onBridgeMessage('PONG', function(ev) {
           _triggerLscgScan('join-retry');
           _updateAutoScanBadge('join-retry');
         }, 12000);
-        // Slideshow-Resume: war sie wegen Disconnect pausiert → nach 5s fortsetzen
-        // (5s Wartezeit damit BC Raum betreten + Outfit-System laden kann)
-        if (_slideshowPaused && _slideshowQueue.length) {
-          _slideshowPaused = false;
-          showStatus('▶ Slideshow wird nach Reconnect fortgesetzt…', 'info');
-          const resumeBtn = document.getElementById('profileSlideshowBtn');
-          if (resumeBtn) resumeBtn.textContent = '⏹ Stop (' + _slideshowQueue.length + ')';
-          setTimeout(function() {
-            if (_connected && _slideshowQueue.length && !_slideshowPaused) {
-              // Originaloutfit neu sichern – kann sich durch Reconnect geändert haben
-              bcSend({ type: 'EXEC', code: '(function(){window.__BCU_slideshowOrig=Player.Appearance.slice();})();' }, true);
-              setTimeout(_runNextSlideshow, 500);
-            }
-          }, 5000);
-        }
+        // Pausierte Abläufe (Auto-Screenshot, Bilderserien …) setzt der
+        // Spiel-Server-Wächter fort, sobald BC eingeloggt/im Raum und stabil ist.
       }
+      // Alter Loader schickt keinen Zustand mit → null = "unbekannt, wie bisher"
+      _gameStateSet(ev.data.game);
+});
+
+// Loader meldet jede Änderung des Spiel-Server-Zustands (DC, Relog, Raumwechsel)
+onBridgeMessage('GAME_STATE', function(ev) {
+      _gameStateSet(ev.data.game);
 });
 
 onBridgeMessage('CACHE_DATA', function(ev) {
@@ -6003,6 +6300,7 @@ onBridgeMessage('POS_DATA', function(ev) {
 });
 
 onBridgeMessage('PLAYER_DATA', function(ev) {
+      if (ev.data.game) _gameStateSet(ev.data.game);
       if (!ev.data.err) {
         // Spieler-Check: anderer BC-Account als beim letzten Mal → nachfragen
         if (!_playerChecked && ev.data.memberNumber) {
@@ -8000,6 +8298,7 @@ const _pendingProfileCapture = {};  // reqId → profileName
 let   _osCaptureQueue   = [];
 let   _osCaptureRunning = false;
 let   _osCaptureNeedSync = false;  // true wenn Player-Appearance temporär geändert wurde
+let   _osCapturePaused  = false;  // true = wegen DC angehalten, Queue wartet
 const _osBrokenCodes    = {};  // vKey → error-message (kaputte Outfit-Codes)
 
 function captureOsScreenshot(mk, vIdx) {
@@ -8010,7 +8309,7 @@ function captureOsScreenshot(mk, vIdx) {
   const fp = v?.fingerprint ?? null;
   const outfitCode = v?.code ?? null;
   const reqId = 'os_' + Date.now() + '_' + mk;
-  _pendingOsCapture[reqId] = { mk, fp };
+  _pendingOsCapture[reqId] = { mk, fp, vIdx };
   if (outfitCode) _osCaptureNeedSync = true;
 
   // Werte sicher als JSON-Strings einbetten (kein Quoting-Problem)
@@ -8140,7 +8439,11 @@ function captureOsScreenshot(mk, vIdx) {
 // rawApplyCode = roher JS-Code (normales Profil) oder null
 // Genau einer der beiden kann gesetzt sein. Wenn beide null: nur Capture (kein Apply).
 function captureProfileViaCanvas(name, outfitCode, rawApplyCode) {
-  if (!_connected) return;
+  // Zwischen loadProfile und diesem Aufruf (20 ms) kann pausiert worden sein → Profil zurück in die Queue
+  if (!_connected || _slideshowPaused) {
+    if (_slideshowRunning && !_slideshowQueue.includes(name)) _slideshowQueue.unshift(name);
+    return;
+  }
   const reqId = 'ps_' + Date.now() + '_' + String(name).replace(/[^a-zA-Z0-9]/g, '').slice(0, 16);
   const J_reqId = JSON.stringify(reqId);
 
@@ -8164,23 +8467,12 @@ function captureProfileViaCanvas(name, outfitCode, rawApplyCode) {
     if (_pendingProfileCapture[reqId] !== undefined) {
       console.warn('[BCU] captureProfileViaCanvas timeout:', name, reqId);
       delete _pendingProfileCapture[reqId];
-      // Profil immer zurück in Queue – wird wiederholt
-      _slideshowQueue.unshift(name);
-      _slideshowPaused = true;
-      const reason = _connected ? 'Timeout' : 'Disconnect';
-      showStatus('⏸ Slideshow pausiert (' + reason + ') – "' + name + '" wird wiederholt', 'info');
-      const pauseBtn = document.getElementById('profileSlideshowBtn');
-      if (pauseBtn) pauseBtn.textContent = '⏸ Pausiert (' + _slideshowQueue.length + ')';
-      // Nach 5s automatisch fortsetzen wenn wieder verbunden
-      setTimeout(function() {
-        if (_slideshowPaused && _connected && _slideshowRunning) {
-          _slideshowPaused = false;
-          showStatus('▶ Slideshow wird fortgesetzt…', 'info');
-          const btn = document.getElementById('profileSlideshowBtn');
-          if (btn) btn.textContent = '⏹ Stop (' + _slideshowQueue.length + ')';
-          _runNextSlideshow();
-        }
-      }, 5000);
+      if (!_slideshowRunning) return;
+      // Profil immer zurück in Queue – wird wiederholt (nie überspringen)
+      if (!_slideshowQueue.includes(name)) _slideshowQueue.unshift(name);
+      // Pausieren; der Spiel-Server-Wächter setzt fort, sobald BC stabil erreichbar ist
+      const why = _gameWaitReason(false);
+      _dcPauseJob('slideshow', why || ('Timeout – "' + name + '" wird wiederholt'));
     }
   }, 12000);
 
@@ -8493,6 +8785,9 @@ function captureAllMissingOsScreenshots() {
 }
 
 function _runNextOsCapture() {
+  // Pausiert (DC): Queue bleibt stehen, _osCaptureRunning bleibt true → neue
+  // Einträge landen nur in der Queue; der Wächter stößt die Serie wieder an.
+  if (_osCapturePaused) return;
   if (!_osCaptureQueue.length) {
     _osCaptureRunning = false;
     if (_osCaptureNeedSync) {
@@ -8512,10 +8807,41 @@ function _runNextOsCapture() {
     }
     return;
   }
+  if (!_osCaptureRunning) _dcJobStart('osCapture');
   _osCaptureRunning = true;
+  if (_dcHalt('osCapture')) return;
   const item = _osCaptureQueue.shift();
-  setTimeout(function() { captureOsScreenshot(item.mk, item.vIdx); }, 50);
+  setTimeout(function() {
+    if (_osCapturePaused) { _osCaptureQueue.unshift(item); return; }
+    captureOsScreenshot(item.mk, item.vIdx);
+  }, 50);
 }
+
+// DC-Pause: laufende Aufnahme verwerfen (spätes Ergebnis wird ignoriert) und
+// wieder vorne einreihen – das Bild wird nach der Rückkehr neu aufgenommen.
+function _osCapturePause() {
+  _osCapturePaused = true;
+  Object.keys(_pendingOsCapture).forEach(k => {
+    const e = _pendingOsCapture[k];
+    delete _pendingOsCapture[k];
+    if (e && typeof e.vIdx === 'number'
+        && !_osCaptureQueue.some(i => i.mk === e.mk && i.vIdx === e.vIdx)) {
+      _osCaptureQueue.unshift({ mk: e.mk, vIdx: e.vIdx });
+    }
+  });
+}
+
+function _osCaptureResume() {
+  _osCapturePaused = false;
+  _runNextOsCapture();
+}
+
+_dcRegisterJob('osCapture', {
+  label: 'LSCG-Bilderserie',
+  active: () => _osCaptureRunning,
+  pause: _osCapturePause,
+  resume: _osCaptureResume,
+});
 
 // ── Styled Tab für LSCG-Eintrag öffnen ───────────────
 function openOsCanvasTab(mk) {
@@ -10102,6 +10428,12 @@ function mbsWheelDeleteShot(mn, oi) {
 let _wheelGenQueue   = [];
 let _wheelGenTotal   = 0;
 let _wheelGenRunning = false;
+// DC-Pause: _wheelGenTok macht die Timer-Kette des laufenden Outfits ungültig,
+// _wheelGenJob kommt zurück in die Queue, ein noch ausstehendes Foto wird verworfen.
+let _wheelGenPaused  = false;
+let _wheelGenTok     = 0;
+let _wheelGenJob     = null;
+let _wheelGenShotReq = null;
 
 function mbsWheelGenerateAll() {
   if (_wheelGenRunning) { mbsWheelGenerateStop(); return; }
@@ -10129,14 +10461,18 @@ function mbsWheelGenerateAll() {
 
   _wheelGenTotal   = _wheelGenQueue.length;
   _wheelGenRunning = true;
+  _wheelGenPaused  = false;
+  _dcJobStart('wheelGen');
   bcSend({ type: 'EXEC', code: _bcuSnapshotCode() }, true); // Aussehen fürs Ende sichern
   _updateWheelGenBtn();
   setTimeout(_wheelGenStep, 500);
 }
 
 function _wheelGenStep() {
-  if (!_wheelGenRunning) return;
-  if (!_wheelGenQueue.length || !_connected) { _wheelGenFinish(); return; }
+  if (!_wheelGenRunning || _wheelGenPaused) return;
+  _wheelGenJob = null;
+  if (!_wheelGenQueue.length) { _wheelGenFinish(); return; }
+  if (_dcHalt('wheelGen')) return;
 
   const job = _wheelGenQueue.shift();
   const r = _mbsWheelData.find(x => x.memberNumber === job.mn);
@@ -10145,6 +10481,10 @@ function _wheelGenStep() {
   const fp = _mbsOutfitFp(o);
   if (_mbsWheelShots[fp]) { _wheelGenStep(); return; } // inzwischen vorhanden
 
+  _wheelGenJob = job;
+  const tok = _wheelGenTok;
+  const alive = () => _wheelGenRunning && !_wheelGenPaused && tok === _wheelGenTok;
+
   const done = _wheelGenTotal - _wheelGenQueue.length;
   const st = document.getElementById('wheelScanStatus');
   if (st) st.textContent = '🖼 Erstelle ' + done + '/' + _wheelGenTotal + ': ' + o.name;
@@ -10152,14 +10492,15 @@ function _wheelGenStep() {
   // 1. Standard-Outfit lokal anlegen (Reset — sonst bleiben Items vom vorherigen Outfit)
   // 2. Wheel-Outfit lokal drüber  3. Foto  4. nächstes  — alles ohne Server-Sync
   const _applyOutfit = function() {
-    if (!_wheelGenRunning) return;
+    if (!alive()) return;
     bcSend({ type: 'EXEC', code: _mbsBuildApplyCode(o.items, true) }, true);
     setTimeout(function() {
-      if (!_wheelGenRunning) return;
+      if (!alive()) return;
       const reqId = 'wss_' + Date.now();
       _pendingWheelShot[reqId] = fp;
+      _wheelGenShotReq = reqId;
       bcSend({ type: 'EXEC', code: _buildCanvasShotCode(reqId) }, true);
-      setTimeout(_wheelGenStep, 1200);
+      setTimeout(function() { if (alive()) _wheelGenStep(); }, 1200);
     }, 2500);
   };
   if (CURSE_DEFAULT_OUTFIT_CODE) {
@@ -10170,9 +10511,43 @@ function _wheelGenStep() {
   }
 }
 
+function _wheelGenPause() {
+  _wheelGenPaused = true;
+  _wheelGenTok++;
+  if (_wheelGenJob) { _wheelGenQueue.unshift(_wheelGenJob); _wheelGenJob = null; }
+  // Foto evtl. mitten im Relog entstanden → verwerfen, wird neu aufgenommen
+  if (_wheelGenShotReq) { delete _pendingWheelShot[_wheelGenShotReq]; _wheelGenShotReq = null; }
+  const st = document.getElementById('wheelScanStatus');
+  if (st) st.textContent = '⏸ Pausiert – wartet auf BC (' + _wheelGenQueue.length + ' offen)';
+  _updateWheelGenBtn();
+}
+
+function _wheelGenResume() {
+  _wheelGenPaused = false;
+  // Undo-Stack fehlt nur, wenn der BC-Tab neu geladen wurde – dann ist das
+  // aktuelle Aussehen das vom Server, also das Original.
+  bcSend({ type: 'EXEC', code: '(function(){try{'
+    + 'if(window.__BCU_UNDO&&window.__BCU_UNDO.length)return;'
+    + 'window.__BCU_UNDO=[CharacterAppearanceBundle(Player)];'
+    + '}catch(e){console.warn("[BCU-Undo]",e.message);}})();' }, true);
+  _updateWheelGenBtn();
+  setTimeout(_wheelGenStep, 500);
+}
+
+_dcRegisterJob('wheelGen', {
+  label: 'Wheel-Bilderserie',
+  active: () => _wheelGenRunning,
+  pause: _wheelGenPause,
+  resume: _wheelGenResume,
+});
+
 function _wheelGenFinish() {
   const was = _wheelGenTotal - _wheelGenQueue.length;
   _wheelGenRunning = false;
+  _wheelGenPaused  = false;
+  _wheelGenTok++;
+  _wheelGenJob     = null;
+  _wheelGenShotReq = null;
   _wheelGenQueue   = [];
   _updateWheelGenBtn();
   // Ursprüngliches Aussehen wiederherstellen (einziger Server-Sync des Durchlaufs)
@@ -10189,7 +10564,7 @@ function mbsWheelGenerateStop() {
 
 function _updateWheelGenBtn() {
   const btn = document.getElementById('wheelGenBtn');
-  if (btn) btn.textContent = _wheelGenRunning ? '⏹ Stop' : '🖼 Alle erstellen';
+  if (btn) btn.textContent = _wheelGenRunning ? (_wheelGenPaused ? '⏸ Pausiert – Stop' : '⏹ Stop') : '🖼 Alle erstellen';
 }
 
 // ── Alle Bilder löschen (Outfits bleiben erhalten) ────────────────────────────
@@ -11595,6 +11970,8 @@ function curseTestToggle() {
 
 function _ctStart() {
   if (!_connected) { showStatus('❌ Nicht verbunden mit BC', 'error'); return; }
+  // Curses melden sich über den Raum-Chat → ohne Raum kann der Test nichts erkennen
+  if (!_gameOk(true)) { showStatus('❌ Curse-Test: ' + _gameWaitReason(true), 'error'); return; }
   _ctQueue = _ctBuildQueue();
   if (!_ctQueue.length) {
     showStatus('⚠️ Keine gecurseden Items ohne Outfit-Tag gefunden', 'info'); return;
@@ -11606,6 +11983,7 @@ function _ctStart() {
   _ctPaused = false;
   _ctCurseActive = false;
   _ctRunId++;   // neue Session-ID
+  _dcJobStart('curseTest');
   document.getElementById('curseTestPanel').style.display = '';
   document.getElementById('curseTestBtn').textContent = '⏹ Test stoppen';
   document.getElementById('curseTestBtn').classList.replace('btn-yellow', 'btn-red');
@@ -11719,6 +12097,11 @@ function curseTestPrev() {
 }
 
 function curseTestPauseToggle() {
+  // Wegen DC angehalten: "Weiter" würde ins Leere laufen – der Wächter setzt selbst fort
+  if (_ctPaused && _dcIsPaused('curseTest')) {
+    showStatus('⏸ Curse-Test wartet auf BC – läuft automatisch weiter, sobald du wieder im Raum bist', 'info');
+    return;
+  }
   _ctPaused = !_ctPaused;
   const btn = document.getElementById('curseTestPauseBtn');
   if (btn) btn.textContent = _ctPaused ? '▶ Weiter' : '⏸ Pause';
@@ -11737,6 +12120,7 @@ function curseTestSetInterval(val) {
 // ── Item anlegen / ablegen ────────────────────────────────────
 function _ctApplyCurrent(prevEntry) {
   if (!_connected) return;
+  if (_dcHalt('curseTest')) return;
   const cur = _ctQueue[_ctIdx];
   if (!cur) return;
 
@@ -11763,7 +12147,9 @@ function _ctApplyCurrent(prevEntry) {
   }
 
   // Neues Item anlegen (mit kleinem Delay damit das Ablegen zuerst verarbeitet wird)
+  const runId = _ctRunId;
   setTimeout(() => {
+    if (runId !== _ctRunId) return;  // inzwischen gestoppt oder wegen DC pausiert
     wearCurse(cur.dbKey, null);
     _ctReadyForCurse = true;  // Item gesendet — ab jetzt Curses vom aktuellen Item erwartet
     // Grace-Fenster: dem Curse Zeit geben sich anzukündigen ("washes over"), bevor der
@@ -12170,3 +12556,77 @@ _ctStart = function() {
   const stateEl = document.getElementById('curseTestCurseState');
   if (stateEl) stateEl.style.display = 'none';
 };
+
+// ── DC-Pause für den Curse-Test ──────────────────────────────
+// Ein Curse, der während des DCs lief, meldet nie sein Ende. Darum werden alle
+// laufenden Ketten (Curse-Warten, Speichern, Standard-Outfit) verworfen; nach
+// der Rückkehr wird das aktuelle Item sauber neu angelegt (vorher Standard-Outfit).
+let _ctDcUserPaused = false;  // war der Test schon vom Nutzer pausiert?
+
+function _ctDcPause() {
+  _ctDcUserPaused = _ctPaused;
+  _ctRunId++;
+  clearInterval(_ctTimer);
+  clearInterval(_ctCountdownTimer);
+  _ctTimer = null;
+  _ctCountdownTimer = null;
+  clearTimeout(_ctCurseDebounce);
+  _ctCurseDebounce  = null;
+  _ctCurseActive    = false;
+  _ctCurseItemIdx   = -1;
+  _ctReadyForCurse  = false;
+  _ctCurseGraceUntil = 0;
+  _ctPaused = true;
+  const btn = document.getElementById('curseTestPauseBtn');
+  if (btn) btn.textContent = '▶ Weiter';
+  const st = document.getElementById('curseTestStatus');
+  if (st) st.textContent = '⏸ Wartet auf BC-Server/Raum';
+  const cd = document.getElementById('curseTestCountdown');
+  if (cd) cd.textContent = '⏸';
+  const se = document.getElementById('curseTestCurseState');
+  if (se) se.style.display = 'none';
+}
+
+function _ctDcResume() {
+  // Vom Nutzer pausiert: Timer wiederherstellen, sonst nichts anfassen
+  if (_ctDcUserPaused) {
+    _ctDcUserPaused = false;
+    const st = document.getElementById('curseTestStatus');
+    if (st) st.textContent = '⏸ Pausiert';
+    _ctStartTimer();
+    return;
+  }
+  _ctPaused = false;
+  const btn = document.getElementById('curseTestPauseBtn');
+  if (btn) btn.textContent = '⏸ Pause';
+  const st = document.getElementById('curseTestStatus');
+  if (st) st.textContent = '';
+  const runId = _ctRunId;
+  const again = () => {
+    if (runId !== _ctRunId || _ctPaused) return;
+    _ctApplyCurrent(null);   // aktuelles Item erneut anlegen (ersetzt es in seiner Gruppe)
+    _ctUpdateUI();
+    _ctResetCountdown();
+    _ctStartTimer();
+  };
+  let resetCode = null;
+  if (CURSE_DEFAULT_OUTFIT_CODE) {
+    try { resetCode = '(function(){' + _buildApplyCode(CURSE_DEFAULT_OUTFIT_CODE) + '})();'; }
+    catch (e) { console.warn('[CURSE-TEST] Standard-Outfit nicht anwendbar:', e.message); }
+  }
+  if (resetCode) {
+    if (st) st.textContent = '🏠 Standard-Outfit…';
+    bcSend({ type: 'EXEC', code: resetCode });
+    setTimeout(again, 5000);
+  } else {
+    again();
+  }
+}
+
+_dcRegisterJob('curseTest', {
+  label: 'Curse-Test',
+  alwaysRoom: true,
+  active: () => _ctIdx >= 0,
+  pause: _ctDcPause,
+  resume: _ctDcResume,
+});

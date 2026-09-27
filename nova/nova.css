@@ -266,6 +266,8 @@ html[data-ui="nova"] {
   & .tbadge[data-conn]::before { width: 7px; height: 7px; background: #fb7185; }
   & .tbadge[data-conn="on"]::before { background: #34d399; }
   & .tbadge[data-conn="on"] { border-color: rgba(52,211,153,.3); background: #0d1a16; color: #b6f5dc; }
+  & .tbadge[data-conn="warn"]::before { background: #fbbf24; }
+  & .tbadge[data-conn="warn"] { border-color: rgba(251,191,36,.3); background: #1c1809; color: #fde68a; }
   & .topbar-icon-btn { width: 36px; height: 36px; border-radius: 10px; color: var(--text2); }
   & .topbar-icon-btn:hover { background: #151823; color: #fff; }
   & .topbar-icon-btn.active { background: var(--accent-soft); color: var(--accent-text); }

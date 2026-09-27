@@ -1423,6 +1423,30 @@ window.CurseScanner = (() => {
 
   window.__BCK_buildGameInventory = buildGameInventory; // Test-Seam (Muster _BCU_serializeChar); im Spiel ungenutzt
 
+  // ── Spiel-Server-Zustand (DC-Pause im Tool) ─────────────
+  // BC verliert gelegentlich die Verbindung zum Server ("Server connection lost"
+  // → Relog-Screen → "Connected to the Bondage Club Server"). Der Loader lebt
+  // dabei weiter, die Bridge merkt davon also nichts. Das Tool braucht diesen
+  // Zustand, um laufende Abläufe (Screenshot-Serien, Curse-Test …) anzuhalten
+  // und erst weiterzumachen, wenn BC wieder eingeloggt und im Raum ist.
+  function _bckGameState() {
+    const st = { online: true, loggedIn: false, screen: '', inRoom: false, room: null };
+    try {
+      if (typeof ServerIsConnected === 'boolean') st.online = ServerIsConnected;
+      st.screen = (typeof CurrentScreen === 'string') ? CurrentScreen : '';
+      st.loggedIn = !!(window.Player && window.Player.MemberNumber != null)
+        && st.screen !== 'Relog' && st.screen !== 'Login';
+      if (st.online && st.loggedIn) {
+        st.inRoom = (typeof ServerPlayerIsInChatRoom === 'function')
+          ? !!ServerPlayerIsInChatRoom()
+          : st.screen === 'ChatRoom';
+      }
+      if (st.inRoom && typeof ChatRoomData !== 'undefined' && ChatRoomData?.Name) st.room = String(ChatRoomData.Name);
+    } catch (e) {}
+    return st;
+  }
+  window.__BCK_gameState = _bckGameState; // Test-Seam
+
   // ── PostMessage Listener ───────────────────────────────
   // Always replace the old listener so re-running the bookmarklet picks up new code
   if (window.__BCK_LISTENER_FN__) {
@@ -1448,7 +1472,7 @@ window.CurseScanner = (() => {
       switch (ev.data.type) {
         case 'PING':
           BCK.info('PING \u2192 sende PONG');
-          src.postMessage({ app: APP, type: 'PONG' }, ALLOWED_ORIGIN);
+          src.postMessage({ app: APP, type: 'PONG', game: _bckGameState() }, ALLOWED_ORIGIN);
           break;
 
         case 'GET_CACHE': {
@@ -1492,6 +1516,7 @@ window.CurseScanner = (() => {
               memberNumber: P?.MemberNumber,
               name: P?.Name,
               members: (window.ChatRoomCharacter ?? []).map(c => ({ num: c.MemberNumber, name: c.Name })),
+              game: _bckGameState(),
             }, ALLOWED_ORIGIN);
           } catch (ex) {
             src.postMessage({ app: APP, type: 'PLAYER_DATA', err: ex.message }, ALLOWED_ORIGIN);
@@ -2226,6 +2251,23 @@ window.CurseScanner = (() => {
     ServerSocket.on('ChatRoomMessage', _ctMsgH);
     BCK.ok('[CurseTestMonitor] aktiv');
   })();
+
+  // ── Server-Wächter: meldet jede Zustandsänderung sofort ans Tool ──────────
+  // Nur Änderungen gehen raus; PONG und PLAYER_DATA tragen den Stand zusätzlich,
+  // falls das Tool-Fenster zum Zeitpunkt der Änderung noch nicht gepinnt war.
+  if (window.__BCK_gameStateTimer) clearInterval(window.__BCK_gameStateTimer);
+  window.__BCK_gameStateLast = '';
+  window.__BCK_gameStateTimer = setInterval(function () {
+    const st = _bckGameState();
+    const key = JSON.stringify(st);
+    if (key === window.__BCK_gameStateLast) return;
+    const hatteStand = !!window.__BCK_gameStateLast;
+    window.__BCK_gameStateLast = key;
+    if (hatteStand) BCK.info('Server-Zustand:', st.online ? 'online' : 'GETRENNT', '| Screen:', st.screen, '| Raum:', st.room ?? '–');
+    const ref = window.__BCK_popupRef;
+    if (!ref || ref.closed) return;
+    try { ref.postMessage({ app: APP, type: 'GAME_STATE', game: st }, ALLOWED_ORIGIN); } catch (e) {}
+  }, 1000);
 
   // ── Popup öffnen / fokussieren ─────────────────────────
   if (window.__BCK_WIN__ && !window.__BCK_WIN__.closed) {

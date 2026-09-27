@@ -10,6 +10,7 @@ let OI_LIST = [];          // [{id, label, code, date}]
 let _oiSeqRunning  = false;
 let _oiSeqIdx      = 0;
 let _oiSeqTimer    = null;
+let _oiSeqPaused   = false;   // true = wegen BC-Server-DC angehalten (Spiel-Server-Wächter in items.js)
 const OI_IDB_KEY        = 'BC_IMPORT_OUTFITS_v1';
 const OI_BODY_BASE_KEY  = 'BC_OI_BODY_BASE_v1';
 
@@ -246,7 +247,7 @@ function _oiUpdateProgress() {
     bar.querySelector('.oi-bar-fill').style.width = pct + '%';
     if (info) info.textContent = _oiSeqIdx + ' / ' + OI_LIST.length + ' ausgeführt';
     if (stopBtn) stopBtn.style.display = 'inline-flex';
-    if (seqBtn)  seqBtn.textContent = '⏸ Läuft…';
+    if (seqBtn)  seqBtn.textContent = _oiSeqPaused ? '⏸ Pausiert (BC getrennt)' : '⏸ Läuft…';
   } else {
     bar.querySelector('.oi-bar-fill').style.width = '0%';
     if (info) info.textContent = OI_LIST.length + ' Einträge';
@@ -503,16 +504,21 @@ function oiStartSequential() {
   if (_oiSeqRunning) { oiStopSequential(); return; }
 
   _oiSeqRunning = true;
+  _oiSeqPaused  = false;
   _oiSeqIdx     = 0;
+  if (typeof _dcJobStart === 'function') _dcJobStart('oiSeq');
   _oiRunNext();
 }
 
 function _oiRunNext() {
+  if (_oiSeqPaused) return;
   if (!_oiSeqRunning || _oiSeqIdx >= OI_LIST.length) {
     oiStopSequential();
     if (_oiSeqIdx >= OI_LIST.length) showStatus('✅ Alle ' + OI_LIST.length + ' Outfits ausgeführt', 'success');
     return;
   }
+  // BC-Server weg → anhalten; der Wächter setzt fort, sobald BC wieder stabil da ist
+  if (typeof _dcHalt === 'function' && _dcHalt('oiSeq')) return;
 
   const item = OI_LIST[_oiSeqIdx];
   // Ein einzelner unbrauchbarer Eintrag darf den Stapellauf nicht abbrechen:
@@ -544,8 +550,34 @@ function _oiRunNext() {
 
 function oiStopSequential() {
   _oiSeqRunning = false;
+  _oiSeqPaused  = false;
   if (_oiSeqTimer) { clearTimeout(_oiSeqTimer); _oiSeqTimer = null; }
   renderOutfitImportTab();
+}
+
+// DC-Pause: Ein DC fällt oft erst Sekunden später auf – das zuletzt gesendete
+// Outfit ist dann womöglich nie beim Server angekommen. Es wird nach der
+// Rückkehr wiederholt (Anlegen desselben Outfits ist unschädlich).
+function _oiSeqPause() {
+  _oiSeqPaused = true;
+  if (_oiSeqTimer) { clearTimeout(_oiSeqTimer); _oiSeqTimer = null; }
+  if (_oiSeqIdx > 0) _oiSeqIdx--;
+  renderOutfitImportTab();
+}
+
+function _oiSeqResume() {
+  _oiSeqPaused = false;
+  renderOutfitImportTab();
+  _oiRunNext();
+}
+
+if (typeof _dcRegisterJob === 'function') {
+  _dcRegisterJob('oiSeq', {
+    label: 'Outfit-Import-Serie',
+    active: () => _oiSeqRunning,
+    pause: _oiSeqPause,
+    resume: _oiSeqResume,
+  });
 }
 
 function oiSetDelay(ms) {

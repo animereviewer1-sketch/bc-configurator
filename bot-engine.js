@@ -1742,6 +1742,33 @@ function _runSeq(aktionen,C,vars,trigBase,onDone,onUngueltig){
 
 
 // Sendet einen Log-Eintrag an den Tab im Index
+/* ── Server-DC: Bot setzt aus ─────────────────────────────────────────
+   Bei "Server connection lost" landet BC im Relog-Screen, ChatRoomCharacter
+   ist dann veraltet oder leer. Ohne Pause wuerde der Takt falsche Schluesse
+   ziehen (Leihen als "nicht mehr im Raum" zurueckbuchen, NoStrip/Zonen) und
+   Timer-Events ins Leere senden. Nach der Rueckkehr laeuft der Bot erst weiter,
+   wenn er wieder in einem Raum ist und das 5 s stabil bleibt (Raum-Sync). */
+let _dcSeit=0, _dcWiederAb=0;
+function _botPausiert(){
+  const now=Date.now();
+  const weg=(typeof ServerIsConnected==='boolean'&&!ServerIsConnected)
+    ||(typeof CurrentScreen==='string'&&(CurrentScreen==='Relog'||CurrentScreen==='Login'));
+  if(weg){
+    if(!_dcSeit){_dcSeit=now;console.warn('[Bot:${safeName}] Server getrennt – Bot pausiert');}
+    _dcWiederAb=0;
+    return true;
+  }
+  if(!_dcSeit)return false;
+  let imRaum=false;
+  try{ imRaum=(typeof ServerPlayerIsInChatRoom==='function')?!!ServerPlayerIsInChatRoom():CurrentScreen==='ChatRoom'; }catch(e){}
+  if(!imRaum){_dcWiederAb=0;return true;}
+  if(!_dcWiederAb)_dcWiederAb=now+5000;
+  if(now<_dcWiederAb)return true;
+  _dcSeit=0;_dcWiederAb=0;
+  console.log('[Bot:${safeName}] Wieder verbunden – Bot laeuft weiter');
+  return false;
+}
+
 // Sendet Log-Eintrag via PostMessage-Brücke zurück an das Popup
 // ── Events Runtime ────────────────────────────────────────
 const _evTimers={};
@@ -1800,9 +1827,12 @@ function _scheduleEv(ev){
   const intC=beds.find(c=>c.typ==='ev_interval');
   if(timerC){
     const ms=(timerC.sek??10)*1000;
-    _evTimers[ev.id+'_t']=setTimeout(()=>{
+    // Einmal-Timer: faellt er in einen DC, wird er nach der Rueckkehr nachgeholt
+    const feuer=()=>{
+      if(_botPausiert()){_evTimers[ev.id+'_t']=setTimeout(feuer,5000);return;}
       _fireEv(ev);
-    },ms);
+    };
+    _evTimers[ev.id+'_t']=setTimeout(feuer,ms);
   }
   if(intC){
     const lo=(intC.sek_min??20)*1000, hi=(intC.sek_max??60)*1000;
@@ -1810,7 +1840,7 @@ function _scheduleEv(ev){
       const cnt=_evFiredCnt[ev.id]??0;
       if(ev.wiederholung==='einmalig'&&cnt>=1)return;
       if(ev.wiederholung==='n_mal'&&cnt>=(ev.maxMal??2))return;
-      _fireEv(ev);
+      if(!_botPausiert())_fireEv(ev);   // waehrend DC diese Runde auslassen
       _evTimers[ev.id+'_i']=setTimeout(go,lo+Math.random()*(hi-lo));
     };
     _evTimers[ev.id+'_i']=setTimeout(go,lo+Math.random()*(hi-lo));
@@ -2879,6 +2909,7 @@ function _tickNoStrip(chars){
    vierten Tick dran. */
 let _taktNr=0;
 const _botTakt=setInterval(()=>{
+  if(_botPausiert())return;   // Server-DC/Relog: Raumdaten sind nicht verlaesslich
   const chars=[Player,...(ChatRoomCharacter||[])];
   _taktNr++;
   try{ _tickItems(chars); }   catch(e){ _log('⚠ Takt/Items:',e.message); }

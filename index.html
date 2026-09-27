@@ -241,6 +241,8 @@ select option:hover {
   background: #fb7185;
 }
 .tbadge[data-conn="on"]::before { background: #34d399; }
+.tbadge[data-conn="warn"]::before { background: #fbbf24; }
+.tbadge[data-conn="warn"] { color: #fcd34d; border-color: rgba(251,191,36,0.35); }
 .tbadge.outfit {
   background: rgba(124,45,18,0.25); border-color: rgba(251,146,60,0.35); color: var(--orange);
 }
@@ -2477,6 +2479,15 @@ button { cursor: pointer; }
   <!-- ── Werkzeuge ── -->
   <section class="set-page" data-set-page="werkzeuge">
     <div class="set-card">
+      <div class="set-card-h"><span class="tweaks-section-title">🔌 Verbindungswächter</span>
+        <div class="tweaks-btn-group set-r">
+          <button class="tweaks-btn" id="dcPopupOnBtn"  onclick="dcPopupSetOn(true)"  title="Bei einem Disconnect ein Popup zeigen">Ein</button>
+          <button class="tweaks-btn" id="dcPopupOffBtn" onclick="dcPopupSetOn(false)" title="Kein Popup – Abläufe pausieren trotzdem">Aus</button>
+          <button class="tweaks-btn" onclick="dcPopupTest()" title="Zeigt das Popup einmal zur Probe">👁 Testen</button>
+        </div></div>
+      <div class="set-card-b"><div class="set-hint">Popup bei Disconnect (BC-Server getrennt oder BC-Tab weg) mit Verlauf bis zur Rückkehr und den pausierten Abläufen. Das Pausieren/Fortsetzen läuft unabhängig von dieser Einstellung immer.</div></div>
+    </div>
+    <div class="set-card">
       <div class="set-card-h"><span class="tweaks-section-title">🔗 UserID anreichern</span>
         <div class="tweaks-btn-group set-r"><button class="tweaks-btn" onclick="enrichProfileNamesWithIDs()">✨ Namen anreichern</button></div></div>
       <div class="set-card-b"><div class="set-hint">Ergänzt #ID in Outfit- &amp; Profilnamen aus Craft/Curse-Daten: <span style="color:var(--text2)">Ada → Ada #219508</span></div>
@@ -2507,6 +2518,19 @@ button { cursor: pointer; }
     </div>
   </section>
 
+  </div>
+</div>
+
+<!-- DISCONNECT-POPUP (Einstellungen → Werkzeuge → Verbindungswächter) -->
+<div id="dcPopup" class="modal-overlay" style="display:none" role="alertdialog" aria-labelledby="dcPopupTitle">
+  <div class="modal" style="width:min(460px,94vw)">
+    <div class="modal-head"><h2 id="dcPopupTitle">⚠️ Verbindung getrennt</h2></div>
+    <div class="modal-body">
+      <div id="dcPopupState" style="font-weight:700;margin-bottom:6px"></div>
+      <div id="dcPopupJobs" class="set-hint" style="margin-bottom:10px"></div>
+      <div id="dcPopupLog" class="set-info" style="white-space:pre-wrap;font-family:var(--font-mono);max-height:220px;overflow:auto"></div>
+    </div>
+    <div class="modal-foot"><button class="btn btn-primary" onclick="dcPopupClose()">OK</button></div>
   </div>
 </div>
 

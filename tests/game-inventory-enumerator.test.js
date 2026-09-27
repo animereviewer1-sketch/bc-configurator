@@ -382,11 +382,11 @@ describe('statisch: Loader-Änderung minimal und read-only', () => {
     return str.split(needle).length - 1;
   }
 
-  it('Case/Funktion/Exposure genau einmal; Zähler 34; verbotene Aufrufe fehlen; Region enthält Deskriptor-APIs und Chunking; Case-Block antwortet an ev.origin', () => {
+  it('Case/Funktion/Exposure genau einmal; Zähler 35; verbotene Aufrufe fehlen; Region enthält Deskriptor-APIs und Chunking; Case-Block antwortet an ev.origin', () => {
     expect(count(L, "case 'GET_GAME_INVENTORY':")).toBe(1);
     expect(count(L, 'function buildGameInventory(reqId, post)')).toBe(1);
     expect(count(L, 'window.__BCK_buildGameInventory = buildGameInventory;')).toBe(1);
-    expect((L.match(/ALLOWED_ORIGIN/g) || []).length).toBe(34);
+    expect((L.match(/ALLOWED_ORIGIN/g) || []).length).toBe(35); // +1 GAME_STATE-Post (Server-Wächter)
 
     const lines = L.split('\n');
     const startIdx = lines.findIndex((l) => l.includes('── Gamecode-Inventar'));

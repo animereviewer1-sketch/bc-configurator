@@ -23,7 +23,9 @@ describe('Loader-Sandbox: loader.js läuft in-process (Wave 0, Phase 5)', () => 
   it('PING → PONG an die Tool-Origin', () => {
     const { posts, send } = makeLoaderSandbox();
     send({ type: 'PING' });
-    expect(posts).toEqual([{ msg: { app: 'BCKonfigurator', type: 'PONG' }, origin: LOADER_TOOL_ORIGIN }]);
+    // PONG trägt den Spiel-Server-Zustand (DC-Pause im Tool); Sandbox: kein ServerIsConnected → online
+    expect(posts).toEqual([{ msg: { app: 'BCKonfigurator', type: 'PONG',
+      game: { online: true, loggedIn: true, screen: '', inRoom: false, room: null } }, origin: LOADER_TOOL_ORIGIN }]);
   });
 
   it('fremde Origin und fremde App werden ignoriert', () => {

@@ -11,10 +11,10 @@ const BASELINE_MANIFEST = {
   ],
   "identifierPattern": "\\b(Inventory|Character|ChatRoom|Server|Asset|Player|Dialog|Common|Item|Lock|Wardrobe|Pose|Skill|Reputation|Online|Chat)[A-Z]\\w+",
   "counts": {
-    "identifiers": 83,
-    "function": 19,
+    "identifiers": 85,
+    "function": 20,
     "assetGroup": 33,
-    "unknown": 31
+    "unknown": 32
   },
   "identifiers": [
     {
@@ -123,6 +123,7 @@ const BASELINE_MANIFEST = {
       "name": "ChatRoom",
       "kind": "unknown",
       "files": [
+        "bot-engine.js",
         "loader.js"
       ]
     },
@@ -616,6 +617,14 @@ const BASELINE_MANIFEST = {
       ]
     },
     {
+      "name": "ServerIsConnected",
+      "kind": "unknown",
+      "files": [
+        "bot-engine.js",
+        "loader.js"
+      ]
+    },
+    {
       "name": "ServerPlayerAppearanceSync",
       "kind": "function",
       "files": [
@@ -627,6 +636,14 @@ const BASELINE_MANIFEST = {
       "kind": "function",
       "files": [
         "items.js"
+      ]
+    },
+    {
+      "name": "ServerPlayerIsInChatRoom",
+      "kind": "function",
+      "files": [
+        "bot-engine.js",
+        "loader.js"
       ]
     },
     {
