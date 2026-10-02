@@ -6283,7 +6283,10 @@ onBridgeMessage('LOCK_STRIPPED', function(ev) {
       _lockStripTs = now;
       _lockStripBuf.push(String(ev.data.lock || '?') + ' an ' + String(ev.data.group || '?')
         + (ev.data.by != null ? ' (von #' + ev.data.by + ')' : '')
-        + (ev.data.aktion === 'meins' ? ' → dein High-Security' : ev.data.aktion === 'dogs' ? ' → DOGS, du als Besitzerin' : ' entfernt'));
+        + (ev.data.aktion === 'meins' ? ' → dein High-Security'
+          : ev.data.aktion === 'dogs' ? ' → DOGS, du als Besitzerin'
+          : ev.data.aktion === 'setzer' ? ' → behalten, Setzer: ' + String(ev.data.info || '?')
+          : ' entfernt'));
       const n = _lockStripBuf.length;
       showStatus('🔓 ' + (n === 1 ? 'Fremdes Schloss' : n + ' fremde Schlösser') + ': '
         + _lockStripBuf.join(', '), 'success');
@@ -9090,7 +9093,13 @@ const MOD_LOCK_GRUPPEN = [
 ];
 const _MOD_LOCK_MAP = {};
 MOD_LOCK_GRUPPEN.forEach(g => g.namen.forEach(n => { _MOD_LOCK_MAP[n] = g.id; }));
-const LOCK_REGELN = { weg: 'Entfernen', behalten: 'Übernehmen', meins: 'Mir gehört' };
+const LOCK_REGELN = { weg: 'Entfernen', behalten: 'Übernehmen', setzer: 'Neuer Setzer', meins: 'Mir gehört' };
+// "Neuer Setzer" (Schloss bleibt, nur LockMemberNumber/-Name werden ersetzt) nur dort, wo
+// der Setzer das Öffnen nicht bestimmt: Owner-/Lover-/Family-Schlösser prüft BC gegen die
+// Beziehungen der Trägerin. Bei Exklusiv/Intricate würde der Setzer den Schlüssel bekommen.
+const LOCK_SETZER_KATEGORIEN = ['owner', 'lover'];
+const LOCK_SETZER_KEY = 'BC_LOCK_SETZER_v1';
+const _LOCK_SETZER_NAME_MAX = 40;
 // Die 18 Schlösser, die BC R132 selbst mitbringt (Female3DCG.js, IsLock) – alles andere zählt als Mod-Schloss
 const _BC_LOCKS = ['CombinationPadlock','ExclusivePadlock','FamilyPadlock','HighSecurityPadlock','IntricatePadlock',
   'LoversPadlock','LoversTimerPadlock','MetalPadlock','MistressPadlock','MistressTimerPadlock','OwnerPadlock',
@@ -9108,15 +9117,31 @@ function _lockRulesAlle(wert) {
   return r;
 }
 
+// Regel w für Schlüssel k erlaubt? ("Neuer Setzer" nur bei Owner/Lover)
+function _lockRegelErlaubt(k, w) {
+  return !!LOCK_REGELN[w] && (w !== 'setzer' || LOCK_SETZER_KATEGORIEN.includes(k));
+}
+
+// Wer bei "Neuer Setzer" eingetragen wird: 'ich' | 'lover' (erste Lover-Beziehung aus BC) | 'nummer'
+function _lockSetzerNormal(s) {
+  const modus = ['ich', 'lover', 'nummer'].includes(s?.modus) ? s.modus : 'ich';
+  const nr = parseInt(s?.nummer, 10);
+  const nummer = (nr > 0 && nr < 1e9) ? nr : null;
+  const name = String(s?.name ?? '').trim().slice(0, _LOCK_SETZER_NAME_MAX);
+  return { modus: (modus === 'nummer' && !nummer) ? 'ich' : modus, nummer, name };
+}
+
 let _lockRules = _lockRulesAlle('weg');
+let _lockSetzer = _lockSetzerNormal(null);
 let _lockModsSeen = [];       // Rohnamen unbekannter Mod-Schlösser
 let _lockModCounts = {};      // 'mod:<id>' → in wie vielen gespeicherten Outfits (nach Suche)
 try {
+  _lockSetzer = _lockSetzerNormal(JSON.parse(localStorage.getItem(LOCK_SETZER_KEY) || 'null'));
   const gespeichert = JSON.parse(localStorage.getItem(LOCK_RULES_KEY) || 'null');
   if (gespeichert && typeof gespeichert === 'object') {
     Object.keys(gespeichert).forEach(k => {
       const gueltig = LOCK_KATEGORIEN.some(x => x.id === k) || (k.startsWith('mod:') && k.length <= _LOCK_MOD_NAME_MAX + 4);
-      if (gueltig && LOCK_REGELN[gespeichert[k]]) _lockRules[k] = gespeichert[k];
+      if (gueltig && _lockRegelErlaubt(k, gespeichert[k])) _lockRules[k] = gespeichert[k];
     });
   } else if (localStorage.getItem(LOCK_FILTER_KEY) === '0') {
     _lockRules = _lockRulesAlle('behalten');   // alter Schalter stand auf "Übernehmen"
@@ -9201,11 +9226,26 @@ function _lockFilterPrelude(melden) {
     +   'if(s[mn])return;s[mn]=1;'
     +   'try{window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"LOCK_SEEN",lock:mn},"' + TOOL_ORIGIN + '");}catch(_e){}'
     + '}'
-    + 'function melde(g,p,regel){'
+    + 'function melde(g,p,regel,info){'
     + (melden
       ? 'try{window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"LOCK_STRIPPED",group:String(g),'
-        + 'lock:modName(p),by:(p.LockMemberNumber==null?null:p.LockMemberNumber),aktion:regel},"' + TOOL_ORIGIN + '");}catch(_e){}'
+        + 'lock:modName(p),by:(p.LockMemberNumber==null?null:p.LockMemberNumber),aktion:regel,info:(info||null)},"' + TOOL_ORIGIN + '");}catch(_e){}'
       : '')
+    + '}'
+    // "Neuer Setzer": wer eingetragen wird und unter welchem Namen (Beziehungen, Freundesliste, Raum)
+    + 'var S=' + JSON.stringify(_lockSetzer) + ';'
+    + 'function setzerNummer(){'
+    +   'if(S.modus==="nummer"&&S.nummer>0)return S.nummer;'
+    +   'if(S.modus==="lover"){var l=(Player.Lovership||[]).find(function(x){return x&&x.MemberNumber>0;});if(l)return l.MemberNumber;}'
+    +   'return Player.MemberNumber;'
+    + '}'
+    + 'function nameFuer(nr){'
+    +   'if(nr===Player.MemberNumber)return Player.Name;'
+    +   'var l=(Player.Lovership||[]).find(function(x){return x&&x.MemberNumber===nr;});if(l&&l.Name)return l.Name;'
+    +   'if(Player.Ownership&&Player.Ownership.MemberNumber===nr&&Player.Ownership.Name)return Player.Ownership.Name;'
+    +   'try{if(Player.FriendNames&&typeof Player.FriendNames.get==="function"){var f=Player.FriendNames.get(nr);if(f)return String(f);}}catch(_e){}'
+    +   'var c=(typeof ChatRoomCharacter!=="undefined"&&ChatRoomCharacter||[]).find(function(x){return x&&x.MemberNumber===nr;});if(c&&c.Name)return c.Name;'
+    +   'return (S.modus==="nummer"&&S.name)?S.name:("#"+nr);'
     + '}'
     // DOGS (Devious Obligate Great Stuff) registriert ein neu auftauchendes Devious-Schloss
     // mit dem AUSLÖSER der nächsten Änderung als Besitzer (checkDeviousPadlocks). Nur wenn
@@ -9233,8 +9273,17 @@ function _lockFilterPrelude(melden) {
     +   'var cur=(typeof InventoryGet==="function")?InventoryGet(Player,g):null;'
     +   'if(cur&&cur.Asset&&cur.Asset.Name===n&&cur.Property&&cur.Property.LockedBy===p.LockedBy'
     +     '&&cur.Property.LockMemberNumber===mn)return p;'
-    +   'var regel=regelFuer(kat(p));'
+    +   'var k=kat(p),regel=regelFuer(k);'
+    +   'if(regel==="setzer"&&k!=="owner"&&k!=="lover")regel="behalten";'
     +   'if(regel==="behalten")return p;'
+    // "Neuer Setzer": Schloss bleibt, nur wer es gesetzt hat wird ersetzt (Owner/Lover/Family)
+    +   'if(regel==="setzer"){'
+    +     'var t=JSON.parse(JSON.stringify(p)),nr=setzerNummer();'
+    +     't.LockMemberNumber=nr;t.LockMemberName=nameFuer(nr);'
+    +     'console.log("[BCU] Schloss behalten, neuer Setzer:",g,n,modName(p),"#"+mn,"→","#"+nr);'
+    +     'melde(g,p,"setzer",t.LockMemberName+" (#"+nr+")");'
+    +     'return t;'
+    +   '}'
     // DOGS-Schloss "Mir gehört": bleibt DOGS-Schloss, Unterbau Exklusiv, du als Besitzer
     // (nur bei echtem Anlegen – Screenshots registrieren nie etwas bei DOGS)
     +   'if(regel==="meins"&&String(p.Name)==="DeviousPadlock"&&ECHT&&dogsAktiv()){'
@@ -9287,15 +9336,45 @@ function _lockRuleLabel(kat) {
 }
 
 function lockRuleSet(kat, wert) {
-  if (!_lockRuleKeyGueltig(kat) || !LOCK_REGELN[wert]) return;
+  if (!_lockRuleKeyGueltig(kat) || !_lockRegelErlaubt(kat, wert)) return;
   _lockRules[kat] = wert;
   _lockRulesSpeichern();
-  showStatus(_lockRuleLabel(kat) + ' → ' + LOCK_REGELN[wert], 'info');
+  showStatus(_lockRuleLabel(kat) + ' → ' + LOCK_REGELN[wert] + (wert === 'setzer' ? ' (' + _lockSetzerText() + ')' : ''), 'info');
+}
+
+// Setzer für "Neuer Setzer" aus den Eingabefeldern übernehmen
+function lockSetzerAus() {
+  const modus = document.getElementById('lockSetzerModus')?.value;
+  const nummer = document.getElementById('lockSetzerNr')?.value;
+  const name = document.getElementById('lockSetzerName')?.value;
+  if (modus === 'nummer' && !(parseInt(nummer, 10) > 0)) {
+    // Eingabefelder anzeigen; gespeichert wird erst, wenn eine Nummer drinsteht
+    // (bis dahin trägt das Spiel dich selbst ein)
+    _lockSetzer = _lockSetzerNormal({ modus: 'ich', nummer: null, name });
+    _lockSetzer.modus = 'nummer';
+    _lockRulesRender();
+    showStatus('👤 Member-Nummer der Person eintragen, die im Schloss stehen soll', 'info');
+    return;
+  }
+  lockSetzerSet(modus, nummer, name);
+}
+
+function lockSetzerSet(modus, nummer, name) {
+  _lockSetzer = _lockSetzerNormal({ modus, nummer, name });
+  try { localStorage.setItem(LOCK_SETZER_KEY, JSON.stringify(_lockSetzer)); } catch (e) {}
+  _lockRulesRender();
+  showStatus('👤 Neuer Setzer: ' + _lockSetzerText(), 'info');
+}
+
+function _lockSetzerText() {
+  if (_lockSetzer.modus === 'lover') return 'deine Lover-Partnerin';
+  if (_lockSetzer.modus === 'nummer') return (_lockSetzer.name ? _lockSetzer.name + ' ' : '') + '#' + _lockSetzer.nummer;
+  return 'du selbst';
 }
 
 // Alle Arten auf einen Wert; einzelne Mod-Regeln fallen dabei weg (folgen "alle anderen")
 function lockRuleSetAll(wert) {
-  if (!LOCK_REGELN[wert]) return;
+  if (!LOCK_REGELN[wert] || wert === 'setzer') return;
   _lockRules = _lockRulesAlle(wert);
   _lockRulesSpeichern();
   showStatus('Alle Schloss-Arten → ' + LOCK_REGELN[wert], 'info');
@@ -9310,8 +9389,24 @@ function _lockRuleZeile(key, label, hint, wert, eingerueckt) {
   return '<div class="set-li"' + (eingerueckt ? ' style="padding-left:18px"' : '') + '><div><b>' + escHtml(label) + '</b>'
     + (hint ? '<div class="set-hint">' + escHtml(hint) + '</div>' : '') + '</div>'
     + '<div class="tweaks-btn-group set-r">'
-    + Object.keys(LOCK_REGELN).map(w => '<button class="tweaks-btn' + (wert === w ? ' on' : '') + '"'
+    + Object.keys(LOCK_REGELN).filter(w => _lockRegelErlaubt(key, w)).map(w => '<button class="tweaks-btn' + (wert === w ? ' on' : '') + '"'
       + ' onclick="lockRuleSet(\'' + escJsAttr(key) + '\',\'' + escJsAttr(w) + '\')">' + escHtml(LOCK_REGELN[w]) + '</button>').join('')
+    + '</div></div>';
+}
+
+// Zeile "Neuer Setzer: wer?" – gilt für Owner/Lover mit Regel "Neuer Setzer"
+function _lockSetzerZeile() {
+  const s = _lockSetzer;
+  const opt = (v, t) => '<option value="' + v + '"' + (s.modus === v ? ' selected' : '') + '>' + t + '</option>';
+  return '<div class="set-li" style="padding-left:18px"><div><b>👤 Neuer Setzer</b>'
+    + '<div class="set-hint">Wer bei „Neuer Setzer“ im Owner-/Lover-Schloss steht. Öffnen können es weiterhin deine Owner bzw. Lover.</div></div>'
+    + '<div class="tweaks-btn-group set-r" style="flex-wrap:wrap;gap:6px">'
+    + '<select id="lockSetzerModus" class="os-filter-btn" onchange="lockSetzerAus()">'
+    + opt('ich', 'Ich selbst') + opt('lover', 'Meine Lover-Partnerin') + opt('nummer', 'Feste Nummer') + '</select>'
+    + (s.modus === 'nummer'
+      ? '<input id="lockSetzerNr" class="os-search" style="max-width:110px" type="number" min="1" placeholder="Member-Nr." value="' + escHtml(s.nummer ?? '') + '" onchange="lockSetzerAus()">'
+        + '<input id="lockSetzerName" class="os-search" style="max-width:140px" type="text" maxlength="' + _LOCK_SETZER_NAME_MAX + '" placeholder="Name (optional)" value="' + escHtml(s.name) + '" onchange="lockSetzerAus()">'
+      : '')
     + '</div></div>';
 }
 
@@ -9320,7 +9415,9 @@ function _lockRulesRender() {
   if (!box) return;
   const zaehler = (key) => (_lockModCounts[key] ? ' · in ' + _lockModCounts[key] + ' gespeicherten Outfits' : '');
   let html = LOCK_KATEGORIEN.filter(k => k.id !== 'mod')
-    .map(k => _lockRuleZeile(k.id, k.label, k.hint, _lockRules[k.id], false)).join('');
+    .map(k => _lockRuleZeile(k.id, k.label, k.hint, _lockRules[k.id], false)
+      // Setzer-Auswahl direkt unter Lover & Family, sobald Owner oder Lover sie nutzen
+      + (k.id === 'lover' && LOCK_SETZER_KATEGORIEN.some(x => _lockRules[x] === 'setzer') ? _lockSetzerZeile() : '')).join('');
   // Mod-Schlösser: je Art eine Zeile, darunter der Rückfall "alle anderen"
   html += '<div class="set-li"><div><b>😈 Mod-Schlösser</b><div class="set-hint">Jede Art einzeln – ohne eigene Regel gilt „alle anderen“. Neue Mod-Schlösser erscheinen hier automatisch.</div></div>'
     + '<div class="tweaks-btn-group set-r"><button class="tweaks-btn" onclick="lockModsScan()" title="Gespeicherte Outfits (LSCG, Profile, Import, MBS) nach Mod-Schlössern durchsuchen – nur lesen">🔍 In gespeicherten Outfits suchen</button></div></div>';

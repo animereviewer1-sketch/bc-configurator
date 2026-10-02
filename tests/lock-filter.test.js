@@ -70,7 +70,7 @@ describe('Schloss-Filter: Regeln', () => {
     const g = makeGame();
     fixIn(g)('ItemPelvis', 'Belt', LOVER_LOCK(FREMD));
     expect(g.posts).toHaveLength(1);
-    expect(g.plain(g.posts[0].m)).toEqual({ app: APP, type: 'LOCK_STRIPPED', group: 'ItemPelvis', lock: 'LoversPadlock', by: FREMD, aktion: 'weg' });
+    expect(g.plain(g.posts[0].m)).toEqual({ app: APP, type: 'LOCK_STRIPPED', group: 'ItemPelvis', lock: 'LoversPadlock', by: FREMD, aktion: 'weg', info: null });
     expect(g.posts[0].o).toBe(evalIn(ctx, 'TOOL_ORIGIN'));
   });
 
@@ -493,5 +493,106 @@ describe('DOGS Devious "Mir gehört": bleibt DOGS-Schloss, du als Besitzerin', (
     send({ type: 'PONG' });
     send({ type: 'LOCK_STRIPPED', group: 'ItemNeck', lock: 'DeviousPadlock', by: FREMD, aktion: 'dogs' });
     expect(els.statusMsg.textContent).toBe('🔓 Fremdes Schloss: DeviousPadlock an ItemNeck (von #555) → DOGS, du als Besitzerin');
+  });
+});
+
+describe('"Neuer Setzer": AFC-/Lover-Schloss behalten, aber mit bekannter Person oder dir', () => {
+  function frisch() {
+    const opener = { closed: false, postMessage: vi.fn() };
+    const els = {};
+    const c = loadScript(['items.js'], { opener, setTimeout: () => 0, clearTimeout: () => {} });
+    c.document.getElementById = (id) => (els[id] ||= makeElementStub());
+    const fix = (g, melden = true) => {
+      vm.runInContext(evalIn(c, `_lockFilterPrelude(${melden})`) + ';this.__fix=__bcuLockFix;', g.game);
+      return g.game.__fix;
+    };
+    return { c, els, opener, fix };
+  }
+
+  it('Setzer "ich selbst": Lover-Schloss bleibt Lover-Schloss, nur Setzer ersetzt', () => {
+    const t = frisch();
+    evalIn(t.c, "lockRuleSet('lover','setzer')");
+    const g = makeGame();
+    const out = g.plain(t.fix(g)('ItemPelvis', 'Belt', LOVER_LOCK(FREMD)));
+    expect(out).toMatchObject({ LockedBy: 'LoversPadlock', LockMemberNumber: ME, LockMemberName: 'Ich', RemoveTimer: 123 });
+    expect(out.Effect).toEqual(['Lock', 'Chaste']);
+    const m = g.plain(g.posts[0].m);
+    expect(m.aktion).toBe('setzer');
+    expect(m.info).toBe('Ich (#100)');
+  });
+
+  it('Setzer "Lover-Partnerin": erste Lover-Beziehung aus BC mit Namen', () => {
+    const t = frisch();
+    evalIn(t.c, "lockRuleSet('lover','setzer'); lockSetzerSet('lover')");
+    const g = makeGame({ lovership: [{ Name: 'NPC-Lover' }, { MemberNumber: 321, Name: 'Mia' }] });
+    const out = g.plain(t.fix(g)('ItemPelvis', 'Belt', LOVER_LOCK(FREMD)));
+    expect(out).toMatchObject({ LockedBy: 'LoversPadlock', LockMemberNumber: 321, LockMemberName: 'Mia' });
+  });
+
+  it('Setzer "Lover-Partnerin" ohne Lover → du selbst', () => {
+    const t = frisch();
+    evalIn(t.c, "lockRuleSet('lover','setzer'); lockSetzerSet('lover')");
+    const g = makeGame();
+    expect(g.plain(t.fix(g)('ItemPelvis', 'Belt', LOVER_LOCK(FREMD))).LockMemberNumber).toBe(ME);
+  });
+
+  it('feste Nummer: Name aus Freundesliste, sonst aus Eingabe, sonst #Nummer', () => {
+    const t = frisch();
+    evalIn(t.c, "lockRuleSet('owner','setzer'); lockSetzerSet('nummer', '4711', 'Bekannte')");
+    expect(JSON.parse(t.c.localStorage.getItem('BC_LOCK_SETZER_v1'))).toEqual({ modus: 'nummer', nummer: 4711, name: 'Bekannte' });
+    const OWNER_LOCK = () => ({ LockedBy: 'OwnerPadlock', LockMemberNumber: FREMD, Effect: ['Lock'] });
+    const g = makeGame();
+    g.game.Player.FriendNames = new Map([[4711, 'Freundin']]);
+    expect(g.plain(t.fix(g)('ItemNeck', 'Collar', OWNER_LOCK())).LockMemberName).toBe('Freundin');
+    const g2 = makeGame();
+    expect(g2.plain(t.fix(g2)('ItemNeck', 'Collar', OWNER_LOCK()))).toMatchObject({ LockedBy: 'OwnerPadlock', LockMemberNumber: 4711, LockMemberName: 'Bekannte' });
+    evalIn(t.c, "lockSetzerSet('nummer', '4711', '')");
+    const g3 = makeGame();
+    expect(g3.plain(t.fix(g3)('ItemNeck', 'Collar', OWNER_LOCK())).LockMemberName).toBe('#4711');
+  });
+
+  it('"Neuer Setzer" gibt es nur bei Owner und Lover – nicht bei Exklusiv, Schlüssel, Code, Mod oder "Alle"', () => {
+    const t = frisch();
+    for (const k of ['exklusiv', 'schluessel', 'code', 'mod', 'mod:DeviousPadlock']) evalIn(t.c, `lockRuleSet('${k}','setzer')`);
+    evalIn(t.c, "lockRuleSetAll('setzer')");
+    const regeln = JSON.parse(JSON.stringify(evalIn(t.c, '_lockRules')));
+    expect(Object.values(regeln).includes('setzer')).toBe(false);
+    evalIn(t.c, "lockRuleSet('lover','setzer'); _lockRulesRender()");
+    const html = t.els.lockRulesBox.innerHTML;
+    expect((html.match(/>Neuer Setzer</g) || []).length).toBe(2);   // Owner- und Lover-Zeile
+    expect(html).toContain('id="lockSetzerModus"');                  // Setzer-Auswahl sichtbar
+  });
+
+  it('gespeicherte "setzer"-Regel für andere Arten wird beim Laden verworfen', () => {
+    const store = new Map([['BC_LOCK_RULES_v1', JSON.stringify({ lover: 'setzer', exklusiv: 'setzer' })]]);
+    const localStorage = { getItem: (k) => (store.has(k) ? store.get(k) : null), setItem: (k, v) => store.set(k, String(v)), removeItem: (k) => store.delete(k) };
+    const c = loadScript(['items.js'], { localStorage });
+    expect(evalIn(c, '_lockRules.lover')).toBe('setzer');
+    expect(evalIn(c, '_lockRules.exklusiv')).toBe('weg');
+  });
+
+  it('ungültige Setzer-Eingaben werden bereinigt (Nummer, Länge, Typ)', () => {
+    const t = frisch();
+    evalIn(t.c, "lockSetzerSet('nummer', 'abc', 'x')");
+    expect(evalIn(t.c, '_lockSetzer.modus')).toBe('ich');
+    evalIn(t.c, "lockSetzerSet('nummer', '12', 'A'.repeat(99))");
+    expect(evalIn(t.c, '_lockSetzer.name.length')).toBe(40);
+    evalIn(t.c, "lockSetzerSet('quatsch')");
+    expect(evalIn(t.c, '_lockSetzer.modus')).toBe('ich');
+  });
+
+  it('Setzer-Name aus der Eingabe kann den Spielcode nicht aufbrechen', () => {
+    const t = frisch();
+    evalIn(t.c, `lockRuleSet('lover','setzer'); lockSetzerSet('nummer', '77', '");alert(1);//')`);
+    const g = makeGame();
+    const out = g.plain(t.fix(g)('ItemPelvis', 'Belt', LOVER_LOCK(FREMD)));
+    expect(out.LockMemberName).toBe('");alert(1);//');
+  });
+
+  it('Tool-Meldung zeigt den neuen Setzer', () => {
+    const t = frisch();
+    dispatchMessage(t.c, { app: APP, type: 'PONG' }, { origin: BC, source: t.opener });
+    dispatchMessage(t.c, { app: APP, type: 'LOCK_STRIPPED', group: 'ItemPelvis', lock: 'LoversPadlock', by: FREMD, aktion: 'setzer', info: 'Mia (#321)' }, { origin: BC, source: t.opener });
+    expect(t.els.statusMsg.textContent).toBe('🔓 Fremdes Schloss: LoversPadlock an ItemPelvis (von #555) → behalten, Setzer: Mia (#321)');
   });
 });
