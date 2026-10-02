@@ -1798,7 +1798,7 @@ window.CurseScanner = (() => {
                     asset:       _item.Asset.Name,
                     assetDesc:   _item.Asset.Description ?? _item.Asset.Name,
                     craftName:   _item.Craft?.Name ?? null,
-                    // BCX DeviousPadlock stores Name:"DeviousPadlock" + LockedBy:"ExclusivePadlock"
+                    // DOGS-DeviousPadlock stores Name:"DeviousPadlock" + LockedBy:"ExclusivePadlock"
                     lockType:    (_P.LockedBy === 'ExclusivePadlock' && _P.Name === 'DeviousPadlock')
                                    ? 'DeviousPadlock'
                                    : _P.LockedBy,

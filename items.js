@@ -5641,7 +5641,7 @@ function _applyCurseDefaultOutfit() {
 function _applyBundleWithSync(lzCode) {
   return '(function(){'
     + 'try{'
-    + _buildApplyCode(lzCode)
+    + _buildApplyCode(lzCode, true)
     + '  setTimeout(function(){'
     + '    if(typeof ServerPlayerAppearanceSync==="function")ServerPlayerAppearanceSync();'
     + '    else if(typeof ServerSend==="function")ServerSend("AccountUpdate",{Appearance:Player.Appearance});'
@@ -6270,6 +6270,31 @@ onBridgeMessage('PONG', function(ev) {
 // Loader meldet jede Änderung des Spiel-Server-Zustands (DC, Relog, Raumwechsel)
 onBridgeMessage('GAME_STATE', function(ev) {
       _gameStateSet(ev.data.game);
+});
+
+// Schloss-Regeln (_lockFilterPrelude) haben beim Anlegen ein fremdes Schloss
+// entfernt oder zu deinem High-Security-Schloss gemacht. Meldungen eines
+// Outfits kommen in einem Rutsch → innerhalb von 2 s in einer Zeile sammeln.
+let _lockStripBuf = [];
+let _lockStripTs  = 0;
+onBridgeMessage('LOCK_STRIPPED', function(ev) {
+      const now = Date.now();
+      if (now - _lockStripTs > 2000) _lockStripBuf = [];
+      _lockStripTs = now;
+      _lockStripBuf.push(String(ev.data.lock || '?') + ' an ' + String(ev.data.group || '?')
+        + (ev.data.by != null ? ' (von #' + ev.data.by + ')' : '')
+        + (ev.data.aktion === 'meins' ? ' → dein High-Security' : ev.data.aktion === 'dogs' ? ' → DOGS, du als Besitzerin' : ' entfernt'));
+      const n = _lockStripBuf.length;
+      showStatus('🔓 ' + (n === 1 ? 'Fremdes Schloss' : n + ' fremde Schlösser') + ': '
+        + _lockStripBuf.join(', '), 'success');
+});
+
+// Spiel-Tab ist auf ein unbekanntes Mod-Schloss gestoßen → eigene Regel-Zeile anbieten
+onBridgeMessage('LOCK_SEEN', function(ev) {
+      if (!_lockModSeenAdd(ev.data.lock)) return;
+      _lockRulesRender();
+      showStatus('🧩 Neues Mod-Schloss entdeckt: ' + String(ev.data.lock).trim()
+        + ' – eigene Regel unter Einstellungen → Werkzeuge → Fremde Schlösser', 'info');
 });
 
 onBridgeMessage('CACHE_DATA', function(ev) {
@@ -8727,6 +8752,9 @@ window.testOsOutfit = function(mk, vIdx) {
     + 'try{'
     + '  var decoded=JSON.parse(LZString.decompressFromBase64(' + JSON.stringify(outfitCode) + '));'
     + '  if(!Array.isArray(decoded)||!decoded.length){console.warn("[BCU] Leeres Bundle");return;}'
+    // Schloss-Regeln wie beim normalen Anlegen – still (nur lokaler Test, nie bei DOGS registrieren)
+    + '  ' + _lockFilterPrelude(false)
+    + '  decoded.forEach(function(it){if(it&&it.Property)it.Property=__bcuLockFix(it.Group,it.Name||"",it.Property);});'
     // Nackt-Gruppen sichern (ArmsLeft, HandsLeft etc.)
     + '  var nakedItems=Player.Appearance.filter(function(i){return !i.Asset.Name||i.Asset.Name==="";});'
     + '  var bundleGroups=new Set(decoded.map(function(i){return i.Group;}));'
@@ -9018,14 +9046,358 @@ function osSearch(q) {
   renderOutfitScanTab();
 }
 
+// ── Schlösser aus kopierten Outfits ──────────────────────────────────────────
+// Ein LSCG-/MBS-/Import-Outfit ist LZString-komprimiertes JSON: eine Liste von
+// Items {Group, Name, Color, Property}. Ein Schloss steckt in der Property:
+// LockedBy = Schloss-Art ("LoversPadlock" …), LockMemberNumber = wer es gesetzt hat, je
+// nach Typ RemoveTimer, Password, MemberNumberListKeys … DOGS-Devious tarnt sich
+// als LockedBy:"ExclusivePadlock" mit Property.Name:"DeviousPadlock".
+// Kopiert man ein Outfit, kommen die Schlösser des ursprünglichen Trägers mit.
+// Beim Anlegen (nie in den gespeicherten Daten) gilt je Schloss-Art eine Regel:
+//   'weg'      Schloss entfernen, Item bleibt an
+//   'behalten' 1:1 übernehmen
+//   'meins'    High-Security-Schloss mit dir als einziger Schlüsselhalterin
+// Den Besitzer einfach umzuschreiben hilft nicht: Owner-/Lover-/Family-
+// Schlösser prüft BC gegen die Beziehungen des TRÄGERS, ein Exklusiv-Schloss
+// darf der Träger nie öffnen (BC R132 Dialog.js, DialogCanUnlock). Ein
+// High-Security-Schloss öffnet jeder aus MemberNumberListKeys – auch der Träger
+// selbst, sofern die Hände frei sind (DialogHasKey, Player.CanInteract).
+// Immer unangetastet bleiben Schlösser der eigenen Owner/Lover und Schlösser,
+// die man an genau diesem Item schon trägt (Ursprung/Standard-Outfit).
+//
+// Mod-Schlösser haben je Art eine eigene Regel ('mod:<id>'); ohne eigene Regel
+// gilt 'mod' ("alle anderen"). Unbekannte Mod-Schlösser meldet der Spiel-Tab
+// per LOCK_SEEN, sie bekommen dann eine eigene Zeile.
+const LOCK_RULES_KEY     = 'BC_LOCK_RULES_v1';
+const LOCK_FILTER_KEY    = 'BC_LOCK_FILTER_v1';     // alter Ein/Aus-Schalter, nur noch zur Übernahme
+const LOCK_MODS_SEEN_KEY = 'BC_LOCK_MODS_SEEN_v1';  // entdeckte, unbekannte Mod-Schlösser
+const LOCK_KATEGORIEN = [
+  { id: 'owner',      label: '👑 Owner',          hint: 'Owner, Owner-Timer – öffnet nur die Owner der Trägerin' },
+  { id: 'lover',      label: '💕 Lover & Family', hint: 'Lover, Lover-Timer, Family – öffnen nur deren Lover/Familie' },
+  { id: 'exklusiv',   label: '🔐 Exklusiv',       hint: 'darf die Trägerin nie selbst öffnen' },
+  { id: 'schluessel', label: '🔑 Schlüssel',      hint: 'Metall, Intricate, High Security, Mistress, Pandora, Portal' },
+  { id: 'code',       label: '⏱️ Zeit & Code',    hint: 'Timer, Mistress-Timer, Passwort, Kombination, Safeword' },
+  { id: 'mod',        label: '🧩 Alle anderen Mod-Schlösser', hint: 'gilt für jedes Mod-Schloss ohne eigene Regel' },
+];
+// Bekannte Mod-Schlösser – mehrere Namen = dasselbe Schloss unter altem/neuem Namen
+const MOD_LOCK_GRUPPEN = [
+  { id: 'DeviousPadlock',     label: '😈 DOGS Devious',       namen: ['DeviousPadlock'],
+    hinweis: 'Mir gehört: bleibt ein DOGS-Schloss mit dir als Besitzerin (braucht DOGS mit eingeschaltetem Devious-Schloss, sonst High Security). Übernehmen: DOGS trägt als Besitzer ein, wer als Nächstes etwas an dir ändert.' },
+  { id: 'LewdCrest',          label: '🌸 Lewd Crest / Luzi',  namen: ['LewdCrestPadlock', '淫纹锁LuziPadlock', 'LuziPadlock'] },
+  { id: 'BestFriend',         label: '👫 Best Friend',        namen: ['Best Friend Padlock', 'Best Friend Timer Padlock'] },
+  { id: 'HeartPadlock',       label: '❤️ Heart',              namen: ['HeartPadlock'] },
+  { id: 'FiveMinutesPadlock', label: '⏱️ 5 Minuten (alt)',    namen: ['FiveMinutesPadlock'] },
+];
+const _MOD_LOCK_MAP = {};
+MOD_LOCK_GRUPPEN.forEach(g => g.namen.forEach(n => { _MOD_LOCK_MAP[n] = g.id; }));
+const LOCK_REGELN = { weg: 'Entfernen', behalten: 'Übernehmen', meins: 'Mir gehört' };
+// Die 18 Schlösser, die BC R132 selbst mitbringt (Female3DCG.js, IsLock) – alles andere zählt als Mod-Schloss
+const _BC_LOCKS = ['CombinationPadlock','ExclusivePadlock','FamilyPadlock','HighSecurityPadlock','IntricatePadlock',
+  'LoversPadlock','LoversTimerPadlock','MetalPadlock','MistressPadlock','MistressTimerPadlock','OwnerPadlock',
+  'OwnerTimerPadlock','PandoraPadlock','PasswordPadlock','PortalLinkPadlock','SafewordPadlock','TimerPadlock',
+  'TimerPasswordPadlock'];
+const _LOCK_PROP_KEYS = ['LockedBy','LockMemberNumber','LockMemberName','Password','CombinationNumber','Hint',
+  'LockSet','RemoveTimer','TimerReal','ShowTimer','SelfUnlock','MemberNumberList','MemberNumberListKeys',
+  'RemoveItem','LockPickSeed','EnableRandomInput'];
+const _LOCK_MOD_NAME_MAX = 80;   // fremde Daten: Länge und Anzahl begrenzen
+const _LOCK_MODS_SEEN_MAX = 40;
+
+function _lockRulesAlle(wert) {
+  const r = {};
+  LOCK_KATEGORIEN.forEach(k => { r[k.id] = wert; });
+  return r;
+}
+
+let _lockRules = _lockRulesAlle('weg');
+let _lockModsSeen = [];       // Rohnamen unbekannter Mod-Schlösser
+let _lockModCounts = {};      // 'mod:<id>' → in wie vielen gespeicherten Outfits (nach Suche)
+try {
+  const gespeichert = JSON.parse(localStorage.getItem(LOCK_RULES_KEY) || 'null');
+  if (gespeichert && typeof gespeichert === 'object') {
+    Object.keys(gespeichert).forEach(k => {
+      const gueltig = LOCK_KATEGORIEN.some(x => x.id === k) || (k.startsWith('mod:') && k.length <= _LOCK_MOD_NAME_MAX + 4);
+      if (gueltig && LOCK_REGELN[gespeichert[k]]) _lockRules[k] = gespeichert[k];
+    });
+  } else if (localStorage.getItem(LOCK_FILTER_KEY) === '0') {
+    _lockRules = _lockRulesAlle('behalten');   // alter Schalter stand auf "Übernehmen"
+  }
+  const seen = JSON.parse(localStorage.getItem(LOCK_MODS_SEEN_KEY) || '[]');
+  if (Array.isArray(seen)) seen.forEach(n => _lockModSeenAdd(n, true));
+} catch (e) {}
+
+// Mod-Schloss → Regel-Schlüssel 'mod:<id>' (bekannte Gruppe) bzw. 'mod:<Rohname>'; null = BC-eigenes Schloss
+function _lockModKey(p) {
+  if (!p || !p.LockedBy) return null;
+  const lb = String(p.LockedBy);
+  const nm = (p.Name && /Padlock$/.test(String(p.Name)) && String(p.Name) !== lb) ? String(p.Name) : lb;
+  if (nm === lb && _BC_LOCKS.includes(lb)) return null;
+  return 'mod:' + (_MOD_LOCK_MAP[nm] || nm);
+}
+
+// Angezeigter Schloss-Name: Mod-Kennung (DOGS: Property.Name) statt getarntem Unterbau
+function _lockAnzeigeName(p) {
+  const lb = String(p.LockedBy);
+  return (p.Name && /Padlock$/.test(String(p.Name)) && String(p.Name) !== lb) ? String(p.Name) : lb;
+}
+
+// Schloss-Art wie im Spiel-Tab (kat() in _lockFilterPrelude): owner/lover/exklusiv/schluessel/code/'mod:<id>'
+function _lockKatTool(p) {
+  if (!p || !p.LockedBy) return null;
+  const mod = _lockModKey(p);
+  if (mod) return mod;
+  const lb = String(p.LockedBy);
+  if (lb.startsWith('Owner')) return 'owner';
+  if (lb.startsWith('Lovers') || lb === 'FamilyPadlock') return 'lover';
+  if (lb === 'ExclusivePadlock') return 'exklusiv';
+  if (/Timer|Password|Combination|Safeword/.test(lb)) return 'code';
+  return 'schluessel';
+}
+
+function _lockModLabel(key) {
+  const id = key.slice(4);
+  const g = MOD_LOCK_GRUPPEN.find(x => x.id === id);
+  return g ? g.label : '🧩 ' + id;
+}
+
+// Unbekanntes Mod-Schloss merken; true = neu
+function _lockModSeenAdd(name, ohneSpeichern) {
+  if (typeof name !== 'string') return false;
+  name = name.trim();
+  if (!name || name.length > _LOCK_MOD_NAME_MAX) return false;
+  if (_BC_LOCKS.includes(name) || _MOD_LOCK_MAP[name] || MOD_LOCK_GRUPPEN.some(g => g.id === name)) return false;
+  if (_lockModsSeen.includes(name) || _lockModsSeen.length >= _LOCK_MODS_SEEN_MAX) return false;
+  _lockModsSeen.push(name);
+  if (!ohneSpeichern) {
+    try { localStorage.setItem(LOCK_MODS_SEEN_KEY, JSON.stringify(_lockModsSeen)); } catch (e) {}
+  }
+  return true;
+}
+
+// JS-Code für den Spiel-Tab: definiert __bcuLockFix(gruppe, assetName, property)
+// → gibt die Property unverändert oder als bearbeitete Kopie zurück.
+// melden = true: jede Änderung per LOCK_STRIPPED ans Tool melden (nicht bei lokalen Screenshots).
+// Unbekannte Mod-Schlösser gehen immer per LOCK_SEEN raus (auch bei Screenshots, einmal je Sitzung).
+function _lockFilterPrelude(melden) {
+  if (Object.keys(_lockRules).every(k => _lockRules[k] === 'behalten')) return 'var __bcuLockFix=function(g,n,p){return p;};';
+  return 'var __bcuLockFix=(function(){'
+    + 'var R=' + JSON.stringify(_lockRules) + ',BC=' + JSON.stringify(_BC_LOCKS)
+    + ',K=' + JSON.stringify(_LOCK_PROP_KEYS) + ',M=' + JSON.stringify(_MOD_LOCK_MAP) + ';'
+    + 'function modName(p){var lb=String(p.LockedBy);'
+    +   'return (p.Name&&/Padlock$/.test(String(p.Name))&&String(p.Name)!==lb)?String(p.Name):lb;}'
+    + 'function kat(p){'
+    +   'var lb=String(p.LockedBy),mn=modName(p);'
+    +   'if(mn!==lb||BC.indexOf(lb)<0)return "mod:"+(M[mn]||mn);'
+    +   'if(lb.indexOf("Owner")===0)return "owner";'
+    +   'if(lb.indexOf("Lovers")===0||lb==="FamilyPadlock")return "lover";'
+    +   'if(lb==="ExclusivePadlock")return "exklusiv";'
+    +   'if(/Timer|Password|Combination|Safeword/.test(lb))return "code";'
+    +   'return "schluessel";'
+    + '}'
+    + 'function regelFuer(k){if(R[k])return R[k];return k.indexOf("mod:")===0?(R.mod||"weg"):"weg";}'
+    + 'function entdeckt(p){'
+    +   'var mn=modName(p),lb=String(p.LockedBy);'
+    +   'if(M[mn]||(mn===lb&&BC.indexOf(lb)>=0))return;'
+    +   'var s=window.__BCU_lockSeen=window.__BCU_lockSeen||{};'
+    +   'if(s[mn])return;s[mn]=1;'
+    +   'try{window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"LOCK_SEEN",lock:mn},"' + TOOL_ORIGIN + '");}catch(_e){}'
+    + '}'
+    + 'function melde(g,p,regel){'
+    + (melden
+      ? 'try{window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"LOCK_STRIPPED",group:String(g),'
+        + 'lock:modName(p),by:(p.LockMemberNumber==null?null:p.LockMemberNumber),aktion:regel},"' + TOOL_ORIGIN + '");}catch(_e){}'
+      : '')
+    + '}'
+    // DOGS (Devious Obligate Great Stuff) registriert ein neu auftauchendes Devious-Schloss
+    // mit dem AUSLÖSER der nächsten Änderung als Besitzer (checkDeviousPadlocks). Nur wenn
+    // DOGS läuft und das Devious-Schloss eingeschaltet ist, bleibt es ein DOGS-Schloss –
+    // sonst wäre es ein Exklusiv-Schloss, das die Trägerin nie öffnen kann.
+    + 'var ECHT=' + (melden ? 'true' : 'false') + ',dogsGeplant=false;'
+    + 'function dogsAktiv(){try{'
+    +   'if(typeof bcModSdk==="undefined"||!bcModSdk.getModsInfo().some(function(m){return m&&m.name==="DOGS";}))return false;'
+    +   'var d=Player.ExtensionSettings&&Player.ExtensionSettings.DOGS;'
+    +   'if(!d||typeof LZString==="undefined")return false;'
+    +   'var s=JSON.parse(LZString.decompressFromBase64(d));'
+    +   'return !!(s&&s.deviousPadlock&&s.deviousPadlock.state);'
+    + '}catch(_e){return false;}}'
+    // Nach dem Anlegen die DOGS-Prüfung mit dir als Auslöser anstoßen (DOGS hängt an
+    // ChatRoomCharacterItemUpdate) – sonst trägt DOGS ein, wer als Nächstes etwas an dir ändert.
+    + 'function dogsRegistrieren(g){if(dogsGeplant)return;dogsGeplant=true;'
+    +   'setTimeout(function(){try{if(typeof ChatRoomCharacterItemUpdate==="function")ChatRoomCharacterItemUpdate(Player,g);}catch(_e){}},600);}'
+    + 'return function(g,n,p){'
+    +   'if(!p||!p.LockedBy)return p;'
+    +   'entdeckt(p);'
+    +   'var mn=p.LockMemberNumber;'
+    +   'var own=Player.Ownership&&Player.Ownership.MemberNumber;'
+    +   'var lov=(Player.Lovership||[]).map(function(l){return l&&l.MemberNumber;});'
+    +   'if(mn!=null&&(mn===own||lov.indexOf(mn)>=0))return p;'
+    +   'var cur=(typeof InventoryGet==="function")?InventoryGet(Player,g):null;'
+    +   'if(cur&&cur.Asset&&cur.Asset.Name===n&&cur.Property&&cur.Property.LockedBy===p.LockedBy'
+    +     '&&cur.Property.LockMemberNumber===mn)return p;'
+    +   'var regel=regelFuer(kat(p));'
+    +   'if(regel==="behalten")return p;'
+    // DOGS-Schloss "Mir gehört": bleibt DOGS-Schloss, Unterbau Exklusiv, du als Besitzer
+    // (nur bei echtem Anlegen – Screenshots registrieren nie etwas bei DOGS)
+    +   'if(regel==="meins"&&String(p.Name)==="DeviousPadlock"&&ECHT&&dogsAktiv()){'
+    +     'var d=JSON.parse(JSON.stringify(p));'
+    +     'try{if(typeof ValidationDeleteLock==="function")ValidationDeleteLock(d,false);}catch(_e){}'
+    +     'K.forEach(function(k){delete d[k];});'
+    +     'var de=Array.isArray(d.Effect)?d.Effect.filter(function(e){return e!=="Lock";}):[];de.push("Lock");d.Effect=de;'
+    +     'd.Name="DeviousPadlock";d.LockedBy="ExclusivePadlock";'
+    +     'd.LockMemberNumber=Player.MemberNumber;d.LockMemberName=Player.Name;'
+    +     'console.log("[BCU] DOGS-Schloss übernommen, Besitzer: du",g,n,"#"+mn);'
+    +     'dogsRegistrieren(g);'
+    +     'melde(g,p,"dogs");'
+    +     'return d;'
+    +   '}'
+    // Lässt das Item kein High-Security-Schloss zu, bleibt nur Entfernen
+    +   'if(regel==="meins"){'
+    +     'var a=(typeof AssetGet==="function")?AssetGet(Player.AssetFamily,g,n):null;'
+    +     'if(a&&Array.isArray(a.AllowLockType)&&a.AllowLockType.indexOf("HighSecurityPadlock")<0)regel="weg";'
+    +   '}'
+    +   'var q=JSON.parse(JSON.stringify(p));'
+    +   'try{if(typeof ValidationDeleteLock==="function")ValidationDeleteLock(q,false);}catch(_e){}'
+    +   'K.forEach(function(k){delete q[k];});'
+    +   'if(q.Name&&/Padlock$/.test(String(q.Name)))delete q.Name;'
+    +   'var eff=Array.isArray(q.Effect)?q.Effect.filter(function(e){return e!=="Lock";}):null;'
+    +   'if(regel==="meins"){'
+    +     '(eff=eff||[]).push("Lock");'
+    +     'q.LockedBy="HighSecurityPadlock";'
+    +     'q.LockMemberNumber=Player.MemberNumber;'
+    +     'q.LockMemberName=Player.Name;'
+    +     'q.MemberNumberListKeys=String(Player.MemberNumber);'
+    +   '}'
+    +   'if(eff)q.Effect=eff;else delete q.Effect;'
+    +   'console.log("[BCU] Schloss "+(regel==="meins"?"als eigenes High-Security übernommen":"entfernt")+":",g,n,modName(p),"#"+mn);'
+    +   'melde(g,p,regel);'
+    +   'return q;'
+    + '};'
+    + '})();';
+}
+
+function _lockRuleKeyGueltig(kat) {
+  if (LOCK_KATEGORIEN.some(k => k.id === kat)) return true;
+  if (typeof kat !== 'string' || !kat.startsWith('mod:')) return false;
+  const id = kat.slice(4);
+  return MOD_LOCK_GRUPPEN.some(g => g.id === id) || _lockModsSeen.includes(id);
+}
+
+function _lockRuleLabel(kat) {
+  const k = LOCK_KATEGORIEN.find(x => x.id === kat);
+  return k ? k.label : _lockModLabel(kat);
+}
+
+function lockRuleSet(kat, wert) {
+  if (!_lockRuleKeyGueltig(kat) || !LOCK_REGELN[wert]) return;
+  _lockRules[kat] = wert;
+  _lockRulesSpeichern();
+  showStatus(_lockRuleLabel(kat) + ' → ' + LOCK_REGELN[wert], 'info');
+}
+
+// Alle Arten auf einen Wert; einzelne Mod-Regeln fallen dabei weg (folgen "alle anderen")
+function lockRuleSetAll(wert) {
+  if (!LOCK_REGELN[wert]) return;
+  _lockRules = _lockRulesAlle(wert);
+  _lockRulesSpeichern();
+  showStatus('Alle Schloss-Arten → ' + LOCK_REGELN[wert], 'info');
+}
+
+function _lockRulesSpeichern() {
+  try { localStorage.setItem(LOCK_RULES_KEY, JSON.stringify(_lockRules)); } catch (e) {}
+  _lockRulesRender();
+}
+
+function _lockRuleZeile(key, label, hint, wert, eingerueckt) {
+  return '<div class="set-li"' + (eingerueckt ? ' style="padding-left:18px"' : '') + '><div><b>' + escHtml(label) + '</b>'
+    + (hint ? '<div class="set-hint">' + escHtml(hint) + '</div>' : '') + '</div>'
+    + '<div class="tweaks-btn-group set-r">'
+    + Object.keys(LOCK_REGELN).map(w => '<button class="tweaks-btn' + (wert === w ? ' on' : '') + '"'
+      + ' onclick="lockRuleSet(\'' + escJsAttr(key) + '\',\'' + escJsAttr(w) + '\')">' + escHtml(LOCK_REGELN[w]) + '</button>').join('')
+    + '</div></div>';
+}
+
+function _lockRulesRender() {
+  const box = document.getElementById('lockRulesBox');
+  if (!box) return;
+  const zaehler = (key) => (_lockModCounts[key] ? ' · in ' + _lockModCounts[key] + ' gespeicherten Outfits' : '');
+  let html = LOCK_KATEGORIEN.filter(k => k.id !== 'mod')
+    .map(k => _lockRuleZeile(k.id, k.label, k.hint, _lockRules[k.id], false)).join('');
+  // Mod-Schlösser: je Art eine Zeile, darunter der Rückfall "alle anderen"
+  html += '<div class="set-li"><div><b>😈 Mod-Schlösser</b><div class="set-hint">Jede Art einzeln – ohne eigene Regel gilt „alle anderen“. Neue Mod-Schlösser erscheinen hier automatisch.</div></div>'
+    + '<div class="tweaks-btn-group set-r"><button class="tweaks-btn" onclick="lockModsScan()" title="Gespeicherte Outfits (LSCG, Profile, Import, MBS) nach Mod-Schlössern durchsuchen – nur lesen">🔍 In gespeicherten Outfits suchen</button></div></div>';
+  const modKeys = MOD_LOCK_GRUPPEN.map(g => 'mod:' + g.id).concat(_lockModsSeen.map(n => 'mod:' + n));
+  html += modKeys.map(key => {
+    const eigen = _lockRules[key];
+    const g = MOD_LOCK_GRUPPEN.find(x => 'mod:' + x.id === key);
+    const hint = (g ? (g.hinweis || g.namen.join(', ')) : 'entdeckt') + zaehler(key) + (eigen ? '' : ' · folgt „alle anderen“');
+    return _lockRuleZeile(key, _lockModLabel(key), hint, eigen || _lockRules.mod, true);
+  }).join('');
+  const rest = LOCK_KATEGORIEN.find(k => k.id === 'mod');
+  html += _lockRuleZeile('mod', rest.label, rest.hint, _lockRules.mod, true);
+  box.innerHTML = html;
+}
+try {
+  if (document.readyState !== 'loading') _lockRulesRender();
+  else document.addEventListener('DOMContentLoaded', _lockRulesRender);
+} catch (e) {}
+
+// Gespeicherte Outfits nur LESEN und zählen, welche Mod-Schlösser darin stecken.
+// In Häppchen, damit die Oberfläche bei großen Sammlungen nicht einfriert.
+function _lockDecodeOutfit(code) {
+  try {
+    const t = String(code).trim();
+    let dec = LZString.decompressFromBase64(t);
+    if (!dec) dec = LZString.decompressFromEncodedURIComponent(t);
+    const arr = dec ? JSON.parse(dec) : null;
+    return Array.isArray(arr) ? arr : null;
+  } catch (e) { return null; }
+}
+
+function lockModsScan(fertig) {
+  const codes = [];
+  Object.keys(LSCG_DB || {}).forEach(mk => (LSCG_DB[mk]?.versions || []).forEach(v => { if (v?.code) codes.push(v.code); }));
+  Object.keys(PROFILES || {}).forEach(n => { if (PROFILES[n]?._outfitCode) codes.push(PROFILES[n]._outfitCode); });
+  if (typeof OI_LIST !== 'undefined' && Array.isArray(OI_LIST)) OI_LIST.forEach(it => { if (it?.code) codes.push(it.code); });
+  const zaehler = {};
+  const zaehle = (props) => {
+    const keys = new Set();
+    props.forEach(p => { const k = _lockModKey(p); if (k) keys.add(k); });
+    keys.forEach(k => { zaehler[k] = (zaehler[k] || 0) + 1; });
+  };
+  if (typeof _mbsWheelData !== 'undefined' && Array.isArray(_mbsWheelData)) {
+    _mbsWheelData.forEach(r => (r?.outfits || []).forEach(o => zaehle((o?.items || []).map(it => it?.property))));
+  }
+  showStatus('🔍 Durchsuche ' + codes.length + ' gespeicherte Outfits nach Mod-Schlössern…', 'info');
+  let i = 0;
+  (function schritt() {
+    const ende = Math.min(i + 40, codes.length);
+    for (; i < ende; i++) {
+      const arr = _lockDecodeOutfit(codes[i]);
+      if (arr) zaehle(arr.map(it => it?.Property));
+    }
+    if (i < codes.length) { setTimeout(schritt, 0); return; }
+    _lockModCounts = zaehler;
+    Object.keys(zaehler).forEach(k => _lockModSeenAdd(k.slice(4)));
+    _lockRulesRender();
+    const liste = Object.entries(zaehler).sort((a, b) => b[1] - a[1]).map(([k, n]) => _lockModLabel(k) + ' ' + n + '×');
+    showStatus(liste.length ? '🔍 Mod-Schlösser in gespeicherten Outfits: ' + liste.join(', ')
+                            : '🔍 Keine Mod-Schlösser in gespeicherten Outfits gefunden', liste.length ? 'success' : 'info');
+    if (typeof fertig === 'function') fertig(zaehler);
+  })();
+}
+
 // ── Gemeinsamer Apply-Kern (wird von Run UND Screenshot verwendet) ───────────
 // Gibt den reinen Apply-Code zurück (kein IIFE-Wrapper, kein Server-Sync).
 // Kann direkt in einen try{}-Block eingebettet werden.
-function _buildApplyCode(code) {
+// melden = true bei echtem Anlegen (nicht bei lokalen Screenshots): entfernte
+// fremde Schlösser erscheinen dann als Statusmeldung im Tool.
+function _buildApplyCode(code, melden) {
   const esc = JSON.stringify(code);
   return ''
     + 'var decoded=JSON.parse(LZString.decompressFromBase64(' + esc + '));'
     + 'if(!Array.isArray(decoded)||!decoded.length){console.warn("[BCU] Leeres Bundle");return;}'
+    // Fremde Schlösser raus – VOR dem Leeren der Appearance (Vergleich mit dem Getragenen)
+    + _lockFilterPrelude(!!melden)
+    + 'decoded.forEach(function(it){if(it&&it.Property)it.Property=__bcuLockFix(it.Group,it.Name||"",it.Property);});'
     // Nackte Body-Items sichern (leere Asset-Namen = interne BC-Pflicht-Items)
     + 'var nakedItems=Player.Appearance.filter(function(i){return i.Asset&&(!i.Asset.Name||i.Asset.Name==="");});'
     + 'var bundleGroups=new Set(decoded.map(function(i){return i.Group;}));'
@@ -9328,7 +9700,7 @@ const _LOCK_META = {
   'FamilyPadlock':            { icon:'👨‍👩‍👧', label:'Family',             hasTimer:false, hasPw:false, hasCombo:false, hasHint:false },
   '淫纹锁LuziPadlock':         { icon:'🌸',   label:'Lewd Crest',         hasTimer:false, hasPw:false, hasCombo:false, hasHint:false },
   'LewdCrestPadlock':         { icon:'🌸',   label:'Lewd Crest (alt)',   hasTimer:false, hasPw:false, hasCombo:false, hasHint:false },
-  'DeviousPadlock':           { icon:'😈',   label:'Devious (BCX)',      hasTimer:true,  hasPw:false, hasCombo:false, hasHint:false, hasKeyHolder:true },
+  'DeviousPadlock':           { icon:'😈',   label:'Devious (DOGS)',     hasTimer:true,  hasPw:false, hasCombo:false, hasHint:false, hasKeyHolder:true },
   'HeartPadlock':             { icon:'❤️',   label:'Heart',              hasTimer:false, hasPw:false, hasCombo:false, hasHint:false },
   // Legacy / BC standalone timer
   'TimerPadlock':             { icon:'⏱️',   label:'Timer',              hasTimer:true,  hasPw:false, hasCombo:false, hasHint:false },
@@ -9609,7 +9981,7 @@ const _APPLY_LOCK_TYPES = [
   { v:'MistressTimerPadlock',      l:'🎭⏱️ Mistress Timer'                    },
   { v:'TimerPasswordPadlock',      l:'⏱️🔑 Timer + Passwort'                  },
   { v:'淫纹锁LuziPadlock',          l:'🌸 Lewd Crest (Mod)'                   },
-  { v:'DeviousPadlock',            l:'😈 Devious (BCX Mod)'                   },
+  { v:'DeviousPadlock',            l:'😈 Devious (DOGS Mod)'                  },
   // ── Nur mit Beziehung / eingeschränkt ────────────────────────
   { v:'LoversPadlock',             l:'💕 Lover  ⚠ nur mit Lover'              },
   { v:'LoversTimerPadlock',        l:'💕⏱️ Lover Timer  ⚠ nur mit Lover'      },
@@ -10817,12 +11189,14 @@ function mbsWheelOpenShot(_unused, mn, oi) {
 function _mbsBuildApplyCode(items, noSync) {
   return '(function(){try{'
     + 'var _items=' + JSON.stringify(items) + ';'
+    + _lockFilterPrelude(!noSync)
     + '_items.forEach(function(it){'
     + '  try{'
     + '    var _a=AssetGet(Player.AssetFamily,it.group,it.asset);'
     + '    if(!_a)return;'
     + '    var _c=it.craft&&it.craft.Name?it.craft:null;'
-    + '    InventoryWear(Player,it.asset,it.group,it.colors,0,Player.MemberNumber,_c?{...it.property??{},..._c}:it.property??null,false);'
+    + '    var _p=__bcuLockFix(it.group,it.asset,it.property??null);'
+    + '    InventoryWear(Player,it.asset,it.group,it.colors,0,Player.MemberNumber,_c?{..._p??{},..._c}:_p??null,false);'
     + '    if(it.tr&&Object.keys(it.tr).length){'
     + '      var _w=Player.Appearance.find(function(a){return a.Asset&&a.Asset.Group&&a.Asset.Group.Name===it.group;});'
     + '      if(_w)_w.Property=Object.assign(_w.Property??{},{TypeRecord:it.tr});'
@@ -11008,18 +11382,95 @@ function _handleOutfitScanData(data) {
   showStatus('✅ ' + (data.room ?? '') + ': ' + results.length + ' Chars gescannt', data._auto ? 'info' : 'success');
 }
 
-// Item-Anzahl aus LZString-Code berechnen
-// Cache: fingerprint/key → item count (LZString+JSON.parse nur einmalig pro Version)
-const _itemCountCache = {};
-function _osItemCount(code, cacheKey) {
-  if (!code) return 0;
-  const k = cacheKey || code.slice(0, 32);
-  if (_itemCountCache[k] !== undefined) return _itemCountCache[k];
+// Item-Anzahl und Schlösser einer Version aus dem LZString-Code – einmal entpacken,
+// beides merken (Karten brauchen die Anzahl, Filter und Abzeichen die Schlösser).
+// Der Schlüssel enthält Länge und Ende des Codes, damit ein reparierter Code neu gelesen wird.
+const _osInfoCache = {};   // Schlüssel → { n: Anzahl Items, locks: [{ g, lb, by, kat }] }
+function _osInfoKey(code, cacheKey) {
+  return (cacheKey || '') + '|' + code.length + '|' + code.slice(-16);
+}
+function _osDecodeInfo(code, cacheKey) {
+  if (!code) return { n: 0, locks: [] };
+  const k = _osInfoKey(code, cacheKey);
+  if (_osInfoCache[k]) return _osInfoCache[k];
+  const info = { n: 0, locks: [] };
   try {
-    const n = JSON.parse(LZString.decompressFromBase64(code)).length;
-    _itemCountCache[k] = n;
-    return n;
-  } catch(e) { _itemCountCache[k] = 0; return 0; }
+    const arr = JSON.parse(LZString.decompressFromBase64(code));
+    if (Array.isArray(arr)) {
+      info.n = arr.length;
+      arr.forEach(function(it) {
+        const p = it && it.Property;
+        const kat = _lockKatTool(p);
+        if (kat) info.locks.push({ g: String(it.Group || '?'), lb: _lockAnzeigeName(p), by: p.LockMemberNumber ?? null, kat: kat });
+      });
+    }
+  } catch(e) {}
+  _osInfoCache[k] = info;
+  return info;
+}
+function _osItemCount(code, cacheKey) {
+  return _osDecodeInfo(code, cacheKey).n;
+}
+
+// ── Schloss-Filter im LSCG-Tab ───────────────────────────────────────────────
+// Zeigt nur Versionen mit bestimmten Schlössern – zum gezielten Testen der
+// Schloss-Regeln (Einstellungen → Werkzeuge → Fremde Schlösser).
+// AFC ist kein eigenes Schloss: AFC-Lover-Schlösser sind BCs LoversPadlock.
+const OS_LOCK_FILTER = {
+  schloss: function(l) { return true; },
+  dogs:    function(l) { return l.kat === 'mod:DeviousPadlock'; },
+  lover:   function(l) { return !l.kat.startsWith('mod:') && /^Lovers/.test(l.lb); },
+  owner:   function(l) { return !l.kat.startsWith('mod:') && /^Owner/.test(l.lb); },
+  mod:     function(l) { return l.kat.startsWith('mod:') && l.kat !== 'mod:DeviousPadlock'; },
+};
+let _osLockFilter = '';
+let _osLockScanToken = 0;
+
+function _osVersionPasst(v, mk, idx) {
+  if (!_osLockFilter) return true;
+  const pred = OS_LOCK_FILTER[_osLockFilter];
+  if (!pred || !v || !v.code) return false;
+  return _osDecodeInfo(v.code, v.fingerprint || (mk + '_' + idx)).locks.some(pred);
+}
+
+function _osLockIcon(l) {
+  if (l.kat === 'mod:DeviousPadlock') return '😈';
+  if (l.kat.startsWith('mod:')) return '🧩';
+  if (/^Lovers/.test(l.lb)) return '💕';
+  if (/^Owner/.test(l.lb)) return '👑';
+  return '🔒';
+}
+
+// Erst alle noch nicht gelesenen Codes in Häppchen entpacken (große Sammlungen
+// frieren sonst die Oberfläche ein), dann gefiltert neu zeichnen.
+function osSetLockFilter(val) {
+  _osLockFilter = OS_LOCK_FILTER[val] ? val : '';
+  const sel = document.getElementById('osLockFilter');
+  if (sel && sel.value !== _osLockFilter) sel.value = _osLockFilter;
+  const token = ++_osLockScanToken;
+  if (!_osLockFilter) { renderOutfitScanTab(); return; }
+  const offen = [];
+  Object.keys(LSCG_DB).forEach(function(mk) {
+    (LSCG_DB[mk]?.versions || []).forEach(function(v, i) {
+      if (v?.code && !_osInfoCache[_osInfoKey(v.code, v.fingerprint || (mk + '_' + i))]) offen.push([mk, i]);
+    });
+  });
+  let i = 0;
+  (function schritt() {
+    if (token !== _osLockScanToken) return;   // Filter inzwischen gewechselt
+    const ende = Math.min(i + 60, offen.length);
+    for (; i < ende; i++) {
+      const v = LSCG_DB[offen[i][0]]?.versions?.[offen[i][1]];
+      if (v?.code) _osDecodeInfo(v.code, v.fingerprint || (offen[i][0] + '_' + offen[i][1]));
+    }
+    if (i < offen.length) {
+      const body = document.getElementById('outfitScanBody');
+      if (body) body.innerHTML = '<div class="os-empty">🔍 Durchsuche Outfits nach Schlössern… ' + i + ' / ' + offen.length + '</div>';
+      setTimeout(schritt, 0);
+      return;
+    }
+    renderOutfitScanTab();
+  })();
 }
 
 let _osStripIO = null;   // Observer fuer noch leere Spieler-Streifen (renderOutfitScanTab)
@@ -11052,6 +11503,17 @@ function renderOutfitScanTab() {
     }
   }
 
+  // Schloss-Filter: nur Spieler mit mindestens einer passenden Version
+  if (_osLockFilter) {
+    members = members.filter(function(mk) {
+      return LSCG_DB[mk].versions.some(function(v, i) { return _osVersionPasst(v, mk, i); });
+    });
+    if (!members.length) {
+      body.innerHTML = '<div class="os-empty">Keine Outfits mit diesem Schloss gefunden.</div>';
+      return;
+    }
+  }
+
   members.sort(function(a, b) {
     const fa = _osFavs.has(a), fb = _osFavs.has(b);
     if (fa !== fb) return fa ? -1 : 1;
@@ -11067,11 +11529,19 @@ function renderOutfitScanTab() {
     const letter = escHtml(((entry.name ?? mk)[0] ?? '?').toUpperCase());
     return [...entry.versions].reverse().map(function(v, i) {
       const realIdx  = entry.versions.length - 1 - i;
+      if (!_osVersionPasst(v, mk, realIdx)) return '';
       const vNum     = entry.versions.length - i;
       const d        = new Date(v.ts);
       const ts       = d.toLocaleDateString('de-DE', { day:'2-digit', month:'2-digit', year:'2-digit' });
       const fp       = v.fingerprint;
-      const itemCnt  = _osItemCount(v.code, fp || (mk + '_' + realIdx));
+      const info     = _osDecodeInfo(v.code, fp || (mk + '_' + realIdx));
+      const itemCnt  = info.n;
+      // Schloss-Abzeichen; Tooltip: Item-Gruppe, Schloss, wer es gesetzt hat (fremde Daten → escHtml)
+      const lockHtml = info.locks.length
+        ? ' <span class="os-card-locks" title="' + escHtml(info.locks.map(function(l) {
+            return l.g + ': ' + l.lb + (l.by != null ? ' (#' + l.by + ')' : '');
+          }).join('\n')) + '">' + [...new Set(info.locks.map(_osLockIcon))].join('') + '</span>'
+        : '';
       const saved    = (fp && _lscgFpMap[fp]) ? _lscgFpMap[fp] : [];
       const hasCode  = !!v.code;
       // Strict lookup: only version-specific key, never the legacy mk fallback
@@ -11111,7 +11581,7 @@ function renderOutfitScanTab() {
         + delBtn + hintIcon
         + '</div>'
         + '<div class="os-card-name">v' + vNum + (i === 0 ? ' <span style="font-size:.6875rem;color:var(--green)">neu</span>' : '') + '</div>'
-        + '<div class="os-card-meta">' + metaLabel + ' · ' + ts + '</div>'
+        + '<div class="os-card-meta">' + metaLabel + lockHtml + ' · ' + ts + '</div>'
         + '<div class="os-card-actions">'
         + repairBtn
         + (!isBroken && hasCode ? '<button class="os-card-btn primary" onclick="osApplyOutfit(\'' + mk + '\',' + realIdx + ')">▶ Run</button>' : '')
@@ -11133,12 +11603,16 @@ function renderOutfitScanTab() {
 
     const nameHtml = escHtml(entry.name ?? mk)
       + (entry.nickname ? ' <span class="os-member-nick">„' + escHtml(entry.nickname) + '“</span>' : '');
+    // Mit Schloss-Filter: Treffer / alle Versionen
+    const vcnt = _osLockFilter
+      ? entry.versions.filter(function(v, i) { return _osVersionPasst(v, mk, i); }).length + '/' + entry.versions.length + 'x'
+      : entry.versions.length + 'x';
 
     return '<div class="os-member-block open' + (isFav ? ' os-fav' : '') + '" id="osm_' + escHtml(mk) + '">'
       + '<div class="os-member-hdr" onclick="toggleOsMember(\'' + mk + '\')">'
       + '<span class="os-member-name">' + nameHtml + '</span>'
       + '<span class="os-member-num">#' + escHtml(mk) + '</span>'
-      + '<span class="os-member-vcnt">' + entry.versions.length + 'x</span>'
+      + '<span class="os-member-vcnt">' + vcnt + '</span>'
       + '<button class="os-member-fav' + (isFav ? ' on' : '') + '" onclick="event.stopPropagation();toggleOsFav(\'' + mk + '\')">' + (isFav ? '⭐' : '☆') + '</button>'
       + '<span class="os-member-chevron">▶</span>'
       + '</div>'
@@ -12492,7 +12966,7 @@ function _ctHandleChatMsg(event, content) {
       if (CURSE_DEFAULT_OUTFIT_CODE) {
         if (st) st.textContent = '🏠 Standard-Outfit…';
         showStatus('🏠 Standard-Outfit wird wiederhergestellt…', 'info');
-        const code = '(function(){' + _buildApplyCode(CURSE_DEFAULT_OUTFIT_CODE) + '})();';
+        const code = '(function(){' + _buildApplyCode(CURSE_DEFAULT_OUTFIT_CODE, true) + '})();';
         bcSend({ type: 'EXEC', code });
         setTimeout(() => { if (_valid()) next(); }, 5000);
       } else {
@@ -12611,7 +13085,7 @@ function _ctDcResume() {
   };
   let resetCode = null;
   if (CURSE_DEFAULT_OUTFIT_CODE) {
-    try { resetCode = '(function(){' + _buildApplyCode(CURSE_DEFAULT_OUTFIT_CODE) + '})();'; }
+    try { resetCode = '(function(){' + _buildApplyCode(CURSE_DEFAULT_OUTFIT_CODE, true) + '})();'; }
     catch (e) { console.warn('[CURSE-TEST] Standard-Outfit nicht anwendbar:', e.message); }
   }
   if (resetCode) {

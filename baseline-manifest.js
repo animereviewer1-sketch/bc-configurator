@@ -11,10 +11,10 @@ const BASELINE_MANIFEST = {
   ],
   "identifierPattern": "\\b(Inventory|Character|ChatRoom|Server|Asset|Player|Dialog|Common|Item|Lock|Wardrobe|Pose|Skill|Reputation|Online|Chat)[A-Z]\\w+",
   "counts": {
-    "identifiers": 85,
-    "function": 20,
+    "identifiers": 88,
+    "function": 21,
     "assetGroup": 33,
-    "unknown": 32
+    "unknown": 34
   },
   "identifiers": [
     {
@@ -138,7 +138,7 @@ const BASELINE_MANIFEST = {
     },
     {
       "name": "ChatRoomCharacterItemUpdate",
-      "kind": "unknown",
+      "kind": "function",
       "files": [
         "items.js"
       ]
@@ -246,6 +246,20 @@ const BASELINE_MANIFEST = {
       "kind": "unknown",
       "files": [
         "loader.js"
+      ]
+    },
+    {
+      "name": "DialogCanUnlock",
+      "kind": "unknown",
+      "files": [
+        "items.js"
+      ]
+    },
+    {
+      "name": "DialogHasKey",
+      "kind": "unknown",
+      "files": [
+        "items.js"
       ]
     },
     {
@@ -580,6 +594,13 @@ const BASELINE_MANIFEST = {
       ]
     },
     {
+      "name": "LockMemberName",
+      "kind": "unknown",
+      "files": [
+        "items.js"
+      ]
+    },
+    {
       "name": "LockMemberNumber",
       "kind": "unknown",
       "files": [
@@ -592,6 +613,7 @@ const BASELINE_MANIFEST = {
       "name": "LockPickSeed",
       "kind": "unknown",
       "files": [
+        "items.js",
         "loader.js"
       ]
     },

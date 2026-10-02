@@ -377,9 +377,14 @@ function _oiBuildExecCode(code) {
           // Optimaler Pfad: Array hier dekodiert → live Asset-Referenzen via AssetGet rekonstruieren.
           // Player.Appearance braucht echte Asset-Objekte aus BCs Asset-DB, keine serialisierten.
           const safeJson = JSON.stringify(arr);
+          // Fremde Schlösser des ursprünglichen Trägers nicht mit anlegen (Filter in items.js)
+          const lockPrelude = (typeof _lockFilterPrelude === 'function')
+            ? _lockFilterPrelude(true)
+            : 'var __bcuLockFix=function(g,n,p){return p;};';
           return `(function(){
   try {
     var _raw=${safeJson};
+    ${lockPrelude}
 
     // ── 1. Outfit-Items resolven ───────────────────────────────────────
     var _incoming=[];
@@ -394,7 +399,7 @@ function _oiBuildExecCode(code) {
       var _ni={Asset:_asset};
       if(_it.Color!==undefined)      _ni.Color=_it.Color;
       if(_it.Difficulty!==undefined)  _ni.Difficulty=_it.Difficulty;
-      if(_it.Property)                _ni.Property=_it.Property;
+      if(_it.Property)                _ni.Property=__bcuLockFix(_grp,_nam,_it.Property);
       if(_it.Craft)                   _ni.Craft=_it.Craft;
       _incoming.push(_ni);
     }
