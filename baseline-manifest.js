@@ -11,10 +11,10 @@ const BASELINE_MANIFEST = {
   ],
   "identifierPattern": "\\b(Inventory|Character|ChatRoom|Server|Asset|Player|Dialog|Common|Item|Lock|Wardrobe|Pose|Skill|Reputation|Online|Chat)[A-Z]\\w+",
   "counts": {
-    "identifiers": 88,
+    "identifiers": 86,
     "function": 21,
     "assetGroup": 33,
-    "unknown": 34
+    "unknown": 32
   },
   "identifiers": [
     {
@@ -246,20 +246,6 @@ const BASELINE_MANIFEST = {
       "kind": "unknown",
       "files": [
         "loader.js"
-      ]
-    },
-    {
-      "name": "DialogCanUnlock",
-      "kind": "unknown",
-      "files": [
-        "items.js"
-      ]
-    },
-    {
-      "name": "DialogHasKey",
-      "kind": "unknown",
-      "files": [
-        "items.js"
       ]
     },
     {

@@ -6283,9 +6283,12 @@ onBridgeMessage('LOCK_STRIPPED', function(ev) {
       _lockStripTs = now;
       _lockStripBuf.push(String(ev.data.lock || '?') + ' an ' + String(ev.data.group || '?')
         + (ev.data.by != null ? ' (von #' + ev.data.by + ')' : '')
-        + (ev.data.aktion === 'meins' ? ' → dein High-Security'
+        + (ev.data.aktion === 'meins' ? ' → dein High-Security' + (ev.data.info ? ' (' + String(ev.data.info) + ')' : '')
           : ev.data.aktion === 'dogs' ? ' → DOGS, du als Besitzerin'
           : ev.data.aktion === 'setzer' ? ' → behalten, Setzer: ' + String(ev.data.info || '?')
+          : ev.data.aktion === 'afc' ? ' → AFC-Herzschloss, Besitzer: ' + String(ev.data.info || '?')
+          : ev.data.aktion === 'umwandeln' ? ' → umgewandelt: ' + String(ev.data.info || '?')
+          : ev.data.aktion === 'zeit' ? ' → behalten, Timer ' + String(ev.data.info || '?')
           : ' entfernt'));
       const n = _lockStripBuf.length;
       showStatus('🔓 ' + (n === 1 ? 'Fremdes Schloss' : n + ' fremde Schlösser') + ': '
@@ -9053,63 +9056,135 @@ function osSearch(q) {
 // Ein LSCG-/MBS-/Import-Outfit ist LZString-komprimiertes JSON: eine Liste von
 // Items {Group, Name, Color, Property}. Ein Schloss steckt in der Property:
 // LockedBy = Schloss-Art ("LoversPadlock" …), LockMemberNumber = wer es gesetzt hat, je
-// nach Typ RemoveTimer, Password, MemberNumberListKeys … DOGS-Devious tarnt sich
-// als LockedBy:"ExclusivePadlock" mit Property.Name:"DeviousPadlock".
+// nach Typ RemoveTimer, Password, MemberNumberListKeys … Mod-Schlösser tarnen sich
+// als BC-Schloss mit Kennung: DOGS = ExclusivePadlock + Name:"DeviousPadlock",
+// AFC = HighSecurityPadlock + Name:"Heart Padlock" + HeartLockId.
 // Kopiert man ein Outfit, kommen die Schlösser des ursprünglichen Trägers mit.
 // Beim Anlegen (nie in den gespeicherten Daten) gilt je Schloss-Art eine Regel:
-//   'weg'      Schloss entfernen, Item bleibt an
-//   'behalten' 1:1 übernehmen
-//   'meins'    High-Security-Schloss mit dir als einziger Schlüsselhalterin
-// Den Besitzer einfach umzuschreiben hilft nicht: Owner-/Lover-/Family-
-// Schlösser prüft BC gegen die Beziehungen des TRÄGERS, ein Exklusiv-Schloss
-// darf der Träger nie öffnen (BC R132 Dialog.js, DialogCanUnlock). Ein
-// High-Security-Schloss öffnet jeder aus MemberNumberListKeys – auch der Träger
-// selbst, sofern die Hände frei sind (DialogHasKey, Player.CanInteract).
+//   'weg'       Schloss entfernen, Item bleibt an
+//   'behalten'  1:1 übernehmen (optional: Timer ab jetzt neu setzen)
+//   'setzer'    Schloss-Art bleibt, nur der Setzer wird ersetzt (Owner/Lover/AFC)
+//   'meins'     High-Security-Schloss mit dir als Schlüsselhalterin (DOGS/AFC: bleibt Mod-Schloss, du Besitzerin)
+//   'umwandeln' in ein Schloss deiner Wahl, mit Timer/Passwort/Kombination aus den Einstellungen
+// BC-Fakten (R132: Dialog.js, Validation.js, Female3DCG.js, Lock-Skripte), auf denen das beruht:
+//   • Owner-/Lover-/Family-Schlösser öffnen nur Owner/Lover/Familie der TRÄGERIN; BC löscht sie
+//     beim Laden, wenn der Setzer keine gültige Beziehung ist (ValidationSanitizeLock).
+//   • Exklusiv öffnet nie die Trägerin; High Security jeder aus MemberNumberListKeys;
+//     Intricate der Setzer; Safeword zeigt der Trägerin ihr Passwort.
+//   • Timer gibt es nur bei Timer-Schlössern (sonst löscht BC RemoveTimer), begrenzt auf MaxTimer.
+//   • Passwort: 1–8 Großbuchstaben, Kombination: 4 Ziffern.
+//   • An sich selbst öffnen geht nur mit freien Händen (Player.CanInteract).
 // Immer unangetastet bleiben Schlösser der eigenen Owner/Lover und Schlösser,
 // die man an genau diesem Item schon trägt (Ursprung/Standard-Outfit).
-//
 // Mod-Schlösser haben je Art eine eigene Regel ('mod:<id>'); ohne eigene Regel
 // gilt 'mod' ("alle anderen"). Unbekannte Mod-Schlösser meldet der Spiel-Tab
 // per LOCK_SEEN, sie bekommen dann eine eigene Zeile.
 const LOCK_RULES_KEY     = 'BC_LOCK_RULES_v1';
 const LOCK_FILTER_KEY    = 'BC_LOCK_FILTER_v1';     // alter Ein/Aus-Schalter, nur noch zur Übernahme
 const LOCK_MODS_SEEN_KEY = 'BC_LOCK_MODS_SEEN_v1';  // entdeckte, unbekannte Mod-Schlösser
+const LOCK_SETZER_KEY    = 'BC_LOCK_SETZER_v1';     // {modus, nummer, name}
+const LOCK_ZIEL_KEY      = 'BC_LOCK_ZIEL_v1';       // je Art: Umwandeln-Ziel {typ, minuten, itemWeg}
+const LOCK_ZEIT_KEY      = 'BC_LOCK_ZEIT_v1';       // je Art: Timer neu (Minuten, 0 = unverändert)
+const LOCK_CODE_KEY      = 'BC_LOCK_CODE_v1';       // {passwort, hinweis, kombination}
+
+// original = wer das kopierte Schloss an dir öffnen könnte; timer = Art enthält Timer-Schlösser
 const LOCK_KATEGORIEN = [
-  { id: 'owner',      label: '👑 Owner',          hint: 'Owner, Owner-Timer – öffnet nur die Owner der Trägerin' },
-  { id: 'lover',      label: '💕 Lover & Family', hint: 'Lover, Lover-Timer, Family – öffnen nur deren Lover/Familie' },
-  { id: 'exklusiv',   label: '🔐 Exklusiv',       hint: 'darf die Trägerin nie selbst öffnen' },
-  { id: 'schluessel', label: '🔑 Schlüssel',      hint: 'Metall, Intricate, High Security, Mistress, Pandora, Portal' },
-  { id: 'code',       label: '⏱️ Zeit & Code',    hint: 'Timer, Mistress-Timer, Passwort, Kombination, Safeword' },
-  { id: 'mod',        label: '🧩 Alle anderen Mod-Schlösser', hint: 'gilt für jedes Mod-Schloss ohne eigene Regel' },
+  { id: 'owner',      label: '👑 Owner',          hint: 'Owner, Owner-Timer', timer: true,
+    original: 'Öffnen nur deine Owner. Hast du keine, kann es niemand öffnen – BC löscht es beim nächsten Laden.' },
+  { id: 'lover',      label: '💕 Lover & Family', hint: 'Lover, Lover-Timer, Family', timer: true,
+    original: 'Öffnen nur deine Lover (Family: deine D/s-Familie). Hast du keine, kann es niemand öffnen – BC löscht es beim nächsten Laden.' },
+  { id: 'exklusiv',   label: '🔐 Exklusiv',       hint: 'Exclusive Padlock',
+    original: 'Öffnen nur, wer es gesetzt hat – bei kopierten Outfits eine fremde Person. Die Trägerin nie.' },
+  { id: 'schluessel', label: '🔑 Schlüssel',      hint: 'Metall, Intricate, High Security, Mistress, Pandora, Portal',
+    original: 'Metall: jede/r mit Schlüssel · Intricate: nur der Setzer · High Security: die Schlüsselhalter (fremde Leute) · Mistress/Pandora: Club-Rollen.' },
+  { id: 'timer',      label: '⏱️ Timer',          hint: 'Timer (5 Min), Mistress-Timer, Timer + Passwort', timer: true,
+    original: 'Geht nach Ablauf von selbst auf. Die Zeit stammt aus dem Original-Outfit – oft längst abgelaufen (fällt sofort ab) oder sehr lang.' },
+  { id: 'code',       label: '🔢 Code',           hint: 'Passwort, Kombination, Safeword',
+    original: 'Öffnen nur mit Passwort/Kombination der fremden Person. Safeword: zeigt der Trägerin das Passwort.' },
+  { id: 'mod',        label: '🧩 Alle anderen Mod-Schlösser', hint: 'gilt für jedes Mod-Schloss ohne eigene Regel',
+    original: 'Wer öffnen darf, bestimmt der jeweilige Mod.' },
 ];
 // Bekannte Mod-Schlösser – mehrere Namen = dasselbe Schloss unter altem/neuem Namen
 const MOD_LOCK_GRUPPEN = [
+  // DOGS (Devious Obligate Great Stuff) registriert ein neues Devious-Schloss mit dem
+  // Auslöser der nächsten Änderung als Besitzer und legt es danach immer wieder an.
   { id: 'DeviousPadlock',     label: '😈 DOGS Devious',       namen: ['DeviousPadlock'],
-    hinweis: 'Mir gehört: bleibt ein DOGS-Schloss mit dir als Besitzerin (braucht DOGS mit eingeschaltetem Devious-Schloss, sonst High Security). Übernehmen: DOGS trägt als Besitzer ein, wer als Nächstes etwas an dir ändert.' },
+    original: 'DOGS trägt als Besitzer ein, wer als Nächstes etwas an dir ändert – auch Fremde – und legt es immer wieder an.',
+    meins: 'Bleibt ein DOGS-Schloss mit dir als Besitzerin (braucht DOGS mit eingeschaltetem Devious-Schloss, sonst High Security).' },
   { id: 'LewdCrest',          label: '🌸 Lewd Crest / Luzi',  namen: ['LewdCrestPadlock', '淫纹锁LuziPadlock', 'LuziPadlock'] },
   { id: 'BestFriend',         label: '👫 Best Friend',        namen: ['Best Friend Padlock', 'Best Friend Timer Padlock'] },
-  { id: 'HeartPadlock',       label: '❤️ Heart',              namen: ['HeartPadlock'] },
+  // AFC (Abundantia Florum Chromatica, Liko) registriert ein unbekanntes Herzschloss bei jedem
+  // CharacterRefresh mit dem SETZER (LockMemberNumber) als Besitzer und schützt es danach.
+  { id: 'AFCHeart',           label: '💞 AFC Heart Padlock',  namen: ['Heart Padlock', 'HeartPadlock'],
+    original: 'AFC trägt den Setzer (die fremde Person) als Besitzerin ein und legt das Schloss immer wieder an.',
+    meins: 'Bleibt ein AFC-Herzschloss – AFC trägt dich als Besitzerin ein.' },
   { id: 'FiveMinutesPadlock', label: '⏱️ 5 Minuten (alt)',    namen: ['FiveMinutesPadlock'] },
 ];
 const _MOD_LOCK_MAP = {};
 MOD_LOCK_GRUPPEN.forEach(g => g.namen.forEach(n => { _MOD_LOCK_MAP[n] = g.id; }));
-const LOCK_REGELN = { weg: 'Entfernen', behalten: 'Übernehmen', setzer: 'Neuer Setzer', meins: 'Mir gehört' };
-// "Neuer Setzer" (Schloss bleibt, nur LockMemberNumber/-Name werden ersetzt) nur dort, wo
-// der Setzer das Öffnen nicht bestimmt: Owner-/Lover-/Family-Schlösser prüft BC gegen die
-// Beziehungen der Trägerin. Bei Exklusiv/Intricate würde der Setzer den Schlüssel bekommen.
-const LOCK_SETZER_KATEGORIEN = ['owner', 'lover'];
-const LOCK_SETZER_KEY = 'BC_LOCK_SETZER_v1';
+
+const LOCK_REGELN = { weg: 'Entfernen', behalten: 'Übernehmen', setzer: 'Neuer Setzer', meins: 'Mir gehört', umwandeln: 'Umwandeln …' };
+const LOCK_REGEL_INFO = {
+  weg:       'Das Schloss fällt weg, das Item bleibt an.',
+  behalten:  'Das Schloss bleibt genau wie im Outfit – mit fremdem Setzer bzw. fremden Schlüsselhaltern.',
+  setzer:    'Die Schloss-Art bleibt, nur der Setzer wird die Person aus „Setzer“ oben. BC lässt bei Owner/Lover nur dich, deine Lover bzw. Owner zu – sonst nimmt das Tool einen gültigen, notfalls High Security.',
+  meins:     'Wird ein High-Security-Schloss mit dir als einziger Schlüsselhalterin – öffnen kannst du es mit freien Händen.',
+  umwandeln: 'Wird ein Schloss deiner Wahl, mit Timer, Passwort oder Kombination aus den Einstellungen oben.',
+};
+// "Neuer Setzer" nur dort, wo der Setzer das Öffnen nicht heimlich verschiebt:
+// Owner/Lover prüft BC gegen die Beziehungen der Trägerin; AFC-Besitzer = Setzer.
+const LOCK_SETZER_KATEGORIEN = ['owner', 'lover', 'mod:AFCHeart'];
 const _LOCK_SETZER_NAME_MAX = 40;
 // Die 18 Schlösser, die BC R132 selbst mitbringt (Female3DCG.js, IsLock) – alles andere zählt als Mod-Schloss
 const _BC_LOCKS = ['CombinationPadlock','ExclusivePadlock','FamilyPadlock','HighSecurityPadlock','IntricatePadlock',
   'LoversPadlock','LoversTimerPadlock','MetalPadlock','MistressPadlock','MistressTimerPadlock','OwnerPadlock',
   'OwnerTimerPadlock','PandoraPadlock','PasswordPadlock','PortalLinkPadlock','SafewordPadlock','TimerPadlock',
   'TimerPasswordPadlock'];
+// Timer-Schlösser und ihre Höchstdauer in Sekunden (MaxTimer, R132); TimerPadlock ist fest 5 Min
+const _LOCK_TIMER_MAX = { TimerPadlock: 300, TimerPasswordPadlock: 14400, MistressTimerPadlock: 14400,
+  LoversTimerPadlock: 604800, OwnerTimerPadlock: 3024000 };
 const _LOCK_PROP_KEYS = ['LockedBy','LockMemberNumber','LockMemberName','Password','CombinationNumber','Hint',
   'LockSet','RemoveTimer','TimerReal','ShowTimer','SelfUnlock','MemberNumberList','MemberNumberListKeys',
-  'RemoveItem','LockPickSeed','EnableRandomInput'];
+  'RemoveItem','LockPickSeed','EnableRandomInput','HeartLockId'];
 const _LOCK_MOD_NAME_MAX = 80;   // fremde Daten: Länge und Anzahl begrenzen
 const _LOCK_MODS_SEEN_MAX = 40;
+
+// Ziele für "Umwandeln" – info: wer es an DIR öffnen kann
+const LOCK_ZIELE = [
+  { id: 'HighSecurityPadlock',  label: '🛡️ High Security',
+    info: 'Öffnen: die Schlüsselhalterin = der Setzer (bei „ich“ du, mit freien Händen). Weitere Halter trägst du im Schloss-Menü ein.' },
+  { id: 'SafewordPadlock',      label: '⚡ Safeword', code: 'passwort',
+    info: 'BC zeigt dir das Passwort selbst an – du kannst es jederzeit öffnen (freie Hände). Passwort aus „Codes“.' },
+  { id: 'IntricatePadlock',     label: '🔒 Intricate',
+    info: 'Öffnen: nur der Setzer (bei „ich“ du, mit freien Händen). Lässt sich knacken.' },
+  { id: 'MetalPadlock',         label: '🔩 Metall',
+    info: 'Öffnen: jede/r mit Metall-Schlüssel – auch du (freie Hände). Lässt sich knacken.' },
+  { id: 'PasswordPadlock',      label: '🔑 Passwort', code: 'passwort',
+    info: 'Öffnen: wer das Passwort kennt (aus „Codes“).' },
+  { id: 'CombinationPadlock',   label: '🔢 Kombination', code: 'kombination',
+    info: 'Öffnen: wer die 4-stellige Kombination kennt (aus „Codes“).' },
+  { id: 'TimerPadlock',         label: '⏱️ Timer (5 Min)',
+    info: 'Geht nach 5 Minuten von selbst auf – BC erlaubt bei diesem Schloss keine andere Zeit.' },
+  { id: 'TimerPasswordPadlock', label: '⏱️🔑 Timer + Passwort', code: 'passwort',
+    info: 'Geht nach Ablauf von selbst auf (max. 4 Std.), vorher mit dem Passwort.' },
+  { id: 'MistressTimerPadlock', label: '🎭⏱️ Mistress-Timer',
+    info: 'Geht nach Ablauf von selbst auf (max. 4 Std.); Club-Mistresses können Zeit ändern.' },
+  { id: 'LoversTimerPadlock',   label: '💕⏱️ Lover-Timer',
+    info: 'Geht nach Ablauf von selbst auf (max. 7 Tage); deine Lover jederzeit. Ohne Lover wird es High Security.' },
+  { id: 'OwnerTimerPadlock',    label: '👑⏱️ Owner-Timer',
+    info: 'Geht nach Ablauf von selbst auf (max. 35 Tage); deine Owner jederzeit. Ohne Owner wird es High Security.' },
+  { id: 'LoversPadlock',        label: '💕 Lover',
+    info: 'Öffnen: deine Lover. Ohne Lover wird es High Security.' },
+  { id: 'OwnerPadlock',         label: '👑 Owner',
+    info: 'Öffnen: deine Owner. Ohne Owner wird es High Security.' },
+  { id: 'ExclusivePadlock',     label: '🔐 Exklusiv',
+    info: 'Öffnen: nur der Setzer, nie du selbst – Setzer muss jemand anderes sein (Lover oder feste Nummer), sonst High Security.' },
+  { id: 'AFCHeart',             label: '💞 AFC-Herzschloss',
+    info: 'AFC trägt den Setzer als Besitzerin ein (darf immer öffnen). Ohne AFC ein High-Security-Schloss mit Herz-Kennung.' },
+  { id: 'DOGS',                 label: '😈 DOGS Devious',
+    info: 'Besitzerin: du. Braucht DOGS mit eingeschaltetem Devious-Schloss, sonst High Security.' },
+];
+const _LOCK_ZIEL_STANDARD = { typ: 'HighSecurityPadlock', minuten: 30, itemWeg: false };
 
 function _lockRulesAlle(wert) {
   const r = {};
@@ -9117,12 +9192,12 @@ function _lockRulesAlle(wert) {
   return r;
 }
 
-// Regel w für Schlüssel k erlaubt? ("Neuer Setzer" nur bei Owner/Lover)
+// Regel w für Schlüssel k erlaubt? ("Neuer Setzer" nur bei Owner/Lover/AFC)
 function _lockRegelErlaubt(k, w) {
   return !!LOCK_REGELN[w] && (w !== 'setzer' || LOCK_SETZER_KATEGORIEN.includes(k));
 }
 
-// Wer bei "Neuer Setzer" eingetragen wird: 'ich' | 'lover' (erste Lover-Beziehung aus BC) | 'nummer'
+// Wer bei "Neuer Setzer"/"Umwandeln" eingetragen wird: 'ich' | 'lover' (erste Lover-Beziehung aus BC) | 'nummer'
 function _lockSetzerNormal(s) {
   const modus = ['ich', 'lover', 'nummer'].includes(s?.modus) ? s.modus : 'ich';
   const nr = parseInt(s?.nummer, 10);
@@ -9131,41 +9206,82 @@ function _lockSetzerNormal(s) {
   return { modus: (modus === 'nummer' && !nummer) ? 'ich' : modus, nummer, name };
 }
 
+// Passwort 1–8 Großbuchstaben (sonst BC-Standard "UNLOCK"), Hinweis ≤ 140, Kombination 4 Ziffern
+function _lockCodeNormal(c) {
+  const pw = String(c?.passwort ?? '').toUpperCase().replace(/[^A-Z]/g, '').slice(0, 8);
+  const kombi = String(c?.kombination ?? '').replace(/\D/g, '');
+  return {
+    passwort: pw || 'UNLOCK',
+    hinweis: String(c?.hinweis ?? '').slice(0, 140),
+    kombination: /^\d{4}$/.test(kombi) ? kombi : '0000',
+  };
+}
+
+function _lockZielNormal(z) {
+  const typ = LOCK_ZIELE.some(x => x.id === z?.typ) ? z.typ : _LOCK_ZIEL_STANDARD.typ;
+  const min = Math.round(Number(z?.minuten));
+  return { typ, minuten: (min >= 1 && min <= 50400) ? min : _LOCK_ZIEL_STANDARD.minuten, itemWeg: !!z?.itemWeg };
+}
+
 let _lockRules = _lockRulesAlle('weg');
 let _lockSetzer = _lockSetzerNormal(null);
+let _lockCode = _lockCodeNormal(null);
+let _lockZiel = {};           // Art → {typ, minuten, itemWeg} für "Umwandeln"
+let _lockZeit = {};           // Art → Minuten: Timer bei "Übernehmen"/"Neuer Setzer" ab jetzt neu setzen
 let _lockModsSeen = [];       // Rohnamen unbekannter Mod-Schlösser
 let _lockModCounts = {};      // 'mod:<id>' → in wie vielen gespeicherten Outfits (nach Suche)
+const _lockKeyFormGueltig = k => LOCK_KATEGORIEN.some(x => x.id === k) || (typeof k === 'string' && k.startsWith('mod:') && k.length <= _LOCK_MOD_NAME_MAX + 4);
 try {
   _lockSetzer = _lockSetzerNormal(JSON.parse(localStorage.getItem(LOCK_SETZER_KEY) || 'null'));
+  _lockCode = _lockCodeNormal(JSON.parse(localStorage.getItem(LOCK_CODE_KEY) || 'null'));
+  const ziele = JSON.parse(localStorage.getItem(LOCK_ZIEL_KEY) || 'null');
+  if (ziele && typeof ziele === 'object') Object.keys(ziele).forEach(k => { if (_lockKeyFormGueltig(k)) _lockZiel[k] = _lockZielNormal(ziele[k]); });
+  const zeit = JSON.parse(localStorage.getItem(LOCK_ZEIT_KEY) || 'null');
+  if (zeit && typeof zeit === 'object') Object.keys(zeit).forEach(k => {
+    const m = Math.round(Number(zeit[k]));
+    if (LOCK_KATEGORIEN.some(x => x.id === k && x.timer) && m >= 1 && m <= 50400) _lockZeit[k] = m;
+  });
   const gespeichert = JSON.parse(localStorage.getItem(LOCK_RULES_KEY) || 'null');
   if (gespeichert && typeof gespeichert === 'object') {
     Object.keys(gespeichert).forEach(k => {
-      const gueltig = LOCK_KATEGORIEN.some(x => x.id === k) || (k.startsWith('mod:') && k.length <= _LOCK_MOD_NAME_MAX + 4);
-      if (gueltig && _lockRegelErlaubt(k, gespeichert[k])) _lockRules[k] = gespeichert[k];
+      if (_lockKeyFormGueltig(k) && _lockRegelErlaubt(k, gespeichert[k])) _lockRules[k] = gespeichert[k];
     });
+    // Übernahme: "Zeit & Code" (früher eine Art) gilt jetzt für Timer und Code getrennt
+    if (gespeichert.timer === undefined && _lockRegelErlaubt('timer', gespeichert.code)) _lockRules.timer = gespeichert.code;
   } else if (localStorage.getItem(LOCK_FILTER_KEY) === '0') {
     _lockRules = _lockRulesAlle('behalten');   // alter Schalter stand auf "Übernehmen"
   }
   const seen = JSON.parse(localStorage.getItem(LOCK_MODS_SEEN_KEY) || '[]');
   if (Array.isArray(seen)) seen.forEach(n => _lockModSeenAdd(n, true));
+  // Übernahme: "Heart Padlock" war früher eine entdeckte Zeile bzw. "Heart" (HeartPadlock) –
+  // beides ist das AFC-Herzschloss. Die Regel der entdeckten Zeile hat Vorrang.
+  if (!_lockRules['mod:AFCHeart']) {
+    const alt = _lockRules['mod:Heart Padlock'] || _lockRules['mod:HeartPadlock'];
+    if (alt && _lockRegelErlaubt('mod:AFCHeart', alt)) _lockRules['mod:AFCHeart'] = alt;
+  }
+  delete _lockRules['mod:Heart Padlock'];
+  delete _lockRules['mod:HeartPadlock'];
 } catch (e) {}
 
 // Mod-Schloss → Regel-Schlüssel 'mod:<id>' (bekannte Gruppe) bzw. 'mod:<Rohname>'; null = BC-eigenes Schloss
 function _lockModKey(p) {
   if (!p || !p.LockedBy) return null;
   const lb = String(p.LockedBy);
-  const nm = (p.Name && /Padlock$/.test(String(p.Name)) && String(p.Name) !== lb) ? String(p.Name) : lb;
+  const nm = _lockAnzeigeName(p);
   if (nm === lb && _BC_LOCKS.includes(lb)) return null;
   return 'mod:' + (_MOD_LOCK_MAP[nm] || nm);
 }
 
-// Angezeigter Schloss-Name: Mod-Kennung (DOGS: Property.Name) statt getarntem Unterbau
+// Angezeigter Schloss-Name: Mod-Kennung (DOGS: Property.Name) statt getarntem Unterbau;
+// AFC-Herzschloss auch dann, wenn nur noch die HeartLockId übrig ist
 function _lockAnzeigeName(p) {
   const lb = String(p.LockedBy);
-  return (p.Name && /Padlock$/.test(String(p.Name)) && String(p.Name) !== lb) ? String(p.Name) : lb;
+  if (p.Name && /Padlock$/.test(String(p.Name)) && String(p.Name) !== lb) return String(p.Name);
+  if (p.HeartLockId && lb === 'HighSecurityPadlock') return 'Heart Padlock';
+  return lb;
 }
 
-// Schloss-Art wie im Spiel-Tab (kat() in _lockFilterPrelude): owner/lover/exklusiv/schluessel/code/'mod:<id>'
+// Schloss-Art wie im Spiel-Tab (kat() in _lockSpielLogik): owner/lover/exklusiv/schluessel/timer/code/'mod:<id>'
 function _lockKatTool(p) {
   if (!p || !p.LockedBy) return null;
   const mod = _lockModKey(p);
@@ -9174,7 +9290,8 @@ function _lockKatTool(p) {
   if (lb.startsWith('Owner')) return 'owner';
   if (lb.startsWith('Lovers') || lb === 'FamilyPadlock') return 'lover';
   if (lb === 'ExclusivePadlock') return 'exklusiv';
-  if (/Timer|Password|Combination|Safeword/.test(lb)) return 'code';
+  if (/Timer/.test(lb)) return 'timer';
+  if (/Password|Combination|Safeword/.test(lb)) return 'code';
   return 'schluessel';
 }
 
@@ -9198,131 +9315,281 @@ function _lockModSeenAdd(name, ohneSpeichern) {
   return true;
 }
 
-// JS-Code für den Spiel-Tab: definiert __bcuLockFix(gruppe, assetName, property)
-// → gibt die Property unverändert oder als bearbeitete Kopie zurück.
-// melden = true: jede Änderung per LOCK_STRIPPED ans Tool melden (nicht bei lokalen Screenshots).
-// Unbekannte Mod-Schlösser gehen immer per LOCK_SEEN raus (auch bei Screenshots, einmal je Sitzung).
-function _lockFilterPrelude(melden) {
-  if (Object.keys(_lockRules).every(k => _lockRules[k] === 'behalten')) return 'var __bcuLockFix=function(g,n,p){return p;};';
-  return 'var __bcuLockFix=(function(){'
-    + 'var R=' + JSON.stringify(_lockRules) + ',BC=' + JSON.stringify(_BC_LOCKS)
-    + ',K=' + JSON.stringify(_LOCK_PROP_KEYS) + ',M=' + JSON.stringify(_MOD_LOCK_MAP) + ';'
-    + 'function modName(p){var lb=String(p.LockedBy);'
-    +   'return (p.Name&&/Padlock$/.test(String(p.Name))&&String(p.Name)!==lb)?String(p.Name):lb;}'
-    + 'function kat(p){'
-    +   'var lb=String(p.LockedBy),mn=modName(p);'
-    +   'if(mn!==lb||BC.indexOf(lb)<0)return "mod:"+(M[mn]||mn);'
-    +   'if(lb.indexOf("Owner")===0)return "owner";'
-    +   'if(lb.indexOf("Lovers")===0||lb==="FamilyPadlock")return "lover";'
-    +   'if(lb==="ExclusivePadlock")return "exklusiv";'
-    +   'if(/Timer|Password|Combination|Safeword/.test(lb))return "code";'
-    +   'return "schluessel";'
-    + '}'
-    + 'function regelFuer(k){if(R[k])return R[k];return k.indexOf("mod:")===0?(R.mod||"weg"):"weg";}'
-    + 'function entdeckt(p){'
-    +   'var mn=modName(p),lb=String(p.LockedBy);'
-    +   'if(M[mn]||(mn===lb&&BC.indexOf(lb)>=0))return;'
-    +   'var s=window.__BCU_lockSeen=window.__BCU_lockSeen||{};'
-    +   'if(s[mn])return;s[mn]=1;'
-    +   'try{window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"LOCK_SEEN",lock:mn},"' + TOOL_ORIGIN + '");}catch(_e){}'
-    + '}'
-    + 'function melde(g,p,regel,info){'
-    + (melden
-      ? 'try{window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"LOCK_STRIPPED",group:String(g),'
-        + 'lock:modName(p),by:(p.LockMemberNumber==null?null:p.LockMemberNumber),aktion:regel,info:(info||null)},"' + TOOL_ORIGIN + '");}catch(_e){}'
-      : '')
-    + '}'
-    // "Neuer Setzer": wer eingetragen wird und unter welchem Namen (Beziehungen, Freundesliste, Raum)
-    + 'var S=' + JSON.stringify(_lockSetzer) + ';'
-    + 'function setzerNummer(){'
-    +   'if(S.modus==="nummer"&&S.nummer>0)return S.nummer;'
-    +   'if(S.modus==="lover"){var l=(Player.Lovership||[]).find(function(x){return x&&x.MemberNumber>0;});if(l)return l.MemberNumber;}'
-    +   'return Player.MemberNumber;'
-    + '}'
-    + 'function nameFuer(nr){'
-    +   'if(nr===Player.MemberNumber)return Player.Name;'
-    +   'var l=(Player.Lovership||[]).find(function(x){return x&&x.MemberNumber===nr;});if(l&&l.Name)return l.Name;'
-    +   'if(Player.Ownership&&Player.Ownership.MemberNumber===nr&&Player.Ownership.Name)return Player.Ownership.Name;'
-    +   'try{if(Player.FriendNames&&typeof Player.FriendNames.get==="function"){var f=Player.FriendNames.get(nr);if(f)return String(f);}}catch(_e){}'
-    +   'var c=(typeof ChatRoomCharacter!=="undefined"&&ChatRoomCharacter||[]).find(function(x){return x&&x.MemberNumber===nr;});if(c&&c.Name)return c.Name;'
-    +   'return (S.modus==="nummer"&&S.name)?S.name:("#"+nr);'
-    + '}'
-    // DOGS (Devious Obligate Great Stuff) registriert ein neu auftauchendes Devious-Schloss
-    // mit dem AUSLÖSER der nächsten Änderung als Besitzer (checkDeviousPadlocks). Nur wenn
-    // DOGS läuft und das Devious-Schloss eingeschaltet ist, bleibt es ein DOGS-Schloss –
-    // sonst wäre es ein Exklusiv-Schloss, das die Trägerin nie öffnen kann.
-    + 'var ECHT=' + (melden ? 'true' : 'false') + ',dogsGeplant=false;'
-    + 'function dogsAktiv(){try{'
-    +   'if(typeof bcModSdk==="undefined"||!bcModSdk.getModsInfo().some(function(m){return m&&m.name==="DOGS";}))return false;'
-    +   'var d=Player.ExtensionSettings&&Player.ExtensionSettings.DOGS;'
-    +   'if(!d||typeof LZString==="undefined")return false;'
-    +   'var s=JSON.parse(LZString.decompressFromBase64(d));'
-    +   'return !!(s&&s.deviousPadlock&&s.deviousPadlock.state);'
-    + '}catch(_e){return false;}}'
-    // Nach dem Anlegen die DOGS-Prüfung mit dir als Auslöser anstoßen (DOGS hängt an
-    // ChatRoomCharacterItemUpdate) – sonst trägt DOGS ein, wer als Nächstes etwas an dir ändert.
-    + 'function dogsRegistrieren(g){if(dogsGeplant)return;dogsGeplant=true;'
-    +   'setTimeout(function(){try{if(typeof ChatRoomCharacterItemUpdate==="function")ChatRoomCharacterItemUpdate(Player,g);}catch(_e){}},600);}'
-    + 'return function(g,n,p){'
-    +   'if(!p||!p.LockedBy)return p;'
-    +   'entdeckt(p);'
-    +   'var mn=p.LockMemberNumber;'
-    +   'var own=Player.Ownership&&Player.Ownership.MemberNumber;'
-    +   'var lov=(Player.Lovership||[]).map(function(l){return l&&l.MemberNumber;});'
-    +   'if(mn!=null&&(mn===own||lov.indexOf(mn)>=0))return p;'
-    +   'var cur=(typeof InventoryGet==="function")?InventoryGet(Player,g):null;'
-    +   'if(cur&&cur.Asset&&cur.Asset.Name===n&&cur.Property&&cur.Property.LockedBy===p.LockedBy'
-    +     '&&cur.Property.LockMemberNumber===mn)return p;'
-    +   'var k=kat(p),regel=regelFuer(k);'
-    +   'if(regel==="setzer"&&k!=="owner"&&k!=="lover")regel="behalten";'
-    +   'if(regel==="behalten")return p;'
-    // "Neuer Setzer": Schloss bleibt, nur wer es gesetzt hat wird ersetzt (Owner/Lover/Family)
-    +   'if(regel==="setzer"){'
-    +     'var t=JSON.parse(JSON.stringify(p)),nr=setzerNummer();'
-    +     't.LockMemberNumber=nr;t.LockMemberName=nameFuer(nr);'
-    +     'console.log("[BCU] Schloss behalten, neuer Setzer:",g,n,modName(p),"#"+mn,"→","#"+nr);'
-    +     'melde(g,p,"setzer",t.LockMemberName+" (#"+nr+")");'
-    +     'return t;'
-    +   '}'
-    // DOGS-Schloss "Mir gehört": bleibt DOGS-Schloss, Unterbau Exklusiv, du als Besitzer
-    // (nur bei echtem Anlegen – Screenshots registrieren nie etwas bei DOGS)
-    +   'if(regel==="meins"&&String(p.Name)==="DeviousPadlock"&&ECHT&&dogsAktiv()){'
-    +     'var d=JSON.parse(JSON.stringify(p));'
-    +     'try{if(typeof ValidationDeleteLock==="function")ValidationDeleteLock(d,false);}catch(_e){}'
-    +     'K.forEach(function(k){delete d[k];});'
-    +     'var de=Array.isArray(d.Effect)?d.Effect.filter(function(e){return e!=="Lock";}):[];de.push("Lock");d.Effect=de;'
-    +     'd.Name="DeviousPadlock";d.LockedBy="ExclusivePadlock";'
-    +     'd.LockMemberNumber=Player.MemberNumber;d.LockMemberName=Player.Name;'
-    +     'console.log("[BCU] DOGS-Schloss übernommen, Besitzer: du",g,n,"#"+mn);'
-    +     'dogsRegistrieren(g);'
-    +     'melde(g,p,"dogs");'
-    +     'return d;'
-    +   '}'
+// ── Spiel-Logik (läuft im BC-Tab) ────────────────────────────────────────────
+// Wird per toString() eingeschleust und mit cfg (reines JSON) aufgerufen – darf darum
+// nichts aus dem Tool-Fenster benutzen. Liefert __bcuLockFix(gruppe, assetName, property):
+// die Property unverändert oder als bearbeitete Kopie (Eingabe = gespeicherte Daten, nie ändern).
+function _lockSpielLogik(cfg) {
+  var R = cfg.R, U = cfg.U, Z = cfg.Z, C = cfg.C, S = cfg.S, BC = cfg.BC, K = cfg.K, M = cfg.M, T = cfg.T;
+  var ECHT = cfg.ECHT, dogsGeplant = false;
+
+  function post(msg) {
+    try { msg.app = 'BCKonfigurator'; window.__BCK_popupRef.postMessage(msg, cfg.ORIGIN); } catch (e) {}
+  }
+  function kopie(p) { return JSON.parse(JSON.stringify(p)); }
+  function modName(p) {
+    var lb = String(p.LockedBy);
+    if (p.Name && /Padlock$/.test(String(p.Name)) && String(p.Name) !== lb) return String(p.Name);
+    if (p.HeartLockId && lb === 'HighSecurityPadlock') return 'Heart Padlock';
+    return lb;
+  }
+  function neueId() {
+    try { if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID(); } catch (e) {}
+    return Math.random().toString(36).slice(2) + Date.now().toString(36);
+  }
+  function jetzt() { return (typeof CurrentTime === 'number' && CurrentTime > 0) ? CurrentTime : Date.now(); }
+  function kat(p) {
+    var lb = String(p.LockedBy), mn = modName(p);
+    if (mn !== lb || BC.indexOf(lb) < 0) return 'mod:' + (M[mn] || mn);
+    if (lb.indexOf('Owner') === 0) return 'owner';
+    if (lb.indexOf('Lovers') === 0 || lb === 'FamilyPadlock') return 'lover';
+    if (lb === 'ExclusivePadlock') return 'exklusiv';
+    if (/Timer/.test(lb)) return 'timer';
+    if (/Password|Combination|Safeword/.test(lb)) return 'code';
+    return 'schluessel';
+  }
+  function regelFuer(k) { if (R[k]) return R[k]; return k.indexOf('mod:') === 0 ? (R.mod || 'weg') : 'weg'; }
+  function zielFuer(k) { return U[k] || (k.indexOf('mod:') === 0 ? U.mod : null) || { typ: 'HighSecurityPadlock', minuten: 30, itemWeg: false }; }
+  // Unbekannte Mod-Schlösser einmal je Sitzung melden (auch bei Screenshots)
+  function entdeckt(p) {
+    var mn = modName(p), lb = String(p.LockedBy);
+    if (M[mn] || (mn === lb && BC.indexOf(lb) >= 0)) return;
+    var s = window.__BCU_lockSeen = window.__BCU_lockSeen || {};
+    if (s[mn]) return;
+    s[mn] = 1;
+    post({ type: 'LOCK_SEEN', lock: mn });
+  }
+  function melde(g, p, regel, info) {
+    if (!cfg.MELDEN) return;
+    post({ type: 'LOCK_STRIPPED', group: String(g), lock: modName(p),
+      by: (p.LockMemberNumber == null ? null : p.LockMemberNumber), aktion: regel, info: (info || null) });
+  }
+  function setzerNummer() {
+    if (S.modus === 'nummer' && S.nummer > 0) return S.nummer;
+    if (S.modus === 'lover') {
+      var l = (Player.Lovership || []).find(function (x) { return x && x.MemberNumber > 0; });
+      if (l) return l.MemberNumber;
+    }
+    return Player.MemberNumber;
+  }
+  // BC-Gültigkeit wie ValidationSanitizeLock (R132)
+  function lq(a, b) { try { return typeof LogQuery === 'function' && !!LogQuery(a, b); } catch (e) { return false; } }
+  function setzerGueltig(lb, nr) {
+    var me = Player.MemberNumber, own = Player.Ownership && Player.Ownership.MemberNumber;
+    var owned = (typeof Player.IsOwned === 'function' && !!Player.IsOwned()) || typeof own === 'number';
+    var lovers = (Player.Lovership || []).map(function (l) { return l && l.MemberNumber; }).filter(function (x) { return x > 0; });
+    var hatLover = (Player.Lovership || []).length > 0;
+    if (/^Owner/.test(lb)) return owned && ((nr === me && !lq('BlockOwnerLockSelf', 'OwnerRule')) || (typeof own === 'number' && nr === own));
+    if (/^Lovers/.test(lb)) return hatLover && ((nr === me && !lq('BlockLoverLockSelf', 'LoverRule')) || lovers.indexOf(nr) >= 0
+      || (typeof own === 'number' && nr === own && !lq('BlockLoverLockOwner', 'LoverRule')));
+    if (lb === 'FamilyPadlock') return !(nr === me && lq('BlockOwnerLockSelf', 'OwnerRule'));
+    return true;
+  }
+  // Gewählter Setzer, sonst Owner (Owner-Schloss) bzw. erste Lover (Lover-Schloss), sonst du; null = keiner gültig
+  function gueltigerSetzer(lb) {
+    var kand = [setzerNummer()], own = Player.Ownership && Player.Ownership.MemberNumber;
+    if (/^Owner/.test(lb) && typeof own === 'number') kand.push(own);
+    if (/^Lovers/.test(lb)) {
+      var l = (Player.Lovership || []).find(function (x) { return x && x.MemberNumber > 0; });
+      if (l) kand.push(l.MemberNumber);
+    }
+    kand.push(Player.MemberNumber);
+    for (var i = 0; i < kand.length; i++) if (setzerGueltig(lb, kand[i])) return kand[i];
+    return null;
+  }
+  function nameFuer(nr) {
+    if (nr === Player.MemberNumber) return Player.Name;
+    var l = (Player.Lovership || []).find(function (x) { return x && x.MemberNumber === nr; });
+    if (l && l.Name) return l.Name;
+    if (Player.Ownership && Player.Ownership.MemberNumber === nr && Player.Ownership.Name) return Player.Ownership.Name;
+    try {
+      if (Player.FriendNames && typeof Player.FriendNames.get === 'function') { var f = Player.FriendNames.get(nr); if (f) return String(f); }
+    } catch (e) {}
+    var c = ((typeof ChatRoomCharacter !== 'undefined' && ChatRoomCharacter) || []).find(function (x) { return x && x.MemberNumber === nr; });
+    if (c && c.Name) return c.Name;
+    return (S.modus === 'nummer' && S.name) ? S.name : ('#' + nr);
+  }
+  function wer(nr) { return nameFuer(nr) + ' (#' + nr + ')'; }
+  // DOGS registriert ein neues Devious-Schloss mit dem Auslöser der nächsten Änderung als
+  // Besitzer – nur wenn DOGS läuft und das Devious-Schloss an ist, bleibt es ein DOGS-Schloss.
+  function dogsAktiv() {
+    try {
+      if (typeof bcModSdk === 'undefined' || !bcModSdk.getModsInfo().some(function (m) { return m && m.name === 'DOGS'; })) return false;
+      var d = Player.ExtensionSettings && Player.ExtensionSettings.DOGS;
+      if (!d || typeof LZString === 'undefined') return false;
+      var s = JSON.parse(LZString.decompressFromBase64(d));
+      return !!(s && s.deviousPadlock && s.deviousPadlock.state);
+    } catch (e) { return false; }
+  }
+  // DOGS-Prüfung mit dir als Auslöser anstoßen (DOGS hängt an ChatRoomCharacterItemUpdate)
+  function dogsRegistrieren(g) {
+    if (dogsGeplant) return;
+    dogsGeplant = true;
+    setTimeout(function () { try { if (typeof ChatRoomCharacterItemUpdate === 'function') ChatRoomCharacterItemUpdate(Player, g); } catch (e) {} }, 600);
+  }
+  function erlaubtAm(g, n, typ) {
+    var a = (typeof AssetGet === 'function') ? AssetGet(Player.AssetFamily, g, n) : null;
+    return !(a && Array.isArray(a.AllowLockType) && a.AllowLockType.indexOf(typ) < 0);
+  }
+  // Alle Schloss-Felder (auch Mod-Kennungen) raus – Item-Eigenschaften bleiben
+  function ohneSchloss(p) {
+    var q = kopie(p);
+    try { if (typeof ValidationDeleteLock === 'function') ValidationDeleteLock(q, false); } catch (e) {}
+    K.forEach(function (k) { delete q[k]; });
+    if (q.Name && /Padlock$/.test(String(q.Name))) delete q.Name;
+    return q;
+  }
+  function mitLockEffekt(q) {
+    var e = Array.isArray(q.Effect) ? q.Effect.filter(function (x) { return x !== 'Lock'; }) : [];
+    e.push('Lock');
+    q.Effect = e;
+    return q;
+  }
+  function timerSek(typ, minuten) {
+    if (!T[typ]) return 0;
+    if (typ === 'TimerPadlock') return 300;
+    return Math.max(60, Math.min(T[typ], Math.round((minuten || 30) * 60)));
+  }
+  // "Timer neu" bei Übernehmen/Neuer Setzer: nur für Timer-Schlösser, ab jetzt
+  function zeitNeu(q, k) {
+    var m = Z[k], typ = String(q.LockedBy);
+    if (!(m > 0) || !T[typ]) return 0;
+    var sek = timerSek(typ, m);
+    q.RemoveTimer = jetzt() + sek * 1000;
+    return sek;
+  }
+  function hochsicher(p, nr) {
+    var q = mitLockEffekt(ohneSchloss(p));
+    q.LockedBy = 'HighSecurityPadlock';
+    q.LockMemberNumber = nr; q.LockMemberName = nameFuer(nr);
+    q.MemberNumberListKeys = String(nr);
+    return q;
+  }
+  function afcHerz(p, nr) {
+    var h = mitLockEffekt(ohneSchloss(p));
+    h.LockedBy = 'HighSecurityPadlock'; h.Name = 'Heart Padlock'; h.HeartLockId = neueId();
+    h.LockMemberNumber = nr; h.LockMemberName = nameFuer(nr); h.MemberNumberListKeys = String(nr);
+    return h;
+  }
+  function dogsSchloss(p, g) {
+    var d = mitLockEffekt(ohneSchloss(p));
+    d.Name = 'DeviousPadlock'; d.LockedBy = 'ExclusivePadlock';
+    d.LockMemberNumber = Player.MemberNumber; d.LockMemberName = Player.Name;
+    dogsRegistrieren(g);
+    return d;
+  }
+  // "Umwandeln": Ziel aus den Einstellungen, mit BC-Ersatz, wenn das Ziel an dir nicht geht
+  function wandle(g, n, p, z) {
+    var typ = z.typ, grund = null, nr = setzerNummer();
+    if (typ === 'DOGS') {
+      if (ECHT && dogsAktiv()) return { q: dogsSchloss(p, g), info: 'DOGS Devious, Besitzerin ' + wer(Player.MemberNumber) };
+      typ = 'HighSecurityPadlock'; nr = Player.MemberNumber; grund = ECHT ? 'DOGS nicht aktiv' : null;
+    }
+    if (typ === 'AFCHeart') {
+      if (ECHT && erlaubtAm(g, n, 'HighSecurityPadlock')) return { q: afcHerz(p, nr), info: 'AFC-Herzschloss, Besitzer ' + wer(nr) };
+      typ = 'HighSecurityPadlock';
+    }
+    if (/^(Lovers|Owner)/.test(typ)) {
+      var s = gueltigerSetzer(typ);
+      if (s == null) { grund = /^Owner/.test(typ) ? 'BC: Owner-Schloss geht nur mit Owner' : 'BC: Lover-Schloss geht nur mit Lover'; typ = 'HighSecurityPadlock'; nr = Player.MemberNumber; }
+      else nr = s;
+    }
+    if (typ === 'ExclusivePadlock' && nr === Player.MemberNumber) { grund = 'Exklusiv könntest du nie selbst öffnen'; typ = 'HighSecurityPadlock'; }
+    if (!erlaubtAm(g, n, typ)) {
+      if (typ !== 'HighSecurityPadlock' && erlaubtAm(g, n, 'HighSecurityPadlock')) { grund = 'Item erlaubt kein ' + typ; typ = 'HighSecurityPadlock'; }
+      else return null;
+    }
+    var q = mitLockEffekt(ohneSchloss(p));
+    q.LockedBy = typ; q.LockMemberNumber = nr; q.LockMemberName = nameFuer(nr);
+    if (typ === 'HighSecurityPadlock') q.MemberNumberListKeys = String(nr);
+    if (typ === 'PasswordPadlock' || typ === 'SafewordPadlock' || typ === 'TimerPasswordPadlock') {
+      q.Password = C.passwort; q.Hint = C.hinweis; q.LockSet = true;
+    }
+    if (typ === 'CombinationPadlock') q.CombinationNumber = C.kombination;
+    var sek = timerSek(typ, z.minuten);
+    if (sek) {
+      q.RemoveTimer = jetzt() + sek * 1000;
+      q.ShowTimer = true; q.EnableRandomInput = false; q.MemberNumberList = []; q.RemoveItem = !!z.itemWeg;
+    }
+    return { q: q, info: typ + (sek ? ', ' + Math.round(sek / 60) + ' Min' + (z.itemWeg ? ', Item fällt mit ab' : '') : '')
+      + ', Setzer ' + wer(nr) + (grund ? ' – statt Wunschziel, weil ' + grund : '') };
+  }
+
+  return function (g, n, p) {
+    if (!p || !p.LockedBy) return p;
+    entdeckt(p);
+    var mn = p.LockMemberNumber;
+    var own = Player.Ownership && Player.Ownership.MemberNumber;
+    var lov = (Player.Lovership || []).map(function (l) { return l && l.MemberNumber; });
+    // Schlösser der eigenen Owner/Lover und schon getragene bleiben immer
+    if (mn != null && (mn === own || lov.indexOf(mn) >= 0)) return p;
+    var cur = (typeof InventoryGet === 'function') ? InventoryGet(Player, g) : null;
+    if (cur && cur.Asset && cur.Asset.Name === n && cur.Property && cur.Property.LockedBy === p.LockedBy
+      && cur.Property.LockMemberNumber === mn) return p;
+    var k = kat(p), regel = regelFuer(k);
+    // Screenshots (nur lokal, danach zurückgesetzt): DOGS und AFC registrieren Schlösser selbst
+    // (AFC schon bei jedem CharacterRefresh) und legen sie danach immer wieder an → nie mitnehmen
+    if (!ECHT && (k === 'mod:DeviousPadlock' || k === 'mod:AFCHeart')) regel = 'weg';
+    if (regel === 'setzer' && k !== 'owner' && k !== 'lover' && k !== 'mod:AFCHeart') regel = 'behalten';
+    if (regel === 'behalten') {
+      var zk = kopie(p), zs = zeitNeu(zk, k);
+      if (zs) { melde(g, p, 'zeit', Math.round(zs / 60) + ' Min ab jetzt'); return zk; }
+      return p;
+    }
+    // AFC-Herzschloss: bleibt Herzschloss, Setzer = Besitzer, neue ID (sonst überspringt
+    // AFC es, falls diese ID früher schon einmal entfernt wurde)
+    if (k === 'mod:AFCHeart' && (regel === 'setzer' || regel === 'meins')) {
+      var hn = (regel === 'meins') ? Player.MemberNumber : setzerNummer();
+      melde(g, p, 'afc', wer(hn));
+      return afcHerz(p, hn);
+    }
+    var grund = null;
+    if (regel === 'setzer') {
+      var nr = gueltigerSetzer(String(p.LockedBy));
+      if (nr == null) {
+        regel = 'meins';
+        grund = /^Owner/.test(String(p.LockedBy)) ? 'BC: Owner-Schloss geht nur mit Owner' : 'BC: kein gültiger Setzer (keine Lover?)';
+      } else {
+        var t = kopie(p);
+        t.LockMemberNumber = nr; t.LockMemberName = nameFuer(nr);
+        var ts = zeitNeu(t, k);
+        melde(g, p, 'setzer', wer(nr) + (ts ? ' · Timer ' + Math.round(ts / 60) + ' Min ab jetzt' : ''));
+        return t;
+      }
+    }
+    // DOGS "Mir gehört": bleibt DOGS-Schloss (Unterbau Exklusiv), du als Besitzerin
+    if (regel === 'meins' && k === 'mod:DeviousPadlock' && ECHT && dogsAktiv()) {
+      melde(g, p, 'dogs');
+      return dogsSchloss(p, g);
+    }
+    if (regel === 'umwandeln') {
+      var w = wandle(g, n, p, zielFuer(k));
+      if (w) { melde(g, p, 'umwandeln', w.info); return w.q; }
+      regel = 'weg';
+    }
     // Lässt das Item kein High-Security-Schloss zu, bleibt nur Entfernen
-    +   'if(regel==="meins"){'
-    +     'var a=(typeof AssetGet==="function")?AssetGet(Player.AssetFamily,g,n):null;'
-    +     'if(a&&Array.isArray(a.AllowLockType)&&a.AllowLockType.indexOf("HighSecurityPadlock")<0)regel="weg";'
-    +   '}'
-    +   'var q=JSON.parse(JSON.stringify(p));'
-    +   'try{if(typeof ValidationDeleteLock==="function")ValidationDeleteLock(q,false);}catch(_e){}'
-    +   'K.forEach(function(k){delete q[k];});'
-    +   'if(q.Name&&/Padlock$/.test(String(q.Name)))delete q.Name;'
-    +   'var eff=Array.isArray(q.Effect)?q.Effect.filter(function(e){return e!=="Lock";}):null;'
-    +   'if(regel==="meins"){'
-    +     '(eff=eff||[]).push("Lock");'
-    +     'q.LockedBy="HighSecurityPadlock";'
-    +     'q.LockMemberNumber=Player.MemberNumber;'
-    +     'q.LockMemberName=Player.Name;'
-    +     'q.MemberNumberListKeys=String(Player.MemberNumber);'
-    +   '}'
-    +   'if(eff)q.Effect=eff;else delete q.Effect;'
-    +   'console.log("[BCU] Schloss "+(regel==="meins"?"als eigenes High-Security übernommen":"entfernt")+":",g,n,modName(p),"#"+mn);'
-    +   'melde(g,p,regel);'
-    +   'return q;'
-    + '};'
-    + '})();';
+    if (regel === 'meins' && !erlaubtAm(g, n, 'HighSecurityPadlock')) regel = 'weg';
+    if (regel === 'meins') { melde(g, p, 'meins', grund); return hochsicher(p, Player.MemberNumber); }
+    var q = ohneSchloss(p);
+    if (Array.isArray(q.Effect)) q.Effect = q.Effect.filter(function (x) { return x !== 'Lock'; });
+    melde(g, p, 'weg', grund);
+    return q;
+  };
 }
 
+// JS-Code für den Spiel-Tab: definiert __bcuLockFix(gruppe, assetName, property).
+// melden = true bei echtem Anlegen: Änderungen per LOCK_STRIPPED ans Tool melden und DOGS/AFC
+// registrieren lassen; false bei lokalen Screenshots (DOGS/AFC dann immer weglassen).
+function _lockFilterPrelude(melden) {
+  const nurUebernehmen = Object.keys(_lockRules).every(k => _lockRules[k] === 'behalten')
+    && !Object.keys(_lockZeit).some(k => _lockZeit[k] > 0);
+  if (nurUebernehmen) return 'var __bcuLockFix=function(g,n,p){return p;};';
+  const cfg = { R: _lockRules, U: _lockZiel, Z: _lockZeit, C: _lockCode, S: _lockSetzer, BC: _BC_LOCKS,
+    K: _LOCK_PROP_KEYS, M: _MOD_LOCK_MAP, T: _LOCK_TIMER_MAX, ECHT: !!melden, MELDEN: !!melden, ORIGIN: TOOL_ORIGIN };
+  return 'var __bcuLockFix=(' + _lockSpielLogik.toString() + ')(' + JSON.stringify(cfg) + ');';
+}
+
+// ── Einstellungen ändern ─────────────────────────────────────────────────────
 function _lockRuleKeyGueltig(kat) {
   if (LOCK_KATEGORIEN.some(k => k.id === kat)) return true;
   if (typeof kat !== 'string' || !kat.startsWith('mod:')) return false;
@@ -9335,14 +9602,61 @@ function _lockRuleLabel(kat) {
   return k ? k.label : _lockModLabel(kat);
 }
 
+// wert '' bei einer Mod-Art = eigene Regel löschen ("wie alle anderen")
 function lockRuleSet(kat, wert) {
-  if (!_lockRuleKeyGueltig(kat) || !_lockRegelErlaubt(kat, wert)) return;
+  if (!_lockRuleKeyGueltig(kat)) return;
+  if (wert === '' && kat.startsWith('mod:')) {
+    delete _lockRules[kat];
+    _lockRulesSpeichern();
+    showStatus(_lockRuleLabel(kat) + ' → wie „alle anderen“', 'info');
+    return;
+  }
+  if (!_lockRegelErlaubt(kat, wert)) return;
   _lockRules[kat] = wert;
+  if (wert === 'umwandeln' && !_lockZiel[kat]) _lockZiel[kat] = _lockZielNormal(_lockZiel.mod && kat.startsWith('mod:') ? _lockZiel.mod : null);
   _lockRulesSpeichern();
-  showStatus(_lockRuleLabel(kat) + ' → ' + LOCK_REGELN[wert] + (wert === 'setzer' ? ' (' + _lockSetzerText() + ')' : ''), 'info');
+  showStatus(_lockRuleLabel(kat) + ' → ' + LOCK_REGELN[wert]
+    + (wert === 'setzer' ? ' (' + _lockSetzerText() + ')' : '')
+    + (wert === 'umwandeln' ? ' ' + _lockZielLabel(_lockZiel[kat].typ) : ''), 'info');
 }
 
-// Setzer für "Neuer Setzer" aus den Eingabefeldern übernehmen
+// Umwandeln-Ziel einer Art: feld 'typ' | 'minuten' | 'itemWeg'
+function lockZielSet(kat, feld, wert) {
+  if (!_lockRuleKeyGueltig(kat) || !['typ', 'minuten', 'itemWeg'].includes(feld)) return;
+  const z = Object.assign({}, _lockZiel[kat] || _LOCK_ZIEL_STANDARD);
+  z[feld] = feld === 'itemWeg' ? !!wert : wert;
+  _lockZiel[kat] = _lockZielNormal(z);
+  try { localStorage.setItem(LOCK_ZIEL_KEY, JSON.stringify(_lockZiel)); } catch (e) {}
+  _lockRulesRender();
+  if (feld === 'typ') showStatus(_lockRuleLabel(kat) + ' → umwandeln in ' + _lockZielLabel(_lockZiel[kat].typ), 'info');
+}
+
+// Timer bei "Übernehmen"/"Neuer Setzer" ab jetzt neu setzen (Minuten); 0 = unverändert
+function lockZeitSet(kat, minuten) {
+  if (!LOCK_KATEGORIEN.some(x => x.id === kat && x.timer)) return;
+  const m = Math.round(Number(minuten));
+  if (m >= 1 && m <= 50400) _lockZeit[kat] = m; else delete _lockZeit[kat];
+  try { localStorage.setItem(LOCK_ZEIT_KEY, JSON.stringify(_lockZeit)); } catch (e) {}
+  _lockRulesRender();
+}
+
+function lockCodeAus() {
+  lockCodeSet(document.getElementById('lockCodePw')?.value, document.getElementById('lockCodeHint')?.value,
+    document.getElementById('lockCodeKombi')?.value);
+}
+
+function lockCodeSet(passwort, hinweis, kombination) {
+  const roh = { passwort, hinweis, kombination };
+  _lockCode = _lockCodeNormal(roh);
+  try { localStorage.setItem(LOCK_CODE_KEY, JSON.stringify(_lockCode)); } catch (e) {}
+  _lockRulesRender();
+  const angepasst = (String(passwort ?? '').toUpperCase() !== _lockCode.passwort && passwort !== undefined && passwort !== '')
+    || (kombination !== undefined && kombination !== '' && String(kombination) !== _lockCode.kombination);
+  showStatus('🔑 Codes gespeichert: Passwort ' + _lockCode.passwort + ', Kombination ' + _lockCode.kombination
+    + (angepasst ? ' (an BC-Regeln angepasst: A–Z, max. 8 / 4 Ziffern)' : ''), angepasst ? 'error' : 'info');
+}
+
+// Setzer aus den Eingabefeldern übernehmen
 function lockSetzerAus() {
   const modus = document.getElementById('lockSetzerModus')?.value;
   const nummer = document.getElementById('lockSetzerNr')?.value;
@@ -9363,7 +9677,7 @@ function lockSetzerSet(modus, nummer, name) {
   _lockSetzer = _lockSetzerNormal({ modus, nummer, name });
   try { localStorage.setItem(LOCK_SETZER_KEY, JSON.stringify(_lockSetzer)); } catch (e) {}
   _lockRulesRender();
-  showStatus('👤 Neuer Setzer: ' + _lockSetzerText(), 'info');
+  showStatus('👤 Setzer: ' + _lockSetzerText(), 'info');
 }
 
 function _lockSetzerText() {
@@ -9372,41 +9686,99 @@ function _lockSetzerText() {
   return 'du selbst';
 }
 
+function _lockZielLabel(typ) { return LOCK_ZIELE.find(z => z.id === typ)?.label || typ; }
+
 // Alle Arten auf einen Wert; einzelne Mod-Regeln fallen dabei weg (folgen "alle anderen")
 function lockRuleSetAll(wert) {
   if (!LOCK_REGELN[wert] || wert === 'setzer') return;
   _lockRules = _lockRulesAlle(wert);
+  if (wert === 'umwandeln') LOCK_KATEGORIEN.forEach(k => { if (!_lockZiel[k.id]) _lockZiel[k.id] = _lockZielNormal(null); });
   _lockRulesSpeichern();
   showStatus('Alle Schloss-Arten → ' + LOCK_REGELN[wert], 'info');
 }
 
 function _lockRulesSpeichern() {
   try { localStorage.setItem(LOCK_RULES_KEY, JSON.stringify(_lockRules)); } catch (e) {}
+  try { localStorage.setItem(LOCK_ZIEL_KEY, JSON.stringify(_lockZiel)); } catch (e) {}
   _lockRulesRender();
 }
 
-function _lockRuleZeile(key, label, hint, wert, eingerueckt) {
-  return '<div class="set-li"' + (eingerueckt ? ' style="padding-left:18px"' : '') + '><div><b>' + escHtml(label) + '</b>'
-    + (hint ? '<div class="set-hint">' + escHtml(hint) + '</div>' : '') + '</div>'
-    + '<div class="tweaks-btn-group set-r">'
-    + Object.keys(LOCK_REGELN).filter(w => _lockRegelErlaubt(key, w)).map(w => '<button class="tweaks-btn' + (wert === w ? ' on' : '') + '"'
-      + ' onclick="lockRuleSet(\'' + escJsAttr(key) + '\',\'' + escJsAttr(w) + '\')">' + escHtml(LOCK_REGELN[w]) + '</button>').join('')
-    + '</div></div>';
+// ── Menü ─────────────────────────────────────────────────────────────────────
+// Eine Zeile je Schloss-Art: Aktion, bei "Umwandeln" Ziel/Timer, bei Timer-Arten
+// "Timer neu", dazu eine aufklappbare Erklärung (wer öffnet das Original, was tut jede Aktion).
+function _lockRuleZeile(key, label, hint, original, eigen, wert, opt = {}) {
+  const k = escJsAttr(key);
+  const aktionen = Object.keys(LOCK_REGELN).filter(w => _lockRegelErlaubt(key, w));
+  const modGruppe = key.startsWith('mod:') ? MOD_LOCK_GRUPPEN.find(g => 'mod:' + g.id === key) : null;
+  const meinsInfo = modGruppe?.meins || LOCK_REGEL_INFO.meins;
+  let html = '<div class="set-li lr-zeile"' + (opt.eingerueckt ? ' style="padding-left:18px"' : '') + '><div class="lr-text"><b>' + escHtml(label) + '</b>'
+    + (hint ? '<div class="set-hint">' + escHtml(hint) + '</div>' : '')
+    + '<details class="lr-info"><summary>ⓘ Erklärung</summary>'
+    + '<div><b>Original an dir:</b> ' + escHtml(original || 'Wer öffnen darf, bestimmt der Mod.') + '</div><ul>'
+    + aktionen.map(w => '<li><b>' + escHtml(LOCK_REGELN[w].replace(' …', '')) + ':</b> ' + escHtml(w === 'meins' ? meinsInfo : LOCK_REGEL_INFO[w]) + '</li>').join('')
+    + '</ul></details></div>'
+    + '<div class="set-r lr-ctrl">'
+    + '<select class="os-filter-btn" title="Was beim Anlegen mit diesem Schloss passiert" onchange="lockRuleSet(\'' + k + '\',this.value)">'
+    + (opt.folgt !== undefined ? '<option value=""' + (!eigen ? ' selected' : '') + '>wie „alle anderen“ (' + escHtml(LOCK_REGELN[opt.folgt] || '') + ')</option>' : '')
+    + aktionen.map(w => '<option value="' + w + '"' + (eigen && wert === w ? ' selected' : '') + '>' + escHtml(LOCK_REGELN[w]) + '</option>').join('')
+    + '</select>';
+  // Umwandeln: Ziel, ggf. Timer und "Item fällt mit ab"
+  if (eigen && wert === 'umwandeln') {
+    const z = _lockZiel[key] || (key.startsWith('mod:') && _lockZiel.mod) || _LOCK_ZIEL_STANDARD;
+    const zDef = LOCK_ZIELE.find(x => x.id === z.typ) || LOCK_ZIELE[0];
+    const max = _LOCK_TIMER_MAX[z.typ];
+    html += '<select class="os-filter-btn" title="Zielschloss" onchange="lockZielSet(\'' + k + '\',\'typ\',this.value)">'
+      + LOCK_ZIELE.map(x => '<option value="' + x.id + '"' + (x.id === z.typ ? ' selected' : '') + '>' + escHtml(x.label) + '</option>').join('')
+      + '</select>';
+    if (max && z.typ !== 'TimerPadlock') {
+      html += '<input class="os-search lr-min" type="number" min="1" max="' + Math.floor(max / 60) + '" value="' + escHtml(String(Math.min(z.minuten, Math.floor(max / 60)))) + '"'
+        + ' title="Minuten (max. ' + escHtml(_lockDauerText(max)) + ')" onchange="lockZielSet(\'' + k + '\',\'minuten\',this.value)"><span class="set-hint">Min</span>';
+    }
+    if (max) {
+      html += '<label class="set-hint lr-chk" title="Wenn die Zeit abläuft, fällt auch das Item ab (BC: RemoveItem)"><input type="checkbox"' + (z.itemWeg ? ' checked' : '')
+        + ' onchange="lockZielSet(\'' + k + '\',\'itemWeg\',this.checked)"> Item fällt mit ab</label>';
+    }
+    html += '<div class="set-hint lr-zielinfo">→ ' + escHtml(zDef.info) + (zDef.code === 'passwort' ? ' (Passwort: ' + escHtml(_lockCode.passwort) + ')'
+      : zDef.code === 'kombination' ? ' (Kombination: ' + escHtml(_lockCode.kombination) + ')' : '') + '</div>';
+  }
+  // Timer neu ab jetzt – nur bei Arten mit Timer-Schlössern und Übernehmen/Neuer Setzer
+  if (eigen && opt.timer && (wert === 'behalten' || wert === 'setzer')) {
+    const m = _lockZeit[key] || 0;
+    html += '<label class="set-hint lr-chk" title="Kopierte Timer haben die Ablaufzeit des Originals – hier ab dem Anlegen neu starten">Timer:'
+      + ' <select class="os-filter-btn" onchange="lockZeitSet(\'' + k + '\',this.value===\'0\'?0:(' + (m || 30) + '))">'
+      + '<option value="0"' + (!m ? ' selected' : '') + '>wie im Outfit</option><option value="neu"' + (m ? ' selected' : '') + '>neu ab jetzt</option></select></label>'
+      + (m ? '<input class="os-search lr-min" type="number" min="1" value="' + m + '" title="Minuten – BC begrenzt je Schloss (Timer fest 5 Min, Mistress/Passwort 4 Std, Lover 7 Tage, Owner 35 Tage)" onchange="lockZeitSet(\'' + k + '\',this.value)"><span class="set-hint">Min</span>' : '');
+  }
+  return html + '</div></div>';
 }
 
-// Zeile "Neuer Setzer: wer?" – gilt für Owner/Lover mit Regel "Neuer Setzer"
-function _lockSetzerZeile() {
-  const s = _lockSetzer;
+function _lockDauerText(sek) {
+  if (sek >= 86400) return Math.round(sek / 86400) + ' Tage';
+  if (sek >= 3600) return Math.round(sek / 3600) + ' Std.';
+  return Math.round(sek / 60) + ' Min';
+}
+
+// Gemeinsame Einstellungen: Setzer (Neuer Setzer, Umwandeln) und Codes (Passwort/Kombination)
+function _lockEinstellungenHtml() {
+  const s = _lockSetzer, c = _lockCode;
   const opt = (v, t) => '<option value="' + v + '"' + (s.modus === v ? ' selected' : '') + '>' + t + '</option>';
-  return '<div class="set-li" style="padding-left:18px"><div><b>👤 Neuer Setzer</b>'
-    + '<div class="set-hint">Wer bei „Neuer Setzer“ im Owner-/Lover-Schloss steht. Öffnen können es weiterhin deine Owner bzw. Lover.</div></div>'
-    + '<div class="tweaks-btn-group set-r" style="flex-wrap:wrap;gap:6px">'
+  return '<div class="lr-gruppe">Einstellungen für „Neuer Setzer“ und „Umwandeln“</div>'
+    + '<div class="set-li"><div class="lr-text"><b>👤 Setzer</b>'
+    + '<div class="set-hint">Wer im Schloss als Setzer/Besitzer steht. „Mir gehört“ nimmt immer dich. Bei Owner-/Lover-Schlössern lässt BC nur dich, deine Lover bzw. deine Owner zu – passt es nicht, nimmt das Tool einen gültigen.</div></div>'
+    + '<div class="set-r lr-ctrl">'
     + '<select id="lockSetzerModus" class="os-filter-btn" onchange="lockSetzerAus()">'
     + opt('ich', 'Ich selbst') + opt('lover', 'Meine Lover-Partnerin') + opt('nummer', 'Feste Nummer') + '</select>'
     + (s.modus === 'nummer'
-      ? '<input id="lockSetzerNr" class="os-search" style="max-width:110px" type="number" min="1" placeholder="Member-Nr." value="' + escHtml(s.nummer ?? '') + '" onchange="lockSetzerAus()">'
+      ? '<input id="lockSetzerNr" class="os-search" style="max-width:110px" type="number" min="1" placeholder="Member-Nr." value="' + escHtml(String(s.nummer ?? '')) + '" onchange="lockSetzerAus()">'
         + '<input id="lockSetzerName" class="os-search" style="max-width:140px" type="text" maxlength="' + _LOCK_SETZER_NAME_MAX + '" placeholder="Name (optional)" value="' + escHtml(s.name) + '" onchange="lockSetzerAus()">'
       : '')
+    + '</div></div>'
+    + '<div class="set-li"><div class="lr-text"><b>🔑 Codes</b>'
+    + '<div class="set-hint">Für Umwandeln in Passwort-, Safeword-, Timer+Passwort- und Kombinations-Schlösser. BC: Passwort 1–8 Buchstaben A–Z, Kombination 4 Ziffern.</div></div>'
+    + '<div class="set-r lr-ctrl">'
+    + '<input id="lockCodePw" class="os-search" style="max-width:110px" type="text" maxlength="8" placeholder="Passwort" title="Passwort (A–Z, max. 8)" value="' + escHtml(c.passwort) + '" onchange="lockCodeAus()">'
+    + '<input id="lockCodeHint" class="os-search" style="max-width:150px" type="text" maxlength="140" placeholder="Hinweis (optional)" title="Hinweis, den BC beim Passwort-Schloss anzeigt" value="' + escHtml(c.hinweis) + '" onchange="lockCodeAus()">'
+    + '<input id="lockCodeKombi" class="os-search" style="max-width:80px" type="text" inputmode="numeric" maxlength="4" placeholder="0000" title="Kombination (4 Ziffern)" value="' + escHtml(c.kombination) + '" onchange="lockCodeAus()">'
     + '</div></div>';
 }
 
@@ -9414,22 +9786,23 @@ function _lockRulesRender() {
   const box = document.getElementById('lockRulesBox');
   if (!box) return;
   const zaehler = (key) => (_lockModCounts[key] ? ' · in ' + _lockModCounts[key] + ' gespeicherten Outfits' : '');
-  let html = LOCK_KATEGORIEN.filter(k => k.id !== 'mod')
-    .map(k => _lockRuleZeile(k.id, k.label, k.hint, _lockRules[k.id], false)
-      // Setzer-Auswahl direkt unter Lover & Family, sobald Owner oder Lover sie nutzen
-      + (k.id === 'lover' && LOCK_SETZER_KATEGORIEN.some(x => _lockRules[x] === 'setzer') ? _lockSetzerZeile() : '')).join('');
+  let html = _lockEinstellungenHtml();
+  html += '<div class="lr-gruppe">BC-Schlösser</div>';
+  html += LOCK_KATEGORIEN.filter(k => k.id !== 'mod')
+    .map(k => _lockRuleZeile(k.id, k.label, k.hint, k.original, true, _lockRules[k.id], { timer: k.timer })).join('');
   // Mod-Schlösser: je Art eine Zeile, darunter der Rückfall "alle anderen"
-  html += '<div class="set-li"><div><b>😈 Mod-Schlösser</b><div class="set-hint">Jede Art einzeln – ohne eigene Regel gilt „alle anderen“. Neue Mod-Schlösser erscheinen hier automatisch.</div></div>'
-    + '<div class="tweaks-btn-group set-r"><button class="tweaks-btn" onclick="lockModsScan()" title="Gespeicherte Outfits (LSCG, Profile, Import, MBS) nach Mod-Schlössern durchsuchen – nur lesen">🔍 In gespeicherten Outfits suchen</button></div></div>';
+  html += '<div class="lr-gruppe lr-gruppe-btn">Mod-Schlösser'
+    + '<button class="tweaks-btn" onclick="lockModsScan()" title="Gespeicherte Outfits (LSCG, Profile, Import, MBS) nach Mod-Schlössern durchsuchen – nur lesen">🔍 In gespeicherten Outfits suchen</button></div>';
   const modKeys = MOD_LOCK_GRUPPEN.map(g => 'mod:' + g.id).concat(_lockModsSeen.map(n => 'mod:' + n));
   html += modKeys.map(key => {
-    const eigen = _lockRules[key];
+    const eigen = !!_lockRules[key];
     const g = MOD_LOCK_GRUPPEN.find(x => 'mod:' + x.id === key);
-    const hint = (g ? (g.hinweis || g.namen.join(', ')) : 'entdeckt') + zaehler(key) + (eigen ? '' : ' · folgt „alle anderen“');
-    return _lockRuleZeile(key, _lockModLabel(key), hint, eigen || _lockRules.mod, true);
+    const hint = (g ? g.namen.join(', ') : 'entdeckt') + zaehler(key);
+    return _lockRuleZeile(key, _lockModLabel(key), hint, g?.original, eigen, eigen ? _lockRules[key] : _lockRules.mod,
+      { eingerueckt: true, folgt: _lockRules.mod });
   }).join('');
   const rest = LOCK_KATEGORIEN.find(k => k.id === 'mod');
-  html += _lockRuleZeile('mod', rest.label, rest.hint, _lockRules.mod, true);
+  html += _lockRuleZeile('mod', rest.label, rest.hint, rest.original, true, _lockRules.mod, { eingerueckt: true });
   box.innerHTML = html;
 }
 try {
@@ -11512,13 +11885,17 @@ function _osItemCount(code, cacheKey) {
 // ── Schloss-Filter im LSCG-Tab ───────────────────────────────────────────────
 // Zeigt nur Versionen mit bestimmten Schlössern – zum gezielten Testen der
 // Schloss-Regeln (Einstellungen → Werkzeuge → Fremde Schlösser).
-// AFC ist kein eigenes Schloss: AFC-Lover-Schlösser sind BCs LoversPadlock.
+// AFC-Schloss = Herzschloss (HighSecurityPadlock + Name "Heart Padlock"/HeartLockId),
+// nicht das normale BC-Lover-Schloss.
 const OS_LOCK_FILTER = {
   schloss: function(l) { return true; },
   dogs:    function(l) { return l.kat === 'mod:DeviousPadlock'; },
+  afc:     function(l) { return l.kat === 'mod:AFCHeart'; },
+  timer:   function(l) { return !l.kat.startsWith('mod:') && /Timer/.test(l.lb); },
+  code:    function(l) { return l.kat === 'code'; },
   lover:   function(l) { return !l.kat.startsWith('mod:') && /^Lovers/.test(l.lb); },
   owner:   function(l) { return !l.kat.startsWith('mod:') && /^Owner/.test(l.lb); },
-  mod:     function(l) { return l.kat.startsWith('mod:') && l.kat !== 'mod:DeviousPadlock'; },
+  mod:     function(l) { return l.kat.startsWith('mod:') && l.kat !== 'mod:DeviousPadlock' && l.kat !== 'mod:AFCHeart'; },
 };
 let _osLockFilter = '';
 let _osLockScanToken = 0;
@@ -11532,9 +11909,12 @@ function _osVersionPasst(v, mk, idx) {
 
 function _osLockIcon(l) {
   if (l.kat === 'mod:DeviousPadlock') return '😈';
+  if (l.kat === 'mod:AFCHeart') return '💞';
   if (l.kat.startsWith('mod:')) return '🧩';
   if (/^Lovers/.test(l.lb)) return '💕';
   if (/^Owner/.test(l.lb)) return '👑';
+  if (/Timer/.test(l.lb)) return '⏱️';
+  if (l.kat === 'code') return '🔢';
   return '🔒';
 }
 

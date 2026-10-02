@@ -2495,7 +2495,19 @@ button { cursor: pointer; }
           <button class="tweaks-btn" onclick="lockRuleSetAll('behalten')" title="Bei allen Schloss-Arten: Schloss 1:1 übernehmen (altes Verhalten)">Übernehmen</button>
           <button class="tweaks-btn" onclick="lockRuleSetAll('meins')" title="Bei allen Schloss-Arten: High-Security-Schloss mit dir als einziger Schlüsselhalterin">Mir gehört</button>
         </div></div>
-      <div class="set-card-b"><div class="set-hint">Kopierte Outfits (LSCG, MBS-Wheel, Import, Profile) tragen die Schlösser des ursprünglichen Trägers mit. Pro Schloss-Art: <b>Entfernen</b> (Item bleibt an), <b>Übernehmen</b> (unverändert) oder <b>Mir gehört</b> (wird ein High-Security-Schloss, das nur du öffnen kannst – an dir selbst nur mit freien Händen). Schlösser deiner Owner/Lover und solche, die du an genau dem Item schon trägst, bleiben immer. Gespeicherte Outfits bleiben unverändert.</div>
+      <div class="set-card-b"><div class="set-hint">Kopierte Outfits tragen die Schlösser der ursprünglichen Trägerin mit – fremde Lover-, DOGS- oder AFC-Schlösser, die nur fremde Leute öffnen können. Hier legst du pro Schloss-Art fest, was beim Anlegen damit passiert.</div>
+        <details class="lr-erklaerung">
+          <summary>ⓘ So funktioniert’s</summary>
+          <ul>
+            <li><b>Wann:</b> Beim Anlegen über das Tool – LSCG-Outfits, Profile, Outfit-Import, MBS-Wheel, Standard-Outfit/Ursprung, Curse-Test. Legt ein Mod im Spiel selbst ein Outfit an, läuft das nicht übers Tool. Die gespeicherten Outfits bleiben immer unverändert.</li>
+            <li><b>Immer geschützt:</b> Schlösser, die deine eigene Owner oder ein eigener Lover gesetzt hat, und Schlösser, die du an genau diesem Item schon trägst, bleiben unangetastet.</li>
+            <li><b>Aktionen:</b> <i>Entfernen</i> – Schloss weg, Item bleibt. <i>Übernehmen</i> – unverändert (bei Timer-Schlössern wahlweise mit neuem Timer ab jetzt). <i>Neuer Setzer</i> – gleiche Schloss-Art, anderer Setzer (Owner, Lover, AFC). <i>Mir gehört</i> – High Security mit dir als Schlüsselhalterin (DOGS/AFC: bleibt Mod-Schloss mit dir als Besitzerin). <i>Umwandeln</i> – in ein Schloss deiner Wahl, mit Timer, Passwort oder Kombination.</li>
+            <li><b>BC-Regeln, die das Tool einhält:</b> Owner-/Lover-Schlösser brauchen eine echte Beziehung – sonst löscht BC sie beim Laden, und das Tool nimmt automatisch ein gültiges Ersatzschloss. Timer gibt es nur bei Timer-Schlössern (Timer fest 5 Min, Mistress-Timer und Timer+Passwort bis 4 Std, Lover-Timer bis 7 Tage, Owner-Timer bis 35 Tage). Passwort: 1–8 Buchstaben A–Z, Kombination: 4 Ziffern.</li>
+            <li><b>Wichtig:</b> An dir selbst kannst du Schlösser nur mit freien Händen öffnen. Bindet das Outfit dir die Arme, helfen nur andere Schlüsselhalter oder ein Timer. Ein Safeword-Schloss zeigt dir dein Passwort selbst an.</li>
+            <li><b>Screenshots</b> (Bilderserien): DOGS- und AFC-Schlösser werden dort immer weggelassen, damit die Mods sie nicht dauerhaft an dir registrieren.</li>
+            <li><b>Testen:</b> Im Tab „LSCG Outfits“ mit dem Schloss-Filter (z. B. „AFC Heart Padlock“, „Timer“) passende Outfits suchen und mit ▶ Run anlegen – die Statuszeile sagt, was mit jedem Schloss passiert ist.</li>
+          </ul>
+        </details>
         <div id="lockRulesBox" style="margin-top:8px"></div></div>
     </div>
     <div class="set-card">
@@ -3795,8 +3807,11 @@ document.write('<scr'+'ipt src="bc-autobackup.js?_='+_cbv+'"><\/scr'+'ipt>');
       <option value="">Schloss: alle Outfits</option>
       <option value="schloss">Mit Schloss (jede Art)</option>
       <option value="dogs">DOGS Devious</option>
-      <option value="lover">Lover (AFC)</option>
+      <option value="afc">AFC Heart Padlock</option>
+      <option value="lover">Lover (BC)</option>
       <option value="owner">Owner</option>
+      <option value="timer">Timer (jede Art)</option>
+      <option value="code">Passwort / Kombination / Safeword</option>
       <option value="mod">Andere Mod-Schlösser</option>
     </select>
     <button class="os-filter-btn" onclick="toggleIgnorePanel()" title="Gruppen-Filter">⚙ Filter</button>
@@ -4241,6 +4256,18 @@ document.write('<scr'+'ipt src="bc-autobackup.js?_='+_cbv+'"><\/scr'+'ipt>');
                 margin-top:7px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:130px; }
 .os-card-meta { font-size:.75rem; color:var(--text3); margin-top:2px; }
 .os-card-locks { cursor:help; letter-spacing:1px; }
+/* Einstellungen → Fremde Schlösser */
+.lr-erklaerung { margin-top:8px; font-size:.75rem; color:var(--text2); }
+.lr-erklaerung summary, .lr-info summary { cursor:pointer; color:var(--accent-text); font-size:.6875rem; }
+.lr-erklaerung ul, .lr-info ul { margin:6px 0 0; padding-left:18px; display:flex; flex-direction:column; gap:4px; }
+.lr-gruppe { margin:12px 0 2px; font-size:.6875rem; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--text3); }
+.lr-gruppe-btn { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.lr-text { min-width:0; flex:1; }
+.lr-info { margin-top:3px; font-size:.6875rem; color:var(--text2); }
+.lr-ctrl { display:flex; flex-wrap:wrap; align-items:center; justify-content:flex-end; gap:6px; max-width:62%; }
+.lr-min { max-width:76px; }
+.lr-chk { display:inline-flex; align-items:center; gap:4px; white-space:nowrap; }
+.lr-zielinfo { flex-basis:100%; text-align:right; }
 .os-card-actions { display:flex; gap:4px; margin-top:7px; flex-wrap:wrap; }
 .os-card-btn { flex:1; font-size:.75rem; padding:4px 6px; border-radius:6px; cursor:pointer;
                background:transparent; border:1px solid var(--border2); color:var(--text2);

@@ -126,3 +126,23 @@ describe('LSCG-Tab: Schloss-Abzeichen und Item-Anzahl', () => {
     expect(evalIn(c, 'JSON.stringify(LSCG_DB)')).toBe(vorher);
   });
 });
+
+describe('LSCG-Tab: Filter "AFC Heart Padlock"', () => {
+  it('zeigt nur Herzschlösser – nicht normale Lover-Schlösser, und "andere Mod-Schlösser" ohne AFC', () => {
+    const HERZ = { LockedBy: 'HighSecurityPadlock', Name: 'Heart Padlock', HeartLockId: 'abc', LockMemberNumber: 249474, MemberNumberListKeys: '249474' };
+    evalIn(c, `LSCG_DB['6'] = { name: 'Fia', versions: [
+      { ts: 10, fingerprint: 'f1', code: ${JSON.stringify(code([{ Group: 'ItemNeckAccessories', Name: 'CollarButterfly', Property: HERZ }]))} },
+      { ts: 11, fingerprint: 'f2', code: ${JSON.stringify(code([{ Group: 'ItemTorso', Name: 'NavelBar1', Property: LOVER }]))} },
+    ] };`);
+    evalIn(c, "osSetLockFilter('afc')");
+    expect(spieler()).toEqual([]);              // Anna..Emma haben kein Herzschloss
+    expect(html()).toContain('id="osm_6"');
+    expect(karten()).toBe(1);
+    expect(html()).toContain('title="ItemNeckAccessories: Heart Padlock (#249474)">💞');
+    evalIn(c, "osSetLockFilter('mod')");
+    expect(html()).not.toContain('id="osm_6"');  // AFC zählt nicht zu "andere Mod-Schlösser"
+    evalIn(c, "osSetLockFilter('lover')");
+    expect(html()).toContain('id="osm_6"');      // Fias zweite Version hat ein normales Lover-Schloss
+    expect(karten()).toBe(3);                    // Bea 2 + Fia 1
+  });
+});
