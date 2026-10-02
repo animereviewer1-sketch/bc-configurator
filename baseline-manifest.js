@@ -11,10 +11,10 @@ const BASELINE_MANIFEST = {
   ],
   "identifierPattern": "\\b(Inventory|Character|ChatRoom|Server|Asset|Player|Dialog|Common|Item|Lock|Wardrobe|Pose|Skill|Reputation|Online|Chat)[A-Z]\\w+",
   "counts": {
-    "identifiers": 86,
+    "identifiers": 88,
     "function": 21,
     "assetGroup": 33,
-    "unknown": 32
+    "unknown": 34
   },
   "identifiers": [
     {
@@ -249,6 +249,13 @@ const BASELINE_MANIFEST = {
       ]
     },
     {
+      "name": "DialogInventoryBuild",
+      "kind": "unknown",
+      "files": [
+        "loader.js"
+      ]
+    },
+    {
       "name": "DialogPrefix",
       "kind": "unknown",
       "files": [
@@ -298,6 +305,13 @@ const BASELINE_MANIFEST = {
       "files": [
         "bot-engine.js",
         "items.js"
+      ]
+    },
+    {
+      "name": "InventoryUnlock",
+      "kind": "unknown",
+      "files": [
+        "loader.js"
       ]
     },
     {

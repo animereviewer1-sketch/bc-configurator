@@ -452,6 +452,19 @@ function _oiBuildExecCode(code) {
     }
 
     // ── 4. Zusammensetzen & rendern ────────────────────────────────────
+    // BC-Pflichtgruppen (AllowNone:false – z. B. ArmsLeft/ArmsRight/HandsLeft/HandsRight)
+    // und namenlose Körperteile nie verlieren: fehlen sie im Outfit, bleiben die aktuellen.
+    // Sonst blockiert BC das ("Invalid removal … blocked"), der Server setzt das Aussehen
+    // zurück und die Figur ist lokal kaputt.
+    var _haben={};
+    _baseItems.concat(_incoming).forEach(function(i){ if(i&&i.Asset&&i.Asset.Group) _haben[i.Asset.Group.Name]=true; });
+    Player.Appearance.forEach(function(item){
+      var grp=item&&item.Asset&&item.Asset.Group;
+      if(!grp||_haben[grp.Name]) return;
+      if(grp.AllowNone===false||!item.Asset.Name){ _baseItems.push(item); _haben[grp.Name]=true; }
+    });
+    // BC erwartet überall ein Property-Objekt (DialogInventoryBuild klont es)
+    _baseItems.concat(_incoming).forEach(function(i){ if(i&&i.Property==null) i.Property={}; });
     Player.Appearance=_baseItems.concat(_incoming);
     try{
       CharacterRefresh(Player,true,false);

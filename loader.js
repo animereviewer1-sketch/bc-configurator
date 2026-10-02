@@ -2051,6 +2051,36 @@ window.CurseScanner = (() => {
     installBCXFilter();
   }
 
+  // ── Schutz vor Items ohne Property (AFC-Fehler) ───────────────────────
+  // AFC (Abundantia Florum Chromatica) setzt nach dem Aufschließen eines Herzschlosses
+  // item.Property = undefined, wenn nur noch ein leeres Effect übrig ist. BC erwartet
+  // überall ein Objekt: DialogInventoryBuild klont CurItem.Property und wirft
+  // ('"undefined" is not valid JSON'), jeder Item-Dialog bricht ab. Fehlende Properties
+  // werden darum – wie BC selbst in ValidationSanitizeProperties – auf {} gesetzt:
+  // vor jedem Item-Dialog und nach jedem Aufschließen (Priorität über AFC, also nach
+  // dessen Aufräumen). Eigener Mod + eigenes Merkmal, damit das auch greift, wenn der
+  // BC-Tab schon einen älteren Loader hatte.
+  if (!window.__BCK_PROP_SCHUTZ__) {
+    window.__BCK_PROP_SCHUTZ__ = true;
+    const _propHeilen = function (C) {
+      try {
+        ((C && C.Appearance) || []).forEach(function (i) { if (i && i.Property == null) i.Property = {}; });
+      } catch (e) {}
+    };
+    window.__BCK_propHeilen = _propHeilen; // Test-Seam
+    (function installPropSchutz() {
+      if (typeof bcModSdk === 'undefined' || typeof bcModSdk.registerMod !== 'function') { setTimeout(installPropSchutz, 500); return; }
+      try {
+        const mod = bcModSdk.registerMod({ name: 'BCK_PropertySchutz', fullName: 'BCK Property-Schutz', version: '1.0.0' });
+        mod.hookFunction('DialogInventoryBuild', 100, function (args, next) { _propHeilen(args[0]); return next(args); });
+        mod.hookFunction('InventoryUnlock', 100, function (args, next) { const r = next(args); _propHeilen(args[0]); return r; });
+        BCK.ok('[PropertySchutz] aktiv ✅ – fehlende Item-Properties (AFC) werden repariert');
+      } catch (e) {
+        BCK.err('[PropertySchutz] Fehler:', e.message);
+      }
+    })();
+  }
+
   // ── Auto-Scan bei Raumwechsel / Member-Join ───────────────────────────
   const _outfitRunId = Date.now();
   window.__BCK_OutfitRunId = _outfitRunId;
