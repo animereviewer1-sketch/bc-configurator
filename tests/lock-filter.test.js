@@ -256,16 +256,51 @@ describe('Schloss-Filter in allen Anlege-Wegen (durchgängig im Spiel-Tab-Nachba
     expect(g.posts).toHaveLength(0);
   });
 
-  it('MBS-Wheel-Outfit (_mbsBuildApplyCode)', () => {
-    const g = makeGame();
-    const worn = [];
-    g.game.InventoryWear = (C, name, group, colors, diff, mn, prop) => worn.push({ group, prop: g.plain(prop) });
+  // BC-InventoryWear nachgebaut: 7. Parameter ist Craft (nicht Property); legt das Item an und gibt es zurück
+  function mitInventoryWear(g) {
+    const aufrufe = [];
+    g.game.InventoryWear = (C, name, group, colors, diff, mn, craft) => {
+      aufrufe.push({ group, craft: craft == null ? craft : g.plain(craft) });
+      const item = { Asset: { Name: name, Group: { Name: group } }, Color: colors, Property: { Effect: [] } };
+      C.Appearance = C.Appearance.filter((a) => a.Asset.Group.Name !== group).concat([item]);
+      return item;
+    };
     g.game.setTimeout = () => 0;
+    return aufrufe;
+  }
+  const amItem = (g, grp) => g.plain(g.game.Player.Appearance.find((a) => a.Asset.Group.Name === grp));
+
+  it('MBS-Wheel-Outfit (_mbsBuildApplyCode): fremdes Schloss wird gefiltert', () => {
+    const g = makeGame();
+    const aufrufe = mitInventoryWear(g);
     const items = [{ group: 'ItemPelvis', asset: 'Belt', colors: 'Default', property: LOVER_LOCK(FREMD) }];
     vm.runInContext(evalIn(ctx, `_mbsBuildApplyCode(${JSON.stringify(items)})`), g.game);
-    expect(worn).toHaveLength(1);
-    expect(worn[0].prop.LockedBy).toBeUndefined();
+    expect(aufrufe).toHaveLength(1);
+    expect(amItem(g, 'ItemPelvis').Property.LockedBy).toBeUndefined();
     expect(g.posts).toHaveLength(1);
+  });
+
+  it('MBS-Wheel: Property kommt ans Item (nicht als Crafting-Rezept) – das Schloss ist danach wirklich dran', () => {
+    evalIn(ctx, "lockRuleSet('mod:AFCHeart','meins')");
+    const g = makeGame();
+    const aufrufe = mitInventoryWear(g);
+    const herz = { LockedBy: 'HighSecurityPadlock', Name: 'Heart Padlock', HeartLockId: 'x', LockMemberNumber: FREMD, MemberNumberListKeys: String(FREMD), Effect: ['Lock'] };
+    const craft = { Name: 'Halsband von Mia', Description: 'Crafted', MemberNumber: 4711 };
+    const items = [{ group: 'ItemNeck', asset: 'Collar', colors: 'Default', property: herz, craft, tr: { a: 1 } }];
+    vm.runInContext(evalIn(ctx, `_mbsBuildApplyCode(${JSON.stringify(items)})`), g.game);
+    expect(aufrufe[0].craft).toBeNull();   // InventoryWear ohne Craft → kein Crafting-Vorkonfigurieren
+    const it = amItem(g, 'ItemNeck');
+    expect(it.Property).toMatchObject({ LockedBy: 'HighSecurityPadlock', Name: 'Heart Padlock', LockMemberNumber: ME, TypeRecord: { a: 1 } });
+    expect(it.Property.Effect).toEqual(['Lock']);
+    expect(it.Craft).toEqual(craft);        // Crafting-Infos unverfälscht, ohne Schloss-Daten
+    evalIn(ctx, "lockRuleSetAll('weg')");
+  });
+
+  it('MBS-Wheel: Item ohne Property bekommt trotzdem ein Property-Objekt', () => {
+    const g = makeGame();
+    mitInventoryWear(g);
+    vm.runInContext(evalIn(ctx, `_mbsBuildApplyCode(${JSON.stringify([{ group: 'Cloth', asset: 'Dress', colors: 'Default', property: null }])})`), g.game);
+    expect(amItem(g, 'Cloth').Property).toEqual({ Effect: [] });
   });
 });
 

@@ -8771,7 +8771,7 @@ window.testOsOutfit = function(mk, vIdx) {
     + '  }else{'
     + '    decoded.forEach(function(item){'
     + '      if(!item||!item.Group)return;'
-    + '      try{InventoryWear(Player,item.Name||"",item.Group,item.Color,0,null,item.Property,false);}catch(_e){}'
+    + '      try{var _iw=InventoryWear(Player,item.Name||"",item.Group,item.Color,0,null,null,false);if(_iw&&item.Craft)_iw.Craft=JSON.parse(JSON.stringify(item.Craft));}catch(_e){}'
     + '    });'
     + '  }'
     // Property-Fix: Craft/Text (z.B. "DOLL") explizit setzen
@@ -9896,7 +9896,7 @@ function _buildApplyCode(code, melden) {
     // Priorität 3: InventoryWear als letzter Fallback (kann Items überspringen)
     + '  decoded.forEach(function(item){'
     + '    if(!item||!item.Group)return;'
-    + '    try{InventoryWear(Player,item.Name||"",item.Group,item.Color,0,null,item.Property,false);}catch(_e){}'
+    + '    try{var _iw=InventoryWear(Player,item.Name||"",item.Group,item.Color,0,null,null,false);if(_iw&&item.Craft)_iw.Craft=JSON.parse(JSON.stringify(item.Craft));}catch(_e){}'
     + '  });'
     // Properties nachträglich setzen, da InventoryWear sie ggf. ignoriert
     + '  decoded.forEach(function(bundleItem){'
@@ -11666,11 +11666,17 @@ function _mbsBuildApplyCode(items, noSync) {
     + '    if(!_a)return;'
     + '    var _c=it.craft&&it.craft.Name?it.craft:null;'
     + '    var _p=__bcuLockFix(it.group,it.asset,it.property??null);'
-    + '    InventoryWear(Player,it.asset,it.group,it.colors,0,Player.MemberNumber,_c?{..._p??{},..._c}:_p??null,false);'
-    + '    if(it.tr&&Object.keys(it.tr).length){'
-    + '      var _w=Player.Appearance.find(function(a){return a.Asset&&a.Asset.Group&&a.Asset.Group.Name===it.group;});'
-    + '      if(_w)_w.Property=Object.assign(_w.Property??{},{TypeRecord:it.tr});'
-    + '    }'
+    // Der 7. Parameter von InventoryWear ist "Craft", NICHT die Property. Früher landete die
+    // Property (samt Schloss) dort: BC wertete sie als Crafting-Rezept aus, das Schloss kam nie
+    // ans Item (AFC/DOGS-Schutz griff nicht), und die Crafting-Infos waren verfälscht.
+    // Jetzt wie beim LSCG-Weg: ohne Craft anziehen, dann Craft und Property direkt setzen
+    // (kein erneutes Crafting-Vorkonfigurieren, das z. B. ein Crafting-Schloss anlegen würde).
+    + '    var _w=InventoryWear(Player,it.asset,it.group,it.colors,0,Player.MemberNumber,null,false)'
+    + '      ||Player.Appearance.find(function(a){return a.Asset&&a.Asset.Group&&a.Asset.Group.Name===it.group;});'
+    + '    if(!_w)return;'
+    + '    if(_c)_w.Craft=JSON.parse(JSON.stringify(_c));'
+    + '    _w.Property=Object.assign(_w.Property||{},_p?JSON.parse(JSON.stringify(_p)):{});'
+    + '    if(it.tr&&Object.keys(it.tr).length)_w.Property.TypeRecord=it.tr;'
     + '  }catch(_e){console.warn("[BCU-MBS]",it.asset,_e.message);}'
     + '});'
     + 'CharacterRefresh(Player,false,false);'
