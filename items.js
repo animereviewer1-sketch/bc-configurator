@@ -8349,7 +8349,7 @@ function captureOsScreenshot(mk, vIdx) {
   // Apply-Kern: exakt gleicher Code wie Run-Button (_buildApplyCode)
   const applyPart = outfitCode
     ? 'try{'
-      + _buildApplyCode(outfitCode)
+      + _buildApplyCode(outfitCode, 'bild')
       + '}catch(applyErr){'
       + '  Player.Appearance.splice(0,Player.Appearance.length);'
       + '  origApp.forEach(function(i){Player.Appearance.push(i);});'
@@ -8484,7 +8484,7 @@ function captureProfileViaCanvas(name, outfitCode, rawApplyCode) {
   let applyCode = '';
   if (outfitCode) {
     try {
-      applyCode = _buildApplyCode(outfitCode);
+      applyCode = _buildApplyCode(outfitCode, 'bild');
     } catch (buildErr) {
       console.error('[BCU] captureProfileViaCanvas _buildApplyCode Fehler:', buildErr.message);
       showStatus('❌ Profil-Code-Fehler: ' + buildErr.message, 'error');
@@ -9117,7 +9117,7 @@ const MOD_LOCK_GRUPPEN = [
   // CharacterRefresh mit dem SETZER (LockMemberNumber) als Besitzer und schützt es danach.
   { id: 'AFCHeart',           label: '💞 AFC Heart Padlock',  namen: ['Heart Padlock', 'HeartPadlock'],
     original: 'AFC trägt den Setzer (die fremde Person) als Besitzerin ein und legt das Schloss immer wieder an.',
-    meins: 'Bleibt ein AFC-Herzschloss – AFC trägt dich als Besitzerin ein.' },
+    meins: 'Bleibt ein AFC-Herzschloss mit dir als Besitzerin – ACHTUNG: AFC lässt die Besitzerin alles entfernen, auch per Total Release. Soll es geschützt bleiben: „Neuer Setzer“ mit Lover oder fester Nummer.' },
   { id: 'FiveMinutesPadlock', label: '⏱️ 5 Minuten (alt)',    namen: ['FiveMinutesPadlock'] },
 ];
 const _MOD_LOCK_MAP = {};
@@ -9180,7 +9180,7 @@ const LOCK_ZIELE = [
   { id: 'ExclusivePadlock',     label: '🔐 Exklusiv',
     info: 'Öffnen: nur der Setzer, nie du selbst – Setzer muss jemand anderes sein (Lover oder feste Nummer), sonst High Security.' },
   { id: 'AFCHeart',             label: '💞 AFC-Herzschloss',
-    info: 'AFC trägt den Setzer als Besitzerin ein (darf immer öffnen). Ohne AFC ein High-Security-Schloss mit Herz-Kennung.' },
+    info: 'AFC trägt den Setzer als Besitzerin ein (darf immer öffnen). Geschützt (auch gegen Total Release) ist es nur, wenn der Setzer jemand anderes ist als du. Ohne AFC ein High-Security-Schloss mit Herz-Kennung.' },
   { id: 'DOGS',                 label: '😈 DOGS Devious',
     info: 'Besitzerin: du. Braucht DOGS mit eingeschaltetem Devious-Schloss, sonst High Security.' },
 ];
@@ -9518,6 +9518,12 @@ function _lockSpielLogik(cfg) {
   return function (g, n, p) {
     if (!p || !p.LockedBy) return p;
     entdeckt(p);
+    // Screenshots: nie ein Schloss anlegen (nur die Kopie fürs Bild – gespeicherter Code bleibt)
+    if (cfg.BILD) {
+      var b = ohneSchloss(p);
+      if (Array.isArray(b.Effect)) b.Effect = b.Effect.filter(function (x) { return x !== 'Lock'; });
+      return b;
+    }
     var mn = p.LockMemberNumber;
     var own = Player.Ownership && Player.Ownership.MemberNumber;
     var lov = (Player.Lovership || []).map(function (l) { return l && l.MemberNumber; });
@@ -9580,12 +9586,15 @@ function _lockSpielLogik(cfg) {
 // JS-Code für den Spiel-Tab: definiert __bcuLockFix(gruppe, assetName, property).
 // melden = true bei echtem Anlegen: Änderungen per LOCK_STRIPPED ans Tool melden und DOGS/AFC
 // registrieren lassen; false bei lokalen Screenshots (DOGS/AFC dann immer weglassen).
+// melden = 'bild': Screenshot – jedes Schloss wird weggelassen, unabhängig von den Regeln.
 function _lockFilterPrelude(melden) {
-  const nurUebernehmen = Object.keys(_lockRules).every(k => _lockRules[k] === 'behalten')
+  const bild = melden === 'bild';
+  if (bild) melden = false;
+  const nurUebernehmen = !bild && Object.keys(_lockRules).every(k => _lockRules[k] === 'behalten')
     && !Object.keys(_lockZeit).some(k => _lockZeit[k] > 0);
   if (nurUebernehmen) return 'var __bcuLockFix=function(g,n,p){return p;};';
   const cfg = { R: _lockRules, U: _lockZiel, Z: _lockZeit, C: _lockCode, S: _lockSetzer, BC: _BC_LOCKS,
-    K: _LOCK_PROP_KEYS, M: _MOD_LOCK_MAP, T: _LOCK_TIMER_MAX, ECHT: !!melden, MELDEN: !!melden, ORIGIN: TOOL_ORIGIN };
+    K: _LOCK_PROP_KEYS, M: _MOD_LOCK_MAP, T: _LOCK_TIMER_MAX, ECHT: !!melden, MELDEN: !!melden, BILD: bild, ORIGIN: TOOL_ORIGIN };
   return 'var __bcuLockFix=(' + _lockSpielLogik.toString() + ')(' + JSON.stringify(cfg) + ');';
 }
 
@@ -9866,7 +9875,7 @@ function _buildApplyCode(code, melden) {
     + 'var decoded=JSON.parse(LZString.decompressFromBase64(' + esc + '));'
     + 'if(!Array.isArray(decoded)||!decoded.length){console.warn("[BCU] Leeres Bundle");return;}'
     // Fremde Schlösser raus – VOR dem Leeren der Appearance (Vergleich mit dem Getragenen)
-    + _lockFilterPrelude(!!melden)
+    + _lockFilterPrelude(melden === 'bild' ? 'bild' : !!melden)
     + 'decoded.forEach(function(it){if(it&&it.Property)it.Property=__bcuLockFix(it.Group,it.Name||"",it.Property);});'
     // Nackte Body-Items sichern (leere Asset-Namen = interne BC-Pflicht-Items)
     + 'var nakedItems=Player.Appearance.filter(function(i){return i.Asset&&(!i.Asset.Name||i.Asset.Name==="");});'
@@ -11659,7 +11668,7 @@ function mbsWheelOpenShot(_unused, mn, oi) {
 function _mbsBuildApplyCode(items, noSync) {
   return '(function(){try{'
     + 'var _items=' + JSON.stringify(items) + ';'
-    + _lockFilterPrelude(!noSync)
+    + _lockFilterPrelude(noSync ? 'bild' : true)
     + '_items.forEach(function(it){'
     + '  try{'
     + '    var _a=AssetGet(Player.AssetFamily,it.group,it.asset);'
