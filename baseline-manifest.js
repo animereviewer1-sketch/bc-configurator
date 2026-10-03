@@ -11,10 +11,10 @@ const BASELINE_MANIFEST = {
   ],
   "identifierPattern": "\\b(Inventory|Character|ChatRoom|Server|Asset|Player|Dialog|Common|Item|Lock|Wardrobe|Pose|Skill|Reputation|Online|Chat)[A-Z]\\w+",
   "counts": {
-    "identifiers": 92,
+    "identifiers": 95,
     "function": 22,
     "assetGroup": 33,
-    "unknown": 37
+    "unknown": 40
   },
   "identifiers": [
     {
@@ -137,10 +137,31 @@ const BASELINE_MANIFEST = {
       ]
     },
     {
+      "name": "ChatRoomCharacterArousalUpdate",
+      "kind": "unknown",
+      "files": [
+        "loader.js"
+      ]
+    },
+    {
+      "name": "ChatRoomCharacterExpressionUpdate",
+      "kind": "unknown",
+      "files": [
+        "loader.js"
+      ]
+    },
+    {
       "name": "ChatRoomCharacterItemUpdate",
       "kind": "function",
       "files": [
         "items.js"
+      ]
+    },
+    {
+      "name": "ChatRoomCharacterPoseUpdate",
+      "kind": "unknown",
+      "files": [
+        "loader.js"
       ]
     },
     {

@@ -6219,7 +6219,7 @@ function _smZeit(ts, mitMs) {
 }
 
 function _smZeile(e) {
-  return e.typ + (e.sub ? ':' + e.sub : '') + ' [' + e.quelle + ']' + (e.screen ? ' (' + e.screen + ')' : '') + (e.tool ? '  ◀ TOOL' : '');
+  return e.typ + (e.sub ? ':' + e.sub : '') + ' [' + e.quelle + ']' + (e.screen ? ' (' + e.screen + ')' : '') + (e.tool ? '  ◀ TOOL' : '') + (e.dup ? '  ≡' : '');
 }
 
 function _smSortiert(objekt, max) {
@@ -6246,9 +6246,14 @@ function _sendMonText(log) {
   z.push('BCs eigenes Limit: ServerSendRateLimit=' + (bc.limit ?? '?') + ' pro ' + (bc.intervall ?? '?')
     + ' ms · Warteschlange jetzt: ' + (bc.warteschlange ?? '?'));
   z.push('Nach Typ: ' + _smSortiert(log.nachTyp, 12));
+  if (log.dup) {
+    const von = Object.values(log.dup.von || {}).reduce((a, b) => a + b, 0);
+    z.push('Identische Wiederholungen (≡, gleicher Inhalt wie die vorige Sendung derselben Art innerhalb ' + Math.round((log.dup.fensterMs || 0) / 1000)
+      + ' s): ' + log.dup.gesamt + ' von ' + von + ' geprüften (' + _smSortiert(log.dup.nachTyp, 6) + ')');
+  }
   z.push('Nach Aufrufer (letzte ' + (log.ringSendungen ?? '?') + ' Sendungen' + (log.wrapper?.length ? ', durchgereicht über ' + log.wrapper.join(' ← ') + ' – ausgeblendet' : '') + '): '
     + _smSortiert(log.nachQuelle, 12));
-  z.push('(„eval@loader.js“ = vom Tool eingespielter Code, also EXEC/Bots, und im Verlauf mit ◀ TOOL markiert; sonst der Dateiname des Aufrufers)');
+  z.push('(„eval@loader.js“ = vom Tool eingespielter Code, also EXEC/Bots, und im Verlauf mit ◀ TOOL markiert; ≡ = identische Wiederholung; sonst der Dateiname des Aufrufers)');
   const vf = Array.isArray(log.vorfaelle) ? log.vorfaelle : [];
   z.push('');
   z.push('TRENNUNGEN (' + vf.length + ')' + (vf.length ? '' : ' – bisher keine seit dem Start des Monitors'));
@@ -6256,6 +6261,7 @@ function _sendMonText(log) {
     z.push('● ' + _smZeit(v.t) + '  ' + v.grund);
     z.push('  letzte 10 s: ' + v.n10 + ' ServerSend-Aufrufe (Spitze ' + (v.spitze10?.n || 0) + ' in 1 s), davon vom Tool: ' + (v.tool10 || 0));
     z.push('  An der Leitung: ' + (v.leitung10 ?? '?') + ' (Spitze ' + (v.leitungSpitze10?.n ?? '?') + ' in 1 s)');
+    z.push('  davon identische Wiederholungen (≡): ' + (v.dup10 ?? '?'));
     z.push('  Hauptsender: ' + ((v.top || []).map(x => x.n + '× ' + x.was).join(' | ') || '–'));
     z.push('  Ablauf (Sekunden vor der Trennung):');
     (v.lauf || []).forEach(e => {

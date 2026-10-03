@@ -130,6 +130,75 @@ describe('Sende-Monitor (Loader): Hook', () => {
   });
 });
 
+describe('Sende-Monitor (Loader): identische Wiederholungen', () => {
+  // Gemessen wird nur, ob eine Sendung dasselbe enthält wie die vorige gleicher Art –
+  // das Senden selbst bleibt unverändert.
+  const ring = (sb) => sb.ctx.__BCK_sendMonSnapshot().ring;
+
+  it('zweimal derselbe AccountUpdate-Inhalt: die zweite Sendung ist eine Wiederholung', () => {
+    const { sb, hook } = bootLoader();
+    senden(hook, 'AccountUpdate', { 'ExtensionSettings.WCEOverrides': 'x' });
+    senden(hook, 'AccountUpdate', { 'ExtensionSettings.WCEOverrides': 'x' });
+    expect(ring(sb).map((e) => e.dup)).toEqual([false, true]);
+    const d = sb.ctx.__BCK_sendMonSnapshot().dup;
+    expect(d.gesamt).toBe(1);
+    expect(d.nachTyp).toEqual({ AccountUpdate: 1 });
+    expect(d.von).toEqual({ AccountUpdate: 2 });
+  });
+
+  it('geänderter Inhalt dazwischen: die Wiederholung von früher zählt nicht (A, B, A)', () => {
+    const { sb, hook } = bootLoader();
+    senden(hook, 'AccountUpdate', { Appearance: ['A'] });
+    senden(hook, 'AccountUpdate', { Appearance: ['B'] });
+    senden(hook, 'AccountUpdate', { Appearance: ['A'] });
+    expect(ring(sb).map((e) => e.dup)).toEqual([false, false, false]);
+  });
+
+  it('verschiedene Felder sind verschiedene Arten: jede wird mit ihrer eigenen Vorgängerin verglichen', () => {
+    const { sb, hook } = bootLoader();
+    for (let i = 0; i < 3; i++) {
+      senden(hook, 'AccountUpdate', { 'ExtensionSettings.WCEOverrides': 'x' });
+      senden(hook, 'AccountUpdate', { Appearance: ['A'] });
+    }
+    // Paare wie im echten Bericht: ab dem zweiten Durchlauf sind beide Wiederholungen
+    expect(ring(sb).map((e) => e.dup)).toEqual([false, false, true, true, true, true]);
+  });
+
+  it('nur bestimmte Typen werden verglichen – Chat zählt nie als Wiederholung', () => {
+    const { sb, hook } = bootLoader();
+    senden(hook, 'ChatRoomChat', { Type: 'Chat', Content: 'hallo' });
+    senden(hook, 'ChatRoomChat', { Type: 'Chat', Content: 'hallo' });
+    expect(ring(sb).map((e) => e.dup)).toEqual([false, false]);
+    expect(sb.ctx.__BCK_sendMonSnapshot().dup.von).toEqual({});
+  });
+
+  it('nach einer Trennung gilt nichts mehr als schon gesendet', () => {
+    const { sb, hook, sockets } = bootLoader();
+    senden(hook, 'AccountUpdate', { Appearance: ['A'] });
+    sockets.ForceDisconnect[0]('ErrorRateLimited');
+    senden(hook, 'AccountUpdate', { Appearance: ['A'] });
+    expect(ring(sb).map((e) => e.dup)).toEqual([false, false]);
+  });
+
+  it('ein Inhalt, der sich nicht serialisieren lässt, wird nicht als Wiederholung gewertet und blockiert nichts', () => {
+    const { sb, hook } = bootLoader();
+    const kreis = {}; kreis.selbst = kreis;
+    const { r, next } = senden(hook, 'AccountUpdate', kreis);
+    expect(r).toBe('weiter');
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(ring(sb)[0].dup).toBe(false);
+  });
+
+  it('Trennung zählt die Wiederholungen der letzten 10 s; der Bericht enthält nie Inhalte', () => {
+    const { sb, hook, sockets } = bootLoader();
+    for (let i = 0; i < 5; i++) senden(hook, 'AccountUpdate', { Appearance: ['sehr-privater-Inhalt'] });
+    sockets.ForceDisconnect[0]('ErrorRateLimited');
+    const snap = sb.ctx.__BCK_sendMonSnapshot();
+    expect(snap.vorfaelle[0].dup10).toBe(4);
+    expect(JSON.stringify(snap)).not.toContain('privater');
+  });
+});
+
 describe('Sende-Monitor (Loader): Leitung (socket.emit)', () => {
   it('zählt Emits, lässt Argumente und Rückgabe unverändert', () => {
     const { sb, ServerSocket, emitOrig } = bootLoader();
@@ -341,6 +410,24 @@ describe('Sende-Monitor (Loader): Aufrufer-Erkennung', () => {
     expect(snap.ring.every((e) => e.tool && e.quelle.startsWith('eval@loader.js'))).toBe(true);
   });
 
+  it('auch hinter vielen Durchgangs-Mods (je ein Hook) wird der echte Absender gefunden', () => {
+    const b = bootLoader();
+    b.sb.ctx.__cb = b.hook.cb;
+    const durchgang = ['KikiLink.fusam.js', 'bcplus.js', 'bcx.js', 'wce.js', 'BC_LianChat.js', 'app.js', 'main-A.js', 'main-B.js', 'main.js', 'zusatz1.js', 'zusatz2.js', 'zusatz3.js'];
+    // innerster Durchgang ruft den Monitor, jeder weitere ruft den vorigen
+    durchgang.forEach((datei, i) => {
+      const ziel = i === 0 ? '__cb([typ, {}], function(){})' : 'dg' + (i - 1) + '(typ)';
+      vm.runInContext('function dg' + i + '(typ){ ' + ziel + '; }', b.sb.ctx, { filename: 'https://x.test/' + datei });
+    });
+    ['DOGS', 'LSCG', 'ChatRoom'].forEach((n) => {
+      vm.runInContext('function von_' + n + '(typ){ dg' + (durchgang.length - 1) + '(typ); }', b.sb.ctx, { filename: 'https://x.test/' + n + '.js' });
+    });
+    for (let i = 0; i < 12; i++) vm.runInContext('von_' + ['DOGS', 'LSCG', 'ChatRoom'][i % 3] + '("ChatRoomChat");', b.sb.ctx, { filename: 'https://x.test/start.js' });
+    const snap = b.sb.ctx.__BCK_sendMonSnapshot();
+    expect(snap.wrapper).toEqual(durchgang);
+    expect(Object.keys(snap.nachQuelle).map((k) => k.split(' ← ')[0]).sort()).toEqual(['ChatRoom.js', 'DOGS.js', 'LSCG.js']);
+  });
+
   it('ein Mod, der ServerSend umhüllt, verdeckt den echten Absender nicht', () => {
     const b = bootLoader();
     b.sb.ctx.__cb = b.hook.cb;
@@ -380,6 +467,7 @@ const LOG = {
   jetzt: Date.now(), seit: Date.now() - 60000, gesamt: 42, vomTool: 3, spitze: { n: 14, t: Date.now() - 5000 }, warnAb: 10,
   nachTyp: { ChatRoomChat: 30, AccountUpdate: 12 }, nachQuelle: { 'eval@loader.js': 3, 'ChatRoom.js': 22 },
   ringSendungen: 42, wrapper: ['KikiLink.fusam.js', 'main-COE8imrH.js'],
+  dup: { gesamt: 31, nachTyp: { AccountUpdate: 28, ChatRoomCharacterExpressionUpdate: 3 }, von: { AccountUpdate: 40, ChatRoomCharacterExpressionUpdate: 6 }, fensterMs: 10000 },
   leitung: { aktiv: true, gesamt: 38, spitze: { n: 9, t: Date.now() - 5000 } },
   bc: { limit: 10, intervall: 1000, warteschlange: 0 },
   ring: [
@@ -388,12 +476,13 @@ const LOG = {
   ],
   vorfaelle: [{
     t: Date.now() - 1000, grund: 'ServerDisconnect: ErrorRateLimited | disconnect: io client disconnect',
-    n10: 47, tool10: 0, spitze10: { n: 18, t: Date.now() - 3000 }, leitung10: 40, leitungSpitze10: { n: 11, t: Date.now() - 3000 },
+    n10: 47, tool10: 0, dup10: 29, spitze10: { n: 18, t: Date.now() - 3000 }, leitung10: 40, leitungSpitze10: { n: 11, t: Date.now() - 3000 },
     top: [{ was: 'ChatRoomChat:Hidden:BCXMsg [bcx.js]', n: 12 }],
     lauf: [
       { t: Date.now() - 4000, k: 'state', online: true, screen: 'ChatSearch', room: null },
       { t: Date.now() - 3000, k: 'send', typ: 'ChatRoomSearch', sub: '', quelle: 'ChatSearch.js', screen: 'ChatSearch', tool: false },
       { t: Date.now() - 2500, k: 'send', typ: 'AccountUpdate', sub: 'Appearance', quelle: 'eval@loader.js', screen: 'ChatRoom', tool: true },
+      { t: Date.now() - 2400, k: 'send', typ: 'AccountUpdate', sub: 'Appearance', quelle: 'wce.js', screen: 'ChatRoom', tool: false, dup: true },
     ],
   }],
 };
@@ -413,6 +502,8 @@ describe('Sende-Monitor (Tool): Bericht', () => {
     expect(text).toContain('letzte 10 s: 47 ServerSend-Aufrufe (Spitze 18 in 1 s), davon vom Tool: 0');
     expect(text).toContain('An der Leitung: 40 (Spitze 11 in 1 s)');
     expect(text).toContain('12× ChatRoomChat:Hidden:BCXMsg [bcx.js]');
+    expect(text).toContain('Identische Wiederholungen (≡, gleicher Inhalt wie die vorige Sendung derselben Art innerhalb 10 s): 31 von 46 geprüften (AccountUpdate 28, ChatRoomCharacterExpressionUpdate 3)');
+    expect(text).toContain('davon identische Wiederholungen (≡): 29');
     expect(text).toContain('Zustand: ChatSearch');
     expect(text).toContain('ChatRoomSearch [ChatSearch.js] (ChatSearch)');
     expect(text).toContain('GETRENNT · Relog');
@@ -424,6 +515,7 @@ describe('Sende-Monitor (Tool): Bericht', () => {
     const text = evalIn(ctx, '_sendMonText(' + JSON.stringify(LOG) + ')');
     expect(text).toMatch(/AccountUpdate:Appearance \[eval@loader\.js\] \(ChatRoom\)  ◀ TOOL/);
     expect(text).not.toMatch(/ChatRoomSearch \[ChatSearch\.js\] \(ChatSearch\)  ◀ TOOL/);
+    expect(text).toMatch(/AccountUpdate:Appearance \[wce\.js\] \(ChatRoom\)  ≡/);
   });
 
   it('ohne Leitungs-Messung steht das im Bericht statt falscher Nullen', () => {

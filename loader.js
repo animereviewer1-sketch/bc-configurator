@@ -2109,11 +2109,15 @@ window.CurseScanner = (() => {
     const SM_VORFALL_MAX  = 50;
     const SM_WARN_PRO_SEK = 10;     // ab so vielen Sendungen in 1 s eine Konsolen-Warnung
     const SM_LAUF_MS      = 30000;  // so viel Ablauf vor einer Trennung wird festgehalten
-    const SM_KETTE_MAX    = 10;     // so viele verschiedene Dateien der Aufrufer-Kette werden gemerkt
+    const SM_KETTE_MAX    = 40;     // so viele verschiedene Dateien der Aufrufer-Kette werden gemerkt
+                                    // (jeder Mod, der ServerSend hakt, steht als Durchgang davor)
     const SM_ZEITEN_MAX   = 600;
+    const SM_DUP_MS       = 10000;  // "identische Wiederholung" = gleicher Inhalt wie die vorige gleicher Art innerhalb so vieler ms
+    // Sendungen, die oft unverändert wiederholt werden – nur hier wird der Inhalt verglichen
+    const SM_DUP_TYPEN    = ['AccountUpdate', 'ChatRoomCharacterExpressionUpdate', 'ChatRoomCharacterPoseUpdate', 'ChatRoomCharacterArousalUpdate'];
     const sm = window.__BCK_SENDLOG2 = window.__BCK_SENDLOG2 || {
       seit: Date.now(), gesamt: 0, vomTool: 0, spitze: { n: 0, t: 0 }, letzteWarnung: 0,
-      nachTyp: {}, ring: [], vorfaelle: [],
+      nachTyp: {}, dup: { gesamt: 0, nachTyp: {}, von: {} }, letzteFp: {}, ring: [], vorfaelle: [],
       leitung: { aktiv: false, gesamt: 0, spitze: { n: 0, t: 0 }, zeiten: [] },
     };
 
@@ -2142,7 +2146,7 @@ window.CurseScanner = (() => {
     const _smKette = function () {
       let stack = '';
       const alt = Error.stackTraceLimit;
-      try { Error.stackTraceLimit = 60; stack = String(new Error().stack || ''); } catch (e) {}
+      try { Error.stackTraceLimit = 150; stack = String(new Error().stack || ''); } catch (e) {}
       try { Error.stackTraceLimit = alt; } catch (e) {}
       const zeilen = stack.split('\n').slice(1);
       const ab = zeilen.findIndex(function (z) { return z.indexOf('BCK_SendMonHook') >= 0; });
@@ -2191,7 +2195,7 @@ window.CurseScanner = (() => {
       const sends = liste.filter(function (e) { return e.k === 'send' && e.kette && e.kette.length; });
       const w = [];
       if (sends.length < 10) return w;
-      for (let runde = 0; runde < 6; runde++) {
+      for (let runde = 0; runde < 40; runde++) {
         const z = {};
         sends.forEach(function (e) {
           const erste = e.kette.find(function (l) { return w.indexOf(l) < 0; });
@@ -2208,7 +2212,7 @@ window.CurseScanner = (() => {
       if (e.k !== 'send') return e;
       const rest = e.kette.filter(function (l) { return w.indexOf(l) < 0; });
       return {
-        t: e.t, k: 'send', typ: e.typ, sub: e.sub, screen: e.screen, tool: e.tool,
+        t: e.t, k: 'send', typ: e.typ, sub: e.sub, screen: e.screen, tool: e.tool, dup: !!e.dup,
         quelle: rest.slice(0, 3).join(' ← ') || (e.kette.length ? '(nur Wrapper)' : '?'),
       };
     };
@@ -2224,6 +2228,26 @@ window.CurseScanner = (() => {
         .sort(function (a, b) { return b.n - a.n; }).slice(0, anz);
     };
 
+    // Inhalts-Fingerabdruck (nur Zahl, nie der Inhalt selbst) – für die Frage, ob eine
+    // Sendung nur wiederholt, was der Server schon hat
+    const _smHash = function (str) {
+      let h = 5381;
+      for (let i = 0; i < str.length; i++) h = ((h << 5) + h + str.charCodeAt(i)) | 0;
+      return h + ':' + str.length;
+    };
+    const _smDuplikat = function (typ, sub, data, t) {
+      if (SM_DUP_TYPEN.indexOf(typ) < 0) return false;
+      let fp;
+      try { fp = _smHash(JSON.stringify(data)); } catch (e) { return false; }
+      const key = typ + '|' + sub;
+      const alt = sm.letzteFp[key];
+      sm.letzteFp[key] = { fp, t };
+      sm.dup.von[typ] = (sm.dup.von[typ] || 0) + 1;
+      const dup = !!alt && alt.fp === fp && t - alt.t < SM_DUP_MS;
+      if (dup) { sm.dup.gesamt++; sm.dup.nachTyp[typ] = (sm.dup.nachTyp[typ] || 0) + 1; }
+      return dup;
+    };
+
     const _smRingKuerzen = function () {
       if (sm.ring.length > SM_RING_MAX) sm.ring.splice(0, sm.ring.length - SM_RING_MAX);
     };
@@ -2231,8 +2255,10 @@ window.CurseScanner = (() => {
     const _smErfassen = function (typ, data) {
       const t = Date.now();
       const kette = _smKette();
+      const sub = _smSub(typ, data);
       const e = {
-        t, k: 'send', typ: String(typ), sub: _smSub(typ, data), kette, tool: _smIstTool(kette),
+        t, k: 'send', typ: String(typ), sub, kette, tool: _smIstTool(kette),
+        dup: _smDuplikat(String(typ), sub, data, t),
         screen: typeof CurrentScreen === 'string' ? CurrentScreen : '',
       };
       sm.gesamt++;
@@ -2274,6 +2300,7 @@ window.CurseScanner = (() => {
         t: v.t, grund: v.grund,
         n10: zehn.filter(function (e) { return e.k === 'send'; }).length,
         tool10: zehn.filter(function (e) { return e.k === 'send' && e.tool; }).length,
+        dup10: zehn.filter(function (e) { return e.k === 'send' && e.dup; }).length,
         spitze10: _smSpitze(zehn), top: _smTop(zehn, 6), lauf,
         leitung10: lt.length, leitungSpitze10: _smSpitzeZeiten(lt),
       };
@@ -2298,6 +2325,7 @@ window.CurseScanner = (() => {
         if (letzter.gruende.indexOf(g) < 0) { letzter.gruende.push(g); letzter.grund = _smGrund(letzter.gruende); }
         return;
       }
+      sm.letzteFp = {};   // nach einer Trennung weiß der Server nichts mehr von früheren Sendungen
       const v = {
         t, gruende: [g], grund: g,
         lauf: sm.ring.filter(function (e) { return e.t >= t - SM_LAUF_MS; }).slice(-80),
@@ -2336,6 +2364,7 @@ window.CurseScanner = (() => {
       return {
         jetzt: Date.now(), seit: sm.seit, gesamt: sm.gesamt, vomTool: sm.vomTool, spitze: sm.spitze, warnAb: SM_WARN_PRO_SEK,
         nachTyp: sm.nachTyp, nachQuelle, ringSendungen: sends.length, wrapper: w,
+        dup: { gesamt: sm.dup.gesamt, nachTyp: sm.dup.nachTyp, von: sm.dup.von, fensterMs: SM_DUP_MS },
         leitung: { aktiv: sm.leitung.aktiv, gesamt: sm.leitung.gesamt, spitze: sm.leitung.spitze },
         // BCs eigene Sende-Warteschlange (wenn die Globals existieren)
         bc: {
