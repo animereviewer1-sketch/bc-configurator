@@ -1198,7 +1198,7 @@ function _restoreDisplaced(C, snapshot, targetGroup){
         // Item wurde durch InventoryWear verdrängt → wiederherstellen
         _log('♻️ Wiederherstellen: '+snap.Group+'/'+snap.Asset.Name+' (verdrängt durch '+targetGroup+')');
         try{
-          InventoryWear(C,snap.Asset.Name,snap.Group,snap.Color,0,Player.MemberNumber,snap.Craft);
+          InventoryWear(C,snap.Asset.Name,snap.Group,snap.Color,0,Player.MemberNumber,snap.Craft,false);
           const restored=InventoryGet(C,snap.Group);
           if(restored&&snap.Property&&Object.keys(snap.Property).length){
             restored.Property=snap.Property;
@@ -1255,7 +1255,7 @@ function _verifyOutfit(a,C,attempt,done){
     try{
       var col=it.colors??(it.cfg&&it.cfg.Color)??'#ffffff'; if(typeof col==='string'&&col.includes(','))col=col.split(',');
       var craft=(it.craft&&it.craft.Name)?it.craft:null;
-      InventoryWear(C,it.asset,it.group,col,0,Player.MemberNumber,craft);
+      InventoryWear(C,it.asset,it.group,col,0,Player.MemberNumber,craft,false);
       _applyProfilItemProps(C,it);
     }catch(e){_log('\u26A0 Retry '+it.group+':',e.message);}
   });
@@ -1299,7 +1299,7 @@ function _applyOutfitSequential(a,C){
     var col=item.colors??(item.cfg&&item.cfg.Color)??'#ffffff'; if(typeof col==='string'&&col.includes(','))col=col.split(',');
     var craft=(item.craft&&item.craft.Name)?item.craft:null;
     try{
-      InventoryWear(C,item.asset,item.group,col,0,Player.MemberNumber,craft);
+      InventoryWear(C,item.asset,item.group,col,0,Player.MemberNumber,craft,false);
       _applyProfilItemProps(C,item);
       CharacterRefresh(C);ChatRoomCharacterUpdate(C);
       _log('\u{1F457} Outfit-Item '+(i+1)+'/'+profilItems.length+': '+item.group+'/'+item.asset);
@@ -1327,7 +1327,7 @@ function _applyItemAction(a, C){
       const ic=a.itemConfig;
       let col=ic.colors??['#ffffff'];
       if(typeof col==='string'&&col.includes(','))col=col.split(',');
-      InventoryWear(C,ic.asset,ic.group,col,0,Player.MemberNumber,ic.craft??null);
+      InventoryWear(C,ic.asset,ic.group,col,0,Player.MemberNumber,ic.craft??null,false);
       // Sofort TypeRecord setzen (vor CharacterRefresh) damit BC es direkt übernimmt
       const itemNow=InventoryGet(C,ic.group);
       if(itemNow){
@@ -1347,7 +1347,7 @@ function _applyItemAction(a, C){
         const item=InventoryGet(C,ic.group);
         if(!item){
           // Item wurde durch _restoreDisplaced verdrängt → nochmal anlegen
-          InventoryWear(C,ic.asset,ic.group,col,0,Player.MemberNumber,ic.craft??null);
+          InventoryWear(C,ic.asset,ic.group,col,0,Player.MemberNumber,ic.craft??null,false);
           const reItem=InventoryGet(C,ic.group);
           if(reItem){
             reItem.Property=reItem.Property??{};
@@ -1402,7 +1402,7 @@ function _applyItemAction(a, C){
       },180);
     }else if(a.curseEntry){
       let col=a.curseEntry.Farbe;if(typeof col==='string'&&col.includes(','))col=col.split(',');
-      InventoryWear(C,a.curseEntry.ItemName,a.curseEntry.Gruppe,col,0,Player.MemberNumber,a.curseEntry.Craft);
+      InventoryWear(C,a.curseEntry.ItemName,a.curseEntry.Gruppe,col,0,Player.MemberNumber,a.curseEntry.Craft,false);
       _restoreDisplaced(C,snapshot,a.curseEntry.Gruppe);
     }else if(a.profilName){
       var profilItems = a.profilItems ?? [];
@@ -1424,7 +1424,7 @@ function _applyItemAction(a, C){
         var col = item.colors ?? item.cfg?.Color ?? '#ffffff';
         if(typeof col==='string' && col.includes(',')) col = col.split(',');
         var craft = (item.craft && item.craft.Name) ? item.craft : null;
-        InventoryWear(C, item.asset, item.group, col, 0, Player.MemberNumber, craft);
+        InventoryWear(C, item.asset, item.group, col, 0, Player.MemberNumber, craft,false);
       });
 
       // Phase 2: Properties + Locks in einem einzigen setTimeout
@@ -1489,7 +1489,7 @@ function _applyItemAction(a, C){
             if(!_outfitKeepGroup(snap.Asset.Group,a)) return; // diese Gruppe soll NICHT behalten werden
             if(InventoryGet(C,snap.Group)) return; // noch vorhanden → nichts zu tun
             try{
-              InventoryWear(C,snap.Asset.Name,snap.Group,snap.Color,0,Player.MemberNumber,snap.Craft);
+              InventoryWear(C,snap.Asset.Name,snap.Group,snap.Color,0,Player.MemberNumber,snap.Craft,false);
               var _r=InventoryGet(C,snap.Group);
               if(_r&&snap.Property&&Object.keys(snap.Property).length) _r.Property=snap.Property;
               _log('\u267B Behalten/Wiederhergestellt: '+snap.Group+'/'+snap.Asset.Name);
@@ -1504,7 +1504,7 @@ function _applyItemAction(a, C){
         _verifyOutfit(a,C,0,function(){ _outfitPending--; });
       }, 600);
     }else if(a.item){
-      InventoryWear(C,a.item,a.gruppe,a.farbe??'#ffffff',0,Player.MemberNumber);
+      InventoryWear(C,a.item,a.gruppe,a.farbe??'#ffffff',0,Player.MemberNumber,null,false);
       _restoreDisplaced(C,snapshot,a.gruppe);
     }
   }catch(ex){_log('item Fehler:',ex.message);}
@@ -1526,7 +1526,7 @@ function _execAct(a,C,vars){
     if(a.typ==='chat'){ServerSend('ChatRoomChat',{Content:_tpl(_pickText(a),vars),Type:'Chat'});ok=true;}
     else if(a.typ==='emote'){ServerSend('ChatRoomChat',{Content:_tpl(_pickText(a),vars),Type:'Emote'});ok=true;}
     else if(a.typ==='whisper'){ServerSend('ChatRoomChat',{Content:_tpl(_pickText(a),vars),Type:'Whisper',Target:C.MemberNumber});ok=true;}
-    else if(a.typ==='item_entf'){const _gr=(Array.isArray(a.gruppen)&&a.gruppen.length)?a.gruppen:(a.gruppe?[a.gruppe]:[]);_gr.forEach(function(g){if(g){try{InventoryRemove(C,g);_asUnregister(C,g);}catch(e){}}});if(_gr.length){CharacterRefresh(C);ChatRoomCharacterUpdate(C);}ok=true;}
+    else if(a.typ==='item_entf'){const _gr=(Array.isArray(a.gruppen)&&a.gruppen.length)?a.gruppen:(a.gruppe?[a.gruppe]:[]);_gr.forEach(function(g){if(g){try{InventoryRemove(C,g,false);_asUnregister(C,g);}catch(e){}}});if(_gr.length){CharacterRefresh(C);ChatRoomCharacterUpdate(C);}ok=true;}
     else if(a.typ==='item'){
       _applyItemAction(a,C);
       if(a.antiStrip)_asRegister(C,a);
@@ -1534,7 +1534,7 @@ function _execAct(a,C,vars){
       if(a.verfallSek>0){
         var _vg=_verfallGroups(a);
         setTimeout(function(){
-          _vg.forEach(function(g){ if(g){ try{ InventoryRemove(C,g); _asUnregister(C,g); }catch(e){} } });
+          _vg.forEach(function(g){ if(g){ try{ InventoryRemove(C,g,false); _asUnregister(C,g); }catch(e){} } });
           try{ CharacterRefresh(C); ChatRoomCharacterUpdate(C); }catch(e){}
           _log('\u23F3 Verfall: '+_vg.join(', ')+' nach '+a.verfallSek+'s entfernt ('+C.Name+')');
         }, a.verfallSek*1000);
@@ -2865,7 +2865,7 @@ function _tickNoStrip(chars){
           const ic=w.itemConfig;
           let col=ic.colors||['#ffffff'];
           if(typeof col==='string'&&col.includes(','))col=col.split(',');
-          InventoryWear(C,ic.asset,ic.group,col,0,Player.MemberNumber,ic.craft||null);
+          InventoryWear(C,ic.asset,ic.group,col,0,Player.MemberNumber,ic.craft||null,false);
           const itemNow=InventoryGet(C,ic.group);
           if(itemNow){
             itemNow.Color=col;
@@ -2880,9 +2880,9 @@ function _tickNoStrip(chars){
           let col2=w.curseEntry.Farbe;
           if(typeof col2==='string'&&col2.includes(','))col2=col2.split(',');
           InventoryWear(C,w.curseEntry.ItemName,w.curseEntry.Gruppe,
-            col2,0,Player.MemberNumber,w.curseEntry.Craft||null);
+            col2,0,Player.MemberNumber,w.curseEntry.Craft||null,false);
         }else if(w.ersatz){
-          InventoryWear(C,w.ersatz,w.gruppe,w.farbe||'#ffffff',0,Player.MemberNumber);
+          InventoryWear(C,w.ersatz,w.gruppe,w.farbe||'#ffffff',0,Player.MemberNumber,null,false);
         }else{
           _log('\u26A0 NoStrip: kein Item-Config fuer '+w.gruppe);
           return;
@@ -3035,7 +3035,7 @@ _asH = function(data) {
             var ic = w.itemConfig;
             var col = ic.colors || ['#ffffff'];
             if (typeof col === 'string' && col.indexOf(',') !== -1) col = col.split(',');
-            InventoryWear(C, ic.asset, ic.group, col, 0, Player.MemberNumber, ic.craft || null);
+            InventoryWear(C, ic.asset, ic.group, col, 0, Player.MemberNumber, ic.craft || null,false);
             var itemNow = InventoryGet(C, ic.group);
             if (itemNow) {
               itemNow.Color = col;
@@ -3050,9 +3050,9 @@ _asH = function(data) {
             var col2 = w.curseEntry.Farbe;
             if (typeof col2 === 'string' && col2.indexOf(',') !== -1) col2 = col2.split(',');
             InventoryWear(C, w.curseEntry.ItemName, w.curseEntry.Gruppe,
-              col2, 0, Player.MemberNumber, w.curseEntry.Craft || null);
+              col2, 0, Player.MemberNumber, w.curseEntry.Craft || null,false);
           } else if (w.ersatz) {
-            InventoryWear(C, w.ersatz, w.gruppe, w.farbe || '#ffffff', 0, Player.MemberNumber);
+            InventoryWear(C, w.ersatz, w.gruppe, w.farbe || '#ffffff', 0, Player.MemberNumber,null,false);
           } else {
             _log('\u26A0 AntiStrip: kein Ersatz konfiguriert f\u00fcr ' + w.gruppe);
             return;

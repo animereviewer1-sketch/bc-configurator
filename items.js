@@ -1950,7 +1950,12 @@ function generateOutfitCode() {
         : 'Asset.find(a=>a.Name===' + JSON.stringify(lock) + '&&a.Group?.Name==="ItemMisc")';
       code += '{\n  const _li=InventoryGet(TARGET,' + JSON.stringify(group) + ');\n'
             + '  const _la=' + findLock + ';\n'
-            + '  if(_la&&_li){\n    InventoryLock(TARGET,_li,{Asset:_la},Player.MemberNumber,true);\n';
+            // InventoryLock(..., true) ruft CharacterRefresh(C, true) auf - fuer den eigenen Charakter ein
+            // AccountUpdate pro gesperrtem Item (15 Schloesser = 15 Pushes in einer Millisekunde, das loeste
+            // "ErrorRateLimited" aus). Darum Update=false; was BC bei true zusaetzlich tut (Timer des Schlosses
+            // setzen) steht eine Zeile darunter, der Push kommt gesammelt am Ende (Refresh + verzoegerter Sync).
+            + '  if(_la&&_li){\n    InventoryLock(TARGET,_li,{Asset:_la},Player.MemberNumber,false);\n'
+            + '    if(_la.RemoveTimer>0&&typeof TimerInventoryRemoveSet==="function")TimerInventoryRemoveSet(TARGET,' + JSON.stringify(group) + ',_la.RemoveTimer);\n';
       if (lockParams?.timer > 0)    code += '    _li.Property.RemoveTimer=Date.now()+' + lockParams.timer + ';\n';
       if (lockParams?.combo)         code += '    _li.Property.CombinationNumber=' + JSON.stringify(lockParams.combo) + ';\n';
       if (lockParams?.password)      code += '    _li.Property.Password=' + JSON.stringify(lockParams.password) + ';\n';
@@ -6272,6 +6277,14 @@ function _sendMonText(log) {
         z.push('  ' + vor + '  ' + _smZeile(e));
       }
     });
+    // Was hat das Tool in dieser Zeit selbst an den Spiel-Tab geschickt? (EXEC-Log des Tools,
+    // gleiche Uhr) – so lässt sich eine Salve mit "◀ TOOL" einer Aktion zuordnen
+    const execs = (typeof _execLog !== 'undefined' && Array.isArray(_execLog) ? _execLog : [])
+      .filter(x => x && x.ts >= v.t - 30000 && x.ts <= v.t + 1000);
+    z.push('  EXEC-Aufrufe des Tools in diesem Zeitraum (' + execs.length + '):');
+    execs.forEach(x => {
+      z.push('  ' + ((x.ts - v.t) / 1000).toFixed(1).padStart(6) + '  ' + x.desc + ' (' + x.len + ' Zeichen)');
+    });
   });
   const ring = Array.isArray(log.ring) ? log.ring : [];
   z.push('');
@@ -8577,6 +8590,13 @@ function captureOsScreenshot(mk, vIdx) {
 // outfitCode  = LZString-Bundle (LSCG-Profil) oder null
 // rawApplyCode = roher JS-Code (normales Profil) oder null
 // Genau einer der beiden kann gesetzt sein. Wenn beide null: nur Capture (kein Apply).
+// Screenshot-Durchlaeufe duerfen den Server nicht anfassen. InventoryLock(..., true) refresht mit Push
+// (CharacterRefresh(C, true, false) -> AccountUpdate) - pro gesperrtem Item einer. Fuer ein lokal
+// aufgenommenes Bild, das danach zurueckgesetzt wird, ist weder der Push noch der Schloss-Timer noetig.
+function _screenshotCodeOhnePush(code) {
+  return String(code).replace(/(InventoryLock\([^\n;]*,\s*)true(\s*\))/g, '$1false$2');
+}
+
 function captureProfileViaCanvas(name, outfitCode, rawApplyCode) {
   // Zwischen loadProfile und diesem Aufruf (20 ms) kann pausiert worden sein → Profil zurück in die Queue
   if (!_connected || _slideshowPaused) {
@@ -8632,6 +8652,7 @@ function captureProfileViaCanvas(name, outfitCode, rawApplyCode) {
              !t.startsWith('CharacterRefresh(') &&
              !(t.startsWith('setTimeout(') && t.includes('1200'));
     }).join('\n');
+    rawApplyCode = _screenshotCodeOhnePush(rawApplyCode);
   }
 
   // ── Identisch zu captureOsScreenshot – bewiesenermaßen funktionierend ──
