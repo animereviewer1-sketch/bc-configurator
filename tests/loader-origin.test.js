@@ -52,6 +52,7 @@ describe('loader.js Origin-Ableitung und Source-Pinning (STAB-06)', () => {
     expect(wildcardLines.length).toBe(0);
     const allowedOriginCount = (L.match(/ALLOWED_ORIGIN/g) || []).length;
     // 35: +1 für den GAME_STATE-Post des Server-Wächters (DC-Pause im Tool)
-    expect(allowedOriginCount).toBe(35);
+    // 37: +2 für den Sende-Monitor (Antwort auf GET_SEND_LOG, SEND_MON_VORFALL bei Trennung)
+    expect(allowedOriginCount).toBe(37);
   });
 });

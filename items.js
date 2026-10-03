@@ -6205,6 +6205,96 @@ try {
 } catch (e) {}
 
 
+// ── Sende-Monitor (Einstellungen → Werkzeuge) ───────────────────────────
+// Der Loader im Spiel-Tab zählt, was BC an den Server SENDET (Typ, Aufrufer,
+// nie Texte). Bei "ErrorRateLimited"-Trennungen zeigt das, wer sendet. Wie das
+// EXEC-Log Betriebs-Telemetrie, kein Scan-Datensatz; das Log selbst liegt im
+// BC-Tab (Ringpuffer), hier wird nur der letzte Abruf angezeigt.
+let _sendMonLog = null;
+
+function _smZeit(ts, mitMs) {
+  const d = new Date(ts);
+  const p = (n, l) => String(n).padStart(l || 2, '0');
+  return p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds()) + (mitMs ? '.' + p(d.getMilliseconds(), 3) : '');
+}
+
+function _smZeile(e) {
+  return e.typ + (e.sub ? ':' + e.sub : '') + ' [' + e.quelle + ']' + (e.screen ? ' (' + e.screen + ')' : '');
+}
+
+function _smSortiert(objekt, max) {
+  return Object.keys(objekt || {}).map(k => [k, objekt[k]]).sort((a, b) => b[1] - a[1]).slice(0, max)
+    .map(x => x[0] + ' ' + x[1]).join(', ') || '–';
+}
+
+function _sendMonText(log) {
+  if (!log) {
+    return 'Keine Daten. „Aktualisieren“ klicken – der BC-Tab muss verbunden sein und das Bookmarklet nach dem Tool-Update neu gestartet worden sein.';
+  }
+  const z = [];
+  z.push('Sende-Monitor · Stand ' + _smZeit(log.jetzt) + ' · läuft seit ' + _smZeit(log.seit));
+  z.push('Gesendet seit Start: ' + log.gesamt + ' · Spitze: ' + (log.spitze?.n || 0) + ' in 1 s'
+    + (log.spitze?.n ? ' (um ' + _smZeit(log.spitze.t) + ')' : '') + ' · Warnschwelle: ' + log.warnAb + ' in 1 s');
+  z.push('Nach Typ: ' + _smSortiert(log.nachTyp, 12));
+  z.push('Nach Aufrufer: ' + _smSortiert(log.nachQuelle, 12));
+  z.push('(„eval“ = vom Tool eingespielter Code, also EXEC/Bots; sonst der Dateiname des Aufrufers)');
+  const vf = Array.isArray(log.vorfaelle) ? log.vorfaelle : [];
+  z.push('');
+  z.push('TRENNUNGEN (' + vf.length + ')' + (vf.length ? '' : ' – bisher keine seit dem Start des Monitors'));
+  vf.slice().reverse().forEach(v => {
+    z.push('● ' + _smZeit(v.t) + '  ' + v.grund);
+    z.push('  letzte 10 s: ' + v.n10 + ' Sendungen, Spitze ' + (v.spitze10?.n || 0) + ' in 1 s');
+    z.push('  Hauptsender: ' + ((v.top || []).map(x => x.n + '× ' + x.was).join(' | ') || '–'));
+    z.push('  Ablauf (Sekunden vor der Trennung):');
+    (v.lauf || []).forEach(e => {
+      const vor = ((e.t - v.t) / 1000).toFixed(1).padStart(6);
+      if (e.k === 'state') {
+        z.push('  ' + vor + '  Zustand: ' + (e.online ? '' : 'GETRENNT · ') + (e.screen || '?') + ' · Raum ' + (e.room ?? '–'));
+      } else {
+        z.push('  ' + vor + '  ' + _smZeile(e));
+      }
+    });
+  });
+  const ring = Array.isArray(log.ring) ? log.ring : [];
+  z.push('');
+  z.push('LETZTE SENDUNGEN UND ZUSTANDSWECHSEL (' + Math.min(ring.length, 40) + ')');
+  ring.slice(-40).reverse().forEach(e => {
+    if (e.k === 'state') z.push(_smZeit(e.t, true) + '  Zustand: ' + (e.online ? '' : 'GETRENNT · ') + (e.screen || '?') + ' · Raum ' + (e.room ?? '–'));
+    else z.push(_smZeit(e.t, true) + '  ' + _smZeile(e));
+  });
+  return z.join('\n');
+}
+
+function _renderSendMon() {
+  const el = document.getElementById('sendMonInfo');
+  if (el) el.textContent = _sendMonText(_sendMonLog);
+}
+
+function sendMonRefresh() {
+  if (!_connected) { showStatus('❌ Nicht verbunden mit BC', 'error'); return; }
+  bcSend({ type: 'GET_SEND_LOG' }, true);
+}
+
+function sendMonCopy() {
+  const text = _sendMonText(_sendMonLog);
+  navigator.clipboard.writeText(text).then(
+    () => showStatus('📋 Sende-Monitor kopiert', 'success'),
+    () => showStatus('❌ Kopieren fehlgeschlagen', 'error')
+  );
+}
+
+onBridgeMessage('SEND_LOG_DATA', function(ev) {
+      _sendMonLog = ev.data.log || null;
+      _renderSendMon();
+});
+
+// Der Loader meldet jede Trennung sofort – Bericht gleich mitholen, solange der Ablauf frisch ist
+onBridgeMessage('SEND_MON_VORFALL', function(ev) {
+      showStatus('⚠️ Server-Trennung (' + String(ev.data.grund || '?').slice(0, 60) + ') – Ablauf unter Einstellungen → Werkzeuge → Sende-Monitor', 'error');
+      sendMonRefresh();
+});
+
+
 /* Den lokalen Curse-Bestand in den Loader schieben.
 
    Wichtig fuer mehr als nur "Wear nach Browserwechsel": ein Full-Sync ersetzt

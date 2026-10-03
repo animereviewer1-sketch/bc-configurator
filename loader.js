@@ -1767,6 +1767,14 @@ window.CurseScanner = (() => {
           break;
         }
 
+        case 'GET_SEND_LOG': {
+          src.postMessage({
+            app: APP, type: 'SEND_LOG_DATA',
+            log: typeof window.__BCK_sendMonSnapshot === 'function' ? window.__BCK_sendMonSnapshot() : null,
+          }, ALLOWED_ORIGIN);
+          break;
+        }
+
         case 'GET_LOCKS': {
           try {
             const _s = new Set();
@@ -2081,6 +2089,176 @@ window.CurseScanner = (() => {
     })();
   }
 
+  // ── Sende-Monitor: wer schickt wie viel an den BC-Server? ──────────────
+  // "ErrorRateLimited" heißt: der Server hat zu viele vom Client GESENDETE
+  // Nachrichten in kurzer Zeit gezählt und trennt die Verbindung. Die Scans des
+  // Tools (GET_PLAYER, OUTFIT_SCAN, SCAN_CURSES …) lesen nur lokalen Speicher
+  // und senden nichts – dieser Monitor zeigt, welche Quelle tatsächlich sendet.
+  // Er zählt nur Typ, Unterart und Aufrufer (nie Nachrichtentexte) und ändert
+  // nichts am Senden. Priorität -9999 → läuft zuletzt und zählt damit nur, was
+  // nach BCX-Filter & Co. wirklich rausgeht. Eigener Mod + eigenes Merkmal,
+  // damit das auch greift, wenn der BC-Tab schon einen älteren Loader hatte.
+  // Das Log liegt auf window und übersteht erneute Bookmarklet-Klicks.
+  if (!window.__BCK_SENDMON__) {
+    window.__BCK_SENDMON__ = true;
+    const SM_RING_MAX    = 400;    // Ringpuffer – verworfen werden nur eigene Log-Einträge
+    const SM_VORFALL_MAX = 50;
+    const SM_WARN_PRO_SEK = 10;    // ab so vielen Sendungen in 1 s eine Konsolen-Warnung
+    const SM_LAUF_MS     = 30000;  // so viel Ablauf vor einer Trennung wird festgehalten
+    const sm = window.__BCK_SENDLOG = window.__BCK_SENDLOG || {
+      seit: Date.now(), gesamt: 0, spitze: { n: 0, t: 0 }, letzteWarnung: 0,
+      nachTyp: {}, nachQuelle: {}, ring: [], vorfaelle: [],
+    };
+
+    // Aufrufer-Kette aus dem Stack: bcmodsdk/Server.js und der Hook selbst zählen
+    // nicht. "eval" = vom Tool eingespielter Code (EXEC, Bots).
+    const _smQuelle = function () {
+      let stack = '';
+      const alt = Error.stackTraceLimit;
+      try { Error.stackTraceLimit = 30; stack = String(new Error().stack || ''); } catch (e) {}
+      try { Error.stackTraceLimit = alt; } catch (e) {}
+      const kette = [];
+      // Erst hinter dem Hook-Frame beginnt der echte Aufrufer (davor liegen
+      // _smQuelle/_smErfassen/Hook – alles loader.js und für den Bericht wertlos).
+      const zeilen = stack.split('\n').slice(1);
+      const ab = zeilen.findIndex(function (z) { return z.indexOf('BCK_SendMonHook') >= 0; });
+      for (const zeile of zeilen.slice(ab + 1)) {
+        let name = null;
+        if (/\beval\b|<anonymous>:\d+:\d+|\bVM\d+:\d+:\d+/.test(zeile)) name = 'eval';
+        else {
+          const m = /([^\/\\\s()]+?\.(?:js|ts|mjs))(?:\?[^:\s)]*)?:\d+:\d+/.exec(zeile);
+          if (m) name = m[1];
+        }
+        if (!name || name === 'bcmodsdk.min.js' || name === 'Server.js') continue;
+        if (kette[kette.length - 1] !== name) kette.push(name);
+        if (kette.length >= 3) break;
+      }
+      return kette.join(' ← ') || '?';
+    };
+
+    // Unterart ohne Inhalte: Chat-Typ (Hidden zusätzlich mit seinem Stichwort,
+    // z. B. BCXMsg/LSCGMsg), bei AccountUpdate nur die Feldnamen.
+    const _smSub = function (typ, data) {
+      if (!data || typeof data !== 'object') return '';
+      if (typ === 'ChatRoomChat') {
+        let s = typeof data.Type === 'string' ? data.Type : '';
+        if (s === 'Hidden' && typeof data.Content === 'string') s += ':' + data.Content.slice(0, 32);
+        return s;
+      }
+      if (typ === 'AccountUpdate') return Object.keys(data).slice(0, 4).join(',');
+      return '';
+    };
+
+    // Höchste Zahl an Sendungen in einem gleitenden 1-s-Fenster
+    const _smSpitze = function (liste) {
+      const sends = liste.filter(function (e) { return e.k === 'send'; });
+      let max = 0, ende = 0, links = 0;
+      for (let i = 0; i < sends.length; i++) {
+        while (sends[i].t - sends[links].t >= 1000) links++;
+        if (i - links + 1 > max) { max = i - links + 1; ende = sends[i].t; }
+      }
+      return { n: max, t: ende };
+    };
+
+    const _smTop = function (liste, anz) {
+      const z = {};
+      liste.forEach(function (e) {
+        if (e.k !== 'send') return;
+        const key = e.typ + (e.sub ? ':' + e.sub : '') + ' [' + e.quelle + ']';
+        z[key] = (z[key] || 0) + 1;
+      });
+      return Object.keys(z).map(function (k) { return { was: k, n: z[k] }; })
+        .sort(function (a, b) { return b.n - a.n; }).slice(0, anz);
+    };
+
+    const _smRingKuerzen = function () {
+      if (sm.ring.length > SM_RING_MAX) sm.ring.splice(0, sm.ring.length - SM_RING_MAX);
+    };
+
+    const _smErfassen = function (typ, data) {
+      const t = Date.now();
+      const e = {
+        t, k: 'send', typ: String(typ), sub: _smSub(typ, data), quelle: _smQuelle(),
+        screen: typeof CurrentScreen === 'string' ? CurrentScreen : '',
+      };
+      sm.gesamt++;
+      sm.nachTyp[e.typ] = (sm.nachTyp[e.typ] || 0) + 1;
+      sm.nachQuelle[e.quelle] = (sm.nachQuelle[e.quelle] || 0) + 1;
+      sm.ring.push(e);
+      _smRingKuerzen();
+      let n = 0;
+      for (let i = sm.ring.length - 1; i >= 0 && sm.ring[i].t > t - 1000; i--) if (sm.ring[i].k === 'send') n++;
+      if (n > sm.spitze.n) sm.spitze = { n, t };
+      if (n >= SM_WARN_PRO_SEK && t - sm.letzteWarnung > 5000) {
+        sm.letzteWarnung = t;
+        BCK.warn('[SendMonitor] ' + n + ' Nachrichten in 1 s: '
+          + _smTop(sm.ring.filter(function (r) { return r.t > t - 1000; }), 4)
+              .map(function (x) { return x.n + '× ' + x.was; }).join(' | '));
+      }
+    };
+
+    // Trennung (ForceDisconnect/disconnect): Ablauf der letzten Sekunden festhalten
+    const _smVorfall = function (grund) {
+      const t = Date.now();
+      const letzter = sm.vorfaelle[sm.vorfaelle.length - 1];
+      if (letzter && t - letzter.t < 2000) return;   // ForceDisconnect + disconnect = ein Vorfall
+      const lauf  = sm.ring.filter(function (e) { return e.t >= t - SM_LAUF_MS; });
+      const zehn  = lauf.filter(function (e) { return e.t >= t - 10000; });
+      const v = {
+        t, grund: String(grund).slice(0, 80),
+        n10: zehn.filter(function (e) { return e.k === 'send'; }).length,
+        spitze10: _smSpitze(zehn), top: _smTop(zehn, 6), lauf: lauf.slice(-80),
+      };
+      sm.vorfaelle.push(v);
+      if (sm.vorfaelle.length > SM_VORFALL_MAX) sm.vorfaelle.splice(0, sm.vorfaelle.length - SM_VORFALL_MAX);
+      BCK.warn('[SendMonitor] ⚠ Trennung (' + v.grund + '): ' + v.n10 + ' Sendungen in den letzten 10 s, Spitze '
+        + v.spitze10.n + '/s | ' + v.top.map(function (x) { return x.n + '× ' + x.was; }).join(' | '));
+      const ref = window.__BCK_popupRef;
+      if (ref && !ref.closed) {
+        try {
+          ref.postMessage({ app: APP, type: 'SEND_MON_VORFALL', grund: v.grund, n10: v.n10, spitze10: v.spitze10.n }, ALLOWED_ORIGIN);
+        } catch (e) {}
+      }
+    };
+
+    // Zustandswechsel (Screen/Raum) in den Ablauf – zeigt Raum-Hopping neben den Sendungen
+    window.__BCK_sendMonState = function (st) {
+      sm.ring.push({ t: Date.now(), k: 'state', online: !!st.online, screen: st.screen || '', room: st.room || null });
+      _smRingKuerzen();
+    };
+    window.__BCK_sendMonSnapshot = function () {
+      return {
+        jetzt: Date.now(), seit: sm.seit, gesamt: sm.gesamt, spitze: sm.spitze, warnAb: SM_WARN_PRO_SEK,
+        nachTyp: sm.nachTyp, nachQuelle: sm.nachQuelle, ring: sm.ring.slice(-150), vorfaelle: sm.vorfaelle,
+      };
+    };
+    window.__BCK_sendMonVorfall = _smVorfall;   // Test-Seam
+
+    (function installSendMon() {
+      if (typeof bcModSdk === 'undefined' || typeof bcModSdk.registerMod !== 'function') { setTimeout(installSendMon, 500); return; }
+      try {
+        const mod = bcModSdk.registerMod({ name: 'BCK_SendMonitor', fullName: 'BCK Sende-Monitor', version: '1.0.0' });
+        mod.hookFunction('ServerSend', -9999, function BCK_SendMonHook(args, next) {
+          try { _smErfassen(args[0], args[1]); } catch (e) {}
+          return next(args);
+        });
+        BCK.ok('[SendMonitor] aktiv ✅ – zählt ausgehende Server-Nachrichten (nur Typ/Aufrufer, keine Texte)');
+      } catch (e) {
+        BCK.err('[SendMonitor] Fehler:', e.message);
+      }
+    })();
+
+    (function installSendMonSocket() {
+      if (typeof ServerSocket === 'undefined') { setTimeout(installSendMonSocket, 1000); return; }
+      ServerSocket.on('ForceDisconnect', function (grund) {
+        try { _smVorfall('ForceDisconnect: ' + (typeof grund === 'string' ? grund : JSON.stringify(grund))); } catch (e) {}
+      });
+      ServerSocket.on('disconnect', function (grund) {
+        try { _smVorfall('disconnect: ' + String(grund)); } catch (e) {}
+      });
+    })();
+  }
+
   // ── Auto-Scan bei Raumwechsel / Member-Join ───────────────────────────
   const _outfitRunId = Date.now();
   window.__BCK_OutfitRunId = _outfitRunId;
@@ -2293,6 +2471,7 @@ window.CurseScanner = (() => {
     if (key === window.__BCK_gameStateLast) return;
     const hatteStand = !!window.__BCK_gameStateLast;
     window.__BCK_gameStateLast = key;
+    if (window.__BCK_sendMonState) { try { window.__BCK_sendMonState(st); } catch (e) {} }
     if (hatteStand) BCK.info('Server-Zustand:', st.online ? 'online' : 'GETRENNT', '| Screen:', st.screen, '| Raum:', st.room ?? '–');
     const ref = window.__BCK_popupRef;
     if (!ref || ref.closed) return;

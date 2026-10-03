@@ -2523,6 +2523,15 @@ button { cursor: pointer; }
         <div id="execLogInfo" class="set-info" style="white-space:pre-wrap;max-height:260px;overflow:auto;font-family:var(--font-mono)">–</div></div>
     </div>
     <div class="set-card">
+      <div class="set-card-h"><span class="tweaks-section-title">📡 Sende-Monitor</span>
+        <div class="tweaks-btn-group set-r">
+          <button class="tweaks-btn" onclick="sendMonRefresh()" title="Aktuellen Stand aus dem Spiel-Tab holen">🔄 Aktualisieren</button>
+          <button class="tweaks-btn" onclick="sendMonCopy()" title="Den ganzen Bericht als Text in die Zwischenablage kopieren">📋 Kopieren</button>
+        </div></div>
+      <div class="set-card-b"><div class="set-hint">Zählt, was Bondage Club an den Server <b>sendet</b> (Nachrichtentyp und Aufrufer, nie Texte) – für Disconnects mit „ErrorRateLimited“. Die Scans des Tools lesen nur lokal und senden nichts. Bei einer Trennung wird der Ablauf der letzten 30 s festgehalten und hier gezeigt. Das Log liegt im BC-Tab und ist weg, wenn du BC neu lädst – vorher kopieren.</div>
+        <div id="sendMonInfo" class="set-info" style="white-space:pre-wrap;max-height:320px;overflow:auto;font-family:var(--font-mono)">Noch keine Daten – „Aktualisieren“ klicken.</div></div>
+    </div>
+    <div class="set-card">
       <div class="set-card-h"><span class="tweaks-section-title">Spiel-Scan ist umgezogen</span></div>
       <div class="set-card-b set-hint">Liegt jetzt im Tab <b>Scan</b> (Seitenleiste → Spieler → Spiel-Scan).</div>
     </div>
