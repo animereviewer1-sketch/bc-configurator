@@ -2096,68 +2096,121 @@ window.CurseScanner = (() => {
   // und senden nichts – dieser Monitor zeigt, welche Quelle tatsächlich sendet.
   // Er zählt nur Typ, Unterart und Aufrufer (nie Nachrichtentexte) und ändert
   // nichts am Senden. Priorität -9999 → läuft zuletzt und zählt damit nur, was
-  // nach BCX-Filter & Co. wirklich rausgeht. Eigener Mod + eigenes Merkmal,
-  // damit das auch greift, wenn der BC-Tab schon einen älteren Loader hatte.
-  // Das Log liegt auf window und übersteht erneute Bookmarklet-Klicks.
-  if (!window.__BCK_SENDMON__) {
-    window.__BCK_SENDMON__ = true;
-    const SM_RING_MAX    = 400;    // Ringpuffer – verworfen werden nur eigene Log-Einträge
-    const SM_VORFALL_MAX = 50;
-    const SM_WARN_PRO_SEK = 10;    // ab so vielen Sendungen in 1 s eine Konsolen-Warnung
-    const SM_LAUF_MS     = 30000;  // so viel Ablauf vor einer Trennung wird festgehalten
-    const sm = window.__BCK_SENDLOG = window.__BCK_SENDLOG || {
-      seit: Date.now(), gesamt: 0, spitze: { n: 0, t: 0 }, letzteWarnung: 0,
-      nachTyp: {}, nachQuelle: {}, ring: [], vorfaelle: [],
+  // nach BCX-Filter & Co. wirklich rausgeht. Zwei Zählstellen:
+  //  - ServerSend-Aufrufe (Hook): wer hat gesendet, mit Aufrufer-Kette
+  //  - socket.emit (Leitung): was nach BCs eigener Sende-Warteschlange wirklich
+  //    beim Server ankommt – nur dieser Wert zählt für das Limit
+  // Eigener Mod + eigenes Merkmal (V2), damit das auch greift, wenn der BC-Tab
+  // schon einen älteren Loader hatte. Das Log liegt auf window und übersteht
+  // erneute Bookmarklet-Klicks.
+  if (!window.__BCK_SENDMON2__) {
+    window.__BCK_SENDMON2__ = true;
+    const SM_RING_MAX     = 400;    // Ringpuffer – verworfen werden nur eigene Log-Einträge
+    const SM_VORFALL_MAX  = 50;
+    const SM_WARN_PRO_SEK = 10;     // ab so vielen Sendungen in 1 s eine Konsolen-Warnung
+    const SM_LAUF_MS      = 30000;  // so viel Ablauf vor einer Trennung wird festgehalten
+    const SM_KETTE_MAX    = 10;     // so viele verschiedene Dateien der Aufrufer-Kette werden gemerkt
+    const SM_ZEITEN_MAX   = 600;
+    const sm = window.__BCK_SENDLOG2 = window.__BCK_SENDLOG2 || {
+      seit: Date.now(), gesamt: 0, vomTool: 0, spitze: { n: 0, t: 0 }, letzteWarnung: 0,
+      nachTyp: {}, ring: [], vorfaelle: [],
+      leitung: { aktiv: false, gesamt: 0, spitze: { n: 0, t: 0 }, zeiten: [] },
     };
 
-    // Aufrufer-Kette aus dem Stack: bcmodsdk/Server.js und der Hook selbst zählen
-    // nicht. "eval" = vom Tool eingespielter Code (EXEC, Bots).
-    const _smQuelle = function () {
+    // Eine Stack-Zeile → Dateiname. Code, den das Tool per new Function einspielt
+    // (EXEC, Bots), heißt "eval@loader.js"; ModSDK-Patches ("eval@bcmodsdk.min.js")
+    // und Server.js sind nur Durchgang und fallen später raus.
+    const _smDatei = function (s) {
+      const m = /([^\/\\\s()]+?\.(?:js|ts|mjs))(?:\?[^:\s)]*)?:\d+:\d+/.exec(s);
+      return m ? m[1] : null;
+    };
+    const _smLabel = function (zeile) {
+      const mE = /eval at [^(]*\(([^)]*)\)/.exec(zeile);
+      if (mE) return 'eval@' + (_smDatei(mE[1]) || '?');
+      if (/<anonymous>:\d+:\d+|\bVM\d+:\d+:\d+/.test(zeile)) return 'eval';
+      return _smDatei(zeile);
+    };
+    // Tool = vom Tool eingespielter Code (EXEC, Bots). Reine loader.js-Frames zählen nicht:
+    // dort stehen auch Hooks (BCX-Filter, ältere Monitor-Fassungen), die jede Sendung durchlaufen.
+    const _smIstTool = function (kette) {
+      return kette.indexOf('eval@loader.js') >= 0;
+    };
+
+    // Aufrufer-Kette aus dem Stack (nächster Aufrufer zuerst). Erst hinter dem
+    // Hook-Frame beginnt der echte Aufrufer – davor liegen _smKette/_smErfassen/
+    // Hook, alles loader.js und für den Bericht wertlos.
+    const _smKette = function () {
       let stack = '';
       const alt = Error.stackTraceLimit;
-      try { Error.stackTraceLimit = 30; stack = String(new Error().stack || ''); } catch (e) {}
+      try { Error.stackTraceLimit = 60; stack = String(new Error().stack || ''); } catch (e) {}
       try { Error.stackTraceLimit = alt; } catch (e) {}
-      const kette = [];
-      // Erst hinter dem Hook-Frame beginnt der echte Aufrufer (davor liegen
-      // _smQuelle/_smErfassen/Hook – alles loader.js und für den Bericht wertlos).
       const zeilen = stack.split('\n').slice(1);
       const ab = zeilen.findIndex(function (z) { return z.indexOf('BCK_SendMonHook') >= 0; });
+      const kette = [];
       for (const zeile of zeilen.slice(ab + 1)) {
-        let name = null;
-        if (/\beval\b|<anonymous>:\d+:\d+|\bVM\d+:\d+:\d+/.test(zeile)) name = 'eval';
-        else {
-          const m = /([^\/\\\s()]+?\.(?:js|ts|mjs))(?:\?[^:\s)]*)?:\d+:\d+/.exec(zeile);
-          if (m) name = m[1];
-        }
-        if (!name || name === 'bcmodsdk.min.js' || name === 'Server.js') continue;
+        if (zeile.indexOf('BCK_SendMon') >= 0) continue;   // auch ein älterer Monitor im selben Tab
+        const name = _smLabel(zeile);
+        if (!name || name === 'bcmodsdk.min.js' || name === 'Server.js' || name.indexOf('eval@bcmodsdk') === 0) continue;
         if (kette[kette.length - 1] !== name) kette.push(name);
-        if (kette.length >= 3) break;
+        if (kette.length >= SM_KETTE_MAX) break;
       }
-      return kette.join(' ← ') || '?';
+      return kette;
     };
 
-    // Unterart ohne Inhalte: Chat-Typ (Hidden zusätzlich mit seinem Stichwort,
-    // z. B. BCXMsg/LSCGMsg), bei AccountUpdate nur die Feldnamen.
+    // Unterart ohne Inhalte: Chat-Typ (Hidden zusätzlich mit dem Namen des Mods,
+    // z. B. BCXMsg/LSCGMsg – nur bis zum ersten Leer-/Doppelpunkt, Nutzdaten
+    // mancher Mods stehen dahinter), bei AccountUpdate nur die Feldnamen.
     const _smSub = function (typ, data) {
       if (!data || typeof data !== 'object') return '';
       if (typ === 'ChatRoomChat') {
         let s = typeof data.Type === 'string' ? data.Type : '';
-        if (s === 'Hidden' && typeof data.Content === 'string') s += ':' + data.Content.slice(0, 32);
+        if (s === 'Hidden' && typeof data.Content === 'string') s += ':' + data.Content.split(/[\s:{]/)[0].slice(0, 24);
         return s;
       }
       if (typ === 'AccountUpdate') return Object.keys(data).slice(0, 4).join(',');
       return '';
     };
 
-    // Höchste Zahl an Sendungen in einem gleitenden 1-s-Fenster
-    const _smSpitze = function (liste) {
-      const sends = liste.filter(function (e) { return e.k === 'send'; });
+    // Höchste Zahl an Zeitpunkten in einem gleitenden 1-s-Fenster
+    const _smSpitzeZeiten = function (zeiten) {
       let max = 0, ende = 0, links = 0;
-      for (let i = 0; i < sends.length; i++) {
-        while (sends[i].t - sends[links].t >= 1000) links++;
-        if (i - links + 1 > max) { max = i - links + 1; ende = sends[i].t; }
+      for (let i = 0; i < zeiten.length; i++) {
+        while (zeiten[i] - zeiten[links] >= 1000) links++;
+        if (i - links + 1 > max) { max = i - links + 1; ende = zeiten[i]; }
       }
       return { n: max, t: ende };
+    };
+    const _smSpitze = function (liste) {
+      return _smSpitzeZeiten(liste.filter(function (e) { return e.k === 'send'; }).map(function (e) { return e.t; }));
+    };
+
+    // Wrapper = Dateien, die bei fast jeder Sendung ganz vorn stehen (ein Mod, der
+    // ServerSend umhüllt, z. B. KikiLink/FUSAM, oder ein Hook in loader.js) – sie
+    // verdecken sonst den echten Absender. Eingespielter Tool-Code wird nie ausgeblendet.
+    const _smWrapper = function (liste) {
+      const sends = liste.filter(function (e) { return e.k === 'send' && e.kette && e.kette.length; });
+      const w = [];
+      if (sends.length < 10) return w;
+      for (let runde = 0; runde < 6; runde++) {
+        const z = {};
+        sends.forEach(function (e) {
+          const erste = e.kette.find(function (l) { return w.indexOf(l) < 0; });
+          if (erste) z[erste] = (z[erste] || 0) + 1;
+        });
+        const top = Object.keys(z).sort(function (a, b) { return z[b] - z[a]; })[0];
+        if (!top || z[top] < sends.length * 0.9) break;
+        if (top === 'eval@loader.js') break;
+        w.push(top);
+      }
+      return w;
+    };
+    const _smAnzeige = function (e, w) {
+      if (e.k !== 'send') return e;
+      const rest = e.kette.filter(function (l) { return w.indexOf(l) < 0; });
+      return {
+        t: e.t, k: 'send', typ: e.typ, sub: e.sub, screen: e.screen, tool: e.tool,
+        quelle: rest.slice(0, 3).join(' ← ') || (e.kette.length ? '(nur Wrapper)' : '?'),
+      };
     };
 
     const _smTop = function (liste, anz) {
@@ -2177,13 +2230,14 @@ window.CurseScanner = (() => {
 
     const _smErfassen = function (typ, data) {
       const t = Date.now();
+      const kette = _smKette();
       const e = {
-        t, k: 'send', typ: String(typ), sub: _smSub(typ, data), quelle: _smQuelle(),
+        t, k: 'send', typ: String(typ), sub: _smSub(typ, data), kette, tool: _smIstTool(kette),
         screen: typeof CurrentScreen === 'string' ? CurrentScreen : '',
       };
       sm.gesamt++;
+      if (e.tool) sm.vomTool++;
       sm.nachTyp[e.typ] = (sm.nachTyp[e.typ] || 0) + 1;
-      sm.nachQuelle[e.quelle] = (sm.nachQuelle[e.quelle] || 0) + 1;
       sm.ring.push(e);
       _smRingKuerzen();
       let n = 0;
@@ -2191,34 +2245,79 @@ window.CurseScanner = (() => {
       if (n > sm.spitze.n) sm.spitze = { n, t };
       if (n >= SM_WARN_PRO_SEK && t - sm.letzteWarnung > 5000) {
         sm.letzteWarnung = t;
+        const w = _smWrapper(sm.ring);
         BCK.warn('[SendMonitor] ' + n + ' Nachrichten in 1 s: '
-          + _smTop(sm.ring.filter(function (r) { return r.t > t - 1000; }), 4)
+          + _smTop(sm.ring.filter(function (r) { return r.k === 'send' && r.t > t - 1000; })
+              .map(function (r) { return _smAnzeige(r, w); }), 4)
               .map(function (x) { return x.n + '× ' + x.was; }).join(' | '));
       }
     };
 
-    // Trennung (ForceDisconnect/disconnect): Ablauf der letzten Sekunden festhalten
+    // Was wirklich über die Leitung geht (socket.emit, nach BCs eigener Warteschlange)
+    const _smLeitung = function () {
+      const t = Date.now();
+      const L = sm.leitung;
+      L.gesamt++;
+      L.zeiten.push(t);
+      if (L.zeiten.length > SM_ZEITEN_MAX) L.zeiten.splice(0, L.zeiten.length - SM_ZEITEN_MAX);
+      let n = 0;
+      for (let i = L.zeiten.length - 1; i >= 0 && L.zeiten[i] > t - 1000; i--) n++;
+      if (n > L.spitze.n) L.spitze = { n, t };
+    };
+
+    // Einen Vorfall für die Anzeige aufbereiten (Wrapper raus, Kennzahlen der letzten 10 s)
+    const _smVorfallAnzeige = function (v, w) {
+      const lauf = v.lauf.map(function (e) { return _smAnzeige(e, w); });
+      const zehn = lauf.filter(function (e) { return e.t >= v.t - 10000; });
+      const lt = v.leitung.filter(function (t) { return t >= v.t - 10000; });
+      return {
+        t: v.t, grund: v.grund,
+        n10: zehn.filter(function (e) { return e.k === 'send'; }).length,
+        tool10: zehn.filter(function (e) { return e.k === 'send' && e.tool; }).length,
+        spitze10: _smSpitze(zehn), top: _smTop(zehn, 6), lauf,
+        leitung10: lt.length, leitungSpitze10: _smSpitzeZeiten(lt),
+      };
+    };
+
+    // Gründe einer Trennung: aussagekräftige (ServerDisconnect/ForceDisconnect) vor dem
+    // nackten socket.io-"disconnect"
+    const _smGrund = function (gruende) {
+      return gruende.slice().sort(function (a, b) {
+        return (a.indexOf('disconnect:') === 0 ? 1 : 0) - (b.indexOf('disconnect:') === 0 ? 1 : 0);
+      }).join(' | ');
+    };
+
+    // Trennung (ServerDisconnect/ForceDisconnect/disconnect): Ablauf der letzten Sekunden festhalten
     const _smVorfall = function (grund) {
       const t = Date.now();
+      const g = String(grund).slice(0, 80);
       const letzter = sm.vorfaelle[sm.vorfaelle.length - 1];
-      if (letzter && t - letzter.t < 2000) return;   // ForceDisconnect + disconnect = ein Vorfall
-      const lauf  = sm.ring.filter(function (e) { return e.t >= t - SM_LAUF_MS; });
-      const zehn  = lauf.filter(function (e) { return e.t >= t - 10000; });
+      // Eine Trennung meldet sich mehrfach (BC ruft intern disconnect() auf, noch bevor der
+      // ForceDisconnect-Handler dran ist) – Gründe sammeln statt einen zweiten Vorfall anlegen
+      if (letzter && t - letzter.t < 2000) {
+        if (letzter.gruende.indexOf(g) < 0) { letzter.gruende.push(g); letzter.grund = _smGrund(letzter.gruende); }
+        return;
+      }
       const v = {
-        t, grund: String(grund).slice(0, 80),
-        n10: zehn.filter(function (e) { return e.k === 'send'; }).length,
-        spitze10: _smSpitze(zehn), top: _smTop(zehn, 6), lauf: lauf.slice(-80),
+        t, gruende: [g], grund: g,
+        lauf: sm.ring.filter(function (e) { return e.t >= t - SM_LAUF_MS; }).slice(-80),
+        leitung: sm.leitung.zeiten.filter(function (z) { return z >= t - SM_LAUF_MS; }),
       };
       sm.vorfaelle.push(v);
       if (sm.vorfaelle.length > SM_VORFALL_MAX) sm.vorfaelle.splice(0, sm.vorfaelle.length - SM_VORFALL_MAX);
-      BCK.warn('[SendMonitor] ⚠ Trennung (' + v.grund + '): ' + v.n10 + ' Sendungen in den letzten 10 s, Spitze '
-        + v.spitze10.n + '/s | ' + v.top.map(function (x) { return x.n + '× ' + x.was; }).join(' | '));
-      const ref = window.__BCK_popupRef;
-      if (ref && !ref.closed) {
+      const a = _smVorfallAnzeige(v, _smWrapper(sm.ring));
+      BCK.warn('[SendMonitor] ⚠ Trennung (' + v.grund + '): ' + a.n10 + ' ServerSend-Aufrufe in den letzten 10 s (Spitze '
+        + a.spitze10.n + '/s), an der Leitung ' + a.leitung10 + ' (Spitze ' + a.leitungSpitze10.n + '/s), davon vom Tool '
+        + a.tool10 + ' | ' + a.top.map(function (x) { return x.n + '× ' + x.was; }).join(' | '));
+      // Kurz warten: der aussagekräftigste Grund trifft oft ein paar Millisekunden später ein
+      setTimeout(function () {
+        const ref = window.__BCK_popupRef;
+        if (!ref || ref.closed) return;
         try {
-          ref.postMessage({ app: APP, type: 'SEND_MON_VORFALL', grund: v.grund, n10: v.n10, spitze10: v.spitze10.n }, ALLOWED_ORIGIN);
+          ref.postMessage({ app: APP, type: 'SEND_MON_VORFALL', grund: v.grund, n10: a.n10, spitze10: a.spitze10.n,
+            leitungSpitze10: a.leitungSpitze10.n }, ALLOWED_ORIGIN);
         } catch (e) {}
-      }
+      }, 300);
     };
 
     // Zustandswechsel (Screen/Raum) in den Ablauf – zeigt Raum-Hopping neben den Sendungen
@@ -2227,9 +2326,26 @@ window.CurseScanner = (() => {
       _smRingKuerzen();
     };
     window.__BCK_sendMonSnapshot = function () {
+      const w = _smWrapper(sm.ring);
+      const sends = sm.ring.filter(function (e) { return e.k === 'send'; });
+      const nachQuelle = {};
+      sends.forEach(function (e) {
+        const q = _smAnzeige(e, w).quelle;
+        nachQuelle[q] = (nachQuelle[q] || 0) + 1;
+      });
       return {
-        jetzt: Date.now(), seit: sm.seit, gesamt: sm.gesamt, spitze: sm.spitze, warnAb: SM_WARN_PRO_SEK,
-        nachTyp: sm.nachTyp, nachQuelle: sm.nachQuelle, ring: sm.ring.slice(-150), vorfaelle: sm.vorfaelle,
+        jetzt: Date.now(), seit: sm.seit, gesamt: sm.gesamt, vomTool: sm.vomTool, spitze: sm.spitze, warnAb: SM_WARN_PRO_SEK,
+        nachTyp: sm.nachTyp, nachQuelle, ringSendungen: sends.length, wrapper: w,
+        leitung: { aktiv: sm.leitung.aktiv, gesamt: sm.leitung.gesamt, spitze: sm.leitung.spitze },
+        // BCs eigene Sende-Warteschlange (wenn die Globals existieren)
+        bc: {
+          limit: typeof ServerSendRateLimit === 'number' ? ServerSendRateLimit : null,
+          intervall: typeof ServerSendRateLimitInterval === 'number' ? ServerSendRateLimitInterval : null,
+          warteschlange: (typeof ServerSendQueue !== 'undefined' && ServerSendQueue && typeof ServerSendQueue.length === 'number')
+            ? ServerSendQueue.length : null,
+        },
+        ring: sm.ring.slice(-150).map(function (e) { return _smAnzeige(e, w); }),
+        vorfaelle: sm.vorfaelle.map(function (v) { return _smVorfallAnzeige(v, w); }),
       };
     };
     window.__BCK_sendMonVorfall = _smVorfall;   // Test-Seam
@@ -2237,11 +2353,21 @@ window.CurseScanner = (() => {
     (function installSendMon() {
       if (typeof bcModSdk === 'undefined' || typeof bcModSdk.registerMod !== 'function') { setTimeout(installSendMon, 500); return; }
       try {
-        const mod = bcModSdk.registerMod({ name: 'BCK_SendMonitor', fullName: 'BCK Sende-Monitor', version: '1.0.0' });
+        const mod = bcModSdk.registerMod({ name: 'BCK_SendMonitorV2', fullName: 'BCK Sende-Monitor', version: '2.0.0' });
         mod.hookFunction('ServerSend', -9999, function BCK_SendMonHook(args, next) {
           try { _smErfassen(args[0], args[1]); } catch (e) {}
           return next(args);
         });
+        // ServerDisconnect(grund): der Grund (z. B. "ErrorRateLimited") steht schon im ersten Aufruf,
+        // noch bevor BC den Socket schließt
+        try {
+          mod.hookFunction('ServerDisconnect', -9999, function BCK_SendMonDcHook(args, next) {
+            try { _smVorfall('ServerDisconnect: ' + (args[0] == null ? '(ohne Angabe)' : (typeof args[0] === 'string' ? args[0] : JSON.stringify(args[0])))); } catch (e) {}
+            return next(args);
+          });
+        } catch (e) {
+          BCK.warn('[SendMonitor] ServerDisconnect nicht hakbar:', e.message);
+        }
         BCK.ok('[SendMonitor] aktiv ✅ – zählt ausgehende Server-Nachrichten (nur Typ/Aufrufer, keine Texte)');
       } catch (e) {
         BCK.err('[SendMonitor] Fehler:', e.message);
@@ -2256,6 +2382,22 @@ window.CurseScanner = (() => {
       ServerSocket.on('disconnect', function (grund) {
         try { _smVorfall('disconnect: ' + String(grund)); } catch (e) {}
       });
+      // Leitungs-Zähler: nur zählen, Rückgabe und Argumente unverändert
+      try {
+        const orig = ServerSocket.emit;
+        if (typeof orig === 'function' && !orig.__bckSM) {
+          const RESERVIERT = ['connect', 'connect_error', 'disconnect', 'disconnecting', 'newListener', 'removeListener', 'error'];
+          const gezaehlt = function (ev) {
+            try { if (typeof ev === 'string' && RESERVIERT.indexOf(ev) < 0) _smLeitung(); } catch (e) {}
+            return orig.apply(this, arguments);
+          };
+          gezaehlt.__bckSM = true;
+          ServerSocket.emit = gezaehlt;
+          sm.leitung.aktiv = true;
+        }
+      } catch (e) {
+        BCK.warn('[SendMonitor] Leitungs-Zähler nicht installiert:', e.message);
+      }
     })();
   }
 

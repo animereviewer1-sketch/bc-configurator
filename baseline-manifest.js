@@ -11,10 +11,10 @@ const BASELINE_MANIFEST = {
   ],
   "identifierPattern": "\\b(Inventory|Character|ChatRoom|Server|Asset|Player|Dialog|Common|Item|Lock|Wardrobe|Pose|Skill|Reputation|Online|Chat)[A-Z]\\w+",
   "counts": {
-    "identifiers": 88,
-    "function": 21,
+    "identifiers": 92,
+    "function": 22,
     "assetGroup": 33,
-    "unknown": 34
+    "unknown": 37
   },
   "identifiers": [
     {
@@ -639,6 +639,13 @@ const BASELINE_MANIFEST = {
       ]
     },
     {
+      "name": "ServerDisconnect",
+      "kind": "function",
+      "files": [
+        "loader.js"
+      ]
+    },
+    {
       "name": "ServerIsConnected",
       "kind": "unknown",
       "files": [
@@ -674,6 +681,28 @@ const BASELINE_MANIFEST = {
       "files": [
         "bot-engine.js",
         "items.js",
+        "loader.js"
+      ]
+    },
+    {
+      "name": "ServerSendQueue",
+      "kind": "unknown",
+      "files": [
+        "loader.js"
+      ]
+    },
+    {
+      "name": "ServerSendRateLimit",
+      "kind": "unknown",
+      "files": [
+        "items.js",
+        "loader.js"
+      ]
+    },
+    {
+      "name": "ServerSendRateLimitInterval",
+      "kind": "unknown",
+      "files": [
         "loader.js"
       ]
     },

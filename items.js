@@ -6219,7 +6219,7 @@ function _smZeit(ts, mitMs) {
 }
 
 function _smZeile(e) {
-  return e.typ + (e.sub ? ':' + e.sub : '') + ' [' + e.quelle + ']' + (e.screen ? ' (' + e.screen + ')' : '');
+  return e.typ + (e.sub ? ':' + e.sub : '') + ' [' + e.quelle + ']' + (e.screen ? ' (' + e.screen + ')' : '') + (e.tool ? '  ◀ TOOL' : '');
 }
 
 function _smSortiert(objekt, max) {
@@ -6233,17 +6233,29 @@ function _sendMonText(log) {
   }
   const z = [];
   z.push('Sende-Monitor · Stand ' + _smZeit(log.jetzt) + ' · läuft seit ' + _smZeit(log.seit));
-  z.push('Gesendet seit Start: ' + log.gesamt + ' · Spitze: ' + (log.spitze?.n || 0) + ' in 1 s'
+  z.push('ServerSend-Aufrufe seit Start: ' + log.gesamt + ' · davon vom Tool: ' + (log.vomTool || 0)
+    + ' · Spitze: ' + (log.spitze?.n || 0) + ' in 1 s'
     + (log.spitze?.n ? ' (um ' + _smZeit(log.spitze.t) + ')' : '') + ' · Warnschwelle: ' + log.warnAb + ' in 1 s');
+  if (log.leitung?.aktiv) {
+    z.push('An der Leitung (socket.emit, nach BCs Warteschlange): ' + log.leitung.gesamt
+      + ' · Spitze: ' + (log.leitung.spitze?.n || 0) + ' in 1 s');
+  } else {
+    z.push('An der Leitung: nicht gemessen (socket.emit nicht erreichbar)');
+  }
+  const bc = log.bc || {};
+  z.push('BCs eigenes Limit: ServerSendRateLimit=' + (bc.limit ?? '?') + ' pro ' + (bc.intervall ?? '?')
+    + ' ms · Warteschlange jetzt: ' + (bc.warteschlange ?? '?'));
   z.push('Nach Typ: ' + _smSortiert(log.nachTyp, 12));
-  z.push('Nach Aufrufer: ' + _smSortiert(log.nachQuelle, 12));
-  z.push('(„eval“ = vom Tool eingespielter Code, also EXEC/Bots; sonst der Dateiname des Aufrufers)');
+  z.push('Nach Aufrufer (letzte ' + (log.ringSendungen ?? '?') + ' Sendungen' + (log.wrapper?.length ? ', durchgereicht über ' + log.wrapper.join(' ← ') + ' – ausgeblendet' : '') + '): '
+    + _smSortiert(log.nachQuelle, 12));
+  z.push('(„eval@loader.js“ = vom Tool eingespielter Code, also EXEC/Bots, und im Verlauf mit ◀ TOOL markiert; sonst der Dateiname des Aufrufers)');
   const vf = Array.isArray(log.vorfaelle) ? log.vorfaelle : [];
   z.push('');
   z.push('TRENNUNGEN (' + vf.length + ')' + (vf.length ? '' : ' – bisher keine seit dem Start des Monitors'));
   vf.slice().reverse().forEach(v => {
     z.push('● ' + _smZeit(v.t) + '  ' + v.grund);
-    z.push('  letzte 10 s: ' + v.n10 + ' Sendungen, Spitze ' + (v.spitze10?.n || 0) + ' in 1 s');
+    z.push('  letzte 10 s: ' + v.n10 + ' ServerSend-Aufrufe (Spitze ' + (v.spitze10?.n || 0) + ' in 1 s), davon vom Tool: ' + (v.tool10 || 0));
+    z.push('  An der Leitung: ' + (v.leitung10 ?? '?') + ' (Spitze ' + (v.leitungSpitze10?.n ?? '?') + ' in 1 s)');
     z.push('  Hauptsender: ' + ((v.top || []).map(x => x.n + '× ' + x.was).join(' | ') || '–'));
     z.push('  Ablauf (Sekunden vor der Trennung):');
     (v.lauf || []).forEach(e => {
