@@ -11,10 +11,10 @@ const BASELINE_MANIFEST = {
   ],
   "identifierPattern": "\\b(Inventory|Character|ChatRoom|Server|Asset|Player|Dialog|Common|Item|Lock|Wardrobe|Pose|Skill|Reputation|Online|Chat)[A-Z]\\w+",
   "counts": {
-    "identifiers": 97,
+    "identifiers": 99,
     "function": 23,
     "assetGroup": 33,
-    "unknown": 41
+    "unknown": 43
   },
   "identifiers": [
     {
@@ -653,6 +653,13 @@ const BASELINE_MANIFEST = {
       ]
     },
     {
+      "name": "OnlineID",
+      "kind": "unknown",
+      "files": [
+        "items.js"
+      ]
+    },
+    {
       "name": "OnlineSharedSettings",
       "kind": "unknown",
       "files": [
@@ -662,6 +669,13 @@ const BASELINE_MANIFEST = {
     {
       "name": "PoseSetActive",
       "kind": "function",
+      "files": [
+        "items.js"
+      ]
+    },
+    {
+      "name": "ServerAccountUpdate",
+      "kind": "unknown",
       "files": [
         "items.js"
       ]
@@ -707,6 +721,7 @@ const BASELINE_MANIFEST = {
       "kind": "function",
       "files": [
         "bot-engine.js",
+        "items.js",
         "loader.js"
       ]
     },

@@ -123,12 +123,13 @@ describe('Statischer Quell-Audit (STAB-05 / STAB-06 Tool-Seite)', () => {
     }
   });
 
-  it('items.js: 17 Stellen konkatenieren TOOL_ORIGIN, bot-ui.js: 1', () => {
+  it('items.js: 20 Stellen konkatenieren TOOL_ORIGIN, bot-ui.js: 1', () => {
     const itemsCount = src('items.js').split('+ TOOL_ORIGIN +').length - 1;
     const botUiCount = src('bot-ui.js').split('+ TOOL_ORIGIN +').length - 1;
     // Der Schloss-Filter (_lockSpielLogik) bekommt TOOL_ORIGIN als Daten (cfg.ORIGIN) statt per
     // Verkettung – abgesichert in lock-filter.test.js ("meldet das entfernte Schloss ans Tool (an den Tool-Origin)")
-    expect(itemsCount).toBe(17);
+    // 20: +3 für die SPERRE_FAIL-Meldung der Sync-Sperre (Profil-, Outfit-Scan- und Wheel-Aufnahme) – geht an den Tool-Origin
+    expect(itemsCount).toBe(20);
     expect(botUiCount).toBe(1);
   });
 });

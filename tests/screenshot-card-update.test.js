@@ -52,6 +52,11 @@ class El {
   querySelector(sel) { return this.querySelectorAll(sel)[0] || null; }
   closest(sel) { for (let e = this; e; e = e.parent) if (e.passt(sel)) return e; return null; }
   set outerHTML(h) { this.neuHtml = h; }
+  set innerHTML(h) {
+    // Nur was der Test braucht: ein <div class="…" id="…">…</div> → ein Kind-Element
+    const m = /<div class="([^"]*)" id="([^"]*)">/.exec(h);
+    this.firstElementChild = m ? Object.assign(new El('div', m[1]), { id: m[2], htmlText: h }) : null;
+  }
 }
 
 function dom() {
@@ -86,7 +91,7 @@ function liste(opts = {}) {
   const el = d.reg(new El('div'), 'profileListEl');
   el._profileKeys = opts.ungezeichnet ? undefined : namen.slice();
   const bloecke = [[0, 1], [2]].map((idxs, b) => {
-    const blk = new El('div', 'profile-owner-block');
+    const blk = d.reg(new El('div', 'profile-owner-block'), 'pb_Besitzer' + (b + 1));
     const zaehler = new El('span', 'profile-owner-count'); zaehler.textContent = String(idxs.length);
     const strip = new El('div', 'profile-strip');
     strip.add(...idxs.map((i) => karte(d, i, namen[i], bilder[i])));
@@ -172,13 +177,80 @@ describe('Profil-Liste: nur die eine Karte wird angefasst', () => {
     expect(el.querySelectorAll('.pc').length).toBe(0);
   });
 
-  it('Filter "mit Bild": ein Profil, das erst jetzt dazukommt, erzwingt Komplett-Rendern', () => {
-    const { ctx, d } = liste({ filter: 'withshot' });
-    d.ids.prow_1.remove(); d.ids.prow_2.remove(); // im Filter "mit Bild" gibt es sie nicht
-    delete d.ids.prow_1; delete d.ids.prow_2;
-    evalIn(ctx, "delete _profileNameMap['p_1']; delete _profileNameMap['p_2']");
-    evalIn(ctx, "PROFILE_SCREENSHOTS['Bea - Besitzer1'] = 'data:bea'");
-    expect(evalIn(ctx, "_profilBildAktualisieren('Bea - Besitzer1')")).toBe(false);
+  describe('Filter "mit Bild": eine neue Karte wird eingesetzt statt die Liste neu zu bauen', () => {
+    // Ausgangslage im Filter "mit Bild": nur Ada (hat ein Bild) ist zu sehen; Bea (gleicher Besitzer) und Cy kommen dazu
+    function mitBild() {
+      const r = liste({ filter: 'withshot' });
+      for (const k of ['prow_1', 'prow_2']) { r.d.ids[k].remove(); delete r.d.ids[k]; }
+      evalIn(r.ctx, "delete _profileNameMap['p_1']; delete _profileNameMap['p_2']; _profileCardHtml = function (name, idx) { return '<div class=\"pc\" id=\"prow_' + idx + '\">' + name + '</div>'; }");
+      r.el.children[1].remove(); // Block "Besitzer2" ist im Filter ebenfalls leer
+      return r;
+    }
+    const namenImBlock = (blk) => blk.querySelectorAll('.pc').map((c) => c.htmlText || c.id);
+
+    it('neue Karte kommt an die richtige Stelle (alphabetisch im Besitzer-Block); Zähler und Nummern stimmen', () => {
+      const { ctx, el, d, bloecke } = mitBild();
+      const ada = d.ids.prow_0;
+      evalIn(ctx, "PROFILE_SCREENSHOTS['Bea - Besitzer1'] = 'data:bea'");
+      expect(evalIn(ctx, "_profilBildAktualisieren('Bea - Besitzer1')")).toBe(true);
+      const karten = bloecke[0].querySelectorAll('.pc');
+      expect(karten.length).toBe(2);
+      expect(karten[0]).toBe(ada);                                    // Ada steht vor Bea und bleibt dasselbe Element
+      expect(karten[1].htmlText).toContain('Bea - Besitzer1');
+      expect(karten[1].id).toBe('prow_3');                            // neue, freie Nummer (es gab 0..2)
+      expect(evalIn(ctx, "_profileNameMap['p_3']")).toBe('Bea - Besitzer1');
+      expect(el._profileKeys[3]).toBe('Bea - Besitzer1');
+      expect(bloecke[0].querySelector('.profile-owner-count').textContent).toBe('2');
+    });
+
+    it('kommt die neue Karte alphabetisch VOR den vorhandenen, steht sie davor', () => {
+      const { ctx, bloecke } = mitBild();
+      evalIn(ctx, "PROFILES['Aaa - Besitzer1'] = { items: [] }; PROFILE_SCREENSHOTS['Aaa - Besitzer1'] = 'data:x'");
+      expect(evalIn(ctx, "_profilBildAktualisieren('Aaa - Besitzer1')")).toBe(true);
+      const karten = bloecke[0].querySelectorAll('.pc');
+      expect(karten[0].htmlText).toContain('Aaa - Besitzer1');
+      expect(karten[1].id).toBe('prow_0');
+    });
+
+    it('mehrere Bilder nacheinander: jede Karte genau einmal, fortlaufende Nummern, Ada bleibt unberührt', () => {
+      const { ctx, d, bloecke } = mitBild();
+      const ada = d.ids.prow_0;
+      evalIn(ctx, "PROFILES['Zed - Besitzer1'] = { items: [] }");
+      for (const n of ['Bea - Besitzer1', 'Zed - Besitzer1']) {
+        evalIn(ctx, `PROFILE_SCREENSHOTS[${JSON.stringify(n)}] = 'data:x'`);
+        expect(evalIn(ctx, `_profilBildAktualisieren(${JSON.stringify(n)})`)).toBe(true);
+      }
+      const ids = bloecke[0].querySelectorAll('.pc').map((c) => c.id);
+      expect(ids).toEqual(['prow_0', 'prow_3', 'prow_4']);
+      expect(bloecke[0].querySelectorAll('.pc')[0]).toBe(ada);
+      expect(bloecke[0].querySelector('.profile-owner-count').textContent).toBe('3');
+    });
+
+    it('Besitzer-Block fehlt: Komplett-Rendern', () => {
+      const { ctx, d } = mitBild();
+      delete d.ids.pb_Besitzer1;
+      evalIn(ctx, "PROFILE_SCREENSHOTS['Bea - Besitzer1'] = 'data:bea'");
+      expect(evalIn(ctx, "_profilBildAktualisieren('Bea - Besitzer1')")).toBe(false);
+    });
+
+    it('mit Suchbegriff oder Tag-Filter entscheidet renderProfileList, was zu sehen ist: Komplett-Rendern', () => {
+      const { ctx, d } = mitBild();
+      d.doc.getElementById = (id) => (id === 'profileSearch' ? { value: 'bea' } : d.ids[id] || makeElementStub());
+      ctx.document.getElementById = d.doc.getElementById;
+      evalIn(ctx, "PROFILE_SCREENSHOTS['Bea - Besitzer1'] = 'data:bea'");
+      expect(evalIn(ctx, "_profilBildAktualisieren('Bea - Besitzer1')")).toBe(false);
+      d.doc.getElementById = (id) => d.ids[id] || makeElementStub();
+      ctx.document.getElementById = d.doc.getElementById;
+      evalIn(ctx, "_profileTagFilter = 'x'");
+      expect(evalIn(ctx, "_profilBildAktualisieren('Bea - Besitzer1')")).toBe(false);
+    });
+
+    it('nach dem Einsetzen werden neue Lazy-Bilder beobachtet', () => {
+      const { ctx, beobachtet } = mitBild();
+      evalIn(ctx, "PROFILE_SCREENSHOTS['Bea - Besitzer1'] = 'data:bea'");
+      evalIn(ctx, "_profilBildAktualisieren('Bea - Besitzer1')");
+      expect(beobachtet()).toBe(1);
+    });
   });
 
   it('Profil ist wegen Suche/Filter nicht sichtbar und bleibt es: nichts zu tun', () => {

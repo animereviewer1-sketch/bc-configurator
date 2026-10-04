@@ -54,6 +54,7 @@ function spiel(code, versionen) {
     setTimeout: (fn) => { timers.push(fn); return timers.length; },
     CharacterRefresh() { z.refresh++; version = versionen[Math.min(z.refresh - 1, versionen.length - 1)]; },
     CharacterLoadCanvas() { z.loadCanvas++; },
+    ServerSend() {},   // die Sync-Sperre braucht ServerSend (sonst legt der Lauf absichtlich nichts an)
   };
   g.window = g;
   g.__BCK_popupRef = {

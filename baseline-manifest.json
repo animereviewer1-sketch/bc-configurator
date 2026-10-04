@@ -9,10 +9,10 @@
   ],
   "identifierPattern": "\\b(Inventory|Character|ChatRoom|Server|Asset|Player|Dialog|Common|Item|Lock|Wardrobe|Pose|Skill|Reputation|Online|Chat)[A-Z]\\w+",
   "counts": {
-    "identifiers": 97,
+    "identifiers": 99,
     "function": 23,
     "assetGroup": 33,
-    "unknown": 41
+    "unknown": 43
   },
   "identifiers": [
     {
@@ -651,6 +651,13 @@
       ]
     },
     {
+      "name": "OnlineID",
+      "kind": "unknown",
+      "files": [
+        "items.js"
+      ]
+    },
+    {
       "name": "OnlineSharedSettings",
       "kind": "unknown",
       "files": [
@@ -660,6 +667,13 @@
     {
       "name": "PoseSetActive",
       "kind": "function",
+      "files": [
+        "items.js"
+      ]
+    },
+    {
+      "name": "ServerAccountUpdate",
+      "kind": "unknown",
       "files": [
         "items.js"
       ]
@@ -705,6 +719,7 @@
       "kind": "function",
       "files": [
         "bot-engine.js",
+        "items.js",
         "loader.js"
       ]
     },

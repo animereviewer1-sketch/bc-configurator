@@ -42,6 +42,7 @@ function spiel() {
     Asset: [
       { Name: 'MetalPadlock', Group: { Name: 'ItemMisc' }, RemoveTimer: 0 },
       { Name: 'TimerPadlock', Group: { Name: 'ItemMisc' }, RemoveTimer: 300000 },
+      { Name: 'HeartPadlock', Group: { Name: 'ItemMisc' }, RemoveTimer: 0 },
     ],
     ExtendedItemInit() {},
     CharacterRefreshSource() {},
@@ -130,5 +131,67 @@ describe('Screenshot-Durchlauf: Absicherung gegen Push durch Schlösser', () => 
   it('andere Aufrufe mit true und bereits abgeschaltete Schlösser bleiben unberührt', () => {
     const roh = 'foo(true);\nInventoryLock(C,w,{Asset:x},1,false);\nExtendedItemInit(TARGET,it,true,true);';
     expect(fn(roh)).toBe(roh);
+  });
+});
+
+describe('Screenshot-Durchläufe: nie ein Schloss anlegen', () => {
+  // Der Bundle-Pfad (LSCG-Code) lässt Schlösser im Bild-Modus schon immer weg. Der Roh-Code der Profile legte sie
+  // dagegen an – per InventoryLock UND über die Schloss-Eigenschaften im gespeicherten Item (LockedBy …). AFC
+  // reagiert auf ein Herzschloss schon beim Neuzeichnen: "…Heart Padlock protection is temporarily disabled".
+  const gesperrt = () => [
+    { group: 'ItemArms', asset: 'Armbinder', colors: ['#ffffff'], lock: 'HeartPadlock', lockParams: {},
+      property: { LockedBy: 'HeartPadlock', LockMemberNumber: 5, LockMemberName: 'Yuuki', MemberNumberList: '5', Effect: ['Lock', 'Block'], Difficulty: 3 } },
+    { group: 'ItemLegs', asset: 'Seil', colors: ['#ffffff'], lock: 'MetalPadlock', lockParams: {} },
+  ];
+  const bauen = (items, opts) => {
+    const ctx = loadScript(['items.js'], { setTimeout: () => 0, clearTimeout: () => {} });
+    ctx.__items = items; ctx.__opts = opts;
+    evalIn(ctx, 'OUTFIT = __items; _outfitTargetNum = null;');
+    return evalIn(ctx, '_outfitCodeBauen(__opts)');
+  };
+  const props = (code) => [...code.matchAll(/_ws\("[^"]*","[^"]*",\[[^\]]*\],("([^"]*)"|null)/g)]
+    .map((m) => (m[2] ? JSON.parse(Buffer.from(m[2], 'base64').toString('utf8')) : null));
+
+  it('ohne Schlösser: weder InventoryLock noch Schloss-Eigenschaften im Code', () => {
+    const code = bauen(gesperrt(), { ohneSchloesser: true });
+    expect(code).not.toContain('InventoryLock(');
+    expect(code).not.toContain('TimerInventoryRemoveSet');
+    const p = props(code)[0];
+    for (const k of ['LockedBy', 'LockMemberNumber', 'LockMemberName', 'MemberNumberList']) expect(p).not.toHaveProperty(k);
+    expect(p.Effect).toEqual(['Block']);        // "Lock" raus, der Rest bleibt
+    expect(p.Difficulty).toBe(3);                // übrige Eigenschaften bleiben erhalten
+  });
+
+  it('der Code läuft im nachgebauten BC und legt kein Schloss an', () => {
+    const s = spiel();
+    s.lauf(bauen(gesperrt(), { ohneSchloesser: true }));
+    expect(s.Player.Appearance.length).toBe(2);
+    expect(s.z.lockCalls).toEqual([]);
+    expect(s.Player.Appearance.every((i) => !i.Property.LockedBy)).toBe(true);
+  });
+
+  it('ohne die Option (Run, Textfeld) bleiben die Schlösser – so wie bisher', () => {
+    const code = bauen(gesperrt(), {});
+    expect(code).toContain('InventoryLock(');
+    expect(props(code)[0].LockedBy).toBe('HeartPadlock');
+    const s = spiel();
+    s.lauf(code);
+    expect(s.z.lockCalls.length).toBe(2);
+  });
+
+  it('das Textfeld wird vom Bau für Screenshots nicht angefasst', () => {
+    const el = makeElementStub();
+    const ctx = loadScript(['items.js'], { setTimeout: () => 0, clearTimeout: () => {} });
+    ctx.document.getElementById = (id) => (id === 'outfitCode' ? el : makeElementStub());
+    ctx.__items = gesperrt();
+    evalIn(ctx, 'OUTFIT = __items; _outfitTargetNum = null; generateOutfitCode();');
+    const vorher = el.value;
+    expect(vorher).toContain('InventoryLock(');
+    evalIn(ctx, '_outfitCodeBauen({ ohneSchloesser: true })');
+    expect(el.value).toBe(vorher);
+  });
+
+  it('leeres Outfit: kein Code, das Textfeld bleibt wie es ist', () => {
+    expect(bauen([], { ohneSchloesser: true })).toBeNull();
   });
 });

@@ -1843,7 +1843,19 @@ function moveOutfitItem(i, d) {
 }
 
 function generateOutfitCode() {
-  if (!OUTFIT.length) return;
+  const code = _outfitCodeBauen({});
+  if (code != null) document.getElementById('outfitCode').value = code;
+}
+
+// Baut den Outfit-Code aus OUTFIT (ohne das Textfeld anzufassen).
+// opts.ohneSchloesser: für Screenshot-Durchläufe – "bei Screenshots wird nie ein Schloss angelegt"
+// (wie im Bundle-Pfad _lockSpielLogik, cfg.BILD). Dann fehlen sowohl das InventoryLock als auch die
+// Schloss-Eigenschaften im gespeicherten Item-Snapshot (LockedBy …): Mods wie AFC und DOGS registrieren
+// Schlösser selbst, sobald sie eins am Charakter sehen (AFC schon bei jedem CharacterRefresh) – das
+// zeigte sich als Meldung "…Heart Padlock protection is temporarily disabled" und AFC_HeartLock-Updates.
+function _outfitCodeBauen(opts) {
+  const ohneSchloesser = !!(opts && opts.ohneSchloesser);
+  if (!OUTFIT.length) return null;
   const isOther   = _outfitTargetNum !== null;
   const memberNum = _outfitTargetNum ?? 0;
 
@@ -1904,6 +1916,12 @@ function generateOutfitCode() {
         if (k !== 'TypeRecord' && k !== 'Type' && k !== 'OverridePriority' && k !== 'LayerProperties') preProp[k] = v;
       }
     }
+    if (ohneSchloesser) {
+      // Schloss-Eigenschaften raus (wie ohneSchloss() in _lockSpielLogik); der Rest des Items bleibt
+      _LOCK_PROP_KEYS.forEach(k => { delete preProp[k]; });
+      if (/Padlock$/.test(String(preProp.Name || ''))) delete preProp.Name;
+      if (Array.isArray(preProp.Effect)) preProp.Effect = preProp.Effect.filter(e => e !== 'Lock');
+    }
     // Post-props: OverridePriority + LayerProperties (must apply AFTER ExtendedItemInit)
     const postProp = {};
     if (fullProp?.OverridePriority != null) postProp.OverridePriority = fullProp.OverridePriority;
@@ -1941,8 +1959,8 @@ function generateOutfitCode() {
       }
     }
 
-    // Lock (synchronous)
-    if (lock) {
+    // Lock (synchronous) – nicht bei Screenshot-Durchläufen
+    if (lock && !ohneSchloesser) {
       const isBcx = BCX_LOCKS_L.includes(lock);
       const isRel = REL_LOCKS_L.includes(lock);
       const findLock = isBcx
@@ -2000,7 +2018,7 @@ function generateOutfitCode() {
         + 'CharacterRefresh(TARGET,false,false);\n'
         + syncCode;
 
-  document.getElementById('outfitCode').value = code;
+  return code;
 }
 
 function copyOutfitCode() {
@@ -2194,6 +2212,65 @@ function _profileShortName(name, owner) {
 // ── Profile Edit Mode State ───────────────────────────
 let _profileEditMode = null; // profileName currently in edit mode
 
+// Eine Profil-Karte als HTML. Eigene Funktion, damit ein einzelnes neues Profil auch ohne Komplett-Rendern in die
+// Liste kommt (_profilKarteEinfuegen). dup = { dupSet, orgSet, groupMap } aus _profilDupInfo().
+function _profileCardHtml(name, idx, owner, blockId, dup) {
+  const { dupSet: _dupProfileSet, orgSet: _orgProfileSet, groupMap: _dupGroupMap } = dup;
+  const p = PROFILES[name];
+  const shortName = _profileShortName(name, owner);
+  const slotKey = 'p_' + idx;
+  const isFav = PROFILE_FAVS.has(name);
+  const isEdit = _profileEditMode === name;
+  const isDup = _dupProfileSet.has(name);
+  const isOrg = _orgProfileSet.has(name);
+  const img = PROFILE_SCREENSHOTS[name];
+  const letter = escHtml((shortName[0] || '?').toUpperCase());
+
+  const thumbContent = img
+    ? _lazyImg('pf', name)
+    : '<div class="pc-placeholder">' + letter + '</div>';
+
+  const dupSiblings = (isDup || isOrg)
+    ? (_dupGroupMap.get(name) || []).filter(n => n !== name).map(n => escHtml(n)).join(', ')
+    : '';
+  const dupBadge = isDup
+    ? '<span class="pc-tag" title="Kopie von: ' + dupSiblings + '">DUP</span>'
+    : isOrg
+    ? '<span class="pc-tag" title="Original – Kopien: ' + dupSiblings + '">ORG</span>'
+    : '<span class="pc-tag">Profil</span>';
+
+  // Use data-slot + data-strip-owner for the modal click — avoids inline JSON escaping issues
+  // Thumb click always opens the modal; screenshot capture only via explicit button
+  const thumbHint = img ? '<span class="pc-zoom">🔍</span>' : '<span class="pc-capture-hint">📸</span>';
+
+  return '<div class="pc' + (isEdit ? ' pc-edit-active' : '') + '" id="prow_' + idx + '">'
+    + '<div class="pc-thumb" data-slot="' + slotKey + '" data-strip-owner="' + escHtml(blockId) + '" onclick="_openProfileCard(this.dataset.slot,this.dataset.stripOwner)">'
+    + thumbContent
+    + dupBadge
+    + '<button class="pc-fav' + (isFav ? ' on' : '') + '" data-pkey="' + idx + '" onclick="event.stopPropagation();toggleProfileFav(_profileNameMap[\'p_\'+this.dataset.pkey])" title="Favorit">'
+    + (isFav ? '⭐' : '☆') + '</button>'
+    + thumbHint
+    + '</div>'
+    + '<div class="pc-name" title="' + escHtml(name) + '">' + escHtml(shortName) + '</div>'
+    + '<div class="pc-meta">' + (p.items?.length ?? 0) + ' Items · ' + (p.date || '') + '</div>'
+    + '<div class="pc-actions">'
+    + '<button class="pc-btn primary" data-slot="' + slotKey + '" onclick="profileExecuteBySlot(this.dataset.slot)" title="Laden + ausführen">▶ Run</button>'
+    + '<button class="pc-btn' + (isFav ? ' fav-on' : '') + '" data-pkey="' + idx + '" onclick="toggleProfileFav(_profileNameMap[\'p_\'+this.dataset.pkey])" title="Favorit">⭐</button>'
+    + '<button class="pc-btn' + (isEdit ? ' edit-on' : '') + '" data-slot="' + slotKey + '" onclick="profileToggleEdit(this.dataset.slot)" title="Bearbeiten">✏️</button>'
+    + '<button class="pc-btn" data-slot="' + slotKey + '" onclick="copyProfileToYuuki(_profileNameMap[this.dataset.slot])" title="Kopie unter Yuuki 998 erstellen" style="font-size:11px">📋 Yuuki</button>'
+    + '<button class="pc-btn" data-slot="' + slotKey + '" onclick="_showCardColorFreq(this.dataset.slot)" title="Farb-Häufigkeit anzeigen und Farben ersetzen">🎨</button>'
+    + '</div>'
+    + '</div>';
+}
+
+// Duplikat-Zuordnung für die Karten (ORG/DUP-Abzeichen)
+function _profilDupInfo() {
+  const { dupSet, orgSet } = _profileDupSets();
+  const groupMap = new Map(); // name → [alle siblings] für Tooltip
+  _getProfileDuplicates().forEach(names => { names.forEach(n => groupMap.set(n, names)); });
+  return { dupSet, orgSet, groupMap };
+}
+
 function renderProfileList() {
   const el = document.getElementById('profileListEl');
   if (!el) return;
@@ -2254,11 +2331,7 @@ function renderProfileList() {
   }
 
   // Duplikate berechnen: ORG = Original (erstes), DUP = Kopien
-  const { dupSet: _dupProfileSet, orgSet: _orgProfileSet } = _profileDupSets();
-  const _dupGroupMap = new Map(); // name → [alle siblings] für Tooltip
-  _getProfileDuplicates().forEach(names => {
-    names.forEach(n => _dupGroupMap.set(n, names));
-  });
+  const _dupInfo = _profilDupInfo();
 
   const html = Object.entries(byOwner).map(([owner, profiles]) => {
     const blockId = 'pb_' + owner.replace(/[^a-zA-Z0-9]/g, '_');
@@ -2292,53 +2365,7 @@ function renderProfileList() {
     }
 
     // Build card strip
-    const cards = profiles.map(({ name, idx }) => {
-      const p = PROFILES[name];
-      const shortName = _profileShortName(name, owner);
-      const slotKey = 'p_' + idx;
-      const isFav = PROFILE_FAVS.has(name);
-      const isEdit = _profileEditMode === name;
-      const isDup = _dupProfileSet.has(name);
-      const isOrg = _orgProfileSet.has(name);
-      const img = PROFILE_SCREENSHOTS[name];
-      const letter = escHtml((shortName[0] || '?').toUpperCase());
-
-      const thumbContent = img
-        ? _lazyImg('pf', name)
-        : '<div class="pc-placeholder">' + letter + '</div>';
-
-      const dupSiblings = (isDup || isOrg)
-        ? (_dupGroupMap.get(name) || []).filter(n => n !== name).map(n => escHtml(n)).join(', ')
-        : '';
-      const dupBadge = isDup
-        ? '<span class="pc-tag" title="Kopie von: ' + dupSiblings + '">DUP</span>'
-        : isOrg
-        ? '<span class="pc-tag" title="Original – Kopien: ' + dupSiblings + '">ORG</span>'
-        : '<span class="pc-tag">Profil</span>';
-
-      // Use data-slot + data-strip-owner for the modal click — avoids inline JSON escaping issues
-      // Thumb click always opens the modal; screenshot capture only via explicit button
-      const thumbHint = img ? '<span class="pc-zoom">🔍</span>' : '<span class="pc-capture-hint">📸</span>';
-
-      return '<div class="pc' + (isEdit ? ' pc-edit-active' : '') + '" id="prow_' + idx + '">'
-        + '<div class="pc-thumb" data-slot="' + slotKey + '" data-strip-owner="' + escHtml(blockId) + '" onclick="_openProfileCard(this.dataset.slot,this.dataset.stripOwner)">'
-        + thumbContent
-        + dupBadge
-        + '<button class="pc-fav' + (isFav ? ' on' : '') + '" data-pkey="' + idx + '" onclick="event.stopPropagation();toggleProfileFav(_profileNameMap[\'p_\'+this.dataset.pkey])" title="Favorit">'
-        + (isFav ? '⭐' : '☆') + '</button>'
-        + thumbHint
-        + '</div>'
-        + '<div class="pc-name" title="' + escHtml(name) + '">' + escHtml(shortName) + '</div>'
-        + '<div class="pc-meta">' + (p.items?.length ?? 0) + ' Items · ' + (p.date || '') + '</div>'
-        + '<div class="pc-actions">'
-        + '<button class="pc-btn primary" data-slot="' + slotKey + '" onclick="profileExecuteBySlot(this.dataset.slot)" title="Laden + ausführen">▶ Run</button>'
-        + '<button class="pc-btn' + (isFav ? ' fav-on' : '') + '" data-pkey="' + idx + '" onclick="toggleProfileFav(_profileNameMap[\'p_\'+this.dataset.pkey])" title="Favorit">⭐</button>'
-        + '<button class="pc-btn' + (isEdit ? ' edit-on' : '') + '" data-slot="' + slotKey + '" onclick="profileToggleEdit(this.dataset.slot)" title="Bearbeiten">✏️</button>'
-        + '<button class="pc-btn" data-slot="' + slotKey + '" onclick="copyProfileToYuuki(_profileNameMap[this.dataset.slot])" title="Kopie unter Yuuki 998 erstellen" style="font-size:11px">📋 Yuuki</button>'
-        + '<button class="pc-btn" data-slot="' + slotKey + '" onclick="_showCardColorFreq(this.dataset.slot)" title="Farb-Häufigkeit anzeigen und Farben ersetzen">🎨</button>'
-        + '</div>'
-        + '</div>';
-    }).join('');
+    const cards = profiles.map(({ name, idx }) => _profileCardHtml(name, idx, owner, blockId, _dupInfo)).join('');
 
     const isAltOwner = PROFILE_ALT_OWNERS.has(owner) || /\(old\)/i.test(owner);
     return '<div class="profile-owner-block' + ((wasOpen !== false) ? ' open' : '') + '" id="' + blockId + '">'
@@ -2358,7 +2385,7 @@ function renderProfileList() {
   // Duplikat-Button ein-/ausblenden
   const dupBtn = document.getElementById('profileDupBtn');
   if (dupBtn) {
-    const dupCount = _dupProfileSet.size;
+    const dupCount = _dupInfo.dupSet.size;
     if (dupCount > 0) {
       dupBtn.textContent = '⚠️ ' + dupCount + ' Duplikat' + (dupCount !== 1 ? 'e' : '') + ' entfernen';
       dupBtn.style.display = '';
@@ -2366,6 +2393,40 @@ function renderProfileList() {
       dupBtn.style.display = 'none';
     }
   }
+}
+
+// Eine Karte, die durch ein neues Bild im Filter "mit Bild" erst jetzt in die Liste gehört, an der richtigen
+// Stelle einsetzen – statt die ganze Liste (und damit jedes Bild) neu zu bauen. Beim Auto-Screenshot mit diesem
+// Filter war das der Fall bei JEDEM Bild. false = der Aufrufer muss komplett neu zeichnen (Besitzer-Block fehlt,
+// Suche/Tag-Filter aktiv: dort entscheidet renderProfileList, was zu sehen ist).
+function _profilKarteEinfuegen(el, name) {
+  if ((document.getElementById('profileSearch')?.value || '').trim()) return false;
+  if (typeof _profileTagFilter !== 'undefined' && _profileTagFilter) return false;
+  const owner = _profileOwnerOf(name);
+  const blockId = 'pb_' + owner.replace(/[^a-zA-Z0-9]/g, '_');
+  const strip = document.getElementById(blockId)?.querySelector('.profile-strip');
+  if (!strip) return false;
+  const idx = el._profileKeys.length;        // neue, freie Nummer: die Nummern der übrigen Karten bleiben gültig
+  const html = _profileCardHtml(name, idx, owner, blockId, _profilDupInfo());
+  const wrap = document.createElement('div');
+  wrap.innerHTML = html;
+  const karte = wrap.firstElementChild;
+  if (!karte) return false;
+  // Einsortieren mit demselben Schlüssel wie renderProfileList
+  const mein = _profileSortKey(name);
+  let davor = null;
+  for (const c of strip.querySelectorAll('.pc')) {
+    const n = _profileNameMap['p_' + String(c.id).replace(/^prow_/, '')];
+    if (n && _profileSortKey(n).localeCompare(mein) > 0) { davor = c; break; }
+  }
+  el._profileKeys.push(name);
+  _profileNameMap['p_' + idx] = name;
+  strip.insertBefore(karte, davor);
+  const block = strip.closest('.profile-owner-block');
+  const zaehler = block && block.querySelector('.profile-owner-count');
+  if (zaehler) zaehler.textContent = String(strip.querySelectorAll('.pc').length);
+  _lazyImgBeobachten(el);
+  return true;
 }
 
 // ── Einzelnes Profil-Bild nachziehen ───────────────────────────────────────
@@ -2383,8 +2444,8 @@ function _profilBildAktualisieren(name) {
   const slot = Object.keys(_profileNameMap).find(k => _profileNameMap[k] === name);
   const card = slot ? document.getElementById('prow_' + slot.slice(2)) : null;
   // Keine Karte: das Profil ist durch Suche/Filter ohnehin nicht zu sehen. Nur wenn das Bild es durch
-  // den Bild-Filter jetzt erst sichtbar macht, fehlt die Karte und die Liste muss neu gebaut werden.
-  if (!card) return !(sichtbar && filterNachBild);
+  // den Bild-Filter ("mit Bild") jetzt erst sichtbar macht, fehlt die Karte – die wird einzeln eingesetzt.
+  if (!card) return (sichtbar && filterNachBild) ? _profilKarteEinfuegen(el, name) : true;
   if (!sichtbar) {
     // z. B. Filter "ohne Bild": die Karte hat jetzt ein Bild und gehört nicht mehr in die Liste.
     // _profileKeys und die Slot-Nummern der übrigen Karten bleiben absichtlich unverändert.
@@ -2963,8 +3024,10 @@ function _runNextSlideshow() {
       loadProfile(name);
       // 20ms reichen – loadProfile ist synchron, wir brauchen nur einen Microtask-Flush
       setTimeout(() => {
-        const rawCode = document.getElementById('outfitCode')?.value?.trim() || null;
-        captureProfileViaCanvas(name, null, rawCode);
+        // Code direkt aus OUTFIT bauen, ohne Schlösser (Screenshots legen nie ein Schloss an). Das Textfeld
+        // bleibt unverändert mit Schlössern – "Run" soll sie weiter anlegen.
+        const rawCode = _outfitCodeBauen({ ohneSchloesser: true });
+        captureProfileViaCanvas(name, null, rawCode ? rawCode.trim() : null);
       }, 20);
     }
     const zeit = _slideshowZeitText(false);
@@ -3134,6 +3197,10 @@ function _handleCanvasPreviewData(data) {
         _osBrokenCodes[vKey] = data.err;
         showStatus('⚠️ #' + mk + ': Code fehlerhaft – Reparieren?', 'error');
         if (_activeTab === 'outfit-scan') renderOutfitScanTab();
+      } else if (String(data.err).startsWith('SPERRE_FAIL')) {
+        // Ohne Sync-Sperre wird nichts angelegt – Serie beenden, den Code NICHT als kaputt markieren
+        _osCaptureQueue = [];
+        showStatus('❌ Bilderserie abgebrochen: Sync-Sperre im Spiel-Tab nicht möglich – es wurde nichts angelegt', 'error');
       } else {
         showStatus('❌ #' + mk + ': ' + data.err, 'error');
       }
@@ -3182,7 +3249,13 @@ function _handleCanvasPreviewData(data) {
     _slideshowStatErfassen(entry, data);
 
     if (data.err) {
-      showStatus('⚠️ Profil-Screenshot "' + name + '": ' + data.err, 'error');
+      if (String(data.err).startsWith('SPERRE_FAIL') && _slideshowRunning) {
+        // Ohne Sync-Sperre wird nichts angelegt (dein Aussehen dürfte sonst beim Raum-Beitritt zum Server gehen)
+        _stopProfileSlideshow();
+        showStatus('❌ Auto-Screenshot abgebrochen: Sync-Sperre im Spiel-Tab nicht möglich – es wurde nichts angelegt', 'error');
+      } else {
+        showStatus('⚠️ Profil-Screenshot "' + name + '": ' + data.err, 'error');
+      }
     } else if (data.data) {
       const imgEl = new Image();
       imgEl.onload = function() {
@@ -4665,7 +4738,8 @@ function switchTab(tab) {
   if (tab === 'inventar')      { if (typeof renderInventarTab === 'function') renderInventarTab(); }
   if (tab === 'scan')          { if (typeof renderScanTab === 'function') renderScanTab(); }
   if (tab === 'outfit-import') { renderOutfitImportTab(); }
-  if (tab === 'outfit-scan')   { renderOutfitScanTab(); }
+  // Start-Schlossfilter: osSetLockFilter entpackt die Codes in Häppchen und zeichnet danach selbst
+  if (tab === 'outfit-scan')   { if (!_sfOsErstmals()) renderOutfitScanTab(); }
   if (tab === 'lscg-wheel')   { if (_mbsWheelData.length) _renderMbsWheelTab(); scanWheelOutfits(); }
   if (tab === 'locks')         { renderLocksTab(); _startLocksTimer(); }
   if (tab !== 'locks')         { _stopLocksTimer(); }
@@ -5105,7 +5179,9 @@ function _syncCurseFilterUI() {
 function _populateSlotFilter() {
   const sel = document.getElementById('slotFilter');
   if (!sel) return;
-  const current = sel.value;
+  // Start-Slot aus den Einstellungen: gilt genau einmal, sobald die Liste das erste Mal befüllt wird
+  const current = sel.value || _sfSlotWunsch;
+  _sfSlotWunsch = '';
   // Use effective gruppe (override wins) – ein einziger Durchlauf über die DB
   // (statt 2×): sammelt Slots + zählt UNBEKANNT in einem Pass (27k Einträge/Scan).
   const slotSet = new Set();
@@ -6221,8 +6297,9 @@ function curseClearAndScan() {
     // Gruppen-Overrides laden
     const gruppeOverrides = await idbGet('BC_CURSE_GRUPPE_v1');
     if (gruppeOverrides && typeof gruppeOverrides === 'object') Object.assign(CURSE_GRUPPE_OVERRIDES, gruppeOverrides);
-    // Erst rendern nachdem ALLE Daten geladen sind
-    if (document.getElementById('curseBody') && Object.keys(CURSE_DB).length) renderCurseTab();
+    // Erst rendern nachdem ALLE Daten geladen sind. Die Slot-Liste wird bisher nur durch einen Scan befüllt –
+    // nach einem Neustart wäre sie leer (und ein Start-Slot aus den Einstellungen wirkungslos).
+    if (document.getElementById('curseBody') && Object.keys(CURSE_DB).length) { _populateSlotFilter(); renderCurseTab(); }
     // War die Verbindung schneller als dieses Laden, ging der Push beim PONG
     // mit leerer CURSE_DB raus – jetzt nachholen, bevor der erste Full-Sync
     // den Bestand durch die kleinere BC-Sicht ersetzt.
@@ -6414,6 +6491,227 @@ onBridgeMessage('SEND_MON_VORFALL', function(ev) {
       showStatus('⚠️ Server-Trennung (' + String(ev.data.grund || '?').slice(0, 60) + ') – Ablauf unter Einstellungen → Werkzeuge → Sende-Monitor', 'error');
       sendMonRefresh();
 });
+
+
+// ══════════════════════════════════════════════════════
+//  START-FILTER (Einstellungen → Darstellung)
+// ══════════════════════════════════════════════════════
+// Welche Filter beim Start eines Tabs schon gesetzt sind. Craft & Curse startet mit "Neu + Cursed + Kein Outfit"
+// (das stellt man dort sonst jedes Mal von Hand ein), die übrigen Tabs ungefiltert. Alles lässt sich in den
+// Einstellungen ändern – oder im Tab einstellen und dort mit "Aktuelle Auswahl" festhalten.
+// Gespeichert wird im localStorage (kleine Einstellung wie die Schloss-Regeln); ein kaputter oder fehlender
+// Eintrag fällt auf die Standardwerte zurück, es geht nie etwas verloren.
+const START_FILTER_KEY = 'BC_StartFilter_v1';
+const SF_CURSE_FILTER  = ['neu', 'cursed', 'fav', 'outfit', 'no-outfit'];
+const SF_PROFIL_FILTER = ['all', 'fav', 'withshot', 'noshot', 'noold'];
+const SF_WHEEL_FILTER  = ['all', 'fav', 'new'];
+const SF_OS_SCHLOESSER = ['', 'schloss', 'dogs', 'afc', 'lover', 'owner', 'timer', 'code', 'mod'];
+const SF_TEXT_MAX      = 80;
+const START_FILTER_STANDARD = {
+  curse:   { filter: ['neu', 'cursed', 'no-outfit'], cache: false, slot: '', suche: '' },
+  profile: { filter: 'all', suche: '' },
+  os:      { schloss: '', suche: '' },
+  wheel:   { filter: 'all', suche: '' },
+};
+
+function _sfText(v) { return typeof v === 'string' ? v.slice(0, SF_TEXT_MAX) : ''; }
+
+// Beliebiges (auch kaputtes) Objekt → gültiger Stand. Unbekannte Werte fliegen raus, fehlende kommen aus den Standardwerten.
+function _sfNormieren(roh) {
+  const r = (roh && typeof roh === 'object') ? roh : {};
+  const std = START_FILTER_STANDARD;
+  const teil = (k) => (r[k] && typeof r[k] === 'object') ? r[k] : {};
+  const c = teil('curse'), p = teil('profile'), o = teil('os'), w = teil('wheel');
+  let cf = Array.isArray(c.filter) ? [...new Set(c.filter.filter(k => SF_CURSE_FILTER.includes(k)))] : std.curse.filter.slice();
+  // Wie im Tab: "Outfit" schließt "Neu" und "Kein Outfit" aus
+  if (cf.includes('outfit') && (cf.includes('neu') || cf.includes('no-outfit'))) cf = cf.filter(k => k !== 'outfit');
+  return {
+    curse:   { filter: cf, cache: c.cache === true, slot: _sfText(c.slot), suche: _sfText(c.suche) },
+    profile: { filter: SF_PROFIL_FILTER.includes(p.filter) ? p.filter : std.profile.filter, suche: _sfText(p.suche) },
+    os:      { schloss: SF_OS_SCHLOESSER.includes(o.schloss) ? o.schloss : std.os.schloss, suche: _sfText(o.suche) },
+    wheel:   { filter: SF_WHEEL_FILTER.includes(w.filter) ? w.filter : std.wheel.filter, suche: _sfText(w.suche) },
+  };
+}
+
+function _sfLaden() {
+  try {
+    const raw = localStorage.getItem(START_FILTER_KEY);
+    return _sfNormieren(raw ? JSON.parse(raw) : null);
+  } catch (e) { return _sfNormieren(null); }
+}
+let _startFilter = _sfLaden();
+function _sfSpeichern() {
+  try { localStorage.setItem(START_FILTER_KEY, JSON.stringify(_startFilter)); } catch (e) {}
+}
+
+let _sfSlotWunsch = '';      // Start-Slot für Craft & Curse – gilt, sobald die Slot-Liste das erste Mal befüllt ist
+let _sfOsSchlossOffen = '';  // Start-Schlossfilter der LSCG Outfits – wird beim ersten Öffnen des Tabs angewendet
+
+// Den Stand in die Tabs übernehmen (Start und "Jetzt anwenden"). bereich: 'curse' | 'profile' | 'os' | 'wheel' | leer = alle.
+function startFilterAnwenden(bereich) {
+  const f = _startFilter;
+  const alle = !bereich;
+  const el = (id) => document.getElementById(id);
+  if (alle || bereich === 'curse') {
+    _curseActiveFilters.clear();
+    f.curse.filter.forEach(k => _curseActiveFilters.add(k));
+    _syncCurseFilterUI();
+    el('fc-cache')?.classList.toggle('on', f.curse.cache);
+    const s = el('curseSearch'); if (s) s.value = f.curse.suche;
+    const sel = el('slotFilter');
+    _sfSlotWunsch = f.curse.slot;
+    if (sel) {
+      if (!f.curse.slot) sel.value = '';
+      else if (Array.from(sel.options || []).some(o => o.value === f.curse.slot)) { sel.value = f.curse.slot; _sfSlotWunsch = ''; }
+    }
+    if (_activeTab === 'curse') renderCurseTab();
+  }
+  if (alle || bereich === 'profile') {
+    _profileFilter = f.profile.filter;
+    document.querySelectorAll('.profile-fc').forEach(c => c.classList.toggle('on', c.dataset.filter === _profileFilter));
+    const s = el('profileSearch'); if (s) s.value = f.profile.suche;
+    if (_activeTab === 'outfit') renderProfileList();
+  }
+  if (alle || bereich === 'os') {
+    const s = el('osSearchInput'); if (s) s.value = f.os.suche;
+    _osSearchQuery = f.os.suche.trim().toLowerCase();
+    if (_activeTab === 'outfit-scan') {
+      osSetLockFilter(f.os.schloss);   // entpackt die Codes in Häppchen und zeichnet danach
+    } else {
+      // Der Schlossfilter muss alle Codes entpacken – das nicht beim Start, sondern beim ersten Öffnen des Tabs
+      _osLockFilter = '';
+      const sel = el('osLockFilter'); if (sel) sel.value = f.os.schloss;
+      _sfOsSchlossOffen = f.os.schloss;
+    }
+  }
+  if (alle || bereich === 'wheel') {
+    _mbsWheelFilter = f.wheel.filter;
+    const s = el('wheelSearchInput'); if (s) s.value = f.wheel.suche;
+    _mbsWheelSearch = f.wheel.suche.trim().toLowerCase();
+    if (_activeTab === 'lscg-wheel') _renderMbsWheelTab();
+  }
+}
+
+// Beim ersten Öffnen der LSCG Outfits: gibt true zurück, wenn der Schlossfilter das Zeichnen übernommen hat
+function _sfOsErstmals() {
+  const v = _sfOsSchlossOffen;
+  _sfOsSchlossOffen = '';
+  if (!v) return false;
+  osSetLockFilter(v);
+  return true;
+}
+
+// Aktuelle Auswahl eines Tabs als Start-Filter festhalten
+function startFilterUebernehmen(bereich) {
+  const el = (id) => document.getElementById(id);
+  if (bereich === 'curse') {
+    _startFilter.curse = {
+      filter: [..._curseActiveFilters], cache: !!el('fc-cache')?.classList.contains('on'),
+      slot: el('slotFilter')?.value || '', suche: el('curseSearch')?.value || '',
+    };
+  } else if (bereich === 'profile') {
+    _startFilter.profile = { filter: _profileFilter, suche: el('profileSearch')?.value || '' };
+  } else if (bereich === 'os') {
+    _startFilter.os = { schloss: _osLockFilter || '', suche: el('osSearchInput')?.value || '' };
+  } else if (bereich === 'wheel') {
+    _startFilter.wheel = { filter: _mbsWheelFilter, suche: el('wheelSearchInput')?.value || '' };
+  } else return;
+  _startFilter = _sfNormieren(_startFilter);
+  _sfSpeichern();
+  startFilterRender();
+  showStatus('✅ Start-Filter übernommen: ' + _sfName(bereich), 'success');
+}
+
+function startFilterStandard(bereich) {
+  if (!START_FILTER_STANDARD[bereich]) return;
+  _startFilter[bereich] = JSON.parse(JSON.stringify(START_FILTER_STANDARD[bereich]));
+  _startFilter = _sfNormieren(_startFilter);
+  _sfSpeichern();
+  startFilterRender();
+}
+
+// Einzelwerte aus den Einstellungen
+function sfSet(bereich, feld, wert) {
+  const b = _startFilter[bereich];
+  if (!b || !(feld in b) || feld === 'filter' && bereich === 'curse') return;
+  b[feld] = (feld === 'cache') ? wert === true : wert;
+  _startFilter = _sfNormieren(_startFilter);
+  _sfSpeichern();
+  startFilterRender();
+}
+function sfCurseFilter(key, an) {
+  if (!SF_CURSE_FILTER.includes(key)) return;
+  const menge = new Set(_startFilter.curse.filter);
+  if (an) {
+    menge.add(key);
+    if (key === 'outfit') { menge.delete('neu'); menge.delete('no-outfit'); }
+    else if (key === 'neu' || key === 'no-outfit') menge.delete('outfit');
+  } else menge.delete(key);
+  _startFilter.curse.filter = [...menge];
+  _startFilter = _sfNormieren(_startFilter);
+  _sfSpeichern();
+  startFilterRender();
+}
+function sfSlotListeFuellen() {
+  const liste = document.getElementById('sfSlotListe');
+  const sel = document.getElementById('slotFilter');
+  if (!liste || !sel) return;
+  liste.innerHTML = Array.from(sel.options || []).map(o => o.value).filter(Boolean)
+    .map(v => '<option value="' + escHtml(v) + '"></option>').join('');
+}
+
+function _sfName(bereich) {
+  return { curse: 'Craft & Curse', profile: 'Outfit & Profile', os: 'LSCG Outfits', wheel: 'MBS Wheel' }[bereich] || bereich;
+}
+
+// Die Karte in den Einstellungen
+function startFilterRender() {
+  const box = document.getElementById('startFilterBox');
+  if (!box) return;
+  const f = _startFilter;
+  const chk = (an, js, text, titel) => '<label class="set-hint lr-chk"' + (titel ? ' title="' + escHtml(titel) + '"' : '') + '><input type="checkbox"'
+    + (an ? ' checked' : '') + ' onchange="' + js + '"> ' + text + '</label>';
+  const wahl = (optionen, aktuell, js) => '<select class="os-filter-btn" onchange="' + js + '">'
+    + optionen.map(([v, t]) => '<option value="' + escHtml(v) + '"' + (v === aktuell ? ' selected' : '') + '>' + escHtml(t) + '</option>').join('') + '</select>';
+  const suche = (wert, bereich, breite) => '<input class="os-search" type="text" maxlength="' + SF_TEXT_MAX + '" placeholder="Suchtext (optional)" value="' + escHtml(wert) + '"'
+    + ' style="width:' + (breite || 150) + 'px" onchange="sfSet(\'' + bereich + '\',\'suche\',this.value)">';
+  const knoepfe = (bereich) => '<button class="tweaks-btn" onclick="startFilterUebernehmen(\'' + bereich + '\')" title="Die Filter, die gerade im Tab eingestellt sind, als Start-Filter festhalten">⤓ Aktuelle Auswahl</button>'
+    + '<button class="tweaks-btn" onclick="startFilterStandard(\'' + bereich + '\')" title="Zurück auf die Standardwerte">↺</button>';
+  const zeile = (titel, hinweis, bereich, ctrl) => '<div class="set-li lr-zeile"><div class="lr-text"><b>' + titel + '</b>'
+    + '<div class="set-hint">' + hinweis + '</div></div><div class="set-r lr-ctrl">' + ctrl + knoepfe(bereich) + '</div></div>';
+  const cf = f.curse.filter;
+  const cc = (k, text) => chk(cf.includes(k), 'sfCurseFilter(\'' + k + '\',this.checked)', text);
+  let html = zeile('🔮 Craft &amp; Curse', 'Beim Start gesetzt, ohne dass du im Tab etwas anklicken musst.', 'curse',
+      cc('neu', '🆕 Neu') + cc('cursed', '🔮 Cursed') + cc('fav', '⭐ Favoriten') + cc('outfit', '👗 Outfit') + cc('no-outfit', 'Kein Outfit')
+      + chk(f.curse.cache, 'sfSet(\'curse\',\'cache\',this.checked)', '💾 Im Cache')
+      + '<input class="os-search" list="sfSlotListe" maxlength="' + SF_TEXT_MAX + '" placeholder="Slot (leer = alle)" value="' + escHtml(f.curse.slot) + '" style="width:130px"'
+      + ' onfocus="sfSlotListeFuellen()" onchange="sfSet(\'curse\',\'slot\',this.value.trim())"><datalist id="sfSlotListe"></datalist>'
+      + suche(f.curse.suche, 'curse'));
+  html += zeile('👗 Outfit &amp; Profile', 'Filter oben in der Profil-Liste.', 'profile',
+      wahl([['all', 'Alle'], ['fav', '⭐ Favs'], ['withshot', '📷 Mit Bild'], ['noshot', '🚫 Ohne Bild'], ['noold', '🙈 (old) aus']], f.profile.filter, 'sfSet(\'profile\',\'filter\',this.value)')
+      + suche(f.profile.suche, 'profile'));
+  html += zeile('🧬 LSCG Outfits', 'Der Schlossfilter wird beim ersten Öffnen des Tabs angewendet (die Codes müssen dafür entpackt werden).', 'os',
+      wahl([['', 'Schloss: alle Outfits'], ['schloss', 'Mit Schloss (jede Art)'], ['dogs', 'DOGS Devious'], ['afc', 'AFC Heart Padlock'], ['lover', 'Lover (BC)'],
+        ['owner', 'Owner'], ['timer', 'Timer (jede Art)'], ['code', 'Passwort / Kombination / Safeword'], ['mod', 'Andere Mod-Schlösser']], f.os.schloss, 'sfSet(\'os\',\'schloss\',this.value)')
+      + suche(f.os.suche, 'os'));
+  html += zeile('🎡 MBS Wheel', 'Die drei Knöpfe oben im Tab.', 'wheel',
+      wahl([['all', 'Alle'], ['fav', '⭐ Favoriten'], ['new', '🆕 Neu']], f.wheel.filter, 'sfSet(\'wheel\',\'filter\',this.value)')
+      + suche(f.wheel.suche, 'wheel'));
+  box.innerHTML = html;
+}
+
+try {
+  // Jeder Tab für sich: ein Fehler in einem Bereich verhindert die anderen nicht. Der Start läuft erst, wenn
+  // items.js vollständig ausgeführt ist (spätere let-Variablen existieren dann) und das DOM steht.
+  const _sfStart = () => {
+    for (const b of ['curse', 'profile', 'os', 'wheel']) {
+      try { startFilterAnwenden(b); } catch (e) { console.warn('[StartFilter] ' + b + ':', e); }
+    }
+    try { startFilterRender(); } catch (e) { console.warn('[StartFilter] Einstellungen:', e); }
+  };
+  if (document.readyState !== 'loading') setTimeout(_sfStart, 0);
+  else document.addEventListener('DOMContentLoaded', _sfStart);
+} catch (e) {}
 
 
 /* Den lokalen Curse-Bestand in den Loader schieben.
@@ -8565,6 +8863,7 @@ function captureOsScreenshot(mk, vIdx) {
       + '  Player.Appearance.splice(0,Player.Appearance.length);'
       + '  origApp.forEach(function(i){Player.Appearance.push(i);});'
       + '  CharacterRefresh(Player,false,false);'
+      + '  ' + _shotSperreAus('myGen')   // erst nach dem Wiederherstellen
       + '  window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",reqId:' + J_reqId + ',err:"APPLY_FAIL:"+applyErr.message},"' + TOOL_ORIGIN + '");'
       + '  return;'
       + '}'
@@ -8581,6 +8880,10 @@ function captureOsScreenshot(mk, vIdx) {
     // hat (Counter erhöht), bricht er ab statt das Outfit zu überschreiben.
     + 'window.__BCU_captureGen=(window.__BCU_captureGen||0)+1;'
     + 'var myGen=window.__BCU_captureGen;'
+    // Sync-Sperre VOR jeder Änderung am Aussehen; gelöst erst nach dem Wiederherstellen (_restoreAndSync)
+    + _shotSperreAn('myGen', _SHOT_SPERRE_MS,
+      'window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",reqId:' + J_reqId
+      + ',err:"SPERRE_FAIL: Sync-Sperre nicht möglich"},"' + TOOL_ORIGIN + '");return;')
     // AFK-Uhr zurück, Pose auf stehend (siehe _SHOT_VORBEREITEN); die Pose von vorher kommt am Ende
     // der Serie zurück (_runNextOsCapture), nicht nach jedem Bild. Ohne Outfit-Code keine Pose-Änderung.
     + (outfitCode ? _SHOT_VORBEREITEN : '(function(){' + _SHOT_AFK + '})();')
@@ -8597,6 +8900,8 @@ function captureOsScreenshot(mk, vIdx) {
     + '  Player.Appearance.splice(0,Player.Appearance.length);'
     + '  origApp.forEach(function(i){Player.Appearance.push(i);});'
     + '  CharacterRefresh(Player,false,false);'
+    // Erst jetzt, wo das Aussehen wieder stimmt, die Sync-Sperre lösen (ggf. mit einem frischen Sync)
+    + '  ' + _shotSperreAus('myGen')
     // 300ms warten, dann nur noch syncToServer – KEIN Restore mehr.
     // Verify-Check entfernt: er feuerte während des nächsten Screenshots
     // und überschrieb dessen Outfit mit dem Original (Race Condition).
@@ -8704,6 +9009,74 @@ const _SHOT_VORBEREITEN = '(function(){'
   + '}catch(_e){}'
   + '})();';
 
+// ── Sync-Sperre: solange ein Test-Outfit an dir hängt, geht dein Aussehen NIE zum Server ──────────────
+// Beim Betreten eines Raums sendet BC (und manche Mods) dein Aussehen – passiert das genau dann, wenn für ein
+// Bild gerade das Test-Outfit an dir hängt, würde der Server es speichern und der ganze Raum es sehen.
+// BC berechnet das Aussehen beim Aufruf (ServerPlayerAppearanceSync) und sendet sofort; nicht erzwungene Updates
+// anderer Mods warten bis zu 2 s im ServerAccountUpdate – mit dem Aussehen von damals.
+//  - Während der Sperre fängt ein Hook auf ServerSend ab: AccountUpdate mit Aussehen (die übrigen Felder gehen
+//    durch), ChatRoomCharacterUpdate und ChatRoomCharacterItemUpdate für dich.
+//  - Gelöst wird sie erst NACH dem Wiederherstellen (_shotSperreAus). Wurde etwas abgefangen oder wartet bei BC
+//    noch ein Aussehen in der Warteschlange, geht danach EIN frischer Sync mit deinem echten Aussehen raus.
+//  - Eigentümer ist der jeweils neueste Lauf (Token); die Sperre verfällt nach ms von selbst, damit ein
+//    abgestürzter Lauf dich nie dauerhaft blockiert.
+//  - Ohne ModSDK (oder wenn der Hook dort scheitert) wird ServerSend direkt umhüllt. Gelingt beides nicht, wird
+//    NICHTS angelegt (beiFehler).
+const _SHOT_SPERRE_MS = 30000;
+const _SHOT_SPERRE_INSTALL = '(function(){'
+  + 'if(window.__BCU_SPERRE_HOOK__)return;'
+  + 'var pruefen=function(args){'
+  +   'try{'
+  +     'if(!(window.__BCU_sperreBis>Date.now()))return true;'
+  +     'var t=args[0],d=args[1];'
+  +     'if(t==="ChatRoomCharacterUpdate"){'
+  +       'if(d&&d.ID!==undefined&&Player.OnlineID!==undefined&&d.ID!==Player.OnlineID)return true;'
+  +       'window.__BCU_sperreRaum=true;return false;}'
+  +     'if(t==="ChatRoomCharacterItemUpdate"){'
+  +       'if(d&&d.Target!==undefined&&d.Target!==Player.MemberNumber)return true;'
+  +       'window.__BCU_sperreRaum=true;return false;}'
+  +     'if(t==="AccountUpdate"&&d&&typeof d==="object"&&("Appearance" in d)){'
+  +       'window.__BCU_sperreAcc=true;delete d.Appearance;delete d.AssetFamily;'
+  +       'return Object.keys(d).length>0;}'
+  +   '}catch(e){}'
+  +   'return true;'
+  + '};'
+  + 'try{'
+  +   'if(typeof bcModSdk!=="undefined"&&typeof bcModSdk.registerMod==="function"){'
+  +     'var m=bcModSdk.registerMod({name:"BCU_SyncSperre",fullName:"BCU Sync-Sperre",version:"1.0.0"});'
+  +     'm.hookFunction("ServerSend",100000,function(args,next){if(!pruefen(args))return;return next(args);});'
+  +     'window.__BCU_SPERRE_HOOK__=true;'
+  +   '}'
+  + '}catch(e){}'
+  + 'if(!window.__BCU_SPERRE_HOOK__&&typeof window.ServerSend==="function"){'
+  +   'var orig=window.ServerSend;'
+  +   'window.ServerSend=function(){if(!pruefen(arguments))return;return orig.apply(this,arguments);};'
+  +   'window.__BCU_SPERRE_HOOK__=true;'
+  + '}'
+  + '})();';
+
+// Sperre setzen (token = JS-Ausdruck des Eigentümers, ms = Verfall). beiFehler: JS, das ausgeführt wird, wenn
+// die Sperre nicht möglich ist – muss das Anlegen verhindern (return).
+function _shotSperreAn(token, ms, beiFehler) {
+  return _SHOT_SPERRE_INSTALL
+    + 'if(!window.__BCU_SPERRE_HOOK__){' + beiFehler + '}'
+    + 'window.__BCU_sperreGen=' + token + ';window.__BCU_sperreBis=Date.now()+' + ms + ';';
+}
+
+// Sperre lösen – erst aufrufen, NACHDEM das Aussehen wiederhergestellt ist. Danach ggf. der eine frische Sync.
+function _shotSperreAus(token) {
+  return '(function(){try{'
+    + 'if(window.__BCU_sperreGen!==' + token + ')return;'          // ein neuerer Lauf hat die Sperre übernommen
+    + 'window.__BCU_sperreBis=0;'
+    + 'var acc=window.__BCU_sperreAcc,raum=window.__BCU_sperreRaum;'
+    + 'window.__BCU_sperreAcc=false;window.__BCU_sperreRaum=false;'
+    + 'try{if(typeof ServerAccountUpdate!=="undefined"&&ServerAccountUpdate.Queue&&typeof ServerAccountUpdate.Queue.has==="function"'
+    +   '&&ServerAccountUpdate.Queue.has("Appearance"))acc=true;}catch(e){}'
+    + 'if(acc&&typeof ServerPlayerAppearanceSync==="function")ServerPlayerAppearanceSync();'
+    + 'if(raum&&typeof ChatRoomCharacterUpdate==="function"&&typeof ServerPlayerIsInChatRoom==="function"&&ServerPlayerIsInChatRoom())ChatRoomCharacterUpdate(Player);'
+    + '}catch(e){}})();';
+}
+
 // Ende eines Durchlaufs: die Pose von vor dem Durchlauf zurück (lokal, ohne Server)
 const _SHOT_POSE_ZURUECK = '(function(){try{'
   + 'var o=window.__BCU_poseOrig;if(!o)return;window.__BCU_poseOrig=null;'
@@ -8800,7 +9173,8 @@ function captureProfileViaCanvas(name, outfitCode, rawApplyCode) {
     + 'Player.Appearance.splice(0,Player.Appearance.length);'
     + 'origApp.forEach(function(i){Player.Appearance.push(i);});'
     + 'CharacterRefresh(Player,false,false);'
-    + 'if(!window.__BCU_slideshowOrig){' + _SHOT_POSE_ZURUECK + '}';
+    + 'if(!window.__BCU_slideshowOrig){' + _SHOT_POSE_ZURUECK + '}'
+    + _shotSperreAus('myGen');   // erst jetzt, wo das Aussehen wieder stimmt
   const _applyErrCode = _restoreCode
     + 'window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",reqId:' + J_reqId + ',err:"APPLY_FAIL:"+applyErr.message},"' + TOOL_ORIGIN + '");'
     + 'return;';
@@ -8820,6 +9194,10 @@ function captureProfileViaCanvas(name, outfitCode, rawApplyCode) {
   const code = '(function(){'
     + 'window.__BCU_captureGen=(window.__BCU_captureGen||0)+1;'
     + 'var myGen=window.__BCU_captureGen;'
+    // Sync-Sperre VOR jeder Änderung am Aussehen; gelöst erst nach dem Wiederherstellen (_restore)
+    + _shotSperreAn('myGen', _SHOT_SPERRE_MS,
+      'window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",reqId:' + J_reqId
+      + ',err:"SPERRE_FAIL: Sync-Sperre nicht möglich"},"' + TOOL_ORIGIN + '");return;')
     + 'var _t0=performance.now();'  // Zeitmessung: Anlegen / Zeichnen / Bild (geht mit der Antwort zurück)
     // AFK-Uhr zurück, Pose auf stehend (siehe _SHOT_VORBEREITEN). Ohne Outfit (nur das aktuelle
     // Aussehen aufnehmen) bleibt die Pose, wie sie ist.
@@ -8841,6 +9219,7 @@ function captureProfileViaCanvas(name, outfitCode, rawApplyCode) {
     + '  origApp.forEach(function(i){Player.Appearance.push(i);});'
     + '  CharacterRefresh(Player,false,false);'
     + '  if(!window.__BCU_slideshowOrig){' + _SHOT_POSE_ZURUECK + '}'
+    + '  ' + _shotSperreAus('myGen')   // erst jetzt, wo das Aussehen wieder stimmt – ggf. mit einem frischen Sync
     + '}'
     + 'function _canvasHash(canvas){'
     + '  try{'
@@ -11638,7 +12017,7 @@ function _wheelGenStep() {
     }, 2500);
   };
   if (CURSE_DEFAULT_OUTFIT_CODE) {
-    bcSend({ type: 'EXEC', code: '(function(){try{' + _buildApplyCode(CURSE_DEFAULT_OUTFIT_CODE) + '}catch(e){console.warn("[BCU-WheelGen] Reset:",e.message);}})();' }, true);
+    bcSend({ type: 'EXEC', code: '(function(){' + _wheelSperreAn() + 'try{' + _buildApplyCode(CURSE_DEFAULT_OUTFIT_CODE) + '}catch(e){console.warn("[BCU-WheelGen] Reset:",e.message);}})();' }, true);
     setTimeout(_applyOutfit, 800);
   } else {
     _applyOutfit();
@@ -11870,6 +12249,9 @@ function mbsWheelCaptureShot(mn, oi) {
 function _buildCanvasShotCode(reqId) {
   const J = JSON.stringify(reqId);
   return '(function(){'
+    // Konnte der vorige Schritt wegen der Sync-Sperre nichts anlegen, wäre dies ein Bild vom falschen Aussehen
+    + 'if(window.__BCU_sperreFehler){window.__BCU_sperreFehler=0;'
+    +   'window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"SCREENSHOT_DATA",reqId:' + J + ',err:"SPERRE_FAIL: Sync-Sperre nicht möglich"},"' + TOOL_ORIGIN + '");return;}'
     + 'CharacterRefresh(Player,false,false);'
     + 'CharacterLoadCanvas(Player);'
     + 'setTimeout(function(){'
@@ -11908,7 +12290,12 @@ function _handleWheelShotData(data) {
   const fp = _pendingWheelShot[data.reqId];
   delete _pendingWheelShot[data.reqId];
   if (fp === undefined) return;
-  if (data.err || !data.data) { showStatus('❌ Screenshot: ' + (data.err || 'Keine Daten'), 'error'); return; }
+  if (data.err || !data.data) {
+    showStatus('❌ Screenshot: ' + (data.err || 'Keine Daten'), 'error');
+    // Ohne Sync-Sperre wird nichts angelegt – dann die Serie beenden statt lauter falscher Bilder zu sammeln
+    if (String(data.err || '').startsWith('SPERRE_FAIL') && _wheelGenRunning) mbsWheelGenerateStop();
+    return;
+  }
   const imgEl = new Image();
   imgEl.onload = () => {
     const MAX_W = 260, MAX_H = 520;
@@ -11946,10 +12333,21 @@ function mbsWheelOpenShot(_unused, mn, oi) {
   document.getElementById('osLightbox').classList.add('open');
 }
 
+// Sync-Sperre für die Wheel-Serie. Scheitert sie, wird nichts angelegt und der nächste Foto-Schritt meldet es
+// (statt ein falsches Bild zu speichern).
+function _wheelSperreAn() {
+  return _shotSperreAn('"wheel"', _SHOT_SPERRE_MS,
+    'window.__BCU_sperreFehler=1;console.error("[BCU] Sync-Sperre nicht möglich – Outfit nicht angelegt");return;');
+}
+
 // Baut InventoryWear-Code aus MBS-Items (gleiche Methode wie Profil-Ausführung)
 // noSync = true: nur lokal anziehen (für Batch-Screenshots), kein ServerSync
 function _mbsBuildApplyCode(items, noSync) {
-  return '(function(){try{'
+  return '(function(){'
+    // Nur lokal anziehen (Serie): dein Aussehen darf währenddessen NIE zum Server. Die Sperre hält über die ganze Serie
+    // (jeder Schritt erneuert sie) und wird erst beim Zurückstellen des Aussehens gelöst (bcuUndoAppearance).
+    + (noSync ? _wheelSperreAn() : '')
+    + 'try{'
     + 'var _items=' + JSON.stringify(items) + ';'
     + _lockFilterPrelude(noSync ? 'bild' : true)
     + '_items.forEach(function(it){'
@@ -11993,10 +12391,12 @@ function bcuUndoAppearance() {
   if (!_connected) { showStatus('❌ Nicht verbunden', 'error'); return; }
   bcSend({ type: 'EXEC', code: '(function(){try{'
     + 'var s=window.__BCU_UNDO;'
-    + 'if(!s||!s.length){console.warn("[BCU-Undo] Stack leer");return;}'
+    + 'if(!s||!s.length){console.warn("[BCU-Undo] Stack leer");' + _shotSperreAus('"wheel"') + 'return;}'
     + 'var b=s.pop();'
     + 'ServerAppearanceLoadFromBundle(Player,Player.AssetFamily,b);'
     + 'CharacterRefresh(Player,false,false);'
+    // Aussehen ist wieder da → Sync-Sperre der Wheel-Serie lösen; der Sync unten (und ggf. der frische) darf raus
+    + _shotSperreAus('"wheel"')
     + 'setTimeout(function(){'
     + '  if(typeof ServerPlayerAppearanceSync==="function")ServerPlayerAppearanceSync();'
     + '  else ServerSend("AccountUpdate",{Appearance:Player.Appearance});'
