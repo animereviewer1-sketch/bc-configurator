@@ -216,7 +216,9 @@ describe('Screenshot-Store (SPLIT-05) — ein Datensatz je Bild, Alt-Blob frozen
     // nicht gegen einen fixen Wert.
     // je +1: reine Lesestelle in _LAZY_IMG_QUELLEN (Lazy-Bilder, Performance) –
     // das Bild wird erst beim Sichtkontakt aus der Map gelesen statt ins HTML kopiert
-    expect(count(src, 'PROFILE_SCREENSHOTS[')).toBe(35); // +1: additive Ladeschleife (Review CR-01)
+    // +1: reine Lesestelle in _profilBildAktualisieren (nur die eine Karte nach einem Screenshot nachziehen,
+    // statt die ganze Liste neu zu bauen) – schreibt nichts
+    expect(count(src, 'PROFILE_SCREENSHOTS[')).toBe(36); // 35 + 1; davon +1 Ladeschleife (Review CR-01)
     expect(count(src, 'LSCG_SCREENSHOTS[')).toBe(25);
     expect(count(src, '_mbsWheelShots[')).toBe(11);
   });

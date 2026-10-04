@@ -2368,6 +2368,59 @@ function renderProfileList() {
   }
 }
 
+// ── Einzelnes Profil-Bild nachziehen ───────────────────────────────────────
+// renderProfileList() baut die ganze Liste per innerHTML neu: jedes Bild wird neu angelegt und neu
+// dekodiert – beim Auto-Screenshot nach JEDEM Bild. Hier wird nur die Vorschau der einen Karte
+// ausgetauscht, alle anderen Karten und Bilder bleiben unberührt.
+// true = erledigt; false = der Aufrufer muss die Liste komplett neu zeichnen (Liste noch nie
+// gezeichnet, Profil erscheint durch den Filter erst jetzt, letzte Karte verschwindet).
+function _profilBildAktualisieren(name) {
+  const el = document.getElementById('profileListEl');
+  if (!el || !Array.isArray(el._profileKeys) || !el._profileKeys.length) return false;
+  const hatBild = !!PROFILE_SCREENSHOTS[name];
+  const filterNachBild = _profileFilter === 'withshot' || _profileFilter === 'noshot';
+  const sichtbar = _profileFilter === 'withshot' ? hatBild : _profileFilter === 'noshot' ? !hatBild : true;
+  const slot = Object.keys(_profileNameMap).find(k => _profileNameMap[k] === name);
+  const card = slot ? document.getElementById('prow_' + slot.slice(2)) : null;
+  // Keine Karte: das Profil ist durch Suche/Filter ohnehin nicht zu sehen. Nur wenn das Bild es durch
+  // den Bild-Filter jetzt erst sichtbar macht, fehlt die Karte und die Liste muss neu gebaut werden.
+  if (!card) return !(sichtbar && filterNachBild);
+  if (!sichtbar) {
+    // z. B. Filter "ohne Bild": die Karte hat jetzt ein Bild und gehört nicht mehr in die Liste.
+    // _profileKeys und die Slot-Nummern der übrigen Karten bleiben absichtlich unverändert.
+    const block = card.closest('.profile-owner-block');
+    card.remove();
+    if (block) {
+      const rest = block.querySelectorAll('.pc').length;
+      if (!rest) block.remove();
+      else { const zaehler = block.querySelector('.profile-owner-count'); if (zaehler) zaehler.textContent = String(rest); }
+    }
+    return !!el.querySelector('.pc'); // letzte Karte weg → Leermeldung per Komplett-Rendern
+  }
+  const thumb = card.querySelector('.pc-thumb');
+  if (!thumb) return false;
+  thumb.querySelectorAll('img[data-lz], .pc-placeholder, .pc-zoom, .pc-capture-hint').forEach(n => n.remove());
+  let vorne;
+  if (hatBild) {
+    vorne = document.createElement('img');
+    vorne.dataset.lz = 'pf';
+    vorne.dataset.lk = name;
+    vorne.alt = '';
+    vorne.decoding = 'async';
+  } else {
+    vorne = document.createElement('div');
+    vorne.className = 'pc-placeholder';
+    vorne.textContent = (_profileShortName(name, _profileOwnerOf(name))[0] || '?').toUpperCase();
+  }
+  thumb.insertBefore(vorne, thumb.firstChild);
+  const hinweis = document.createElement('span');
+  hinweis.className = hatBild ? 'pc-zoom' : 'pc-capture-hint';
+  hinweis.textContent = hatBild ? '🔍' : '📸';
+  thumb.appendChild(hinweis);
+  _lazyImgBeobachten(el); // bestehender Observer; nur das neue Bild kommt dazu
+  return true;
+}
+
 // ══════════════════════════════════════════════════════
 //  Standard-Haar Baseline
 // ══════════════════════════════════════════════════════
@@ -2817,6 +2870,31 @@ let _slideshowQueue   = [];
 let _slideshowTotal   = 0;
 let _slideshowPaused  = false; // true = pausiert (Disconnect), wartet auf Reconnect
 let _slideshowRunning = false; // true sobald Slideshow läuft (auch wenn Queue leer aber Capture läuft)
+const SLIDESHOW_GAP_MS = 30;   // Pause zwischen zwei Profilen (früher 250 ms, siehe Handler der Antwort)
+let _slideshowStat = null;     // Zeitmessung des laufenden Durchlaufs: { n, ms, a, r, c, mit }
+
+// Eine fertige Aufnahme verbuchen: Umlaufzeit (Anfrage → Antwort) und – falls der Spiel-Tab sie mitschickt –
+// die Aufteilung im Spiel (Anlegen / Zeichnen / Bild erzeugen). So lässt sich sehen, wo die Zeit bleibt.
+function _slideshowStatErfassen(entry, data) {
+  const s = _slideshowStat;
+  if (!s || !_slideshowRunning) return;
+  const ms = entry && entry.t0 ? Date.now() - entry.t0 : 0;
+  s.n++; s.ms += ms;
+  if (data && data.t) { s.a += data.t.a || 0; s.r += data.t.r || 0; s.c += data.t.c || 0; s.mit++; }
+  console.log('[BCU] Auto-Screenshot "' + (entry?.name ?? entry) + '": ' + ms + ' ms'
+    + (data && data.t ? ' (Spiel: Anlegen ' + data.t.a + ' · Zeichnen ' + data.t.r + ' · Bild ' + data.t.c + ' ms)' : ''));
+}
+
+function _slideshowZeitText(lang) {
+  const s = _slideshowStat;
+  if (!s || s.n < 1) return '';
+  const fmt = ms => (ms / 1000).toFixed(1).replace('.', ',');
+  let t = 'Ø ' + fmt(s.ms / s.n + SLIDESHOW_GAP_MS) + ' s/Profil';
+  if (lang && s.mit) {
+    t += ' (im Spiel: Anlegen ' + Math.round(s.a / s.mit) + ' · Zeichnen ' + Math.round(s.r / s.mit) + ' · Bild ' + Math.round(s.c / s.mit) + ' ms)';
+  }
+  return t;
+}
 
 function toggleProfileSlideshow() {
   if (_slideshowRunning || _slideshowTimer !== null || _slideshowQueue.length || _slideshowPaused) {
@@ -2839,10 +2917,13 @@ function _startProfileSlideshow() {
   }
   _slideshowRunning = true;
   _slideshowPaused  = false;
+  _slideshowStat    = { n: 0, ms: 0, a: 0, r: 0, c: 0, mit: 0 };
   _dcJobStart('slideshow');
   // Originaloutfit vor dem Start sichern – wird vor jedem Profil wiederhergestellt
   // damit Haare/Slots aus Profil N nicht in Profil N+1 überlaufen.
-  bcSend({ type: 'EXEC', code: '(function(){window.__BCU_slideshowOrig=Player.Appearance.slice();})();' }, true);
+  // AFK-Symbol (falls schon gesetzt) vorher weg, sonst steckt es in der gesicherten Ausgangslage
+  bcSend({ type: 'EXEC', code: '(function(){try{if(typeof AfkTimerReset==="function")AfkTimerReset();}catch(_e){}'
+    + 'window.__BCU_slideshowOrig=Player.Appearance.slice();})();' }, true);
   const btn = document.getElementById('profileSlideshowBtn');
   if (btn) { btn.textContent = '⏹ Stop (' + _slideshowTotal + ')'; btn.classList.add('btn-red'); btn.classList.remove('btn-primary'); }
   showStatus('📸 Auto-Screenshot gestartet – ' + _slideshowTotal + ' Profile', 'info');
@@ -2853,8 +2934,9 @@ function _runNextSlideshow() {
   // Verspätete Timer nach Stop/Pause dürfen nichts mehr anstoßen
   if (!_slideshowRunning || _slideshowPaused) return;
   if (!_slideshowQueue.length) {
+    const zeit = _slideshowZeitText(true);
     _stopProfileSlideshow();
-    showStatus('✅ Auto-Screenshot fertig – alle Screenshots generiert!', 'success');
+    showStatus('✅ Auto-Screenshot fertig – alle Screenshots generiert!' + (zeit ? ' · ' + zeit : ''), 'success');
     return;
   }
   // Server/Bridge weg → pausieren, der Wächter setzt fort (Profil bleibt in der Queue)
@@ -2885,7 +2967,8 @@ function _runNextSlideshow() {
         captureProfileViaCanvas(name, null, rawCode);
       }, 20);
     }
-    showStatus('📸 (' + done + '/' + _slideshowTotal + ') "' + name + '" – noch ' + remaining + ' übrig', 'info');
+    const zeit = _slideshowZeitText(false);
+    showStatus('📸 (' + done + '/' + _slideshowTotal + ') "' + name + '" – noch ' + remaining + ' übrig' + (zeit ? ' · ' + zeit : ''), 'info');
     const btn = document.getElementById('profileSlideshowBtn');
     if (btn) btn.textContent = '⏹ Stop (' + remaining + ')';
     // Kein _slideshowTimer mehr – _handleCanvasPreviewData ruft _runNextSlideshow() nach Capture auf
@@ -2944,7 +3027,8 @@ function _stopProfileSlideshow() {
   // Originaloutfit nach dem Slideshow wiederherstellen + Server-Sync.
   // Ist BC gerade vom Server getrennt, lädt der Relog das Original ohnehin vom Server.
   if (_connected && _gameOk(false)) {
-    bcSend({ type: 'EXEC', code: '(function(){'
+    // Pose von vor dem Durchlauf zurück (alle Bilder wurden stehend aufgenommen), dann Aussehen + Sync
+    bcSend({ type: 'EXEC', code: _SHOT_POSE_ZURUECK + '(function(){'
       + 'if(!window.__BCU_slideshowOrig)return;'
       + 'Player.Appearance.splice(0,Player.Appearance.length);'
       + 'window.__BCU_slideshowOrig.forEach(function(i){Player.Appearance.push(i);});'
@@ -2983,7 +3067,7 @@ function _handleScreenshotData(data) {
     canvas.getContext('2d').drawImage(imgEl, 0, 0, w, h);
     PROFILE_SCREENSHOTS[name] = canvas.toDataURL('image/jpeg', 0.88);
     _saveProfileScreenshots();
-    renderProfileList();
+    if (!_profilBildAktualisieren(name)) renderProfileList();
     showStatus('✅ Screenshot gespeichert für "' + name + '"', 'success');
     const mod = document.getElementById('profileModal');
     if (mod?.classList.contains('open') && _profileModalName === name) _renderProfileModal(name);
@@ -3069,7 +3153,7 @@ function _handleCanvasPreviewData(data) {
         LSCG_SCREENSHOTS[storeKey] = dataUrl;
         _saveLscgScreenshots();
         _syncLscgScreenshotToProfiles(mk, fp);
-        if (_activeTab === 'outfit-scan') _debouncedRenderOutfitScanTab();
+        if (_activeTab === 'outfit-scan' && !_osBildAktualisieren(storeKey)) _debouncedRenderOutfitScanTab();
         showStatus('✅ Bild gespeichert', 'success');
         if (_pendingOsTab === mk) {
           _pendingOsTab = null;
@@ -3090,6 +3174,13 @@ function _handleCanvasPreviewData(data) {
     delete _pendingProfileCapture[data.reqId];
     console.log('[BCU] ps_ capture empfangen:', name, 'err:', data.err || 'none');
 
+    // Nächstes Profil SOFORT anstoßen. Das Spiel hat sein Aussehen schon wieder zurückgesetzt (_restore
+    // läuft direkt nach dem Senden), und das Dekodieren/Verkleinern/Speichern unten braucht der nächste
+    // Lauf nicht. Früher: erst danach plus 250 ms Pause – die Pause stammte aus der Zeit, als pro Bild
+    // Server-Pushes rausgingen; die gibt es im Screenshot-Durchlauf nicht mehr.
+    setTimeout(_runNextSlideshow, SLIDESHOW_GAP_MS);
+    _slideshowStatErfassen(entry, data);
+
     if (data.err) {
       showStatus('⚠️ Profil-Screenshot "' + name + '": ' + data.err, 'error');
     } else if (data.data) {
@@ -3104,15 +3195,14 @@ function _handleCanvasPreviewData(data) {
         oc.getContext('2d').drawImage(imgEl, 0, 0, w, h);
         PROFILE_SCREENSHOTS[name] = oc.toDataURL('image/jpeg', 0.88);
         _saveProfileScreenshots();
-        renderProfileList();
-        showStatus('✅ Screenshot: "' + name + '"', 'success');
+        if (!_profilBildAktualisieren(name)) renderProfileList();
+        // Im Durchlauf zeigt die Fortschrittszeile den Stand; eine Meldung je Bild würde sie überschreiben
+        if (!_slideshowRunning) showStatus('✅ Screenshot: "' + name + '"', 'success');
         const mod = document.getElementById('profileModal');
         if (mod?.classList.contains('open') && _profileModalName === name) _renderProfileModal(name);
       };
       imgEl.src = data.data;
     }
-    // Kleiner Delay zwischen Screenshots: verhindert BC ErrorRateLimited
-    setTimeout(_runNextSlideshow, 250);
     return;
   }
 
@@ -3209,7 +3299,7 @@ function uploadProfileScreenshot(pname) {
         canvas.getContext('2d').drawImage(imgEl, 0, 0, w, h);
         PROFILE_SCREENSHOTS[name] = canvas.toDataURL('image/jpeg', 0.88);
         _saveProfileScreenshots();
-        renderProfileList();
+        if (!_profilBildAktualisieren(name)) renderProfileList();
         const mod = document.getElementById('profileModal');
         if (mod?.classList.contains('open') && _profileModalName === name) _renderProfileModal(name);
       };
@@ -3227,7 +3317,7 @@ function removeProfileScreenshot(pname) {
   if (!confirm('Profil-Bild von "' + name + '" entfernen?')) return;
   delete PROFILE_SCREENSHOTS[name];
   _saveProfileScreenshots();
-  renderProfileList();
+  if (!_profilBildAktualisieren(name)) renderProfileList();
   const mod = document.getElementById('profileModal');
   if (mod?.classList.contains('open') && _profileModalName === name) _renderProfileModal(name);
 }
@@ -8491,8 +8581,11 @@ function captureOsScreenshot(mk, vIdx) {
     // hat (Counter erhöht), bricht er ab statt das Outfit zu überschreiben.
     + 'window.__BCU_captureGen=(window.__BCU_captureGen||0)+1;'
     + 'var myGen=window.__BCU_captureGen;'
+    // AFK-Uhr zurück, Pose auf stehend (siehe _SHOT_VORBEREITEN); die Pose von vorher kommt am Ende
+    // der Serie zurück (_runNextOsCapture), nicht nach jedem Bild. Ohne Outfit-Code keine Pose-Änderung.
+    + (outfitCode ? _SHOT_VORBEREITEN : '(function(){' + _SHOT_AFK + '})();')
     + 'var origApp=Player.Appearance.slice();'
-    + applyPart
+    + _shotApplyUmhuellen(applyPart)
 
     // ── Stabilisierungs-Loop ────────────────────────────────────
     // Timeout nach 6 Checks × 150ms = max. ~1 Sekunde.
@@ -8583,13 +8676,7 @@ function captureOsScreenshot(mk, vIdx) {
   bcSend({ type: 'EXEC', code }, true);
 }
 
-// ── Profil-Screenshot via Player.Canvas ─────────────────────
-// Ein einziger EXEC (wie captureOsScreenshot):
-//   Restore → Server-Sync deaktivieren → Apply → Snapshot → Render-Loop → Verify → Capture → Restore
-// Kein Zeitfenster für fremde EXECs, kein Server-Update während des Screenshots.
-// outfitCode  = LZString-Bundle (LSCG-Profil) oder null
-// rawApplyCode = roher JS-Code (normales Profil) oder null
-// Genau einer der beiden kann gesetzt sein. Wenn beide null: nur Capture (kein Apply).
+// ── Screenshot-Durchläufe: nichts zum Server, nichts im Bild, was nicht zum Outfit gehört ──────────
 // Screenshot-Durchlaeufe duerfen den Server nicht anfassen. InventoryLock(..., true) refresht mit Push
 // (CharacterRefresh(C, true, false) -> AccountUpdate) - pro gesperrtem Item einer. Fuer ein lokal
 // aufgenommenes Bild, das danach zurueckgesetzt wird, ist weder der Push noch der Schloss-Timer noetig.
@@ -8597,6 +8684,58 @@ function _screenshotCodeOhnePush(code) {
   return String(code).replace(/(InventoryLock\([^\n;]*,\s*)true(\s*\))/g, '$1false$2');
 }
 
+// Vor JEDEM Bild (läuft im Spiel-Tab, vor dem Sichern der Ausgangslage):
+//  - AFK: BC setzt nach 5 Minuten ohne Eingabe im BC-Tab das AFK-Symbol (AfkTimerSetIsAfk). Beim
+//    Durchlauf arbeitest du im Tool, der BC-Tab bekommt keine Eingabe → "nach einer Zeit immer AFK".
+//    AfkTimerReset() stellt die Uhr zurück (und nimmt ein schon gesetztes Symbol weg), wie jede Eingabe.
+//  - Pose: Bleibt ein Outfit knieend zurück, sähe das nächste Bild ebenfalls so aus. Darum vor jedem
+//    Bild lokal auf "stehend" (PoseSetActive ruft CharacterRefresh(C, false): kein Server-Push). Die
+//    Ausgangspose wird einmal gemerkt (nicht überschreiben, sonst würde "stehend" zur Ausgangspose)
+//    und am Ende des Durchlaufs wiederhergestellt (_SHOT_POSE_ZURUECK).
+const _SHOT_AFK = 'try{if(typeof AfkTimerReset==="function")AfkTimerReset();}catch(_e){}';
+const _SHOT_VORBEREITEN = '(function(){'
+  + _SHOT_AFK
+  + 'try{'
+  +   'if(!window.__BCU_poseOrig){window.__BCU_poseOrig={'
+  +     'm:Player.ActivePoseMapping?JSON.parse(JSON.stringify(Player.ActivePoseMapping)):null,'
+  +     'a:(!Player.ActivePoseMapping&&Array.isArray(Player.ActivePose))?Player.ActivePose.slice():null};}'
+  +   'if(typeof PoseSetActive==="function")PoseSetActive(Player,null,false,false);'
+  +   'else if(Array.isArray(Player.ActivePose)){Player.ActivePose=[];if(typeof CharacterRefresh==="function")CharacterRefresh(Player,false,false);}'
+  + '}catch(_e){}'
+  + '})();';
+
+// Ende eines Durchlaufs: die Pose von vor dem Durchlauf zurück (lokal, ohne Server)
+const _SHOT_POSE_ZURUECK = '(function(){try{'
+  + 'var o=window.__BCU_poseOrig;if(!o)return;window.__BCU_poseOrig=null;'
+  + 'if(o.m)Player.ActivePoseMapping=o.m;else if(o.a)Player.ActivePose=o.a;'
+  + 'if(typeof CharacterRefresh==="function")CharacterRefresh(Player,false,false);'
+  + '}catch(_e){}})();';
+
+// Das Anlegen selbst: Items lösen beim Anlegen Gesichtsausdrücke aus (InventoryExpressionTriggerApply →
+// der Ausdruck geht für den Spieler jedes Mal an den ganzen Raum) – das sind die "Emotes" während der
+// Aufnahme. Für die Dauer des (synchronen) Anlegens abgeschaltet und im finally
+// zurückgesetzt, auch bei Fehler oder return. Danach fliegt jedes Emoticon (AFK, Schlafen …) aus dem
+// Bild, auch eines, das ein gescanntes Outfit mitbringt. Alles nur lokal; die Ausgangslage kommt per
+// Restore zurück.
+function _shotApplyUmhuellen(applyPart) {
+  return 'var __bckIet=window.InventoryExpressionTriggerApply;'
+    + 'try{if(__bckIet)window.InventoryExpressionTriggerApply=function(){};'
+    + applyPart
+    + '}finally{if(__bckIet)window.InventoryExpressionTriggerApply=__bckIet;}'
+    + 'var __rm=0;for(var __e=Player.Appearance.length-1;__e>=0;__e--){var __i=Player.Appearance[__e];'
+    + 'if(__i&&__i.Asset&&__i.Asset.Group&&__i.Asset.Group.Name==="Emoticon"){Player.Appearance.splice(__e,1);__rm++;}}'
+    // nur wenn wirklich etwas entfernt wurde, einmal lokal neu zeichnen (sonst enthielte der erste
+    // Vergleichswert des Prüflaufs das Emoticon und der Lauf bräuchte eine Runde mehr)
+    + 'if(__rm){try{CharacterRefresh(Player,false,false);}catch(_e){}}';
+}
+
+// ── Profil-Screenshot via Player.Canvas ─────────────────────
+// Ein einziger EXEC (wie captureOsScreenshot):
+//   Restore → Server-Sync deaktivieren → Apply → Snapshot → Render-Loop → Verify → Capture → Restore
+// Kein Zeitfenster für fremde EXECs, kein Server-Update während des Screenshots.
+// outfitCode  = LZString-Bundle (LSCG-Profil) oder null
+// rawApplyCode = roher JS-Code (normales Profil) oder null
+// Genau einer der beiden kann gesetzt sein. Wenn beide null: nur Capture (kein Apply).
 function captureProfileViaCanvas(name, outfitCode, rawApplyCode) {
   // Zwischen loadProfile und diesem Aufruf (20 ms) kann pausiert worden sein → Profil zurück in die Queue
   if (!_connected || _slideshowPaused) {
@@ -8635,7 +8774,7 @@ function captureProfileViaCanvas(name, outfitCode, rawApplyCode) {
     }
   }, 12000);
 
-  _pendingProfileCapture[reqId] = { name, timeoutId };
+  _pendingProfileCapture[reqId] = { name, timeoutId, t0: Date.now() };
 
   // rawApplyCode bereinigen: Sync-Aufrufe am Ende des generierten Codes entfernen.
   // Der generierte Code endet typischerweise mit:
@@ -8660,7 +8799,8 @@ function captureProfileViaCanvas(name, outfitCode, rawApplyCode) {
   const _restoreCode = ''
     + 'Player.Appearance.splice(0,Player.Appearance.length);'
     + 'origApp.forEach(function(i){Player.Appearance.push(i);});'
-    + 'CharacterRefresh(Player,false,false);';
+    + 'CharacterRefresh(Player,false,false);'
+    + 'if(!window.__BCU_slideshowOrig){' + _SHOT_POSE_ZURUECK + '}';
   const _applyErrCode = _restoreCode
     + 'window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",reqId:' + J_reqId + ',err:"APPLY_FAIL:"+applyErr.message},"' + TOOL_ORIGIN + '");'
     + 'return;';
@@ -8680,17 +8820,27 @@ function captureProfileViaCanvas(name, outfitCode, rawApplyCode) {
   const code = '(function(){'
     + 'window.__BCU_captureGen=(window.__BCU_captureGen||0)+1;'
     + 'var myGen=window.__BCU_captureGen;'
+    + 'var _t0=performance.now();'  // Zeitmessung: Anlegen / Zeichnen / Bild (geht mit der Antwort zurück)
+    // AFK-Uhr zurück, Pose auf stehend (siehe _SHOT_VORBEREITEN). Ohne Outfit (nur das aktuelle
+    // Aussehen aufnehmen) bleibt die Pose, wie sie ist.
+    + ((outfitCode || rawApplyCode) ? _SHOT_VORBEREITEN : '(function(){' + _SHOT_AFK + '})();')
     // origApp IMMER aus __BCU_slideshowOrig – wird einmal bei Slideshow-Start gespeichert.
     // Nie aus Player.Appearance.slice() – sonst cascading-Fehler wenn ein Restore schiefläuft.
     + 'var origApp=(window.__BCU_slideshowOrig||Player.Appearance).slice();'
-    + applyPart
-    + 'var _prevHash=null,_checksDone=0,_maxChecks=3;'
+    + _shotApplyUmhuellen(applyPart)
+    + 'var _tA=performance.now()-_t0;'
+    // Erster Vergleichswert = das Bild direkt nach dem Anlegen (das hat schon gezeichnet). Der Prüflauf
+    // zeichnet dann EINMAL neu; ist das Ergebnis gleich, ist das Bild fertig. Früher: Vergleichswert null,
+    // darum immer mindestens zwei Prüfläufe mit je zwei Mal Neuzeichnen.
+    + 'var _prevHash=_canvasHash(Player.Canvas),_checksDone=0,_maxChecks=3;'
     // _restore: NUR lokaler Restore, KEIN Server-Update.
     // Server-Sync passiert einmalig beim Slideshow-Stop (_stopProfileSlideshow).
+    // Einzelaufnahme (kein Durchlauf): auch die Pose von vorher zurück; im Durchlauf erst am Ende.
     + 'function _restore(){'
     + '  Player.Appearance.splice(0,Player.Appearance.length);'
     + '  origApp.forEach(function(i){Player.Appearance.push(i);});'
     + '  CharacterRefresh(Player,false,false);'
+    + '  if(!window.__BCU_slideshowOrig){' + _SHOT_POSE_ZURUECK + '}'
     + '}'
     + 'function _canvasHash(canvas){'
     + '  try{'
@@ -8702,6 +8852,7 @@ function captureProfileViaCanvas(name, outfitCode, rawApplyCode) {
     + '  }catch(_e){return -1;}'
     + '}'
     + 'function _sendCapture(){'
+    + '  var _tC0=performance.now();'
     + '  try{'
     + '    var src=Player.Canvas;'
     + '    if(!src||!src.width)throw new Error("Canvas leer");'
@@ -8723,25 +8874,27 @@ function captureProfileViaCanvas(name, outfitCode, rawApplyCode) {
     + '    var ctx2=cc.getContext("2d");'
     + '    ctx2.fillStyle="#000";ctx2.fillRect(0,0,cw,ch);'
     + '    ctx2.drawImage(oc,x0,y0,cw,ch,0,0,cw,ch);'
-    + '    window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",reqId:' + J_reqId + ',data:cc.toDataURL("image/jpeg",0.88)},"' + TOOL_ORIGIN + '");'
+    + '    var _dat=cc.toDataURL("image/jpeg",0.88);'
+    + '    window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",reqId:' + J_reqId + ',data:_dat,'
+    + 't:{a:Math.round(_tA),r:Math.round(_tC0-_t0-_tA),c:Math.round(performance.now()-_tC0)}},"' + TOOL_ORIGIN + '");'
     + '  }catch(e){'
     + '    window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",reqId:' + J_reqId + ',err:e.message},"' + TOOL_ORIGIN + '");'
     + '  }finally{'
     + '    _restore();'
     + '  }'
     + '}'
+    // Prüflauf: EINMAL neu zeichnen (CharacterRefresh ruft CharacterLoadCanvas selbst auf – der frühere
+    // zweite Aufruf direkt dahinter zeichnete jedes Mal doppelt), Bild mit dem letzten vergleichen.
+    // Gleich → fertig. Anders → es wurden noch Bilder nachgeladen, nochmal (höchstens _maxChecks).
     + 'function _renderCheck(){'
     + '  CharacterRefresh(Player,false,false);'
-    + '  CharacterLoadCanvas(Player);'
-    + '  setTimeout(function(){'
-    + '    var h=_canvasHash(Player.Canvas);'
-    + '    if(h===_prevHash||_checksDone>=_maxChecks){'
-    + '      _sendCapture();'
-    + '    }else{'
-    + '      _prevHash=h;_checksDone++;'
-    + '      setTimeout(_renderCheck,50);'
-    + '    }'
-    + '  },40);'
+    + '  var h=_canvasHash(Player.Canvas);'
+    + '  if(h===_prevHash||_checksDone>=_maxChecks){'
+    + '    _sendCapture();'
+    + '  }else{'
+    + '    _prevHash=h;_checksDone++;'
+    + '    setTimeout(_renderCheck,60);'
+    + '  }'
     + '}'
     + 'setTimeout(_renderCheck,40);'
     + '})();';
@@ -8958,7 +9111,8 @@ function _runNextOsCapture() {
       // Alle Captures fertig → Player-Canvas neu laden + Server-Sync
       bcSend({
         type: 'EXEC',
-        code: '(function(){'
+        // Pose von vor der Serie zurück (die Bilder wurden alle stehend aufgenommen)
+        code: _SHOT_POSE_ZURUECK + '(function(){'
           + 'try{'
           + '  CharacterLoadCanvas(Player);'
           + '  if(typeof ServerPlayerAppearanceSync==="function"){ServerPlayerAppearanceSync();}'
@@ -12095,6 +12249,36 @@ function osSetLockFilter(val) {
 }
 
 let _osStripIO = null;   // Observer fuer noch leere Spieler-Streifen (renderOutfitScanTab)
+let _osKartenBauer = null; // (mk, nurIdx) → Karten-HTML; wird von renderOutfitScanTab gesetzt, siehe _osBildAktualisieren
+
+// Nach einem neuen Bild nur die Karten austauschen, die dieses Bild zeigen. renderOutfitScanTab() baut
+// ALLE Karten aller Spieler neu – jedes Bild wird neu angelegt und dekodiert, nach jedem Screenshot.
+// Mehrere Versionen mit gleichem Fingerabdruck teilen sich ein Bild (Schlüssel mk|fp) und werden alle
+// ersetzt. true = erledigt; false = der Aufrufer muss komplett neu zeichnen.
+function _osBildAktualisieren(storeKey) {
+  const body = document.getElementById('outfitScanBody');
+  if (!body || !_osKartenBauer) return false;
+  const sep = String(storeKey).indexOf('|');
+  const mk = sep === -1 ? String(storeKey) : String(storeKey).slice(0, sep);
+  const versions = LSCG_DB[mk]?.versions;
+  if (!Array.isArray(versions)) return false;
+  const block = document.getElementById('osm_' + mk);
+  if (!block) return false;                                   // Spieler (noch) nicht gezeichnet
+  if (block.querySelector('.os-strip[data-os-lazy]')) return true; // Streifen noch leer: Karten entstehen später mit dem Bild
+  const karten = Array.from(block.querySelectorAll('.os-card[data-vidx]'));
+  for (let idx = 0; idx < versions.length; idx++) {
+    const fp = versions[idx]?.fingerprint;
+    if ((fp ? mk + '|' + fp : mk) !== storeKey) continue;
+    const html = _osKartenBauer(mk, idx);
+    const alt = karten.find(c => c.dataset.vidx === String(idx));
+    if (!html) { if (alt) return false; continue; }           // durch den Schloss-Filter nicht sichtbar
+    if (!alt) return false;                                   // sollte da sein, ist es aber nicht
+    alt.outerHTML = html;
+  }
+  _lazyImgBeobachten(body);
+  return true;
+}
+
 function renderOutfitScanTab() {
   const body = document.getElementById('outfitScanBody');
   if (!body) return;
@@ -12143,13 +12327,15 @@ function renderOutfitScanTab() {
 
   // Karten eines Spielers als HTML (wird erst gebaut, wenn der Block in die
   // Naehe des Sichtbereichs kommt – siehe _osStripIO unten)
-  function _buildCardsHtml(mk) {
+  // nurIdx: nur diese eine Version (für _osBildAktualisieren)
+  function _buildCardsHtml(mk, nurIdx) {
     const entry = LSCG_DB[mk];
     if (!entry || !Array.isArray(entry.versions)) return '';
     const isFav = _osFavs.has(mk);
     const letter = escHtml(((entry.name ?? mk)[0] ?? '?').toUpperCase());
     return [...entry.versions].reverse().map(function(v, i) {
       const realIdx  = entry.versions.length - 1 - i;
+      if (nurIdx != null && realIdx !== nurIdx) return '';
       if (!_osVersionPasst(v, mk, realIdx)) return '';
       const vNum     = entry.versions.length - i;
       const d        = new Date(v.ts);
@@ -12195,7 +12381,7 @@ function renderOutfitScanTab() {
         ? '<button class="os-card-btn warn" onclick="openRepairOsCode(\'' + mk + '\',' + realIdx + ')" title="Korrekten Code einfügen">🔧 Repair</button>'
         : '';
 
-      return '<div class="os-card' + (isBroken ? ' os-card-broken' : '') + '">'
+      return '<div class="os-card' + (isBroken ? ' os-card-broken' : '') + '" data-mk="' + escHtml(mk) + '" data-vidx="' + realIdx + '">'
         + '<div class="os-card-thumb" onclick="' + thumbClick + '">'
         + thumbContent + tagHtml
         + '<button class="os-card-fav' + (isFav ? ' on' : '') + '" onclick="event.stopPropagation();toggleOsFav(\'' + mk + '\')">' + (isFav ? '⭐' : '☆') + '</button>'
@@ -12214,6 +12400,7 @@ function renderOutfitScanTab() {
         + '</div>';
     }).join('');
   }
+  _osKartenBauer = _buildCardsHtml;
 
   // Hilfsfunktion: einen Member-Block als HTML-String bauen.
   // lazy=true → leerer Streifen mit Platzhalterhoehe, Karten folgen bei Sichtkontakt.

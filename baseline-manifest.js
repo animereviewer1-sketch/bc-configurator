@@ -11,10 +11,10 @@ const BASELINE_MANIFEST = {
   ],
   "identifierPattern": "\\b(Inventory|Character|ChatRoom|Server|Asset|Player|Dialog|Common|Item|Lock|Wardrobe|Pose|Skill|Reputation|Online|Chat)[A-Z]\\w+",
   "counts": {
-    "identifiers": 95,
-    "function": 22,
+    "identifiers": 97,
+    "function": 23,
     "assetGroup": 33,
-    "unknown": 40
+    "unknown": 41
   },
   "identifiers": [
     {
@@ -288,6 +288,13 @@ const BASELINE_MANIFEST = {
       "kind": "unknown",
       "files": [
         "loader.js"
+      ]
+    },
+    {
+      "name": "InventoryExpressionTriggerApply",
+      "kind": "unknown",
+      "files": [
+        "items.js"
       ]
     },
     {
@@ -650,6 +657,13 @@ const BASELINE_MANIFEST = {
       "kind": "unknown",
       "files": [
         "loader.js"
+      ]
+    },
+    {
+      "name": "PoseSetActive",
+      "kind": "function",
+      "files": [
+        "items.js"
       ]
     },
     {
