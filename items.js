@@ -1,3 +1,7 @@
+// Ladezeiten (ms seit Seitenstart) für die Export-Info (Einstellungen → Werkzeuge). Nur beobachten, ändert nichts.
+const _ladeMarken = {};
+function _ladeMarke(name) { try { if (!(name in _ladeMarken)) _ladeMarken[name] = Math.round(performance.now()); } catch (e) {} }
+_ladeMarke('items.js gestartet');
 // ── Ladereihenfolge-Guard (SPLIT-04): persistence.js → bridge.js müssen VOR items.js geladen sein (docs/LOAD-ORDER.md). Fehlt ein Modul, bricht items.js hier sichtbar ab statt später still in einer Tab-Funktion. Bewusst ohne Abhängigkeit zu den geprüften Modulen.
 (function () {
   const required = [['idbGet', 'persistence.js'], ['bcSend', 'bridge.js'], ['onBridgeMessage', 'bridge.js']];
@@ -398,6 +402,10 @@ let vibratingMode      = 'Off';
 let vibratingIntensity = -1;
 let vibratingTR        = 0;
 let vibratingEffects   = new Set();
+let vibratingExtraEffects = [];   // Effekte eines geladenen Items, die kein Knopf abbildet (z. B. "Lock") – bleiben erhalten
+
+// Craft-Objekt eines geladenen Profil-Items: Felder, die die Oberfläche nicht kennt (Color, Lock, MemberNumber …), bleiben erhalten
+let craftBasis = null;
 
 // ── Direct options (BallGag) ─────────────────────────
 let classicOptionSel = 0;
@@ -415,6 +423,7 @@ try { PROFILES = JSON.parse(localStorage.getItem('BC_PROFILES_v11') || '{}'); } 
 // Arbeitsspeicher stammt an dieser Stelle nur aus dem localStorage-Spiegel.
 idbGet('BC_PROFILES_v12').then(d => {
   if (d && typeof d === 'object' && Object.keys(d).length) PROFILES = { ...PROFILES, ...d };
+  _ladeMarke('Profile geladen');
 });
 // Speichert Profile in IDB (primär) + localStorage (Fallback)
 /* -- Gebuendeltes Speichern -----------------------------------------------
@@ -582,6 +591,7 @@ _screenshotStoreReady().then(() => idbScreenshotGetAll('profile')).then(d => {
     for (const k of Object.keys(d)) if (!(k in PROFILE_SCREENSHOTS)) PROFILE_SCREENSHOTS[k] = d[k];
     _screenshotShadowMerge('profile', d);
   }
+  _ladeMarke('Profil-Bilder geladen');
 });
 function _saveProfileScreenshotsJetzt() { return _screenshotFlush('profile', PROFILE_SCREENSHOTS); }
 function _saveProfileScreenshots() {
@@ -761,12 +771,16 @@ function renderGroups(filter = '') {
 function selectItem(group, asset) {
   const cfg = CACHE[group]?.[asset];
   if (!cfg) return;
+  // Jede Auswahl (auch dasselbe Item nochmal) setzt die Oberfläche auf Standard – dann darf kein Profil-Item mehr "in Bearbeitung" sein,
+  // sonst würde "Änderung übernehmen" es mit Standardwerten überschreiben. profileOpenInItemManager setzt den Kontext erst danach.
+  if (_profilEditKontext) profilEditAbbrechen();
   CURRENT = { group, asset, cfg };
   dimMode = {}; dimSelected = {}; dimSubProps = {}; globalPropVals = {};
   colorIsDefault = {};
   tightnessOn = false; tightnessVal = 0;
   vibratingMode = 'Off'; vibratingIntensity = -1; vibratingTR = 0; vibratingEffects = new Set(['Egged']);
   classicOptionSel = 0; baselinePropVals = {};
+  vibratingExtraEffects = []; craftBasis = null;
 
   for (const key in (cfg.typeKeys || {})) {
     dimMode[key]     = 'single';
@@ -805,6 +819,7 @@ function buildConfigurator() {
     .forEach(p => { const o=document.createElement('option'); o.value=p; o.textContent=p; sel.appendChild(o); });
   document.getElementById('craftName').value = '';
   document.getElementById('craftDesc').value = '';
+  _erweitertZuruecksetzen();
   document.getElementById('lockType').value  = '';
   onLockChange();
   generate();
@@ -1453,9 +1468,13 @@ function generate() {
   const craftDesc = document.getElementById('craftDesc').value.trim();
   const craftProp = document.getElementById('craftProp').value;
   const firstColor = colors.find(c => c !== 'Default') ?? '#808080';
+  const craftPrivat = !!document.getElementById('craftPrivate')?.checked;
   const craftStr  = craftName
-    ? ',\n  {\n    Name: ' + JSON.stringify(craftName) + ',\n    Description: ' + JSON.stringify(craftDesc) + ',\n    Property: "' + craftProp + '",\n    Color: ' + JSON.stringify(firstColor) + ',\n    Lock: "", Item: ' + JSON.stringify(asset) + ', Private: false, MemberNumber: Player.MemberNumber,\n  }'
+    ? ',\n  {\n    Name: ' + JSON.stringify(craftName) + ',\n    Description: ' + JSON.stringify(craftDesc) + ',\n    Property: "' + craftProp + '",\n    Color: ' + JSON.stringify(firstColor) + ',\n    Lock: "", Item: ' + JSON.stringify(asset) + ', Private: ' + craftPrivat + ', MemberNumber: Player.MemberNumber,\n  }'
     : '';
+
+  // Erweitert: Override-Priorität, Ebenen und weitere Eigenschaften (JSON) – ungültige Eingaben werden gemeldet, nicht still verworfen
+  const erw = _erweitertLesen();
 
   // Lock
   const lock   = document.getElementById('lockType').value;
@@ -1516,7 +1535,8 @@ function generate() {
   const code = '// ═══════════════════════════════════════════\n'
     + '//  ' + asset + ' (' + group + ')' + (isOther&&memberNum ? ' → Spieler #'+memberNum : ' → Player') + '\n'
     + '// ═══════════════════════════════════════════\n'
-    + buildItemCode({ group, asset, cfg, colors, tr, trStr, typeStr, propCode: archetypeCode, craftStr, lock, lockParams, tightCode:'', isOther, memberNum });
+    + buildItemCode({ group, asset, cfg, colors, tr, trStr, typeStr, propCode: archetypeCode, craftStr, lock, lockParams, tightCode:'', isOther, memberNum,
+        property: Object.keys(erw.eig).length ? erw.eig : undefined, overridePriority: erw.override, layerProperties: erw.layer });
 
   document.getElementById('codeOut').value = code;
 
@@ -1648,8 +1668,10 @@ function buildItemInner({ group, asset, colors, tr, trStr, typeStr, propCode, cr
 }
 
 // ── Einzelnes Item (mit TARGET-Deklaration + Sync) ──
-function buildItemCode({ group, asset, cfg, colors, tr, trStr, typeStr, propCode, craftStr, lock, lockParams, tightCode, isOther, memberNum }) {
-  const inner = buildItemInner({ group, asset, colors, tr, trStr, typeStr, propCode, craftStr, lock, lockParams, tightCode });
+function buildItemCode({ group, asset, cfg, colors, tr, trStr, typeStr, propCode, craftStr, lock, lockParams, tightCode, isOther, memberNum,
+                         property, overridePriority, layerProperties }) {
+  const inner = buildItemInner({ group, asset, colors, tr, trStr, typeStr, propCode, craftStr, lock, lockParams, tightCode,
+                                 property, overridePriority, layerProperties });
   const wrapped = isOther && memberNum
     ? inner + '\n  setTimeout(() => { ChatRoomCharacterUpdate(TARGET); }, 900);'
     : inner + '\n  setTimeout(() => { ServerPlayerAppearanceSync(); setTimeout(()=>{ ChatRoomCharacterUpdate(TARGET); },600); }, 900);';
@@ -1793,12 +1815,19 @@ function addToOutfit() {
     }
   }
 
+  // Alles, was der Item Manager einstellt, als echte Felder mitgeben (property, difficulty, craft …): der Outfit-Code und die
+  // Profile lesen nur diese – propCode/tightCode/craftStr sind reine Text-Schnipsel für den Einzel-Code.
+  const rec = _itemManagerAktuell();
+  if (rec.fehler.length) { showStatus('❌ Erweitert: ' + rec.fehler.join(' · '), 'error'); return; }
+
   OUTFIT.push({
-    group, asset, cfg, colors, tr, trStr, typeStr, propCode, craftStr,
+    group, asset, cfg, colors, tr: rec.tr, trStr, typeStr, propCode, craftStr,
     lock, lockParams,
     tightCode: tightnessOn ? `\n    item.Difficulty=${tightnessVal};` : '',
     isOther, memberNum,
     label: `${asset} (${group})`,
+    property: rec.property, difficulty: rec.difficulty, craft: rec.craft, directOption: rec.directOption,
+    ...(rec.lockMember ? { lockMember: rec.lockMember } : {}),
   });
 
   _autoOutfitCode();
@@ -1954,6 +1983,12 @@ function _outfitCodeBauen(opts) {
             + (hasTr ? 'true' : 'false') + ','
             + (difficulty ?? 0) + ');\n';
 
+      // Einfache Option (z. B. Knebel-Variante) wie im Einzel-Code: erst die Option setzen, danach die Farbe erneut (TypedItem überschreibt sie)
+      if (item.directOption) {
+        code += '{ const _di=InventoryGet(TARGET,' + JSON.stringify(group) + ');\n'
+              + '  try{ TypedItemSetOptionByName(TARGET,_di,' + JSON.stringify(item.directOption) + '); _di.Color=' + JSON.stringify(colors) + '; }catch(e){} }\n';
+      }
+
       // Post-props (OverridePriority / LayerProperties)
       if (hasPostProp) {
         code += 'Object.assign(InventoryGet(TARGET,' + JSON.stringify(group) + ').Property,'
@@ -2048,7 +2083,8 @@ function saveProfile() {
   if (PROFILES[name] && !confirm('Profil "' + name + '" existiert bereits. Überschreiben?')) return;
 
   // Nur die nötigen Felder speichern – cfg/propCode/craftStr sind zu groß (localStorage-Limit)
-  const SAVE_KEYS = ['group','asset','colors','tr','trStr','typeStr','tightCode','lock','lockParams','isOther','memberNum','label'];
+  const SAVE_KEYS = ['group','asset','colors','tr','trStr','typeStr','tightCode','lock','lockParams','isOther','memberNum','label',
+                     'property','difficulty','craft','directOption','lockMember'];
   const stripped = OUTFIT.map(item => {
     const out = {};
     SAVE_KEYS.forEach(k => { if (item[k] !== undefined) out[k] = item[k]; });
@@ -2193,10 +2229,13 @@ function _getProfileDuplicates() {
 // Ein Profil gilt als "old", wenn sein Owner per (old) im Namen oder über die Alt-Markierung (🔘 (old)) markiert ist
 function _profileIstOld(name) {
   const owner = _profileOwnerOf(name);
-  return PROFILE_ALT_OWNERS.has(owner) || /\(old\)/i.test(owner);
+  // Beim erneuten Speichern desselben Namens hängt das Tool "v2", "v3" … an (_uniqueProfileName): "Kleid - Mia" → "Kleid - Miav2".
+  // Solche Profile zählen wie (old)-Profile als alte Kopie.
+  return PROFILE_ALT_OWNERS.has(owner) || /\(old\)/i.test(owner) || /v([2-9]|\d{2,})$/i.test(String(name).trim());
 }
 
-// Was "Duplikate entfernen" löschen darf: nur KOPIEN (DUP – das Original, ORG, bleibt immer), die als (old) markiert sind.
+// Was "Duplikate entfernen" löschen darf: nur KOPIEN (DUP – das Original, ORG, bleibt immer), die als (old) markiert sind
+// oder auf v2/v3 … enden.
 // Duplikate bei aktuellen Profilen werden nie angefasst.
 function _profileOldDuplikate(gruppen) {
   const weg = [];
@@ -2206,15 +2245,15 @@ function _profileOldDuplikate(gruppen) {
 
 function removeProfileDuplicates() {
   const _weg = _profileOldDuplikate();
-  if (!_weg.length) { showStatus('✅ Keine Duplikate mit (old) gefunden', 'success'); return; }
-  if (!confirm(_weg.length + ' doppelte (old)-Profile löschen?\n\n'
+  if (!_weg.length) { showStatus('✅ Keine Duplikate mit (old) oder v2/v3 gefunden', 'success'); return; }
+  if (!confirm(_weg.length + ' doppelte (old)/v2-Profile löschen?\n\n'
       + _weg.slice(0, 12).join('\n')
       + (_weg.length > 12 ? '\n… und ' + (_weg.length - 12) + ' weitere' : '')
       + '\n\nDas Original (ORG) bleibt jeweils erhalten. Das lässt sich nicht rückgängig machen.')) return;
   _weg.forEach(_profilEntfernen);
   _saveProfiles();
   renderProfileList();
-  showStatus('🗑️ ' + _weg.length + ' doppelte (old)-Profile entfernt', 'success');
+  showStatus('🗑️ ' + _weg.length + ' doppelte (old)/v2-Profile entfernt', 'success');
 }
 
 function _profileDupSets() {
@@ -2522,7 +2561,7 @@ function renderProfileList() {
   if (dupBtn) {
     const dupCount = _profileOldDuplikate(_dupInfo.gruppen).length;
     if (dupCount > 0) {
-      dupBtn.textContent = '⚠️ ' + dupCount + ' (old)-Duplikat' + (dupCount !== 1 ? 'e' : '') + ' entfernen';
+      dupBtn.textContent = '⚠️ ' + dupCount + ' (old)/v2-Duplikat' + (dupCount !== 1 ? 'e' : '') + ' entfernen';
       dupBtn.style.display = '';
     } else {
       dupBtn.style.display = 'none';
@@ -2787,11 +2826,18 @@ const DC_SETTLE_MS = 5000;
 let _gameState = null;
 const _dcJobs = {};  // id → { label, active(), pause(reason), resume(), alwaysRoom, needRoom, paused, readySince, waitMsg }
 
+// Ruhe nach einem freiwilligen Raumwechsel: Beim Betreten sendet BC (und jeder Mod) in kurzer Zeit viel an den Server – genau dann
+// ist der Server am empfindlichsten ("ErrorRateLimited"). Bilderserien und andere lange Abläufe warten darum diese Zeit ab, bevor sie
+// weitermachen (danach gilt wie üblich noch DC_SETTLE_MS). Nach einem DC gilt das nicht zusätzlich – dort greift DC_SETTLE_MS allein.
+const RAUM_RUHE_MS = 8000;
+let _raumRuheBis = 0;
+
 function _gameOk(needRoom) {
   if (!_connected) return false;
   const g = _gameState;
   if (!g) return true;
   if (!g.online || !g.loggedIn) return false;
+  if (Date.now() < _raumRuheBis) return false;
   return !needRoom || g.inRoom;
 }
 
@@ -2801,6 +2847,7 @@ function _gameWaitReason(needRoom) {
   if (!g) return '';
   if (!g.online) return 'BC-Server getrennt';
   if (!g.loggedIn) return 'BC noch nicht wieder eingeloggt';
+  if (Date.now() < _raumRuheBis) return 'Raumwechsel – kurze Ruhe, damit der Beitritt nicht gedrosselt wird';
   if (needRoom && !g.inRoom) return 'nicht in einem Raum';
   return '';
 }
@@ -2889,6 +2936,11 @@ function _gameStateSet(g) {
   _gameState = (g && typeof g === 'object')
     ? { online: g.online !== false, loggedIn: !!g.loggedIn, screen: String(g.screen || ''), inRoom: !!g.inRoom, room: g.room ? String(g.room) : null }
     : null;
+  // Freiwilliger Raumwechsel (vorher gesund eingeloggt, jetzt in einem anderen Raum) → Ruhe; nach einem DC nicht (dort wartet DC_SETTLE_MS)
+  if (prev && _gameState && prev.online && prev.loggedIn && _gameState.online && _gameState.loggedIn
+      && _gameState.inRoom && _gameState.room !== prev.room) {
+    _raumRuheBis = Date.now() + RAUM_RUHE_MS;
+  }
   if (_gameState && prev?.online !== _gameState.online) {
     if (!_gameState.online) console.warn('[BCK-Popup] BC-Server getrennt');
     else if (prev) console.log('[BCK-Popup] BC-Server wieder verbunden');
@@ -3514,26 +3566,48 @@ body{display:flex;align-items:flex-start;justify-content:center;padding:32px 16p
 // Wie ein Durchlauf des Auto-Screenshots für ein einzelnes Profil: das Profil wird lokal angezogen (stehend, ohne
 // Schloss, AFK-Uhr zurück), fotografiert und dein Aussehen kommt zurück. Das vorhandene Bild wird erst ersetzt,
 // wenn das neue fertig ist. (Ein Hochladen eigener Dateien gibt es nicht mehr.)
-function profilBildNeu(pname) {
-  const name = _profileNameMap[pname] || pname;
-  const p = name && PROFILES[name];
-  if (!p) return;
-  if (!_connected) { showStatus('❌ Nicht verbunden mit BC', 'error'); return; }
-  if (_slideshowRunning) { showStatus('⏳ Der Auto-Screenshot läuft – danach einzeln aufnehmen', 'info'); return; }
-  if (!_gameOk(false)) { showStatus('❌ ' + _gameWaitReason(false) + ' – Bild nicht aufgenommen', 'error'); return; }
+
+// Den Aufnahmecode eines Profils erzeugen, OHNE deinen Outfit-Aufbau im Item Manager zu verändern (loadProfile überschreibt
+// ihn – das darf eine Aufnahme im Hintergrund nicht, dort können ungespeicherte Items stehen). null = nicht möglich.
+function _profilCodeOhneEingriff(name) {
+  const p = PROFILES[name];
+  if (!p || !(p.items || []).length || !Object.keys(CACHE).length) return null;
+  const outfit = OUTFIT, keep = _currentProfileKeepHairGroups;
+  let code = null;
+  try {
+    loadProfile(name);
+    if (OUTFIT.length === p.items.length) code = _outfitCodeBauen({ ohneSchloesser: true });
+  } finally {
+    OUTFIT = outfit; _currentProfileKeepHairGroups = keep;
+    try { _autoOutfitCode(); } catch (e) {}
+  }
+  return code ? code.trim() : null;
+}
+
+// Gemeinsamer Kern (Knopf im Profil-Fenster und Auto-Bild): true = die Aufnahme wurde gestartet. meldung=false: leise.
+function _profilBildAufnehmen(name, meldung) {
+  const p = PROFILES[name];
+  if (!p) return false;
+  const sag = (t, art) => { if (meldung !== false) showStatus(t, art); };
+  if (!_connected) { sag('❌ Nicht verbunden mit BC', 'error'); return false; }
+  if (_slideshowRunning) { sag('⏳ Der Auto-Screenshot läuft – danach einzeln aufnehmen', 'info'); return false; }
+  if (!_gameOk(false)) { sag('❌ ' + _gameWaitReason(false) + ' – Bild nicht aufgenommen', 'error'); return false; }
   if (p._outfitCode) {
     captureProfileViaCanvas(name, p._outfitCode, null);
   } else {
-    if (!(p.items || []).length) { showStatus('❌ Profil "' + name + '" hat keine Items', 'error'); return; }
-    if (!Object.keys(CACHE).length) { showStatus('❌ Cache nicht geladen! Erst Dump-Script ausführen und Cache importieren.', 'error'); return; }
-    loadProfile(name);   // wie "Run": setzt den Outfit-Aufbau auf dieses Profil
-    setTimeout(() => {
-      const roh = _outfitCodeBauen({ ohneSchloesser: true });
-      if (!roh) { showStatus('❌ Kein Code generiert', 'error'); return; }
-      captureProfileViaCanvas(name, null, roh.trim());
-    }, 20);
+    if (!(p.items || []).length) { sag('❌ Profil "' + name + '" hat keine Items', 'error'); return false; }
+    if (!Object.keys(CACHE).length) { sag('❌ Cache nicht geladen! Erst Dump-Script ausführen und Cache importieren.', 'error'); return false; }
+    const roh = _profilCodeOhneEingriff(name);
+    if (!roh) { sag('❌ Kein Code generiert', 'error'); return false; }
+    captureProfileViaCanvas(name, null, roh);
   }
-  showStatus('📸 Bild von "' + name + '" wird aufgenommen…', 'info');
+  return true;
+}
+
+function profilBildNeu(pname) {
+  const name = _profileNameMap[pname] || pname;
+  if (!name || !PROFILES[name]) return;
+  if (_profilBildAufnehmen(name)) showStatus('📸 Bild von "' + name + '" wird aufgenommen…', 'info');
 }
 
 function removeProfileScreenshot(pname) {
@@ -3775,23 +3849,423 @@ function profileDeleteItem(slot, iIdx) {
   renderProfileList();
 }
 
+// ── Item Manager: alle Werte eines Items lesen/schreiben + Profil-Item bearbeiten ───────────────────────────────────────
+// Der Knopf ⚙️ am Item eines Profils öffnet den Item Manager mit der gespeicherten Konfiguration 1:1 (Optionen, Farben,
+// Eigenschaften, Vibrator, Schwierigkeit, Schloss, Craft, Priorität, Ebenen und alle übrigen Eigenschaften) – man passt nur noch an.
+// Oben erscheint eine Leiste: "Änderung ins Profil übernehmen" ersetzt genau dieses Item im Profil, "Abbrechen" lässt es unberührt.
+// Werte, für die es oben kein passendes Feld gibt (oder deren Typ nicht zum Feld passt), stehen im Bereich "Erweitert" als JSON –
+// so geht beim Öffnen und Zurückschreiben nichts verloren.
+let _profilEditKontext = null;   // { name, idx } solange ein Profil-Item bearbeitet wird
+
+const _EIG_BOOL = /^(Show|Punish|Enable|Allow|Has|Is|Can|Auto|Block)/;
+const _EIG_NUM  = /Level|Count|Timer|Num|Max|Min|Amount|Delay|Duration|Speed/;
+// Passt der Wert zum Feld, das der Item Manager für diese Eigenschaft anbietet (Auswahl / ganze Zahl / Text)?
+function _eigenschaftPasst(prop, v) {
+  if (_EIG_BOOL.test(prop)) return typeof v === 'boolean';
+  if (_EIG_NUM.test(prop)) return Number.isInteger(v);
+  return typeof v === 'string';
+}
+
+// Bereich "Erweitert" lesen. Ungültiges JSON wird rot gemeldet und NICHT stillschweigend verworfen (Aufrufer prüfen .fehler).
+function _erweitertLesen() {
+  const r = { eig: {}, override: null, layer: null, fehler: [] };
+  const istObj = v => v !== null && typeof v === 'object' && !Array.isArray(v);
+  const lies = (id, name, passt) => {
+    const t = (document.getElementById(id)?.value || '').trim();
+    if (!t) return undefined;
+    let v;
+    try { v = JSON.parse(t); } catch (e) { r.fehler.push(name + ': kein gültiges JSON'); return undefined; }
+    if (!passt(v)) { r.fehler.push(name + ': falsche Form'); return undefined; }
+    return v;
+  };
+  const e = lies('extraProps', 'Weitere Eigenschaften', istObj);
+  if (e !== undefined) r.eig = e;
+  const l = lies('extraLayers', 'Ebenen-Eigenschaften', v => v !== null && typeof v === 'object');
+  if (l !== undefined) r.layer = l;
+  const o = lies('extraOverride', 'Override-Priorität', v => typeof v === 'number' || istObj(v));
+  if (o !== undefined) r.override = o;
+  const f = document.getElementById('extraFehler');
+  if (f) { f.textContent = r.fehler.length ? '⚠️ ' + r.fehler.join(' · ') : ''; f.style.display = r.fehler.length ? 'block' : 'none'; }
+  return r;
+}
+
+function _erweitertZuruecksetzen() {
+  ['extraProps', 'extraLayers', 'extraOverride'].forEach(id => { const e = document.getElementById(id); if (e) e.value = ''; });
+  const p = document.getElementById('craftPrivate'); if (p) p.checked = false;
+  const f = document.getElementById('extraFehler'); if (f) { f.textContent = ''; f.style.display = 'none'; }
+}
+
+// Die Eigenschaften, die der Item Manager über eigene Felder verwaltet (Optionen-Eigenschaften, weitere Properties, Vibrator, Option)
+function _itemManagerEigenschaften() {
+  const { cfg } = CURRENT;
+  const p = {};
+  for (const key in (cfg.typeKeys || {})) {
+    for (const idx of dimSelected[key]) {
+      for (const [prop, val] of Object.entries(dimSubProps[key]?.[idx] || {})) if (val != null) p[prop] = val;
+    }
+  }
+  for (const [prop, val] of Object.entries(globalPropVals)) if (val != null) p[prop] = val;
+  if (cfg.archetype === 'vibrating') {
+    const eff = new Set(vibratingEffects);
+    if (vibratingMode !== 'Off') eff.add('Vibrating'); else eff.delete('Vibrating');
+    p.Mode = vibratingMode; p.Intensity = vibratingIntensity;
+    p.Effect = [...eff, ...vibratingExtraEffects.filter(e => !eff.has(e))];
+    for (const [prop, val] of Object.entries(baselinePropVals)) if (val != null) p[prop] = val;
+  } else if (cfg.directOptions?.length) {
+    p.Type = cfg.directOptions[classicOptionSel] ?? cfg.directOptions[0];
+  }
+  return p;
+}
+
+function _itemManagerSchloss() {
+  const lock = document.getElementById('lockType').value;
+  const lockParams = { timer: 0, combo: '', password: '', relMember: 0, relTimer: 0 };
+  if (lock) {
+    const rel = REL_LOCKS.includes(lock);
+    const zahl = id => parseInt(document.getElementById(id).value) || 0;
+    if (lock.includes('Timer') && !rel) lockParams.timer = (zahl('timerH') * 3600 + zahl('timerM') * 60 + zahl('timerS')) * 1000;
+    if (lock === 'CombinationPadlock') lockParams.combo = document.getElementById('comboCode').value || '1234';
+    if (PW_LOCKS.includes(lock)) lockParams.password = document.getElementById('lockPassword').value || '1234';
+    if (rel) { lockParams.relMember = zahl('relMemberNum'); lockParams.relTimer = zahl('relTimerH') * 3600 * 1000; }
+  }
+  return { lock, lockParams };
+}
+
+// Der aktuelle Stand des Item Managers als Profil-Item (mit echten Feldern: tr, property, difficulty, lock, craft …)
+function _itemManagerAktuell() {
+  const { group, asset, cfg } = CURRENT;
+  const tr = {};
+  for (const key in (cfg.typeKeys || {})) {
+    const sel = [...dimSelected[key]].sort((a, b) => a - b);
+    tr[key] = dimMode[key] === 'multi' ? sel.reduce((acc, i) => acc + Math.pow(2, i), 0) : (sel[0] ?? 0);
+  }
+  const hatTr = Object.keys(tr).length > 0;
+  const trStr = JSON.stringify(tr);
+  const typeStr = Object.entries(tr).map(([k, v]) => k + v).join('');
+  const colors = getColors();
+  const erw = _erweitertLesen();
+
+  const property = _itemManagerEigenschaften();
+  if (hatTr && !cfg.directOptions?.length && cfg.archetype !== 'vibrating') property.Type = typeStr;
+  Object.assign(property, erw.eig);                       // "Erweitert" hat das letzte Wort
+  if (erw.override != null) property.OverridePriority = erw.override;
+  if (erw.layer != null) property.LayerProperties = erw.layer;
+  if (cfg.archetype === 'vibrating' && !('vibrating' in tr)) tr.vibrating = vibratingTR;
+
+  const { lock, lockParams } = _itemManagerSchloss();
+
+  const cName = (document.getElementById('craftName').value || '').trim();
+  let craft = null;
+  if (cName) {
+    craft = Object.assign({ Color: colors.find(c => c !== 'Default') ?? '#808080', Lock: '' }, craftBasis || {}, {
+      Name: cName,
+      Description: (document.getElementById('craftDesc').value || '').trim(),
+      Property: document.getElementById('craftProp').value,
+      Item: asset,
+      Private: !!document.getElementById('craftPrivate')?.checked,
+    });
+  }
+
+  return {
+    group, asset, colors, tr, trStr, typeStr,
+    property: Object.keys(property).length ? property : null,
+    difficulty: tightnessOn ? tightnessVal : null,
+    lock: lock || null, lockParams, lockMember: lockParams.relMember || null,
+    craft,
+    directOption: (cfg.directOptions?.length && cfg.archetype !== 'vibrating') ? (cfg.directOptions[classicOptionSel] ?? cfg.directOptions[0]) : null,
+    fehler: erw.fehler,
+  };
+}
+
+// Ein Eigenschaftsfeld ("Weitere Properties") im Item Manager auf einen Wert setzen
+function _globalPropFeldSetzen(prop, wert) {
+  const karten = Array.from(document.querySelectorAll('#propsGrid .prop-card'));
+  const karte = karten.find(k => (k.querySelector('.prop-name')?.textContent || '') === prop);
+  if (!karte) return;
+  const auswahl = karte.querySelector('select');
+  if (auswahl) { auswahl.value = wert == null ? 'null' : String(wert); return; }
+  const haken = karte.querySelector('input[type=checkbox]');
+  const feld = karte.querySelector('input[type=number], input[type=text]');
+  if (haken) haken.checked = wert != null;
+  if (feld && wert != null) feld.value = wert;
+}
+
+// Ein Feld der Punishment-/Zusatz-Einstellungen eines Vibrators setzen
+function _baselineFeldSetzen(prop, v) {
+  const label = prop.replace(/([A-Z])/g, ' $1').trim();
+  const karte = Array.from(document.querySelectorAll('#baselineGrid .bl-card')).find(k => k.querySelector('.bl-card-label')?.textContent === label);
+  if (!karte) return;
+  if (prop === 'TriggerValues') {
+    // Häkchen per Klick umlegen, damit der Merker der Oberfläche mitzieht
+    const soll = new Set(String(v).split(','));
+    karte.querySelectorAll('label').forEach(l => { const cb = l.querySelector('input'); if (cb && cb.checked !== soll.has(l.textContent)) cb.click(); });
+    return;
+  }
+  const c = karte.querySelector('select, input');
+  if (c) c.value = String(v);
+}
+
+// Die UI des Item Managers mit der gespeicherten Konfiguration eines Profil-Items belegen (selectItem ist schon gelaufen)
+function _itemManagerBelegen(item) {
+  const { cfg } = CURRENT;
+  const eig = (item.property && typeof item.property === 'object') ? item.property : {};
+  const typeKeys = cfg.typeKeys || {};
+  const vib = cfg.archetype === 'vibrating';
+  const angewendet = new Set();   // Eigenschaften, die ein Feld oben übernommen hat – alle anderen landen in "Erweitert"
+
+  // 1. Optionen (TypeRecord): ein Wert unter der Optionszahl ist ein Index, größere Werte sind eine Bitmaske (Mehrfachauswahl)
+  const tr = (item.tr && typeof item.tr === 'object') ? item.tr : {};
+  for (const key in typeKeys) {
+    const opts = typeKeys[key] || [];
+    const v = tr[key];
+    if (Number.isInteger(v) && v >= 0) {
+      if (v < opts.length) { dimMode[key] = 'single'; dimSelected[key] = new Set([v]); }
+      else {
+        const menge = new Set();
+        opts.forEach((_, i) => { if (v & (1 << i)) menge.add(i); });
+        if (menge.size) { dimMode[key] = 'multi'; dimSelected[key] = menge; }
+      }
+    }
+    const haken = document.getElementById('multi_' + key);
+    if (haken) haken.checked = dimMode[key] === 'multi';
+  }
+
+  // 2. Eigenschaften der gewählten Optionen (nur wenn der Wert zum Feld passt)
+  for (const key in typeKeys) {
+    for (const idx of dimSelected[key]) {
+      for (const p of getPropsForOpt(cfg, key, idx)) {
+        if (p in eig && _eigenschaftPasst(p, eig[p])) {
+          (dimSubProps[key][idx] = dimSubProps[key][idx] || {})[p] = eig[p];
+          angewendet.add(p);
+        }
+      }
+    }
+  }
+  for (const key in typeKeys) renderDimOpts(key);
+  buildGlobalPropsUI();   // setzt die weiteren Properties zurück – danach erst befüllen
+  for (const p of getGlobalProps(cfg)) {
+    if (p in eig && _eigenschaftPasst(p, eig[p])) { globalPropVals[p] = eig[p]; _globalPropFeldSetzen(p, eig[p]); angewendet.add(p); }
+  }
+
+  // 3. Vibrator: Modus/Intensität (BC kodiert beides in einem Wert 0–9), Effekte, Punishment-Einstellungen
+  if (vib) {
+    const VIB = window.__VIB_OPTIONS__ || [];
+    let opt = null;
+    if (Number.isInteger(tr.vibrating)) opt = VIB.find(o => o.tr === tr.vibrating) || null;
+    if (!opt && typeof eig.Mode === 'string') opt = VIB.find(o => o.mode === eig.Mode && o.intensity === eig.Intensity) || VIB.find(o => o.mode === eig.Mode) || null;
+    if (opt) {
+      vibratingMode = opt.mode; vibratingIntensity = opt.intensity; vibratingTR = opt.tr;
+      document.querySelectorAll('#vibModeGrid .vib-mode-btn').forEach((b, j) => b.classList.toggle('on', VIB[j] === opt));
+      angewendet.add('Mode'); angewendet.add('Intensity');
+    }
+    if (Array.isArray(eig.Effect)) {
+      const bekannt = ['Egged', 'Vibrating', 'UseRemote', 'Edged'];
+      vibratingEffects = new Set(eig.Effect.filter(e => bekannt.includes(e)));
+      vibratingExtraEffects = eig.Effect.filter(e => !bekannt.includes(e));
+      document.querySelectorAll('#vibEffRow .vib-eff-btn').forEach(b => b.classList.toggle('on', vibratingEffects.has(b.textContent)));
+      angewendet.add('Effect');
+    }
+    for (const k of Object.keys(baselinePropVals)) {
+      if (!(k in eig)) continue;
+      const v = eig[k], d = baselinePropVals[k];
+      if (k === 'TriggerValues' ? typeof v === 'string' : (d != null && typeof v === typeof d)) {
+        if (k !== 'TriggerValues') baselinePropVals[k] = v;
+        _baselineFeldSetzen(k, v);
+        angewendet.add(k);
+      }
+    }
+  }
+
+  // 4. Einfache Optionen (z. B. Knebel-Varianten)
+  if (cfg.directOptions?.length && !vib) {
+    const name = typeof item.directOption === 'string' ? item.directOption : eig.Type;
+    const i = typeof name === 'string' ? cfg.directOptions.indexOf(name) : -1;
+    if (i >= 0) {
+      classicOptionSel = i;
+      document.querySelectorAll('#directOptsBtns .dir-opt-btn').forEach((b, j) => b.classList.toggle('on', j === i));
+    }
+  }
+
+  // 5. Farben (nur echte Hex-Farben; "Default" bleibt Standard)
+  const farben = Array.isArray(item.colors) ? item.colors : (item.colors != null ? [item.colors] : []);
+  const n = cfg.colorCount || 1;
+  for (let i = 0; i < n; i++) {
+    let c = farben[i];
+    if (typeof c !== 'string') continue;
+    if (/^#[0-9a-fA-F]{3}$/.test(c)) c = '#' + c[1] + c[1] + c[2] + c[2] + c[3] + c[3];
+    if (!/^#[0-9a-fA-F]{6}$/.test(c)) continue;
+    const el = document.getElementById('color_' + i);
+    if (el) { el.value = c.toLowerCase(); onColorChange(i); }
+  }
+
+  // 6. Schwierigkeit (Tightness) – auch wenn sie dem Basiswert des Items entspricht, damit sie 1:1 sichtbar bleibt
+  let d = item.difficulty;
+  if (d == null && typeof item.tightCode === 'string') { const m = /Difficulty\s*=\s*(-?\d+)/.exec(item.tightCode); if (m) d = +m[1]; }
+  if (Number.isFinite(d)) {
+    const regler = document.getElementById('tightnessSlider');
+    if (regler) {
+      regler.min = Math.min(+regler.min, d); regler.max = Math.max(+regler.max, d); regler.value = d;
+      document.getElementById('tightnessEnabled').checked = true;
+      onTightnessToggle();
+      onTightnessChange();
+    }
+  }
+
+  // 7. Schloss – die tatsächlichen Werte (Kombination, Passwort, Besitzer) kommen aus lockParams, sonst aus den Eigenschaften des Items
+  const schloss = typeof item.lock === 'string' ? item.lock : '';
+  const lockSel = document.getElementById('lockType');
+  if (schloss && !Array.from(lockSel.options || []).some(o => o.value === schloss)) {
+    const o = document.createElement('option'); o.value = schloss; o.textContent = schloss; lockSel.appendChild(o);
+  }
+  lockSel.value = schloss;
+  onLockChange();
+  const lp = item.lockParams || {};
+  const setze = (id, v) => { const e = document.getElementById(id); if (e && v != null) e.value = v; };
+  const sek = Math.floor((lp.timer || 0) / 1000);
+  setze('timerH', Math.floor(sek / 3600)); setze('timerM', Math.floor(sek % 3600 / 60)); setze('timerS', sek % 60);
+  setze('comboCode', lp.combo || eig.CombinationNumber || ''); setze('lockPassword', lp.password || eig.Password || '');
+  setze('relMemberNum', lp.relMember || item.lockMember || eig.LockMemberNumber || '');
+  setze('relTimerH', lp.relTimer ? Math.round(lp.relTimer / 3600000) : 0);
+
+  // 8. Craft (Felder ohne eigenes Eingabefeld bleiben in craftBasis erhalten)
+  const cr = item.craft && typeof item.craft === 'object' ? item.craft : null;
+  if (cr && cr.Name) {
+    craftBasis = JSON.parse(JSON.stringify(cr));
+    setze('craftName', cr.Name); setze('craftDesc', cr.Description || '');
+    const prop = document.getElementById('craftProp');
+    const wert = typeof cr.Property === 'string' ? cr.Property : 'Normal';
+    if (prop && !Array.from(prop.options || []).some(o => o.value === wert)) {
+      const o = document.createElement('option'); o.value = wert; o.textContent = wert; prop.appendChild(o);
+    }
+    if (prop) prop.value = wert;
+    const priv = document.getElementById('craftPrivate'); if (priv) priv.checked = !!cr.Private;
+  }
+
+  // 9. Erweitert: Priorität, Ebenen und alles, was oben kein Feld bekommen hat
+  const extras = {};
+  const STRUKTUR = ['TypeRecord', 'Type', 'OverridePriority', 'LayerProperties'];
+  for (const [k, v] of Object.entries(eig)) {
+    if (STRUKTUR.includes(k) || angewendet.has(k) || _LOCK_PROP_KEYS.includes(k)) continue;
+    if (k === 'Name' && /Padlock$/.test(String(v))) continue;
+    extras[k] = v;
+    delete baselinePropVals[k];   // sonst würde der Standardwert des Vibrator-Felds den echten Wert im Code überschreiben
+  }
+  const feld = (id, text) => { const e = document.getElementById(id); if (e) e.value = text; };
+  feld('extraProps', Object.keys(extras).length ? JSON.stringify(extras, null, 2) : '');
+  const ov = eig.OverridePriority != null ? eig.OverridePriority : item.overridePriority;
+  feld('extraOverride', ov == null ? '' : JSON.stringify(ov));
+  const ly = eig.LayerProperties != null ? eig.LayerProperties : item.layerProperties;
+  feld('extraLayers', ly == null ? '' : JSON.stringify(ly, null, 2));
+  generate();
+}
+
 function profileOpenInItemManager(slot, iIdx) {
   const name = _profileNameMap[slot];
   if (!name) return;
   const p = PROFILES[name];
-  const item = p?.items?.[parseInt(iIdx)];
+  const idx = parseInt(iIdx);
+  const item = p?.items?.[idx];
   if (!item) return;
   switchTab('items');
   const cfg = CACHE[item.group]?.[item.asset];
   if (cfg) {
     selectItem(item.group, item.asset);
-    showStatus('⚙️ ' + item.asset + ' im Item Manager geöffnet', 'info');
+    try { _itemManagerBelegen(item); } catch (e) { console.warn('[Profil-Item] Belegen:', e); showStatus('⚠️ Konfiguration nur teilweise geladen: ' + e.message, 'info'); }
+    _profilEditKontext = { name, idx };
+    _profilEditLeisteZeigen();
+    showStatus('✏️ ' + item.asset + ' aus „' + name + '" geladen – anpassen und „Änderung ins Profil übernehmen"', 'info');
   } else {
     // Nicht im Cache – Sidebar-Suche auf Asset-Name setzen
     const searchEl = document.querySelector('.sidebar-search');
     if (searchEl) { searchEl.value = item.asset; renderGroups(item.asset); }
     showStatus('⚠️ ' + item.asset + ' nicht im Cache – Suche gesetzt', 'info');
   }
+}
+
+function _profilEditLeisteZeigen() {
+  const leiste = document.getElementById('profilEditBar');
+  if (!leiste) return;
+  leiste.classList.toggle('hidden', !_profilEditKontext);
+  const t = document.getElementById('profilEditText');
+  if (t && _profilEditKontext) t.textContent = 'Profil „' + _profilEditKontext.name + '" · Item ' + (_profilEditKontext.idx + 1);
+}
+function profilEditAbbrechen() {
+  _profilEditKontext = null;
+  _profilEditLeisteZeigen();
+}
+
+// Gespeicherte Farben (Text für alle Ebenen oder Liste) mit den Farben des Item Managers zusammenführen, ohne etwas zu verfälschen:
+// ein Text bleibt ein Text, solange nur Ebene 1 diesen Wert hat und der Rest Standard ist; Ebenen, die der Item Manager nicht kennt,
+// und Nicht-Hex-Werte bleiben erhalten.
+function _farbenZusammen(alt, ui) {
+  const hex = c => typeof c === 'string' && /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(c);
+  const norm = c => { c = c.toLowerCase(); return c.length === 4 ? '#' + c[1] + c[1] + c[2] + c[2] + c[3] + c[3] : c; };
+  if (typeof alt === 'string') {
+    const unveraendert = ui.slice(1).every(c => c === 'Default')
+      && (hex(alt) ? norm(alt) === String(ui[0]).toLowerCase() : ui[0] === 'Default');
+    return unveraendert ? alt : ui;
+  }
+  if (!Array.isArray(alt)) return ui;
+  const aus = ui.map((c, i) => (c === 'Default' && typeof alt[i] === 'string' && alt[i] && !hex(alt[i])) ? alt[i] : c);
+  return alt.length > aus.length ? aus.concat(alt.slice(aus.length)) : aus;
+}
+
+// Den aktuellen Stand des Item Managers ins Profil zurückschreiben: ersetzt genau dieses Item. Was die Oberfläche nicht kennt
+// (z. B. unbekannte TypeRecord-Schlüssel, Schloss-Eigenschaften bei unverändertem Schloss), bleibt erhalten.
+function profilItemUebernehmen() {
+  const k = _profilEditKontext;
+  const p = k && PROFILES[k.name];
+  const alt = p && p.items && p.items[k.idx];
+  if (!alt || !CURRENT) { showStatus('❌ Kein Profil-Item in Bearbeitung', 'error'); return; }
+  if (CURRENT.group !== alt.group || CURRENT.asset !== alt.asset) {
+    showStatus('⚠️ Im Item Manager ist jetzt ein anderes Item gewählt – „' + alt.asset + '" erneut über ⚙️ öffnen', 'info');
+    return;
+  }
+  const rec = _itemManagerAktuell();
+  if (rec.fehler.length) { showStatus('❌ Erweitert: ' + rec.fehler.join(' · ') + ' – nichts übernommen', 'error'); return; }
+  const cfg = CURRENT.cfg;
+  const neu = JSON.parse(JSON.stringify(alt));
+  const eigAlt = (alt.property && typeof alt.property === 'object') ? alt.property : {};
+
+  // Optionen und Farben
+  const tr = Object.assign({}, rec.tr);
+  for (const [key, v] of Object.entries(alt.tr || {})) if (!(key in tr)) tr[key] = v;
+  neu.tr = tr;
+  neu.trStr = JSON.stringify(tr);
+  neu.typeStr = Object.entries(tr).map(([a, b]) => a + b).join('');
+  neu.colors = _farbenZusammen(alt.colors, rec.colors);
+
+  // Eigenschaften
+  const eig = rec.property ? Object.assign({}, rec.property) : {};
+  const trGleich = Object.keys(cfg.typeKeys || {}).every(key => (alt.tr || {})[key] === rec.tr[key]);
+  if (trGleich && eigAlt.Type !== undefined && !cfg.directOptions?.length) eig.Type = eigAlt.Type;
+  const schlossGleich = (alt.lock || null) === (rec.lock || null);
+  if (schlossGleich) {   // Schloss-Eigenschaften (LockedBy, Zeiten …) gehören zum Schloss: unverändert lassen
+    for (const key of _LOCK_PROP_KEYS) if (key in eigAlt) eig[key] = eigAlt[key];
+    if (/Padlock$/.test(String(eigAlt.Name || ''))) eig.Name = eigAlt.Name;
+  }
+  if (!rec.lock && Array.isArray(eig.Effect)) eig.Effect = eig.Effect.filter(e => e !== 'Lock');
+  neu.property = Object.keys(eig).length ? eig : null;
+  neu.overridePriority = null;   // steht jetzt (wie im Spiel-Snapshot) in property
+  neu.layerProperties = null;
+  if (rec.directOption) neu.directOption = rec.directOption; else delete neu.directOption;
+
+  // Schwierigkeit, Schloss, Craft
+  if (rec.difficulty != null) neu.difficulty = rec.difficulty; else delete neu.difficulty;
+  delete neu.tightCode;
+  neu.lock = rec.lock;
+  neu.lockParams = rec.lockParams;
+  if (rec.lockMember) neu.lockMember = rec.lockMember; else if (!schlossGleich) delete neu.lockMember;
+  neu.craft = rec.craft;
+
+  p.items[k.idx] = neu;
+  _saveProfiles();
+  _profilEditKontext = null;
+  _profilEditLeisteZeigen();
+  renderProfileList();
+  const mod = document.getElementById('profileModal');
+  if (mod?.classList.contains('open') && _profileModalName === k.name) _renderProfileModal(k.name);
+  showStatus('✅ „' + alt.asset + '" in „' + k.name + '" aktualisiert' + (PROFILE_SCREENSHOTS[k.name] ? ' – Bild ggf. neu aufnehmen' : ''), 'success');
 }
 
 // ── Kopie unter Yuuki 998 ────────────────────────────────────────────────
@@ -5042,8 +5516,24 @@ function _saveCurseOutfitFlags() {
 // ── Gruppen-Overrides ────────────────────────────────────────
 let CURSE_GRUPPE_OVERRIDES = {};  // dbKey → string (manuell gesetzter Gruppe-Name)
 function _saveCurseGruppeOverrides() { idbSet('BC_CURSE_GRUPPE_v1', CURSE_GRUPPE_OVERRIDES); }
+// Welche Gruppe ein Item hat: 1. von Hand gesetzt, 2. beim Scan erkannt, 3. aus dem Item-Cache des Tools nachgeschlagen
+// (der Scan im Spiel konnte den Namen manchmal nicht auflösen – dann stand "UNBEKANNT" und man konnte das Item nicht anziehen).
+let _assetGruppenIndex = null, _assetGruppenIndexQuelle = null, _assetGruppenIndexGruppen = -1;
+function _assetGruppeAusCache(assetName) {
+  if (!assetName) return null;
+  const gruppen = Object.keys(CACHE);
+  if (!gruppen.length) return null;
+  if (!_assetGruppenIndex || _assetGruppenIndexQuelle !== CACHE || _assetGruppenIndexGruppen !== gruppen.length) {
+    _assetGruppenIndex = new Map();
+    for (const g of gruppen) for (const a of Object.keys(CACHE[g] || {})) if (!_assetGruppenIndex.has(a)) _assetGruppenIndex.set(a, g);
+    _assetGruppenIndexQuelle = CACHE; _assetGruppenIndexGruppen = gruppen.length;
+  }
+  return _assetGruppenIndex.get(assetName) || null;
+}
 function _getEffectiveGruppe(entry, dbKey) {
-  return CURSE_GRUPPE_OVERRIDES[dbKey] || entry.Gruppe || 'UNBEKANNT';
+  if (CURSE_GRUPPE_OVERRIDES[dbKey]) return CURSE_GRUPPE_OVERRIDES[dbKey];
+  if (entry.Gruppe && entry.Gruppe !== 'UNBEKANNT') return entry.Gruppe;
+  return _assetGruppeAusCache(entry.ItemName) || 'UNBEKANNT';
 }
 // ── Favoriten ────────────────────────────────────────────────
 let CURSE_FAVOURITES = new Set();
@@ -5731,9 +6221,8 @@ function wearCurse(dbKey, targetNum) {
   if (!_connected) { showStatus('❌ Nicht verbunden', 'error'); return; }
   const entry = CURSE_DB[dbKey] ?? null;
   if (!entry) { showStatus('❌ Eintrag nicht in DB: ' + dbKey, 'error'); return; }
-  const effectiveEntry = CURSE_GRUPPE_OVERRIDES[dbKey]
-    ? { ...entry, Gruppe: CURSE_GRUPPE_OVERRIDES[dbKey] }
-    : entry;
+  const effGruppe = _getEffectiveGruppe(entry, dbKey);   // von Hand gesetzt, erkannt oder aus dem Cache
+  const effectiveEntry = effGruppe !== entry.Gruppe ? { ...entry, Gruppe: effGruppe } : entry;
   CURSE_APPLIED_TS[dbKey] = Date.now();
 
   // Nur bei Selbst-Anwendung ohne aktiven Snapshot: Outfit sichern + Standard-Outfit + Curse
@@ -5814,7 +6303,8 @@ function _curseEntryToProfileItem(entry) {
   if (typeof col === 'string' && col.includes(',')) col = col.split(',');
   if (!Array.isArray(col)) col = col ? [col] : ['#ffffff'];
   return {
-    asset: entry.ItemName, group: entry.Gruppe,
+    asset: entry.ItemName,
+    group: _getEffectiveGruppe(entry, (entry.Besitzer?.Nummer ?? '') + ':' + entry.ItemName + ':' + entry.CraftName),
     colors: col, craft: entry.Craft || null,
     lock: null, tr: {},
     _fromCurse: true, _craftName: entry.CraftName || entry.ItemName
@@ -5848,8 +6338,51 @@ function _doSaveProfile(items, defaultName, keepHairGroups, afterSave) {
     _saveProfiles();
     showStatus('✅ Profil "' + trimmed + '" gespeichert (' + items.length + ' Items) – nutzbar in Bot-Triggern!', 'success');
     if (typeof afterSave === 'function') afterSave();
+    _autoBildPlanen(trimmed);
   } catch(e) { showStatus('❌ Speichern fehlgeschlagen: ' + e.message, 'error'); }
 }
+
+// ── Bild automatisch beim Speichern (z. B. Craft & Curse → Outfit & Profile) ─────────────────────────────────────────
+// Ein neu gespeichertes Profil bekommt gleich sein Bild. Es wird kurz gewartet (das Wiederherstellen deines Outfits nach
+// dem Speichern läuft noch), dann – nacheinander, nie parallel zu einer anderen Aufnahme – lokal angezogen und fotografiert.
+// Ein vorhandenes Bild wird dabei nie ersetzt. In den Einstellungen (Werkzeuge) abschaltbar.
+const AUTOBILD_KEY = 'BC_AutoBild_v1';
+const AUTOBILD_WARTE_MS = 5000;
+const AUTOBILD_MAX_VERSUCHE = 20;      // 20 × 3 s, dann wird aufgegeben (das Profil bleibt ohne Bild; Auto-Screenshot holt es nach)
+const _autoBildQueue = [];
+let _autoBildTimer = null, _autoBildVersuche = 0;
+
+function autoBildAn() { try { return localStorage.getItem(AUTOBILD_KEY) !== '0'; } catch (e) { return true; } }
+function autoBildSetzen(an) {
+  try { localStorage.setItem(AUTOBILD_KEY, an ? '1' : '0'); } catch (e) {}
+  showStatus(an ? '📸 Neue Profile bekommen beim Speichern automatisch ein Bild' : '📸 Kein automatisches Bild beim Speichern', 'info');
+}
+
+function _autoBildPlanen(name) {
+  if (!autoBildAn() || !PROFILES[name] || PROFILE_SCREENSHOTS[name]) return;
+  if (!_autoBildQueue.includes(name)) _autoBildQueue.push(name);
+  if (!_autoBildTimer) { _autoBildVersuche = 0; _autoBildTimer = setTimeout(_autoBildSchritt, AUTOBILD_WARTE_MS); }
+}
+
+function _autoBildSchritt() {
+  _autoBildTimer = null;
+  if (!_autoBildQueue.length) return;
+  // Nicht dazwischenfunken: läuft eine andere Aufnahme/Serie oder ist BC gerade nicht stabil, später noch einmal
+  const belegt = _slideshowRunning || _wheelGenRunning || _osCaptureRunning || !_connected || !_gameOk(false)
+    || Object.keys(_pendingProfileCapture).length > 0;
+  if (belegt) {
+    if (++_autoBildVersuche > AUTOBILD_MAX_VERSUCHE) { _autoBildQueue.length = 0; return; }
+    _autoBildTimer = setTimeout(_autoBildSchritt, 3000);
+    return;
+  }
+  const name = _autoBildQueue.shift();
+  if (name && PROFILES[name] && !PROFILE_SCREENSHOTS[name]) _profilBildAufnehmen(name, false);
+  if (_autoBildQueue.length) { _autoBildVersuche = 0; _autoBildTimer = setTimeout(_autoBildSchritt, 3000); }
+}
+try {
+  const _autoBildSync = () => { const c = document.getElementById('autoBildChk'); if (c) c.checked = autoBildAn(); };
+  if (document.readyState !== 'loading') setTimeout(_autoBildSync, 0); else document.addEventListener('DOMContentLoaded', _autoBildSync);
+} catch (e) {}
 
 // ── Curse Standard-Outfit ─────────────────────────────────────────────────────
 // Speichert das aktuell getragene Outfit (Player.Appearance) als LZString-Bundle.
@@ -6422,6 +6955,7 @@ function curseClearAndScan() {
       }
     }
     const d = await idbGet('BC_CURSE_DB_v1');
+    _ladeMarke('Curse-DB gelesen');
     if (d) {
       // Guard: if BC already sent live CURSE_DATA before IDB resolved, don't overwrite it
       if (!_curseDBFresh) {
@@ -6542,7 +7076,7 @@ function _smZeit(ts, mitMs) {
 }
 
 function _smZeile(e) {
-  return e.typ + (e.sub ? ':' + e.sub : '') + ' [' + e.quelle + ']' + (e.screen ? ' (' + e.screen + ')' : '') + (e.tool ? '  ◀ TOOL' : '') + (e.dup ? '  ≡' : '');
+  return e.typ + (e.sub ? ':' + e.sub : '') + ' [' + e.quelle + ']' + (e.screen ? ' (' + e.screen + ')' : '') + (e.tool ? '  ◀ TOOL' : '') + (e.aufnahme ? '  ◀ AUFNAHME' : '') + (e.dup ? '  ≡' : '');
 }
 
 function _smSortiert(objekt, max) {
@@ -6557,6 +7091,7 @@ function _sendMonText(log) {
   const z = [];
   z.push('Sende-Monitor · Stand ' + _smZeit(log.jetzt) + ' · läuft seit ' + _smZeit(log.seit));
   z.push('ServerSend-Aufrufe seit Start: ' + log.gesamt + ' · davon vom Tool: ' + (log.vomTool || 0)
+    + ' · während einer Bild-Aufnahme: ' + (log.waehrendAufnahme || 0)
     + ' · Spitze: ' + (log.spitze?.n || 0) + ' in 1 s'
     + (log.spitze?.n ? ' (um ' + _smZeit(log.spitze.t) + ')' : '') + ' · Warnschwelle: ' + log.warnAb + ' in 1 s');
   if (log.leitung?.aktiv) {
@@ -6576,7 +7111,7 @@ function _sendMonText(log) {
   }
   z.push('Nach Aufrufer (letzte ' + (log.ringSendungen ?? '?') + ' Sendungen' + (log.wrapper?.length ? ', durchgereicht über ' + log.wrapper.join(' ← ') + ' – ausgeblendet' : '') + '): '
     + _smSortiert(log.nachQuelle, 12));
-  z.push('(„eval@loader.js“ = vom Tool eingespielter Code, also EXEC/Bots, und im Verlauf mit ◀ TOOL markiert; ≡ = identische Wiederholung; sonst der Dateiname des Aufrufers)');
+  z.push('(„eval@loader.js“ = vom Tool eingespielter Code, also EXEC/Bots, und im Verlauf mit ◀ TOOL markiert; ◀ AUFNAHME = gesendet, während das Tool gerade ein Bild aufnahm; ≡ = identische Wiederholung; sonst der Dateiname des Aufrufers)');
   const vf = Array.isArray(log.vorfaelle) ? log.vorfaelle : [];
   z.push('');
   z.push('TRENNUNGEN (' + vf.length + ')' + (vf.length ? '' : ' – bisher keine seit dem Start des Monitors'));
@@ -6585,6 +7120,7 @@ function _sendMonText(log) {
     z.push('  letzte 10 s: ' + v.n10 + ' ServerSend-Aufrufe (Spitze ' + (v.spitze10?.n || 0) + ' in 1 s), davon vom Tool: ' + (v.tool10 || 0));
     z.push('  An der Leitung: ' + (v.leitung10 ?? '?') + ' (Spitze ' + (v.leitungSpitze10?.n ?? '?') + ' in 1 s)');
     z.push('  davon identische Wiederholungen (≡): ' + (v.dup10 ?? '?'));
+    z.push('  davon während einer Bild-Aufnahme des Tools (◀ AUFNAHME): ' + (v.aufnahme10 ?? '?'));
     z.push('  Hauptsender: ' + ((v.top || []).map(x => x.n + '× ' + x.was).join(' | ') || '–'));
     z.push('  Ablauf (Sekunden vor der Trennung):');
     (v.lauf || []).forEach(e => {
@@ -6642,6 +7178,60 @@ onBridgeMessage('SEND_MON_VORFALL', function(ev) {
       showStatus('⚠️ Server-Trennung (' + String(ev.data.grund || '?').slice(0, 60) + ') – Ablauf unter Einstellungen → Werkzeuge → Sende-Monitor', 'error');
       sendMonRefresh();
 });
+
+// ── Sende-Bremse (Einstellungen → Werkzeuge) ─────────────────────────────
+// BC schickt höchstens ServerSendRateLimit (14) Nachrichten pro ServerSendRateLimitInterval (1,2 s) an den Server und stellt den Rest in
+// eine Warteschlange. Beim Raumbeitritt senden BC und alle Mods gleichzeitig (Aussehen, versteckte Mod-Nachrichten, Ausdruck, …): die
+// Warteschlange läuft dann am Anschlag, und der Server trennt mit "ErrorRateLimited". Die Bremse senkt das Limit im Spiel-Tab –
+// Nachrichten kommen etwas später an, es geht keine verloren. Gilt bis BC neu geladen wird; beim Verbinden wird sie neu gesetzt.
+// Ausgeschaltet stellt sie den Originalwert wieder her. (Das tatsächliche Server-Limit kennt das Tool nicht.)
+const SENDEBREMSE_KEY = 'BC_SendeBremse_v1';
+const SENDEBREMSE_STANDARD = { an: true, limit: 9 };
+const SENDEBREMSE_MIN = 4, SENDEBREMSE_MAX = 14;
+
+function _sendeBremseLimit(n) {
+  n = Math.round(Number(n));
+  return Number.isFinite(n) ? Math.min(SENDEBREMSE_MAX, Math.max(SENDEBREMSE_MIN, n)) : SENDEBREMSE_STANDARD.limit;
+}
+function sendeBremseLesen() {
+  try {
+    const v = JSON.parse(localStorage.getItem(SENDEBREMSE_KEY) || 'null');
+    if (v && typeof v === 'object') return { an: v.an !== false, limit: _sendeBremseLimit(v.limit) };
+  } catch (e) {}
+  return { ...SENDEBREMSE_STANDARD };
+}
+// Der Code für den Spiel-Tab: Originalwert einmal merken, dann setzen bzw. zurückstellen
+function _sendeBremseCode(an, limit) {
+  return '(function(){try{'
+    + 'if(typeof ServerSendRateLimit!=="number")return;'
+    + 'if(window.__BCU_origRateLimit==null)window.__BCU_origRateLimit=ServerSendRateLimit;'
+    + (an ? 'ServerSendRateLimit=' + _sendeBremseLimit(limit) + ';'
+          : 'ServerSendRateLimit=window.__BCU_origRateLimit;')
+    + '}catch(e){}})();';
+}
+function sendeBremseAnwenden() {
+  if (!_connected) return false;
+  const b = sendeBremseLesen();
+  return bcSend({ type: 'EXEC', code: _sendeBremseCode(b.an, b.limit) }, true);
+}
+function sendeBremseSetzen() {
+  const chk = document.getElementById('sendeBremseChk'), lim = document.getElementById('sendeBremseLimit');
+  const b = { an: chk ? !!chk.checked : true, limit: _sendeBremseLimit(lim ? lim.value : SENDEBREMSE_STANDARD.limit) };
+  if (lim) lim.value = b.limit;
+  try { localStorage.setItem(SENDEBREMSE_KEY, JSON.stringify(b)); } catch (e) {}
+  const ok = sendeBremseAnwenden();
+  showStatus(b.an ? '🐢 Sende-Bremse: ' + b.limit + ' Nachrichten pro 1,2 s' + (ok ? '' : ' (wird beim Verbinden gesetzt)')
+                  : '🐢 Sende-Bremse aus – BC-Standard' + (ok ? '' : ' (wird beim Verbinden zurückgestellt)'), 'info');
+}
+try {
+  const _sendeBremseSync = () => {
+    const b = sendeBremseLesen();
+    const c = document.getElementById('sendeBremseChk'), l = document.getElementById('sendeBremseLimit');
+    if (c) c.checked = b.an;
+    if (l) l.value = b.limit;
+  };
+  if (document.readyState !== 'loading') setTimeout(_sendeBremseSync, 0); else document.addEventListener('DOMContentLoaded', _sendeBremseSync);
+} catch (e) {}
 
 
 // ══════════════════════════════════════════════════════
@@ -6871,6 +7461,7 @@ try {
       try { startFilterAnwenden(b); } catch (e) { console.warn('[StartFilter] ' + b + ':', e); }
     }
     try { startFilterRender(); } catch (e) { console.warn('[StartFilter] Einstellungen:', e); }
+    _ladeMarke('Start-Filter angewendet');
   };
   if (document.readyState !== 'loading') setTimeout(_sfStart, 0);
   else document.addEventListener('DOMContentLoaded', _sfStart);
@@ -6968,6 +7559,170 @@ onBridgeMessage('GEFAHR_ERGEBNIS', function(ev) {
       }
 });
 
+// ══════════════════════════════════════════════════════
+//  EXPORT-INFO (Einstellungen → Werkzeuge): alles, was man für eine Leistungsprüfung braucht, als Text
+// ══════════════════════════════════════════════════════
+// Zählt die Bestände, die Größen der Bilder und des Speichers, misst die Ladezeiten (ms seit Seitenstart, siehe
+// _ladeMarke) und die Zeit, die das Zeichnen der Listen JETZT braucht. Liest nur; geändert wird nichts (außer dass die
+// Listen einmal neu gezeichnet werden).
+async function exportInfoSammeln() {
+  const z = [];
+  const zahl = (n) => Number(n || 0).toLocaleString('de-DE');
+  const MB = (n) => (Number(n || 0) / 1048576).toFixed(1).replace('.', ',') + ' MB';
+  const KB = (n) => Math.round(Number(n || 0) / 1024).toLocaleString('de-DE') + ' KB';
+  const jetzt = () => { try { return performance.now(); } catch (e) { return Date.now(); } };
+  const messen = (fn) => { const t0 = jetzt(); let r; try { r = fn(); } catch (e) { r = { fehler: e.message }; } return { ms: Math.round(jetzt() - t0), r }; };
+  const sicher = (fn, fallback) => { try { const v = fn(); return v === undefined ? fallback : v; } catch (e) { return fallback; } };
+  // Bilder: Anzahl, Summe der Zeichen (≈ Bytes, Base64), größtes Bild
+  const bilder = (obj) => {
+    let summe = 0, max = 0, n = 0;
+    for (const k in obj) { const l = String(obj[k] || '').length; summe += l; if (l > max) max = l; n++; }
+    return { n, summe, max };
+  };
+
+  z.push('Export-Info · ' + new Date().toLocaleString('de-DE'));
+  z.push('Tool: ' + sicher(() => document.title, '?'));
+  z.push('Browser: ' + sicher(() => navigator.userAgent.replace(/^Mozilla\/5\.0 /, '').slice(0, 110), '?')
+    + ' · Fenster ' + sicher(() => window.innerWidth + '×' + window.innerHeight, '?')
+    + ' · Kerne ' + sicher(() => navigator.hardwareConcurrency, '?')
+    + sicher(() => navigator.deviceMemory ? ' · Gerätespeicher ≥ ' + navigator.deviceMemory + ' GB' : '', ''));
+  try {
+    const est = await navigator.storage.estimate();
+    z.push('Browser-Speicher: ' + MB(est.usage) + ' von ' + MB(est.quota) + ' belegt');
+  } catch (e) { z.push('Browser-Speicher: nicht abfragbar'); }
+
+  // ── Bestände ──
+  z.push('');
+  z.push('BESTÄNDE');
+  const pKeys = Object.keys(PROFILES);
+  const pItems = pKeys.reduce((s, k) => s + ((PROFILES[k].items || []).length), 0);
+  const pMax = pKeys.reduce((m, k) => Math.max(m, (PROFILES[k].items || []).length), 0);
+  const pBild = pKeys.filter(k => PROFILE_SCREENSHOTS[k]).length;
+  const dupGruppen = sicher(() => _getProfileDuplicates().size, 0);
+  z.push('Outfit & Profile: ' + zahl(pKeys.length) + ' Profile (' + zahl(pBild) + ' mit Bild) · ' + zahl(pItems) + ' Items gesamt · größtes Profil ' + pMax
+    + ' Items · ' + zahl(Object.keys(PROFILE_TAGS || {}).length) + ' mit Tags · ' + zahl(PROFILE_FAVS.size) + ' Favoriten · ' + zahl(dupGruppen) + ' Duplikat-Gruppen');
+  const lKeys = Object.keys(LSCG_DB);
+  const lVers = lKeys.reduce((s, k) => s + ((LSCG_DB[k].versions || []).length), 0);
+  const lMax = lKeys.reduce((m, k) => Math.max(m, (LSCG_DB[k].versions || []).length), 0);
+  let lCodeZeichen = 0, lMitBild = 0;
+  for (const k of lKeys) for (const v of (LSCG_DB[k].versions || [])) {
+    lCodeZeichen += String(v.code || '').length;
+    if (LSCG_SCREENSHOTS[v.fingerprint ? k + '|' + v.fingerprint : k]) lMitBild++;
+  }
+  z.push('LSCG Outfits: ' + zahl(lKeys.length) + ' Spieler · ' + zahl(lVers) + ' Versionen (' + zahl(lMitBild) + ' mit Bild) · meiste Versionen bei einem Spieler ' + zahl(lMax)
+    + ' · Codes ' + MB(lCodeZeichen) + ' · Favoriten: ' + zahl(_osFavs.size) + ' Spieler, ' + zahl(_osOutfitFavs.size) + ' Outfits');
+  const wOutfits = _mbsWheelData.reduce((s, r) => s + (r.outfits || []).length, 0);
+  const wShots = bilder(_mbsWheelShots);
+  const wNiedrig = sicher(() => Object.keys(_mbsWheelShots).filter(k => _wheelBildNiedrig(_mbsWheelShots[k])).length, 0);
+  z.push('MBS Wheel: ' + zahl(_mbsWheelData.length) + ' Spieler · ' + zahl(wOutfits) + ' Outfits · ' + zahl(wShots.n) + ' Bilder (' + zahl(wNiedrig)
+    + ' in niedriger Auflösung) · Favoriten: ' + zahl(_mbsWheelFavs.size) + ' Spieler, ' + zahl(_mbsWheelOutfitFavs.size) + ' Outfits');
+  const cKeys = Object.keys(CURSE_DB);
+  const cOwner = new Set(cKeys.map(k => CURSE_DB[k]?.Besitzer?.Nummer));
+  const cUnbekannt = cKeys.filter(k => _getEffectiveGruppe(CURSE_DB[k], k) === 'UNBEKANNT').length;
+  z.push('Craft & Curse: ' + zahl(cKeys.length) + ' Einträge von ' + zahl(cOwner.size) + ' Besitzern · ' + zahl(cUnbekannt) + ' mit unbekannter Gruppe · '
+    + zahl(Object.keys(CURSE_COMMENTS).length) + ' Notizen · ' + zahl(Object.keys(CURSE_OUTFIT_FLAGS).length) + ' Outfit-Markierungen · ' + zahl(CURSE_FAVOURITES.size) + ' Favoriten');
+  z.push('Weitere: Outfit Import ' + zahl(sicher(() => OI_LIST.length, 0)) + ' · Bots ' + zahl(sicher(() => _bots.length, 0)) + ' · Shop-Artikel ' + zahl(sicher(() => _shop.items.length, 0))
+    + ' · Ränge ' + zahl(sicher(() => _rankData.defs.length, 0)) + ' · Konten ' + zahl(sicher(() => Object.keys(_money.balances).length, 0))
+    + ' · Inventar-Spieler ' + zahl(sicher(() => Object.keys(_inventar.spieler).length, 0)) + ' · Item-Cache ' + zahl(Object.keys(CACHE).length) + ' Gruppen / '
+    + zahl(Object.values(CACHE).reduce((s, g) => s + Object.keys(g || {}).length, 0)) + ' Assets');
+
+  // ── Bilder ──
+  z.push('');
+  z.push('BILDER');
+  const bp = bilder(PROFILE_SCREENSHOTS), bl = bilder(LSCG_SCREENSHOTS);
+  z.push('Profil-Bilder: ' + zahl(bp.n) + ' · ' + MB(bp.summe) + ' · größtes ' + KB(bp.max));
+  z.push('LSCG-Bilder: ' + zahl(bl.n) + ' · ' + MB(bl.summe) + ' · größtes ' + KB(bl.max));
+  z.push('Wheel-Bilder: ' + zahl(wShots.n) + ' · ' + MB(wShots.summe) + ' · größtes ' + KB(wShots.max));
+  z.push('Alle Bilder zusammen: ' + MB(bp.summe + bl.summe + wShots.summe));
+
+  // ── Speicher im Browser ──
+  z.push('');
+  z.push('SPEICHER IM BROWSER');
+  let kvAnzahl = 0, kvZeichen = 0, kvGroesster = '', kvMax = 0;
+  try {
+    const kv = await idbKvAlle();
+    for (const k of Object.keys(kv)) {
+      kvAnzahl++;
+      const l = sicher(() => JSON.stringify(kv[k]).length, 0);
+      kvZeichen += l;
+      if (l > kvMax) { kvMax = l; kvGroesster = k; }
+    }
+  } catch (e) {}
+  z.push('Datenbank: ' + zahl(kvAnzahl) + ' Schlüssel · ca. ' + MB(kvZeichen) + (kvGroesster ? ' · größter: ' + kvGroesster + ' (' + MB(kvMax) + ')' : ''));
+  let lsAnzahl = 0, lsZeichen = 0;
+  try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); lsAnzahl++; lsZeichen += String(localStorage.getItem(k) || '').length + k.length; } } catch (e) {}
+  z.push('localStorage: ' + zahl(lsAnzahl) + ' Schlüssel · ca. ' + MB(lsZeichen));
+  let scanAnzahl = 0;
+  try { scanAnzahl = (await idbSnapshotKeys()).length; } catch (e) {}
+  z.push('Spiel-Scans: ' + zahl(scanAnzahl));
+
+  // ── Oberfläche ──
+  z.push('');
+  z.push('OBERFLÄCHE (jetzt gezeichnet)');
+  const n = (sel) => sicher(() => document.querySelectorAll(sel).length, 0);
+  z.push('DOM-Knoten gesamt: ' + zahl(n('*')) + ' · Bilder mit Quelle: ' + zahl(n('img[src]')) + ' von ' + zahl(n('img[data-lk]')) + ' Lazy-Bildern');
+  z.push('Karten: Profile ' + zahl(n('#profileListEl .pc')) + ' · LSCG ' + zahl(n('#outfitScanBody .os-card')) + ' · Wheel ' + zahl(n('#wheelOutfitBody .os-card')));
+
+  // ── Ladezeiten ──
+  z.push('');
+  z.push('LADEZEITEN (ms seit Seitenstart)');
+  const marken = Object.entries(_ladeMarken).sort((a, b) => a[1] - b[1]);
+  for (const [name, ms] of marken) z.push(String(ms).padStart(7) + '  ' + name);
+  try {
+    const nav = performance.getEntriesByType('navigation')[0];
+    if (nav) z.push(String(Math.round(nav.domContentLoadedEventEnd)).padStart(7) + '  Seite: DOMContentLoaded · ' + Math.round(nav.loadEventEnd) + ' ms Seite komplett (load)');
+  } catch (e) {}
+  if (!marken.length) z.push('  (keine Messpunkte)');
+
+  // ── Zeichnen ──
+  z.push('');
+  z.push('ZEICHNEN (jetzt gemessen)');
+  const liste = [
+    ['Profil-Liste', () => renderProfileList(), '#profileListEl .pc'],
+    ['LSCG Outfits', () => renderOutfitScanTab(), '#outfitScanBody .os-card'],
+    ['MBS Wheel', () => _renderMbsWheelTab(), '#wheelOutfitBody .os-card'],
+    ['Craft & Curse', () => renderCurseTab(), '#curseBody [id^="co_"]'],   // Besitzer-Blöcke (die Zeilen entstehen erst beim Aufklappen)
+  ];
+  for (const [name, fn, sel] of liste) {
+    const m = messen(fn);
+    z.push(name + ': ' + m.ms + ' ms' + (m.r && m.r.fehler ? ' (Fehler: ' + m.r.fehler + ')' : '') + ' · ' + zahl(n(sel)) + ' Einträge im DOM');
+  }
+  z.push('Duplikat-Erkennung (alle Profile): ' + messen(() => _profilDupInfo()).ms + ' ms');
+  z.push('Profil-Filter/Suche: ' + messen(() => _profilGefiltert()).ms + ' ms');
+
+  // ── Backup ──
+  z.push('');
+  z.push('GESAMT-BACKUP (Zusammenstellen, ohne Datei)');
+  const t0 = jetzt();
+  let ex = { idb: {}, ls: {} }, sc = {};
+  try { ex = await _backupExtras(); } catch (e) {}
+  const tEx = Math.round(jetzt() - t0);
+  const t1 = jetzt();
+  try { sc = await _backupScans(); } catch (e) {}
+  const tSc = Math.round(jetzt() - t1);
+  z.push('Einstellungen/Schlüssel: ' + zahl(Object.keys(ex.idb).length + Object.keys(ex.ls).length) + ' · ' + tEx + ' ms · Spiel-Scans: ' + zahl(Object.keys(sc).length) + ' · ' + tSc + ' ms');
+  z.push('Geschätzte Größe der Backup-Datei: ca. ' + MB(bp.summe + bl.summe + wShots.summe + lCodeZeichen + kvZeichen));
+  return z.join('\n');
+}
+
+let _exportInfoText = '';
+async function exportInfoErzeugen() {
+  const box = document.getElementById('exportInfoText');
+  if (box) box.textContent = '⏳ Wird gemessen …';
+  try {
+    _exportInfoText = await exportInfoSammeln();
+    if (box) box.textContent = _exportInfoText;
+  } catch (e) {
+    _exportInfoText = '';
+    if (box) box.textContent = '❌ Fehler: ' + e.message;
+  }
+}
+async function exportInfoKopieren() {
+  if (!_exportInfoText) await exportInfoErzeugen();
+  try { await navigator.clipboard.writeText(_exportInfoText); showStatus('📋 Export-Info kopiert', 'success'); }
+  catch (e) { showStatus('❌ Kopieren fehlgeschlagen – Text bitte von Hand markieren', 'error'); }
+}
+
 
 /* Den lokalen Curse-Bestand in den Loader schieben.
 
@@ -7008,6 +7763,8 @@ onBridgeMessage('PONG', function(ev) {
         document.getElementById('connectHint')?.classList.add('hidden');
         // Curse-DB an Loader pushen → Wear nach Browserwechsel/Neustart möglich
         _pushCurseDBToBC();
+        // Sende-Bremse (Limit der BC-Sendewarteschlange) nach jedem Verbinden neu setzen – BC kann neu geladen worden sein
+        try { sendeBremseAnwenden(); } catch (e) {}
         // Sofort Raum scannen + Interval starten
         bcSend({ type: 'GET_PLAYER' }, true);
         startRoomScan();
@@ -9413,6 +10170,9 @@ const _SHOT_VORBEREITEN = '(function(){'
 //    abgestürzter Lauf dich nie dauerhaft blockiert.
 //  - Ohne ModSDK (oder wenn der Hook dort scheitert) wird ServerSend direkt umhüllt. Gelingt beides nicht, wird
 //    NICHTS angelegt (beiFehler).
+// Die Hook-Funktionen heißen BCU_SperreHook/BCU_SperreWrap: der Sende-Monitor (loader.js) erkennt sie am Namen und lässt sie aus
+// der Aufrufer-Kette weg. Sonst stünde dieser Code (eingespielt per EXEC → "eval@loader.js") bei JEDER Sendung im Stack und der
+// Monitor würde alles dem Tool zuschreiben.
 const _SHOT_SPERRE_MS = 30000;
 const _SHOT_SPERRE_INSTALL = '(function(){'
   + 'if(window.__BCU_SPERRE_HOOK__)return;'
@@ -9435,13 +10195,13 @@ const _SHOT_SPERRE_INSTALL = '(function(){'
   + 'try{'
   +   'if(typeof bcModSdk!=="undefined"&&typeof bcModSdk.registerMod==="function"){'
   +     'var m=bcModSdk.registerMod({name:"BCU_SyncSperre",fullName:"BCU Sync-Sperre",version:"1.0.0"});'
-  +     'm.hookFunction("ServerSend",100000,function(args,next){if(!pruefen(args))return;return next(args);});'
+  +     'm.hookFunction("ServerSend",100000,function BCU_SperreHook(args,next){if(!pruefen(args))return;return next(args);});'
   +     'window.__BCU_SPERRE_HOOK__=true;'
   +   '}'
   + '}catch(e){}'
   + 'if(!window.__BCU_SPERRE_HOOK__&&typeof window.ServerSend==="function"){'
   +   'var orig=window.ServerSend;'
-  +   'window.ServerSend=function(){if(!pruefen(arguments))return;return orig.apply(this,arguments);};'
+  +   'window.ServerSend=function BCU_SperreWrap(){if(!pruefen(arguments))return;return orig.apply(this,arguments);};'
   +   'window.__BCU_SPERRE_HOOK__=true;'
   + '}'
   + '})();';
@@ -11130,6 +11890,7 @@ function toggleOsChar(mk, hdrEl) {
       console.log('[BCU] LSCG-DB geladen:', Object.keys(LSCG_DB).length, 'Spieler,', _neu, 'Versionen ergaenzt');
     }
     _lscgLoaded = true;
+    _ladeMarke('LSCG-DB geladen');
     if (_lscgSavePending) { _lscgSavePending = false; _saveLscgDB(); }
   } catch (e) {
     // Sperre bleibt aktiv: lieber neue Scans nicht speichern als den Bestand ueberschreiben
@@ -11149,6 +11910,7 @@ function toggleOsChar(mk, hdrEl) {
     LSCG_SCREENSHOTS = Object.assign({}, ssSaved, LSCG_SCREENSHOTS);
     _screenshotShadowMerge('lscg', ssSaved);
     console.log('[BCU] LSCG Screenshots geladen:', Object.keys(LSCG_SCREENSHOTS).length);
+    _ladeMarke('LSCG-Bilder geladen');
   }
   // Gespeicherte LSCG-Outfit-Slots laden (persistierte Slot-Namen + Codes)
   const slotsSaved = await idbGet(LSCG_SLOTS_KEY);
@@ -11968,6 +12730,7 @@ idbGet(_MBS_WHEEL_IDB_KEY).then(function(d) {
       if (_activeTab === 'lscg-wheel') _renderMbsWheelTab();
     }
     _mbsWheelLoaded = true;
+    _ladeMarke('Wheel-Daten geladen');
   } catch (err) {
     // Nicht als "geladen" markieren: sonst wuerde ein Scan die noch in IDB
     // liegenden Outfits mit einer leeren Liste ueberschreiben.
@@ -12125,6 +12888,7 @@ _screenshotStoreReady().then(function () { return idbScreenshotGetAll('wheel'); 
     _screenshotShadowMerge('wheel', d);
     if (_activeTab === 'lscg-wheel') _renderMbsWheelTab();
   }
+  _ladeMarke('Wheel-Bilder geladen');
 });
 function _saveMbsWheelShotsJetzt() { return _screenshotFlush('wheel', _mbsWheelShots); }
 /* Wie bei LSCG buendeln - die Stapel-Erzeugung weiter unten laeuft sonst
@@ -13018,6 +13782,7 @@ function mbsWheelOpenShot(_unused, mn, oi) {
   _osLightboxKey    = null;
   _osLightboxWheelFp = fp;
   _osLightboxNeuSetzen(() => mbsWheelCaptureShot(mn, oi));
+  _osLbNavSetzen('wm_' + mn, 'oi', (i) => () => mbsWheelOpenShot(0, mn, i), oi);
   document.getElementById('osLbImg').src = img;
   document.getElementById('osLbName').textContent = o.name;
   // wie bei LSCG: Spieler, Nummer und Datum (wann das Outfit zuerst gesehen wurde)
@@ -13644,6 +14409,39 @@ function osLightboxNeuAufnehmen() {
   if (fn) fn();
 }
 
+// ◀ ▶ und Tastatur (← → Esc): durch die Bilder desselben Spielers blättern – in der Reihenfolge, wie die Karten gezeigt
+// werden (also mit dem aktiven Filter). Es zählen nur Karten mit Bild. LSCG und Wheel sind Bestandsaufnahmen: hier wird
+// nur geschaut, bearbeitet wird in den Profilen.
+let _osLbNav = { liste: [], pos: -1 };
+function _osLbNavSetzen(blockId, attr, oeffner, aktuell) {
+  let idxs = [];
+  try {
+    const block = document.getElementById(blockId);
+    if (block) idxs = Array.from(block.querySelectorAll('.os-card[data-' + attr + ']'))
+      .filter(c => c.querySelector('.os-card-del')).map(c => Number(c.dataset[attr]));
+  } catch (e) {}
+  const pos = idxs.indexOf(Number(aktuell));
+  _osLbNav = pos < 0 ? { liste: [], pos: -1 } : { liste: idxs.map(oeffner), pos };
+  _osLbNavKnoepfe();
+}
+function _osLbNavKnoepfe() {
+  const zeige = (id, an) => { const b = document.getElementById(id); if (b) b.style.display = an ? '' : 'none'; };
+  zeige('osLbPrev', _osLbNav.pos > 0);
+  zeige('osLbNext', _osLbNav.pos >= 0 && _osLbNav.pos < _osLbNav.liste.length - 1);
+}
+function osLightboxBlaettern(richtung) {
+  const n = _osLbNav.pos + richtung;
+  if (n < 0 || n >= _osLbNav.liste.length) return;
+  _osLbNav.liste[n]();   // öffnet die Nachbarkarte und berechnet die Liste neu
+}
+document.addEventListener('keydown', (e) => {
+  const lb = document.getElementById('osLightbox');
+  if (!lb || !lb.classList || !lb.classList.contains('open')) return;
+  if (e.key === 'Escape') closeOsLightbox();
+  else if (e.key === 'ArrowLeft') osLightboxBlaettern(-1);
+  else if (e.key === 'ArrowRight') osLightboxBlaettern(1);
+});
+
 function openOsLightbox(mk) {
   const img = _getLscgScreenshot(mk);
   if (!img) return;
@@ -13652,6 +14450,7 @@ function openOsLightbox(mk) {
   _osLightboxKey = null;
   _osLightboxWheelFp = null;
   _osLightboxNeuSetzen(null);
+  _osLbNavSetzen('', 'vidx', () => null, -1);   // ältere Ansicht pro Spieler: kein Blättern
   document.getElementById('osLbImg').src   = img;
   document.getElementById('osLbName').textContent = entry ? (entry.name ?? mk) : mk;
   document.getElementById('osLbSub').textContent  = '#' + mk + (entry?.nickname ? ' · „' + entry.nickname + '”' : '');
@@ -13671,6 +14470,7 @@ function openOsLightboxVersion(mk, vIdx) {
   _osLightboxKey = key;
   _osLightboxWheelFp = null;
   _osLightboxNeuSetzen(() => { captureOsScreenshot(mk, vIdx); showStatus('📸 Bild wird neu aufgenommen…', 'info'); });
+  _osLbNavSetzen('osm_' + mk, 'vidx', (i) => () => openOsLightboxVersion(mk, i), vIdx);
   document.getElementById('osLbImg').src   = img;
   document.getElementById('osLbName').textContent = entry ? (entry.name ?? mk) : mk;
   document.getElementById('osLbSub').textContent  = '#' + mk
@@ -13686,6 +14486,7 @@ function closeOsLightbox() {
   _osLightboxKey = null;
   _osLightboxWheelFp = null;
   _osLightboxNeu = null;
+  _osLbNav = { liste: [], pos: -1 };
 }
 
 function deleteOsScreenshotFromLb() {
@@ -15000,3 +15801,5 @@ _dcRegisterJob('curseTest', {
   pause: _ctDcPause,
   resume: _ctDcResume,
 });
+
+_ladeMarke('items.js fertig');

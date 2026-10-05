@@ -313,6 +313,21 @@ describe('Sende-Monitor (Loader): GET_SEND_LOG', () => {
   });
 });
 
+describe('Sende-Monitor (Loader): Bild-Aufnahme markieren', () => {
+  it('Sendungen während der Sync-Sperre (Aufnahme) sind markiert und werden gezählt, andere nicht', () => {
+    const { sb, hook } = bootLoader();
+    senden(hook, 'ChatRoomChat', {});
+    sb.ctx.__BCU_sperreBis = Date.now() + 30000;
+    senden(hook, 'ChatRoomChat', {});
+    senden(hook, 'ChatRoomCharacterExpressionUpdate', {});
+    sb.ctx.__BCU_sperreBis = 0;
+    senden(hook, 'ChatRoomChat', {});
+    const snap = sb.ctx.__BCK_sendMonSnapshot();
+    expect(snap.waehrendAufnahme).toBe(2);
+    expect(snap.ring.map((e) => !!e.aufnahme)).toEqual([false, true, true, false]);
+  });
+});
+
 describe('Sende-Monitor (Loader): Aufrufer-Erkennung', () => {
   // Der Aufrufer kommt aus dem Stack: Dateiname ohne Query, bcmodsdk/Server.js
   // übersprungen, vom Tool eingespielter Code (new Function in loader.js) heißt
@@ -370,6 +385,24 @@ describe('Sende-Monitor (Loader): Aufrufer-Erkennung', () => {
     const sb = lauf([['https://x.test/ketten.js',
       'function a(){__hook("X")} function b(){a()} function c(){b()} function d(){c()}']], 'd();');
     expect(letzte(sb).quelle.split(' ← ').length).toBeLessThanOrEqual(3);
+  });
+
+  it('der Hook der Sync-Sperre (BCU_SperreHook, per new Function eingespielt) macht nicht jede Sendung zur Tool-Sendung', () => {
+    // Stack von innen nach außen: Monitor-Hook ← BCU_SperreHook (eval@loader.js) ← ChatRoom.js
+    const sb = lauf([
+      ['https://x.test/loader.js?_=1', "var sperre = new Function('return function BCU_SperreHook(){ __cb([\\\"ChatRoomChat\\\",{}],function(){}); }')();"],
+      ['https://x.test/ChatRoom.js', 'function ChatRoomX(){ sperre(); }'],
+    ], 'ChatRoomX();');
+    expect(letzte(sb).tool).toBe(false);
+    expect(letzte(sb).quelle.split(' ← ')[0]).toBe('ChatRoom.js');
+    expect(sb.ctx.__BCK_sendMonSnapshot().vomTool).toBe(0);
+  });
+
+  it('echter Tool-Code bleibt Tool, auch wenn der Hook der Sync-Sperre daneben im Stack steht', () => {
+    const sb = lauf([
+      ['https://x.test/loader.js?_=1', "function exec(){ new Function('function BCU_SperreHook(){ __cb([\\\"ChatRoomChat\\\",{}],function(){}); } BCU_SperreHook();')(); }"],
+    ], 'exec();');
+    expect(letzte(sb).tool).toBe(true);
   });
 
   it('ein älterer Monitor im selben Tab macht nicht jede Sendung zur Tool-Sendung', () => {

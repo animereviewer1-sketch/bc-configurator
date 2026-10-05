@@ -218,8 +218,8 @@ describe('Screenshot-Store (SPLIT-05) — ein Datensatz je Bild, Alt-Blob frozen
     // das Bild wird erst beim Sichtkontakt aus der Map gelesen statt ins HTML kopiert
     // +1: reine Lesestelle in _profilBildAktualisieren (nur die eine Karte nach einem Screenshot nachziehen,
     // statt die ganze Liste neu zu bauen) – schreibt nichts
-    expect(count(src, 'PROFILE_SCREENSHOTS[')).toBe(34); // 35 + 1; davon +1 Ladeschleife (Review CR-01); -2: der entfernte renderProfileList-Wrapper hatte die Bild-Filter ein zweites Mal; +1: mbsWheelSaveProfile nimmt das Wheel-Bild mit ins Profil; -1: uploadProfileScreenshot entfernt
-    expect(count(src, 'LSCG_SCREENSHOTS[')).toBe(26); // +1: Filter "Mit/Ohne Bild" in _osVersionPasst liest nur
-    expect(count(src, '_mbsWheelShots[')).toBe(15); // +2 Filter "Mit/Ohne Bild" im Wheel; +2: Bilder-Serie liest vorhandene Bilder (niedrige Auflösung neu machen) und Als-Profil-speichern holt das Bild
+    expect(count(src, 'PROFILE_SCREENSHOTS[')).toBe(38); // 34 + 4 reine Lesestellen: Auto-Bild (_autoBildPlanen, _autoBildSchritt: nie ein vorhandenes Bild ersetzen), Meldung beim Übernehmen eines Profil-Items, Bild-Zähler der Export-Info; davor: 35 + 1; davon +1 Ladeschleife (Review CR-01); -2: der entfernte renderProfileList-Wrapper hatte die Bild-Filter ein zweites Mal; +1: mbsWheelSaveProfile nimmt das Wheel-Bild mit ins Profil; -1: uploadProfileScreenshot entfernt
+    expect(count(src, 'LSCG_SCREENSHOTS[')).toBe(27); // +1: Export-Info zählt LSCG-Bilder (liest nur); davor 26, +1: Filter "Mit/Ohne Bild" in _osVersionPasst liest nur
+    expect(count(src, '_mbsWheelShots[')).toBe(16); // +1: Export-Info zählt niedrig aufgelöste Wheel-Bilder (liest nur); davor 15, +2 Filter "Mit/Ohne Bild" im Wheel; +2: Bilder-Serie liest vorhandene Bilder (niedrige Auflösung neu machen) und Als-Profil-speichern holt das Bild
   });
 });

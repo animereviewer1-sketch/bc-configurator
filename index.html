@@ -507,6 +507,13 @@ h3 svg.bci, .info-box svg.bci, .hint svg.bci, .warn svg.bci,
   background: oklch(72% 0.13 58 / 0.05);
 }
 
+.field textarea {
+  width: 100%; background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 8px; color: var(--text); padding: 8px 12px; font-size: .75rem;
+  font-family: var(--font-mono, monospace); resize: vertical; transition: all 0.18s ease;
+}
+.field textarea:focus { outline: none; border-color: var(--purple); background: oklch(72% 0.13 58 / 0.05); }
+
 .hint { font-size: .75rem; color: var(--text3); margin-top: 3px; line-height: 1.45; }
 
 .warn {
@@ -2519,6 +2526,12 @@ button { cursor: pointer; }
         <div id="lockRulesBox" style="margin-top:8px"></div></div>
     </div>
     <div class="set-card">
+      <div class="set-card-h"><span class="tweaks-section-title">📸 Bild beim Speichern</span></div>
+      <div class="set-card-b">
+        <label class="set-hint lr-chk"><input type="checkbox" id="autoBildChk" checked onchange="autoBildSetzen(this.checked)"> Neu gespeicherte Profile (z. B. aus Craft &amp; Curse) bekommen automatisch ein Bild</label>
+        <div class="set-hint" style="margin-top:6px">Das Profil wird kurz nach dem Speichern lokal angezogen (stehend, ohne Schloss) und fotografiert; danach ist dein Aussehen wieder da. Ein vorhandenes Bild wird nie ersetzt. Läuft gerade eine andere Aufnahme, wartet es.</div></div>
+    </div>
+    <div class="set-card">
       <div class="set-card-h"><span class="tweaks-section-title">🔗 UserID anreichern</span>
         <div class="tweaks-btn-group set-r"><button class="tweaks-btn" onclick="enrichProfileNamesWithIDs()">✨ Namen anreichern</button></div></div>
       <div class="set-card-b"><div class="set-hint">Ergänzt #ID in Outfit- &amp; Profilnamen aus Craft/Curse-Daten: <span style="color:var(--text2)">Ada → Ada #219508</span></div>
@@ -2529,6 +2542,23 @@ button { cursor: pointer; }
         <div class="tweaks-btn-group set-r"><button class="tweaks-btn" onclick="_renderExecLog()" title="EXEC-Log neu aufbauen">🔄 Aktualisieren</button></div></div>
       <div class="set-card-b"><div class="set-hint">Jeder an das Spiel gesendete EXEC mit Zeitstempel und Kurzbeschreibung (Ringpuffer, 200 Einträge).</div>
         <div id="execLogInfo" class="set-info" style="white-space:pre-wrap;max-height:260px;overflow:auto;font-family:var(--font-mono)">–</div></div>
+    </div>
+    <div class="set-card">
+      <div class="set-card-h"><span class="tweaks-section-title">📊 Export-Info</span>
+        <div class="tweaks-btn-group set-r">
+          <button class="tweaks-btn" onclick="exportInfoErzeugen()" title="Bestände, Größen, Ladezeiten und Zeichenzeiten messen">▶ Messen</button>
+          <button class="tweaks-btn" onclick="exportInfoKopieren()" title="Den ganzen Bericht als Text in die Zwischenablage kopieren">📋 Kopieren</button>
+        </div></div>
+      <div class="set-card-b"><div class="set-hint">Alles, was man für eine Leistungsprüfung braucht, als Text: Anzahl der Profile, LSCG-Outfits, Wheel-Outfits, Curse-Einträge und Bilder, Größen von Datenbank und Bildern, die Ladezeiten (ms seit Seitenstart) und wie lange das Zeichnen der Listen gerade dauert. Zum Weitergeben einfach kopieren.</div>
+        <div id="exportInfoText" class="set-info" style="white-space:pre-wrap;max-height:380px;overflow:auto;font-family:var(--font-mono)">Noch nicht gemessen – „Messen“ klicken.</div></div>
+    </div>
+    <div class="set-card">
+      <div class="set-card-h"><span class="tweaks-section-title">🐢 Sende-Bremse</span></div>
+      <div class="set-card-b">
+        <label class="set-hint lr-chk"><input type="checkbox" id="sendeBremseChk" checked onchange="sendeBremseSetzen()"> BCs Sende-Warteschlange drosseln (gegen „ErrorRateLimited“)</label>
+        <div class="set-hint" style="margin-top:6px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">Nachrichten pro 1,2 s:
+          <input type="number" id="sendeBremseLimit" min="4" max="14" value="9" style="width:70px" onchange="sendeBremseSetzen()"> (BC-Standard: 14, Vorschlag: 9)</div>
+        <div class="set-hint" style="margin-top:6px">Beim Raumbeitritt senden BC und alle Mods gleichzeitig; die Warteschlange läuft dann am Anschlag, und der Server trennt bei zu viel. Die Bremse senkt das Limit im Spiel-Tab: Nachrichten kommen etwas später an, es geht keine verloren. Sie wird bei jedem Verbinden gesetzt und gilt, bis BC neu geladen wird; ausgeschaltet gilt wieder der BC-Standard. Welches Limit der Server selbst hat, ist nicht bekannt – bleiben Trennungen trotzdem, im Sende-Monitor nachsehen, wer sendet. Zusätzlich warten Bilderserien nach einem Raumwechsel ein paar Sekunden.</div></div>
     </div>
     <div class="set-card">
       <div class="set-card-h"><span class="tweaks-section-title">📡 Sende-Monitor</span>
@@ -2657,6 +2687,14 @@ button { cursor: pointer; }
 
     <div id="configurator" class="hidden">
 
+      <!-- Leiste beim Bearbeiten eines Profil-Items (siehe profileOpenInItemManager) -->
+      <div id="profilEditBar" class="hidden" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 12px;margin-bottom:10px;border:1px solid var(--accent-line);background:var(--accent-soft);border-radius:var(--r-sm)">
+        <span>✏️ <b>Bearbeiten:</b> <span id="profilEditText"></span></span>
+        <span style="flex:1"></span>
+        <button class="btn btn-primary" style="font-size:.75rem;padding:4px 10px" onclick="profilItemUebernehmen()" title="Ersetzt genau dieses Item im Profil durch die aktuelle Einstellung">💾 Änderung ins Profil übernehmen</button>
+        <button class="btn" style="font-size:.75rem;padding:4px 10px" onclick="profilEditAbbrechen()" title="Das Profil bleibt unverändert">✕ Abbrechen</button>
+      </div>
+
       <!-- ZIEL -->
       <div class="section">
         <div class="sec-hdr">
@@ -2753,6 +2791,30 @@ button { cursor: pointer; }
         <div class="props-grid" id="propsGrid"></div>
       </div>
 
+      <!-- ERWEITERT: alles, was ein Item sonst noch trägt (aus dem Spiel / von Mods) und oben kein eigenes Feld hat -->
+      <div class="section" id="erweitertSection">
+        <div class="sec-hdr">
+          <h3>🧬 Erweitert</h3>
+          <span style="font-size:.6875rem;color:var(--text3)">Werte aus dem Spiel / von Mods ohne eigenes Feld</span>
+        </div>
+        <div class="two-col">
+          <div class="field">
+            <label>Override-Priorität</label>
+            <input type="text" id="extraOverride" placeholder="leer = Standard · Zahl oder {&quot;Ebene&quot;: 5}" oninput="generate()">
+          </div>
+          <div class="field">
+            <label>Ebenen-Eigenschaften (LayerProperties)</label>
+            <textarea id="extraLayers" rows="3" spellcheck="false" placeholder="leer = Standard · JSON" oninput="generate()"></textarea>
+          </div>
+          <div class="field full">
+            <label>Weitere Eigenschaften (Property als JSON)</label>
+            <textarea id="extraProps" rows="5" spellcheck="false" placeholder="leer = keine · z. B. {&quot;Opacity&quot;: 0.5}" oninput="generate()"></textarea>
+          </div>
+        </div>
+        <div class="hint" id="extraFehler" style="color:var(--red);display:none"></div>
+        <div class="hint">Gilt für den erzeugten Code, „👗 Outfit“ und beim Bearbeiten eines Profil-Items. Was hier steht, überschreibt gleichnamige Werte von oben.</div>
+      </div>
+
       <!-- CRAFT -->
       <div class="section">
         <div class="sec-hdr"><h3>✏️ Craft (optional)</h3></div>
@@ -2760,6 +2822,11 @@ button { cursor: pointer; }
           <div class="field"><label>Name (max. 40)</label><input type="text" id="craftName" maxlength="40" placeholder="Leer = kein Craft" oninput="generate()"></div>
           <div class="field"><label>Beschreibung (max. 100)</label><input type="text" id="craftDesc" maxlength="100" oninput="generate()"></div>
           <div class="field"><label>Craft Property</label><select id="craftProp" onchange="generate()"></select></div>
+          <div class="field"><label>Sichtbarkeit</label>
+            <label style="display:flex;align-items:center;gap:6px;text-transform:none;letter-spacing:0;font-weight:500;cursor:pointer">
+              <input type="checkbox" id="craftPrivate" style="width:auto;accent-color:var(--purple)" onchange="generate()"> Craft privat (nur für mich sichtbar)
+            </label>
+          </div>
         </div>
       </div>
 
@@ -2916,7 +2983,7 @@ button { cursor: pointer; }
             <button class="btn" id="profileSortBtn" onclick="profileToggleSort()" title="Sortierung umschalten: nach Name oder nach Datum (neueste zuerst)" style="font-size:.6875rem;padding:3px 9px">🔤 Name</button>
             <button class="btn btn-primary" id="profileSlideshowBtn" onclick="toggleProfileSlideshow()" title="Alle Profile ohne Screenshot im 5s-Takt ausführen und fotografieren" style="font-size:.6875rem;padding:3px 9px">📸 Auto-Screenshot</button>
             <button class="btn" onclick="clearAllProfileScreenshots()" title="Alle Profil-Screenshots löschen (Profile bleiben erhalten)" style="font-size:.6875rem;padding:3px 9px;color:#fb7185;border-color:rgba(251,113,133,0.3)">🖼️ Alle Bilder löschen</button>
-            <button class="btn btn-red" id="profileDupBtn" onclick="removeProfileDuplicates()" title="Doppelte Profile entfernen – nur Kopien, die als (old) markiert sind (das Original bleibt)" style="display:none;font-size:.6875rem;padding:3px 9px">⚠️ Duplikate entfernen</button>
+            <button class="btn btn-red" id="profileDupBtn" onclick="removeProfileDuplicates()" title="Doppelte Profile entfernen – nur Kopien, die als (old) markiert sind oder auf v2/v3 enden (das Original bleibt)" style="display:none;font-size:.6875rem;padding:3px 9px">⚠️ Duplikate entfernen</button>
             <button class="btn btn-primary" onclick="toggleDefaultHairPanel()" title="Standard-Haare festlegen – wird beim Profil-Speichern als Baseline genutzt" style="font-size:.6875rem;padding:3px 9px">💇 Standard-Haare</button>
             <button class="btn btn-red" onclick="markAllProfilesOld()" title="Alle Profile umbenennen: Owner bekommt '(old)' im Namen – neue Profile werden danach als eigene Einträge gespeichert" style="font-size:.6875rem;padding:3px 9px">🗂️ Alle → (old)</button>
             <button class="btn btn-primary" onclick="openStatsModal()" title="Item- und Farbstatistiken über alle Profile" style="font-size:.6875rem;padding:3px 9px">📊 Statistiken</button>
@@ -4264,6 +4331,12 @@ document.write('<scr'+'ipt src="bc-autobackup.js?_='+_cbv+'"><\/scr'+'ipt>');
 .os-lightbox-name { color:var(--accent-text); font-weight:800; font-size:1rem; }
 .os-lightbox-sub  { color:var(--text3); font-size:.8125rem; font-family:var(--font-mono); margin-top:-8px; }
 .os-lightbox-actions { display:flex; gap:8px; margin-top:4px; }
+.os-lb-nav { position:fixed; top:50%; transform:translateY(-50%); width:44px; height:44px; display:grid; place-items:center;
+             border-radius:99px; background:rgba(0,0,0,0.6); backdrop-filter:blur(8px); color:#fff; border:none; cursor:pointer;
+             font-size:18px; transition:background .12s; z-index:1; }
+.os-lb-nav:hover { background:rgba(0,0,0,0.85); }
+.os-lb-nav.prev { left:max(12px, calc(50vw - 300px)); }
+.os-lb-nav.next { right:max(12px, calc(50vw - 300px)); }
 .os-lightbox-btn { padding:6px 16px; border-radius:8px; font-size:.8125rem; cursor:pointer; border:1px solid; }
 .os-lightbox-btn.close { background:rgba(255,255,255,0.06); border-color:rgba(255,255,255,0.12); color:var(--text2); }
 .os-lightbox-btn.close:hover { background:rgba(255,255,255,0.12); }
@@ -4275,6 +4348,8 @@ document.write('<scr'+'ipt src="bc-autobackup.js?_='+_cbv+'"><\/scr'+'ipt>');
 
 <!-- ── Lightbox DOM ── -->
 <div id="osLightbox" class="os-lightbox" onclick="if(event.target===this)closeOsLightbox()">
+  <button class="os-lb-nav prev" id="osLbPrev" onclick="osLightboxBlaettern(-1)" title="Vorheriges Bild (←)" style="display:none">◀</button>
+  <button class="os-lb-nav next" id="osLbNext" onclick="osLightboxBlaettern(1)" title="Nächstes Bild (→)" style="display:none">▶</button>
   <div class="os-lightbox-name" id="osLbName"></div>
   <div class="os-lightbox-sub"  id="osLbSub"></div>
   <img class="os-lightbox-img"  id="osLbImg" src="" alt="">

@@ -28,6 +28,7 @@ function boot(files = ['items.js']) {
   const state = (game) => send({ type: 'GAME_STATE', game });
   // Settle-Fenster "vorspulen": erste Auswertung setzt readySince, dann 6 s zurückdatieren
   const settle = (id) => {
+    evalIn(ctx, '_raumRuheBis = 0');   // Zeit vorspulen: auch die Ruhe nach einem Raumwechsel ist vorbei
     evalIn(ctx, '_dcEvaluate()');
     evalIn(ctx, `_dcJobs[${JSON.stringify(id)}].readySince -= 6000`);
     evalIn(ctx, '_dcEvaluate()');
@@ -180,7 +181,8 @@ describe('Tool: Spiel-Server-Wächter', () => {
     expect(log()).toEqual(['r-pause:nicht in einem Raum']);
     t.state(ROOM);
     t.settle('r');
-    expect(log()).toEqual(['r-pause:nicht in einem Raum', 'r-resume']);
+    // (der Standard-Ablauf 't' des Aufbaus pausiert beim Beitritt jetzt ebenfalls kurz – hier zählen nur die Einträge von 'r')
+    expect(log().filter((x) => x.startsWith('r-'))).toEqual(['r-pause:nicht in einem Raum', 'r-resume']);
   });
 
   it('Bridge verloren → pausiert ebenfalls', () => {
@@ -194,6 +196,59 @@ describe('Tool: Spiel-Server-Wächter', () => {
     t.state(ROOM);
     t.settle('t');
     expect(log()).toEqual([]);
+  });
+});
+
+describe('Ruhe nach freiwilligem Raumwechsel', () => {
+  const ANDERER = { online: true, loggedIn: true, screen: 'ChatRoom', inRoom: true, room: 'Anderer Raum' };
+  function mitAblauf() {
+    const t = boot();
+    t.send({ type: 'PONG', game: ROOM });
+    evalIn(t.ctx, `
+      globalThis._tLog = [];
+      _dcRegisterJob('s', { label: 'Serie', active: () => true,
+        pause: (r) => _tLog.push('pause:' + r), resume: () => _tLog.push('resume') });
+      _dcJobStart('s');`);
+    return t;
+  }
+  const log = (t) => evalIn(t.ctx, '_tLog.slice()');
+
+  it('Raumwechsel hält laufende Abläufe an und nennt den Grund', () => {
+    const t = mitAblauf();
+    t.state(ANDERER);
+    expect(log(t).length).toBe(1);
+    expect(log(t)[0]).toMatch(/^pause:Raumwechsel/);
+  });
+
+  it('weiter geht es erst nach der Ruhe UND dem Settle-Fenster, nicht schon nach dem Settle-Fenster allein', () => {
+    const t = mitAblauf();
+    t.state(ANDERER);
+    evalIn(t.ctx, '_dcEvaluate()');
+    evalIn(t.ctx, "_dcJobs['s'].readySince -= 6000");
+    evalIn(t.ctx, '_dcEvaluate()');
+    expect(log(t)).toEqual([expect.stringMatching(/^pause:/)]);   // Ruhe läuft noch → kein resume
+    evalIn(t.ctx, '_raumRuheBis = 0');
+    evalIn(t.ctx, '_dcEvaluate()');
+    evalIn(t.ctx, "_dcJobs['s'].readySince -= 6000");
+    evalIn(t.ctx, '_dcEvaluate()');
+    expect(log(t)[1]).toBe('resume');
+  });
+
+  it('nach einem DC gibt es keine zusätzliche Ruhe (dort wartet DC_SETTLE_MS allein)', () => {
+    const t = mitAblauf();
+    t.state(OFFLINE);
+    t.state(ROOM);
+    expect(evalIn(t.ctx, '_raumRuheBis')).toBe(0);
+    t.settle('s');
+    expect(log(t)[1]).toBe('resume');
+  });
+
+  it('derselbe Raum (nur ein neuer Zustandsbericht) löst keine Ruhe aus', () => {
+    const t = mitAblauf();
+    t.state(ROOM);
+    t.state(ROOM);
+    expect(evalIn(t.ctx, '_raumRuheBis')).toBe(0);
+    expect(log(t)).toEqual([]);
   });
 });
 

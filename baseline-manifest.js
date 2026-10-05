@@ -12,9 +12,9 @@ const BASELINE_MANIFEST = {
   "identifierPattern": "\\b(Inventory|Character|ChatRoom|Server|Asset|Player|Dialog|Common|Item|Lock|Wardrobe|Pose|Skill|Reputation|Online|Chat)[A-Z]\\w+",
   "counts": {
     "identifiers": 99,
-    "function": 24,
+    "function": 26,
     "assetGroup": 33,
-    "unknown": 42
+    "unknown": 40
   },
   "identifiers": [
     {
@@ -750,7 +750,7 @@ const BASELINE_MANIFEST = {
     },
     {
       "name": "ServerSendRateLimit",
-      "kind": "unknown",
+      "kind": "function",
       "files": [
         "items.js",
         "loader.js"
@@ -758,8 +758,9 @@ const BASELINE_MANIFEST = {
     },
     {
       "name": "ServerSendRateLimitInterval",
-      "kind": "unknown",
+      "kind": "function",
       "files": [
+        "items.js",
         "loader.js"
       ]
     },

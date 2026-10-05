@@ -534,9 +534,13 @@ window.CurseScanner = (() => {
 
   // Memoization-Cache: itemName → groupName (session-persistent)
   const _groupCache = {};
+  // Ein erfolgloser Nachschlag wird NICHT dauerhaft gemerkt: Mods und Assets kommen mit Verzögerung dazu. Früher blieb ein
+  // einmal gescheiterter Name für die ganze Sitzung "UNBEKANNT". Jetzt höchstens alle 20 s ein neuer Versuch.
+  const _groupMiss = {};
 
   function findeGruppe(itemName) {
-    if (_groupCache[itemName] !== undefined) return _groupCache[itemName];
+    if (_groupCache[itemName]) return _groupCache[itemName];
+    if (_groupMiss[itemName] && Date.now() - _groupMiss[itemName] < 20000) return null;
     // Schnellster Weg: Asset-Array einmal direkt durchsuchen (kein Group-by-Group Loop)
     if (typeof Asset !== 'undefined') {
       for (let i = 0; i < Asset.length; i++) {
@@ -566,8 +570,17 @@ window.CurseScanner = (() => {
         }
       }
     }
-    _groupCache[itemName] = null;
+    _groupMiss[itemName] = Date.now();
     return null;
+  }
+
+  // Weiß BC den Namen nicht (mehr), trägt die Besitzerin das Item aber gerade: die Gruppe steht am getragenen Item.
+  function gruppeAusGetragen(C, craft) {
+    try {
+      const it = (C.Appearance ?? []).find(i => i?.Asset?.Name === craft.Item && i?.Craft?.Name === craft.Name)
+        ?? (C.Appearance ?? []).find(i => i?.Asset?.Name === craft.Item);
+      return it?.Asset?.Group?.Name ?? null;
+    } catch (e) { return null; }
   }
 
   function isCursed(craft) {
@@ -603,7 +616,7 @@ window.CurseScanner = (() => {
       }
       (C.Crafting ?? []).forEach(craft => {
         if (!craft?.Item) return;
-        const gruppe = findeGruppe(craft.Item);
+        const gruppe = findeGruppe(craft.Item) ?? gruppeAusGetragen(C, craft);
         const key    = C.MemberNumber + ':' + craft.Item + ':' + craft.Name;
         const istNeu = !database[key];
         // LSCG: O(1) Lookup via Map statt linearer Suche
@@ -676,6 +689,11 @@ window.CurseScanner = (() => {
     target = target ?? Player;
     const entry = _finde(indexOderName);
     if (!entry) return { err: '"' + indexOderName + '" nicht gefunden' };
+    if (entry.Gruppe === 'UNBEKANNT') {
+      // Noch einmal nachschlagen – BC kennt den Namen inzwischen vielleicht
+      const g = findeGruppe(entry.ItemName);
+      if (g) entry.Gruppe = g;
+    }
     if (entry.Gruppe === 'UNBEKANNT') return { err: 'Gruppe unbekannt für ' + entry.ItemName };
     // Color: BC wants string or array; parse comma-separated if needed
     let _color = entry.Farbe;
@@ -2153,6 +2171,7 @@ window.CurseScanner = (() => {
       const kette = [];
       for (const zeile of zeilen.slice(ab + 1)) {
         if (zeile.indexOf('BCK_SendMon') >= 0) continue;   // auch ein älterer Monitor im selben Tab
+        if (zeile.indexOf('BCU_Sperre') >= 0) continue;     // Hook der Sync-Sperre des Tools: Durchgang, kein Absender
         const name = _smLabel(zeile);
         if (!name || name === 'bcmodsdk.min.js' || name === 'Server.js' || name.indexOf('eval@bcmodsdk') === 0) continue;
         if (kette[kette.length - 1] !== name) kette.push(name);
@@ -2212,7 +2231,7 @@ window.CurseScanner = (() => {
       if (e.k !== 'send') return e;
       const rest = e.kette.filter(function (l) { return w.indexOf(l) < 0; });
       return {
-        t: e.t, k: 'send', typ: e.typ, sub: e.sub, screen: e.screen, tool: e.tool, dup: !!e.dup,
+        t: e.t, k: 'send', typ: e.typ, sub: e.sub, screen: e.screen, tool: e.tool, dup: !!e.dup, aufnahme: !!e.aufnahme,
         quelle: rest.slice(0, 3).join(' ← ') || (e.kette.length ? '(nur Wrapper)' : '?'),
       };
     };
@@ -2258,11 +2277,13 @@ window.CurseScanner = (() => {
       const sub = _smSub(typ, data);
       const e = {
         t, k: 'send', typ: String(typ), sub, kette, tool: _smIstTool(kette),
+        aufnahme: window.__BCU_sperreBis > t,   // gesendet, während das Tool gerade ein Bild/Test-Outfit aufnahm
         dup: _smDuplikat(String(typ), sub, data, t),
         screen: typeof CurrentScreen === 'string' ? CurrentScreen : '',
       };
       sm.gesamt++;
       if (e.tool) sm.vomTool++;
+      if (e.aufnahme) sm.waehrendAufnahme = (sm.waehrendAufnahme || 0) + 1;
       sm.nachTyp[e.typ] = (sm.nachTyp[e.typ] || 0) + 1;
       sm.ring.push(e);
       _smRingKuerzen();
@@ -2301,6 +2322,7 @@ window.CurseScanner = (() => {
         n10: zehn.filter(function (e) { return e.k === 'send'; }).length,
         tool10: zehn.filter(function (e) { return e.k === 'send' && e.tool; }).length,
         dup10: zehn.filter(function (e) { return e.k === 'send' && e.dup; }).length,
+        aufnahme10: zehn.filter(function (e) { return e.k === 'send' && e.aufnahme; }).length,
         spitze10: _smSpitze(zehn), top: _smTop(zehn, 6), lauf,
         leitung10: lt.length, leitungSpitze10: _smSpitzeZeiten(lt),
       };
@@ -2362,7 +2384,8 @@ window.CurseScanner = (() => {
         nachQuelle[q] = (nachQuelle[q] || 0) + 1;
       });
       return {
-        jetzt: Date.now(), seit: sm.seit, gesamt: sm.gesamt, vomTool: sm.vomTool, spitze: sm.spitze, warnAb: SM_WARN_PRO_SEK,
+        jetzt: Date.now(), seit: sm.seit, gesamt: sm.gesamt, vomTool: sm.vomTool, waehrendAufnahme: sm.waehrendAufnahme || 0,
+        spitze: sm.spitze, warnAb: SM_WARN_PRO_SEK,
         nachTyp: sm.nachTyp, nachQuelle, ringSendungen: sends.length, wrapper: w,
         dup: { gesamt: sm.dup.gesamt, nachTyp: sm.dup.nachTyp, von: sm.dup.von, fensterMs: SM_DUP_MS },
         leitung: { aktiv: sm.leitung.aktiv, gesamt: sm.leitung.gesamt, spitze: sm.leitung.spitze },

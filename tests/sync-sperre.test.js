@@ -77,6 +77,18 @@ function sperreAn(env, b, token = 7, ms = 30000) {
   env.lauf(b.an(String(token), ms, 'window.__FEHLER__=1;'));
 }
 
+describe('Sync-Sperre: Name der Hook-Funktion', () => {
+  it('ModSDK-Hook heißt BCU_SperreHook, der Ersatz ohne ModSDK BCU_SperreWrap (der Sende-Monitor erkennt sie daran)', () => {
+    const b = bausteine();
+    const mit = bc({ modsdk: true });
+    mit.lauf(b.install);
+    expect(mit.z.hooks[0].cb.name).toBe('BCU_SperreHook');
+    const ohne = bc({ modsdk: false });
+    ohne.lauf(b.install);
+    expect(ohne.g.ServerSend.name).toBe('BCU_SperreWrap');
+  });
+});
+
 describe('Sync-Sperre: der Hook', () => {
   it('ohne aktive Sperre geht alles unverändert durch', () => {
     const b = bausteine();
