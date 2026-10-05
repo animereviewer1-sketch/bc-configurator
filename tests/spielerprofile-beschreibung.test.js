@@ -366,3 +366,100 @@ describe('Bilder automatisch für die gezeigten Karten', () => {
     expect(t.ctx.showStatus).not.toHaveBeenCalledWith(expect.stringContaining('2 erstellt'), expect.anything());
   });
 });
+
+describe('Kleine Bilder (Version 1) werden durch große (Version 2) ersetzt – nie umgekehrt, nie ohne fertiges neues Bild', () => {
+  const BILD2 = 'data:image/jpeg;base64,WFlaWFla';
+  const speichern = (t, nr, img, stabil, v) => { t.ctx.__i = img; return evalIn(t.ctx, `_spBildSpeichern(${nr}, __i, 'cache', ${stabil}, false, ${v})`); };
+
+  it('ein kleines Bild wird von einem fertigen großen ersetzt; das Große bleibt dann stehen', async () => {
+    const t = boot();
+    await settle(60);
+    merge(t, [res(5)], T0);
+    expect(await speichern(t, 5, BILD, true, 1)).toBe(true);
+    expect(db(t)['5'].bild.v).toBe(1);
+    expect(await speichern(t, 5, BILD2, true, 2)).toBe(true);
+    expect(db(t)['5'].bild.v).toBe(2);
+    expect(await t.ctx.idbGet('BC_SPIELERBILD_v1:5')).toBe(BILD2);
+    expect(await speichern(t, 5, BILD, true, 1)).toBe(false);          // nie zurück zum kleinen
+    expect(await speichern(t, 5, BILD, true, 2)).toBe(false);          // gleich groß: bleibt
+    expect(await t.ctx.idbGet('BC_SPIELERBILD_v1:5')).toBe(BILD2);
+  });
+
+  it('ein unfertiges großes Bild ersetzt kein fertiges kleines', async () => {
+    const t = boot();
+    await settle(60);
+    merge(t, [res(5)], T0);
+    await speichern(t, 5, BILD, true, 1);
+    expect(await speichern(t, 5, BILD2, false, 2)).toBe(false);
+    expect(await t.ctx.idbGet('BC_SPIELERBILD_v1:5')).toBe(BILD);
+  });
+
+  it('Bilder ohne Versionsangabe (von früher) gelten als klein', () => {
+    const t = boot();
+    merge(t, [res(5)], T0);
+    evalIn(t.ctx, "SPIELER_DB['5'].bild = { ts: 1, quelle: 'raum', stabil: true }");
+    expect(evalIn(t.ctx, "_spBildNiedrig(SPIELER_DB['5'])")).toBe(true);
+    evalIn(t.ctx, "SPIELER_DB['5'].bild.v = 2");
+    expect(evalIn(t.ctx, "_spBildNiedrig(SPIELER_DB['5'])")).toBe(false);
+  });
+
+  it('kleine Bilder werden erst angefordert, wenn der Spiel-Tab große liefern kann (alter Loader: keine sinnlose Aufnahme bei jedem Auslesen)', () => {
+    const t = boot();
+    merge(t, [res(5), res(6)], T0);
+    evalIn(t.ctx, "SPIELER_DB['5'].bild = { ts: 1, quelle: 'raum', stabil: true }");   // klein
+    expect(evalIn(t.ctx, '_spOhneBild()')).toEqual([6]);
+    t.opener.postMessage.mockClear();
+    bridge(t, { type: 'PONG' });
+    bridge(t, { type: 'SPIELER_PROFILE_DATA', results: [res(5)], room: 'R', scanTime: T0, bildV: 2 });
+    expect(evalIn(t.ctx, '_spLoaderBildV')).toBe(2);
+    expect(evalIn(t.ctx, '_spOhneBild()').slice().sort()).toEqual([5, 6]);
+  });
+
+  it('ein neues großes Bild aus dem Raum ersetzt das kleine von selbst', async () => {
+    const t = boot();
+    await settle(60);
+    bridge(t, { type: 'PONG' });
+    merge(t, [res(5)], T0);
+    await speichern(t, 5, BILD, true, 1);
+    bridge(t, { type: 'SPIELER_PROFILE_DATA', results: [res(5, { bild: { img: BILD2, stabil: true, v: 2 } })], room: 'R', scanTime: T0 + 1000, bildV: 2 });
+    await bis(() => db(t)['5']?.bild?.v === 2);
+    expect(await t.ctx.idbGet('BC_SPIELERBILD_v1:5')).toBe(BILD2);
+  });
+
+  it('die Serie und die Automatik nehmen kleine Bilder mit, sobald V2 bekannt ist – und ersetzen sie erst, wenn das große ankommt', async () => {
+    const t = boot({ tab: 'spielerprofile' });
+    await settle(60);
+    bridge(t, { type: 'PONG' });
+    merge(t, [res(5), res(6)], T0);
+    evalIn(t.ctx, "Object.values(SPIELER_DB).forEach(r => { r.inCache = true; }); SPIELER_DB['5'].bild = { ts: 1, quelle: 'cache', stabil: true };");
+    await evalIn(t.ctx, `(_spBilder['5'] = ${JSON.stringify(BILD)}, 0)`);
+    // V1-Loader: das kleine Bild gilt als vorhanden
+    expect(evalIn(t.ctx, '_spBilderKandidaten()')).toEqual([6]);
+    evalIn(t.ctx, '_spLoaderBildV = 2;');
+    expect(evalIn(t.ctx, '_spBilderKandidaten()').slice().sort()).toEqual([5, 6]);
+    t.opener.postMessage.mockClear();
+    evalIn(t.ctx, 'renderSpielerProfileTab()');
+    await bis(() => senden(t).some((m) => m.type === 'GET_SPIELER_BILDER'));
+    const m = senden(t).find((x) => x.type === 'GET_SPIELER_BILDER');
+    expect(m.nrs.slice().sort()).toEqual([5, 6]);
+    expect(db(t)['5'].bild.v).toBeUndefined();       // bis das große da ist, bleibt das kleine
+    bridge(t, { type: 'SPIELER_BILDER_DATA', reqId: m.reqId, bildV: 2, bilder: [{ nr: 5, img: BILD2, stabil: true, quelle: 'cache', v: 2 }, { nr: 6, img: BILD2, stabil: true, quelle: 'cache', v: 2 }], fehler: [] });
+    await bis(() => !evalIn(t.ctx, '_spBilderLaeuft'));
+    expect(db(t)['5'].bild.v).toBe(2);
+    expect(db(t)['6'].bild.v).toBe(2);
+  });
+
+  it('die Detailansicht weist auf ein kleines Bild hin', () => {
+    const t = boot();
+    merge(t, [res(5)], T0);
+    evalIn(t.ctx, "SPIELER_DB['5'].bild = { ts: 1, quelle: 'cache', stabil: true }");
+    expect(evalIn(t.ctx, `spielerDetailHtml(SPIELER_DB['5'], ${T0})`)).toContain('niedrige Auflösung');
+  });
+
+  it('eine Beschreibung, die sich zu "" entpackt, obwohl der Text länger ist, bleibt unverändert (nichts geht verloren)', () => {
+    const t = boot();
+    t.ctx.LZString = { decompressFromUTF16: () => '' };
+    t.ctx.__x = MAGIC + 'abcdef';
+    expect(evalIn(t.ctx, 'spielerBeschreibung(__x)')).toBe(MAGIC + 'abcdef');
+  });
+});

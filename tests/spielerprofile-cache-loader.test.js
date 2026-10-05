@@ -56,10 +56,12 @@ function neuerPuffer() {
         getImageData: () => ({ data: c._data || new Uint8ClampedArray(Math.max(1, c.width * c.height * 4)) }),
       };
     },
-    toDataURL: () => 'data:image/jpeg;base64,QUJD',
+    toDataURL: (typ, q) => { c.typ = typ; c.qualitaet = q; return 'data:image/jpeg;base64,QUJD'; },
   };
+  erzeugt.push(c);
   return c;
 }
+const erzeugt = [];   // alle im Test angelegten Zeichenpuffer (zum Prüfen von Größe und Qualität des fertigen Bildes)
 
 function boot({ factory = new IDBFactory(), chars = [], character = [], mitCharacterLoadOnline = null, extra = {} } = {}) {
   const Player = { MemberNumber: 100, Name: 'Ich', Appearance: [], AssetFamily: 'Female3DCG', Canvas: leinwand() };
@@ -253,6 +255,38 @@ describe('Spielerprofile (Loader): Beschreibung und erlaubte Interaktionen', () 
   });
 });
 
+describe('Spielerprofile (Loader): Bildgröße wie bei den Screenshots', () => {
+  it('die Figur wird nicht verkleinert, solange sie in 520×1040 passt; JPEG mit Qualität 0,88; V2 wird gemeldet', () => {
+    erzeugt.length = 0;
+    const t = boot({ chars: [{ MemberNumber: 5, Name: 'A', Appearance: [], Canvas: leinwand() }] });
+    erzeugt.length = 0;
+    t.sb.posts.length = 0;
+    t.sb.send({ type: 'GET_SPIELER_PROFILE', reqId: 'r', fehlt: [5] });
+    const a = t.sb.posts.find((p) => p.msg.type === 'SPIELER_PROFILE_DATA').msg;
+    expect(a.bildV).toBe(2);
+    expect(a.results.find((r) => r.nr === 5).bild.v).toBe(2);
+    const fertig = erzeugt.filter((c) => c.qualitaet !== undefined).at(-1);
+    expect(fertig.typ).toBe('image/jpeg');
+    expect(fertig.qualitaet).toBe(0.88);
+    // Figur 200×700 plus je 10 Rand = 220×720: bleibt in Originalgröße (früher auf 180×360 verkleinert)
+    expect([fertig.width, fertig.height]).toEqual([220, 720]);
+  });
+
+  it('ist die Figur größer als 520×1040, wird sie proportional verkleinert', () => {
+    const gross = leinwand(1200, 2400);
+    const data = gross.__data;
+    for (let y = 100; y < 2300; y++) for (let x = 100; x < 1100; x++) { const i = (y * 1200 + x) * 4; data[i] = 200; data[i + 3] = 255; }
+    const t = boot({ chars: [{ MemberNumber: 5, Name: 'A', Appearance: [], Canvas: gross }] });
+    erzeugt.length = 0;
+    t.sb.posts.length = 0;
+    t.sb.send({ type: 'GET_SPIELER_PROFILE', reqId: 'r', fehlt: [5] });
+    const fertig = erzeugt.filter((c) => c.qualitaet !== undefined).at(-1);
+    expect(fertig.width).toBeLessThanOrEqual(520);
+    expect(fertig.height).toBeLessThanOrEqual(1040);
+    expect(Math.abs(fertig.width / fertig.height - 1020 / 2220)).toBeLessThan(0.01);
+  });
+});
+
 describe('Spielerprofile (Loader): Bilder im Raum (GET_SPIELER_PROFILE mit "fehlt")', () => {
   const spieler = (nr) => ({ MemberNumber: nr, Name: 'Name' + nr, Appearance: [], Canvas: leinwand() });
 
@@ -307,7 +341,8 @@ describe('Spielerprofile (Loader): GET_SPIELER_BILDER', () => {
     const t = boot({ chars: [{ MemberNumber: 5, Name: 'A', Appearance: [], Canvas: leinwand() }] });
     const a = await bilder(t, [5]);
     expect(a.origin).toBe(LOADER_TOOL_ORIGIN);
-    expect(a.msg.bilder).toEqual([{ nr: 5, img: expect.stringMatching(/^data:image\/jpeg;base64,/), stabil: true, quelle: 'raum' }]);
+    expect(a.msg.bilder).toEqual([{ nr: 5, img: expect.stringMatching(/^data:image\/jpeg;base64,/), stabil: true, quelle: 'raum', v: 2 }]);
+    expect(a.msg.bildV).toBe(2);
     expect(a.msg.fehler).toEqual([]);
   });
 

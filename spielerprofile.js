@@ -54,6 +54,7 @@ const SP_BILD_HOSTS = ['cdn.discordapp.com', 'media.discordapp.com', 'i.imgur.co
 const SP_LZ_MAGIC = String.fromCharCode(9580);   // "╬": BC legt lange Beschreibungen komprimiert ab (╬ + LZString.compressToUTF16)
 const SP_BILD_PRAEFIX = 'BC_SPIELERBILD_v1:';        // ein Schlüssel je Bild in der Datenbank (so landen sie im Gesamt-Backup)
 const SP_CACHE_META_KEY = 'BC_SPIELERCACHE_META_v1';  // { seit, ts, n }: bis wohin der WCE/FBC-Speicher schon eingelesen ist
+const SP_BILD_V = 2;                                  // Bildgröße: 1 = 180×360 (zu unscharf), 2 = 360×720 – kleine Bilder werden durch große ersetzt
 const SP_BILD_STAPEL = 6;                             // so viele Bilder je Anfrage an den Spiel-Tab
 const SP_FEHLT_MAX = 4000;                            // so viele Nummern ohne Bild schickt ein Auslesen höchstens mit
 
@@ -83,7 +84,7 @@ function spielerBeschreibung(text) {
   try {
     if (typeof LZString !== 'undefined' && LZString && typeof LZString.decompressFromUTF16 === 'function') {
       const d = LZString.decompressFromUTF16(text.substring(1));
-      if (typeof d === 'string') return d;
+      if (typeof d === 'string' && !(d === '' && text.length > 1)) return d;   // leer aus einem längeren Text = nicht entpackbar: Original behalten
     }
   } catch (e) {}
   return text;
@@ -473,10 +474,22 @@ idbGet(SPIELERPROFILE_KEY).then(function (d) {
 
 // ═══════════════════════════ Scan ═══════════════════════════
 
-// Nummern aller Spieler, die noch kein Bild haben – der Spiel-Tab nimmt davon die auf, die gerade im Raum sind
+// Welche Bildversion kann der Spiel-Tab erzeugen? (aus seiner letzten Antwort; unbekannt/alter Loader = 1)
+let _spLoaderBildV = 1;
+function _spBildNiedrig(rec) { return !!(rec && rec.bild && (rec.bild.v || 1) < SP_BILD_V); }
+// Soll ein Spieler ein (neues) Bild bekommen? Ohne Bild immer; ein kleines Bild nur, wenn der Spiel-Tab schon große liefert
+function _spBrauchtBild(rec) { return !!rec && (!rec.bild || (_spLoaderBildV >= SP_BILD_V && _spBildNiedrig(rec))); }
+// Darf ein neu aufgenommenes Bild das vorhandene von selbst ersetzen? Nur ein unfertiges durch ein fertiges, oder ein kleines durch ein großes fertiges.
+function _spBildErsetzbar(rec, stabil, v) {
+  if (!rec.bild) return true;
+  if (!stabil) return false;
+  return rec.bild.stabil === false || (rec.bild.v || 1) < (v || 1);
+}
+
+// Nummern aller Spieler, die ein Bild brauchen – der Spiel-Tab nimmt davon die auf, die gerade im Raum sind
 function _spOhneBild() {
   const nrn = [];
-  for (const r of Object.values(SPIELER_DB)) { if (r && !r.bild && nrn.length < SP_FEHLT_MAX) nrn.push(r.nr); }
+  for (const r of Object.values(SPIELER_DB)) { if (_spBrauchtBild(r) && nrn.length < SP_FEHLT_MAX) nrn.push(r.nr); }
   return nrn;
 }
 const _spBildErzwingen = new Set();   // Nummern, deren Bild beim nächsten Auslesen ersetzt werden soll (nur auf ausdrücklichen Wunsch)
@@ -516,12 +529,13 @@ onBridgeMessage('SPIELER_PROFILE_DATA', function (ev) {
   const ts = typeof d.scanTime === 'number' ? d.scanTime : Date.now();
   const r = spielerMerge(SPIELER_DB, d.results || [], ts, d.room || null, d.gameVersion || null);
   _spImRaum = new Set((d.results || []).map(function (x) { return String(x.nr); }));
-  // Bilder der Spieler im Raum: nur ergänzen (oder auf ausdrücklichen Wunsch ersetzen)
+  // Bilder der Spieler im Raum: nur ergänzen (ein kleines nur durch ein großes ersetzen, sonst nur auf ausdrücklichen Wunsch)
+  if (d.bildV) _spLoaderBildV = d.bildV;
   for (const x of (d.results || [])) {
     if (x && x.bild && typeof x.bild.img === 'string') {
       const erzwungen = _spBildErzwingen.has(x.nr);
       _spBildErzwingen.delete(x.nr);
-      _spBildSpeichern(x.nr, x.bild.img, 'raum', x.bild.stabil !== false, erzwungen);
+      _spBildSpeichern(x.nr, x.bild.img, 'raum', x.bild.stabil !== false, erzwungen, x.bild.v || 1);
     }
   }
   spielerSpeichern();
@@ -640,17 +654,17 @@ let _spBildFehlerGemeldet = false;
 
 function _spBildGueltig(url) { return typeof url === 'string' && /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(url); }
 
-async function _spBildSpeichern(nr, img, quelle, stabil, ersetzen) {
+async function _spBildSpeichern(nr, img, quelle, stabil, ersetzen, v) {
   const key = String(nr);
   const rec = SPIELER_DB[key];
   if (!rec || !_spBildGueltig(img)) return false;
-  if (rec.bild && !ersetzen && !(rec.bild.stabil === false && stabil)) return false;   // vorhandene Bilder bleiben
+  if (!ersetzen && !_spBildErsetzbar(rec, stabil !== false, v || 1)) return false;   // vorhandene Bilder bleiben
   const ok = await idbSet(SP_BILD_PRAEFIX + key, img);
   if (!ok) {
     if (!_spBildFehlerGemeldet) { _spBildFehlerGemeldet = true; showStatus('❌ Spielerbild konnte nicht gespeichert werden (Browser-Speicher voll?) – das Profil bleibt ohne Bild', 'error'); }
     return false;
   }
-  rec.bild = { ts: Date.now(), quelle: quelle, stabil: stabil !== false };
+  rec.bild = { ts: Date.now(), quelle: quelle, stabil: stabil !== false, v: v || 1 };
   delete rec.bildFehler;
   _spBilder[key] = img;
   spielerSpeichern();
@@ -684,7 +698,7 @@ let _spBilderQueue = [], _spBilderReq = null, _spBilderWarte = null;
 let _spBilderStat = { ok: 0, fehler: 0, gesamt: 0, ganzFehl: 0, letzterGrund: '' };
 
 function _spBilderKandidaten() {
-  return Object.values(SPIELER_DB).filter(function (r) { return r && !r.bild && !r.bildFehler && (r.inCache || _spImRaum.has(String(r.nr))); })
+  return Object.values(SPIELER_DB).filter(function (r) { return r && _spBrauchtBild(r) && !r.bildFehler && (r.inCache || _spImRaum.has(String(r.nr))); })
     .sort(function (a, b) { return (b.zuletzt || 0) - (a.zuletzt || 0); }).map(function (r) { return r.nr; });
 }
 
@@ -745,6 +759,7 @@ onBridgeMessage('SPIELER_BILDER_DATA', function (ev) {
   if (!req || d.reqId !== req.id) return;
   _spBilderReq = null;
   clearTimeout(_spBilderWarte);
+  if (d.bildV) _spLoaderBildV = d.bildV;
   (async function () {
     if (d.err === 'belegt') { _spBilderQueue = req.stapel.concat(_spBilderQueue); setTimeout(_spBilderWeiter, 2000); return; }
     const bilder = d.err ? [] : (d.bilder || []);
@@ -754,8 +769,8 @@ onBridgeMessage('SPIELER_BILDER_DATA', function (ev) {
       const rec = SPIELER_DB[String(b.nr)];
       const erzwungen = _spBildErzwingen.has(b.nr);
       _spBildErzwingen.delete(b.nr);
-      if (rec && rec.bild && !erzwungen && !(rec.bild.stabil === false && b.stabil)) { _spBilderStat.ok++; continue; }   // schon eins da: bleibt
-      if (await _spBildSpeichern(b.nr, b.img, b.quelle || 'cache', b.stabil, erzwungen)) _spBilderStat.ok++;
+      if (rec && rec.bild && !erzwungen && !_spBildErsetzbar(rec, b.stabil !== false, b.v || 1)) { _spBilderStat.ok++; continue; }   // schon eins da: bleibt
+      if (await _spBildSpeichern(b.nr, b.img, b.quelle || 'cache', b.stabil, erzwungen, b.v || 1)) _spBilderStat.ok++;
       else { _spBilderStat.fehler++; _spBilderStop = true; }   // Speichern scheitert → nicht weitermachen (Meldung kam schon)
     }
     for (const f of fehler) {
@@ -830,7 +845,7 @@ function _spAutoBilder(gezeigt) {
   if (typeof _activeTab === 'undefined' || _activeTab !== 'spielerprofile') return;
   if (typeof _connected !== 'undefined' && !_connected) return;
   if (typeof _gameOk === 'function' && !_gameOk(false)) return;
-  const nrn = gezeigt.filter(function (r) { return r && !r.bild && !r.bildFehler && r.inCache && !_spImRaum.has(String(r.nr)) && !_spAutoVersucht.has(r.nr); })
+  const nrn = gezeigt.filter(function (r) { return r && _spBrauchtBild(r) && !r.bildFehler && r.inCache && !_spImRaum.has(String(r.nr)) && !_spAutoVersucht.has(r.nr); })
     .slice(0, 60).map(function (r) { return r.nr; });
   if (!nrn.length) return;
   nrn.forEach(function (n) { _spAutoVersucht.add(n); });
@@ -948,7 +963,7 @@ function spielerDetailHtml(r, jetzt) {
     + _spZeile('Zuerst gesehen', escHtml(_spDatumZeit(r.erstmals)))
     + _spZeile('Begegnungen', String(r.begegnungen || 0))
     + _spZeile('WCE/FBC-Profilspeicher', r.inCache ? 'ja' + (r.cacheGesehen ? ' · dort zuletzt gesehen ' + escHtml(_spDatumZeit(r.cacheGesehen)) : '') : '')
-    + _spZeile('Bild', r.bild ? escHtml('von ' + _spDatumZeit(r.bild.ts) + ' · ' + (r.bild.quelle === 'raum' ? 'aus dem Raum aufgenommen' : 'aus dem gespeicherten Profil gezeichnet') + (r.bild.stabil === false ? ' · evtl. unvollständig' : ''))
+    + _spZeile('Bild', r.bild ? escHtml('von ' + _spDatumZeit(r.bild.ts) + ' · ' + (r.bild.quelle === 'raum' ? 'aus dem Raum aufgenommen' : 'aus dem gespeicherten Profil gezeichnet') + (r.bild.stabil === false ? ' · evtl. unvollständig' : '') + (_spBildNiedrig(r) ? ' · niedrige Auflösung (wird bei Gelegenheit durch ein großes ersetzt)' : ''))
         : (r.bildFehler ? escHtml('nicht möglich: ' + r.bildFehler.grund) : ''))
     + '</table>';
   if (r.notiz) h += '<h4>Deine Notiz (WCE/FBC)</h4><div class="sp-text-voll sp-beschr">' + spielerBeschreibungHtml(r.notiz) + '</div>';

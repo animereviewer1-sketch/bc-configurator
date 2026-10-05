@@ -1548,7 +1548,7 @@ window.CurseScanner = (() => {
           try {
             const r = _spielerProfileScan({ fehlt: ev.data.fehlt, erzwingen: ev.data.erzwingen });
             src.postMessage({ app: APP, type: 'SPIELER_PROFILE_DATA', reqId: ev.data.reqId, results: r.results, room: r.room,
-              gameVersion: r.gameVersion, scanTime: Date.now() }, ALLOWED_ORIGIN);
+              gameVersion: r.gameVersion, scanTime: Date.now(), bildV: SP_BILD_V }, ALLOWED_ORIGIN);
           } catch (ex) {
             src.postMessage({ app: APP, type: 'SPIELER_PROFILE_DATA', reqId: ev.data.reqId, err: ex.message }, ALLOWED_ORIGIN);
           }
@@ -1577,7 +1577,7 @@ window.CurseScanner = (() => {
           if (_spBilderLaeuft) { src.postMessage({ app: APP, type: 'SPIELER_BILDER_DATA', reqId: reqId, err: 'belegt' }, ALLOWED_ORIGIN); break; }
           _spBilderLaeuft = true;
           _spBilderErzeugen(nrs).then(function (r) {
-            src.postMessage({ app: APP, type: 'SPIELER_BILDER_DATA', reqId: reqId, bilder: r.bilder, fehler: r.fehler }, ALLOWED_ORIGIN);
+            src.postMessage({ app: APP, type: 'SPIELER_BILDER_DATA', reqId: reqId, bilder: r.bilder, fehler: r.fehler, bildV: SP_BILD_V }, ALLOWED_ORIGIN);
           }, function (ex) {
             src.postMessage({ app: APP, type: 'SPIELER_BILDER_DATA', reqId: reqId, err: String((ex && ex.message) || ex) }, ALLOWED_ORIGIN);
           }).then(function () { _spBilderLaeuft = false; });
@@ -2718,7 +2718,10 @@ window.CurseScanner = (() => {
   // ── Bilder der Spieler ───────────────────────────────────────────────────────
   // Von einem Zeichenpuffer (BC-Canvas, durchsichtiger Hintergrund) bleibt der Bereich um die Figur: zugeschnitten, auf höchstens
   // SP_BILD_W × SP_BILD_H verkleinert, als JPEG auf dunklem Grund. null = nichts zu sehen / nicht lesbar.
-  const SP_BILD_W = 180, SP_BILD_H = 360, SP_BILDER_MAX = 40;
+  // Version der Bildgröße: 1 = 180×360 (zu unscharf in der Großansicht), 2 = wie die Screenshots (höchstens 520×1040, JPEG 0,88 – BC zeichnet
+  // einen Charakter ohnehin nur etwa 500×1000, es wird also praktisch nicht verkleinert). Das Tool ersetzt kleine Bilder durch große, sobald es V2 kennt.
+  const SP_BILD_V = 2;
+  const SP_BILD_W = 520, SP_BILD_H = 1040, SP_BILDER_MAX = 40;
   const _spBildVonCanvas = function (src) {
     try {
       if (!src || !src.width || !src.height) return null;
@@ -2745,7 +2748,7 @@ window.CurseScanner = (() => {
       const ctx = out.getContext('2d');
       ctx.fillStyle = '#14141a'; ctx.fillRect(0, 0, ow, oh);
       ctx.drawImage(oc, x0, y0, cw, ch, 0, 0, ow, oh);
-      return out.toDataURL('image/jpeg', 0.72);
+      return out.toDataURL('image/jpeg', 0.88);
     } catch (e) { return null; }   // z. B. SecurityError bei einem "tainted" Canvas
   };
   // Prüfsumme eines Zeichenpuffers (grob, schnell): ändert sie sich nicht mehr, sind alle Bilder geladen
@@ -2784,7 +2787,7 @@ window.CurseScanner = (() => {
         const p = _spProfil(C, ichNr);
         if (bilder < SP_BILDER_MAX && brauchtBild.has(C.MemberNumber)) {
           const img = _spBildLive(C);
-          if (img) { p.bild = { img: img, stabil: true }; bilder++; }
+          if (img) { p.bild = { img: img, stabil: true, v: SP_BILD_V }; bilder++; }
         }
         results.push(p);
       } catch (e) { BCK.warn('[Spielerprofile] #' + C.MemberNumber + ':', e.message); }
@@ -2953,7 +2956,7 @@ window.CurseScanner = (() => {
           const live = raum.find(function (c) { return c && c.MemberNumber === nr; });
           if (live) {
             const img = _spBildLive(live);
-            if (img) bilder.push({ nr: nr, img: img, stabil: true, quelle: 'raum' }); else fehler.push({ nr: nr, grund: 'Der Zeichenpuffer ist leer' });
+            if (img) bilder.push({ nr: nr, img: img, stabil: true, quelle: 'raum', v: SP_BILD_V }); else fehler.push({ nr: nr, grund: 'Der Zeichenpuffer ist leer' });
             continue;
           }
           if (!cache) cache = await _spCacheOeffnen();
@@ -2964,7 +2967,7 @@ window.CurseScanner = (() => {
           try { b = typeof zeile.characterBundle === 'string' ? JSON.parse(zeile.characterBundle) : zeile.characterBundle; } catch (e) {}
           if (!b || typeof b !== 'object') { fehler.push({ nr: nr, grund: 'Gespeichertes Profil nicht lesbar' }); continue; }
           const r = await _spBildAusBundle(b, nr);
-          bilder.push({ nr: nr, img: r.img, stabil: r.stabil, quelle: 'cache' });
+          bilder.push({ nr: nr, img: r.img, stabil: r.stabil, quelle: 'cache', v: SP_BILD_V });
         } catch (e) {
           fehler.push({ nr: nr, grund: String((e && e.message) || e).slice(0, 160) });
         }
