@@ -36,8 +36,9 @@ function boot() {
     } };
     CACHE['ItemVulva'] = { TestEgg: {
       archetype: 'vibrating', colorCount: 1, defaultColors: ['Default'], typeKeys: {}, props: [], allowedCraftProps: ['Normal'],
-      vibratingInfo: { baselineProps: { PunishStruggle: false, AccessMode: '' } },
+      vibratingInfo: { baselineProps: { PunishStruggle: false, AccessMode: '', TriggerValues: 'Increase,Decrease' } },
     } };
+    CACHE['ItemBoots'] = { Tri: { colorCount: 3, defaultColors: ['#202020', '#808080', '#ffffff'], typeKeys: {}, props: [], allowedCraftProps: ['Normal'] } };
     CACHE['ItemMouth'] = { TestGag: {
       colorCount: 1, defaultColors: ['Default'], typeKeys: {}, props: [], directOptions: ['Normal', 'Tight', 'Loose'], allowedCraftProps: ['Normal'],
     } };
@@ -143,7 +144,7 @@ describe('Konfiguration 1:1 laden', () => {
   it('zeigt die Bearbeiten-Leiste und merkt sich Profil und Position', () => {
     const { ctx } = boot();
     oeffnen(ctx, seilItem());
-    expect(evalIn(ctx, '_profilEditKontext')).toEqual({ name: 'P', idx: 0 });
+    expect(evalIn(ctx, '_profilEditKontext')).toMatchObject({ name: 'P', idx: 0 });
   });
 });
 
@@ -154,7 +155,8 @@ describe('Änderung ins Profil übernehmen', () => {
     oeffnen(ctx, vorher);
     ctx.profilItemUebernehmen();
     const nachher = profilItem(ctx);
-    expect(nachher.property).toEqual(vorher.property);
+    // die Variante steht jetzt (wie im Spiel-Snapshot) auch in property.TypeRecord – Bots lesen nur property
+    expect(nachher.property).toEqual({ ...vorher.property, TypeRecord: vorher.tr });
     expect(nachher.tr).toEqual(vorher.tr);
     expect(nachher.colors).toEqual(vorher.colors);
     expect(nachher.difficulty).toBe(4);
@@ -342,5 +344,156 @@ describe('Duplikate: Namen mit v2/v3 am Ende zählen als Kopie', () => {
   it('nur echte v2+: "v1" oder "Rev" am Ende zählen nicht', () => {
     const ctx = bootDup();
     expect(evalIn(ctx, "['A v1','Rev','Anv2','X-v10','Dv0'].map(_profileIstOld)")).toEqual([false, false, true, true, false]);
+  });
+});
+
+describe('Prüfbericht: Randfälle beim Bearbeiten', () => {
+  it('Bots lesen nur property: die Variante steht nach "👗 Outfit" auch in property.TypeRecord', () => {
+    const { ctx } = boot();
+    ctx.selectItem('ItemArms', 'TestRope');
+    evalIn(ctx, 'OUTFIT = []; dimSelected.a = new Set([2]);');
+    ctx.addToOutfit();
+    expect(JSON.parse(JSON.stringify(evalIn(ctx, 'OUTFIT[0].property.TypeRecord')))).toEqual({ a: 2, b: 0 });
+  });
+
+  it('Item, das die Variante nur in property.TypeRecord trägt (ohne Feld tr), wird mit den richtigen Optionen geöffnet und behält sie', () => {
+    const { ctx } = boot();
+    const it = seilItem(); delete it.tr; it.property.TypeRecord = { a: 2, b: 1 };
+    oeffnen(ctx, it);
+    expect(evalIn(ctx, '[...dimSelected.a]')).toEqual([2]);
+    expect(evalIn(ctx, '[...dimSelected.b]')).toEqual([1]);
+    ctx.profilItemUebernehmen();
+    const n = profilItem(ctx);
+    expect(n.property.TypeRecord).toEqual({ a: 2, b: 1 });
+    expect(n.tr).toEqual({ a: 2, b: 1 });
+  });
+
+  it('einfaches Item (Knebel): die Option kommt aus tr.typed, nicht aus der ersten Option', () => {
+    const { ctx } = boot();
+    oeffnen(ctx, { group: 'ItemMouth', asset: 'TestGag', colors: ['Default'], tr: { typed: 2 } });
+    expect(evalIn(ctx, 'classicOptionSel')).toBe(2);
+    ctx.profilItemUebernehmen();
+    const n = profilItem(ctx);
+    expect(n.directOption).toBe('Loose');
+    expect(n.property.Type).toBe('Loose');
+  });
+
+  it('einfaches Item, dessen Option sich nicht bestimmen lässt: nichts wird erfunden (kein "Normal")', () => {
+    const { ctx } = boot();
+    oeffnen(ctx, { group: 'ItemMouth', asset: 'TestGag', colors: ['Default'], tr: {} });
+    ctx.profilItemUebernehmen();
+    const n = profilItem(ctx);
+    expect(n.directOption).toBeUndefined();
+    expect(n.property?.Type).toBeUndefined();
+  });
+
+  it('Farben: Text für alle Ebenen bleibt, "Default"-Ebenen bleiben "Default" (auch bei Ebenen mit Hex-Standard)', () => {
+    const t1 = boot();
+    ['#202020', '#808080', '#ffffff'].forEach((c, i) => { t1.ctx.document.getElementById('color_' + i).value = c; });
+    oeffnen(t1.ctx, { group: 'ItemBoots', asset: 'Tri', colors: '#000000', tr: {} });
+    t1.ctx.profilItemUebernehmen();
+    expect(profilItem(t1.ctx).colors).toBe('#000000');
+
+    const t2 = boot();
+    ['#202020', '#808080', '#ffffff'].forEach((c, i) => { t2.ctx.document.getElementById('color_' + i).value = c; });
+    oeffnen(t2.ctx, { group: 'ItemBoots', asset: 'Tri', colors: ['Default', '#000000', 'Default'], tr: {} });
+    t2.ctx.profilItemUebernehmen();
+    expect(profilItem(t2.ctx).colors).toEqual(['Default', '#000000', 'Default']);
+  });
+
+  it('Farben: eine geänderte Ebene wird übernommen, die übrigen bleiben im Original', () => {
+    const { ctx } = boot();
+    ['#202020', '#808080', '#ffffff'].forEach((c, i) => { ctx.document.getElementById('color_' + i).value = c; });
+    oeffnen(ctx, { group: 'ItemBoots', asset: 'Tri', colors: ['Default', '#000000', 'Default'], tr: {} });
+    ctx.document.getElementById('color_2').value = '#123456';
+    ctx.profilItemUebernehmen();
+    expect(profilItem(ctx).colors).toEqual(['Default', '#000000', '#123456']);
+  });
+
+  it('Vibrator: eigene TriggerValues (Wörter, Reihenfolge) bleiben unverändert', () => {
+    const { ctx } = boot();
+    oeffnen(ctx, { group: 'ItemVulva', asset: 'TestEgg', colors: ['Default'], tr: { vibrating: 0 },
+      property: { Mode: 'Off', Intensity: -1, TriggerValues: 'Hallo,Welt,Extra' } });
+    ctx.profilItemUebernehmen();
+    expect(profilItem(ctx).property.TriggerValues).toBe('Hallo,Welt,Extra');
+  });
+
+  it('Vibrator: eine gespeicherte Intensität, die nicht zum Modus-Knopf passt, bleibt erhalten', () => {
+    const { ctx } = boot();
+    oeffnen(ctx, { group: 'ItemVulva', asset: 'TestEgg', colors: ['Default'], tr: { vibrating: 6 },
+      property: { Mode: 'Escalate', Intensity: 0, Effect: ['Egged'] } });
+    ctx.profilItemUebernehmen();
+    const n = profilItem(ctx);
+    expect(n.property.Mode).toBe('Escalate');
+    expect(n.property.Intensity).toBe(0);
+  });
+
+  it('Ladefehler: kein Bearbeiten-Kontext, das Profil bleibt unverändert', () => {
+    const { ctx, meldungen } = boot();
+    const vorher = seilItem();
+    evalIn(ctx, '_itemManagerBelegen = function () { throw new Error("kaputt"); };');
+    oeffnen(ctx, vorher);
+    expect(evalIn(ctx, '_profilEditKontext')).toBeNull();
+    expect(meldungen.some(m => m.includes('Bearbeiten abgebrochen'))).toBe(true);
+    ctx.profilItemUebernehmen();
+    expect(profilItem(ctx).property).toEqual(vorher.property);
+  });
+
+  it('wurde das Item im Profil seit dem Öffnen ersetzt (z. B. neu gespeichert), wird nichts überschrieben', () => {
+    const { ctx, meldungen } = boot();
+    oeffnen(ctx, seilItem());
+    const neuGescannt = { ...seilItem(), colors: ['#0000ff', '#0000ff'], property: { Frisch: 1 } };
+    evalIn(ctx, `PROFILES['P'].items[0] = ${JSON.stringify(neuGescannt)};`);
+    ctx.profilItemUebernehmen();
+    expect(profilItem(ctx).property).toEqual({ Frisch: 1 });
+    expect(meldungen.some(m => m.includes('seit dem Öffnen geändert'))).toBe(true);
+    expect(evalIn(ctx, '_profilEditKontext')).toBeNull();
+  });
+});
+
+describe('Prüfbericht: Profil ausführen und Bild-Aufnahme', () => {
+  it('eingestellte Schloss-Werte (Timer, Kombination) des Profils wirken beim Ausführen; der Besitzer fällt auf lockMember zurück', () => {
+    const { ctx } = boot();
+    evalIn(ctx, `PROFILES['L'] = { name: 'L', items: [
+      { group: 'ItemArms', asset: 'TestRope', colors: ['#fff'], tr: {}, lock: 'CombinationPadlock', lockParams: { timer: 3600000, combo: '4321' }, lockMember: 12 },
+      { group: 'ItemMouth', asset: 'TestGag', colors: ['#fff'], tr: {}, lock: 'OwnerPadlock', lockMember: 77 },
+    ] };`);
+    ctx.loadProfile('L');
+    const lp = JSON.parse(JSON.stringify(evalIn(ctx, 'OUTFIT.map(i => i.lockParams)')));
+    expect(lp[0]).toMatchObject({ timer: 3600000, combo: '4321', relMember: 12 });
+    expect(lp[1]).toMatchObject({ timer: 0, combo: '', relMember: 77 });   // Spiel-Import ohne lockParams: wie bisher
+  });
+
+  it('Bild-Aufnahme nutzt immer dein eigenes Aussehen, auch wenn ein anderer Spieler als Outfit-Ziel gewählt ist', () => {
+    const { ctx } = boot();
+    evalIn(ctx, `PROFILES['B'] = { name: 'B', items: [{ group: 'ItemArms', asset: 'TestRope', colors: ['#fff'], tr: {} }] }; _outfitTargetNum = 55;`);
+    const code = evalIn(ctx, "_profilCodeOhneEingriff('B')");
+    expect(code).toContain('const TARGET = Player;');
+    expect(code).not.toContain('55');
+    expect(evalIn(ctx, '_outfitTargetNum')).toBe(55);   // die Auswahl des Nutzers bleibt
+  });
+});
+
+describe('Prüfbericht: Duplikate mit v2/v3', () => {
+  function bootDup2() {
+    const ctx = loadScript(['items.js'], { setTimeout: () => 0, clearTimeout: () => {}, confirm: () => true });
+    ctx.document.getElementById = () => makeElementStub();
+    evalIn(ctx, `
+      renderProfileList = function () {};
+      Object.keys(PROFILES).forEach(k => delete PROFILES[k]);
+      const it = (col, craft) => [{ group: 'Cloth', asset: 'Dress', colors: [col], craft: craft || null }];
+      PROFILES['Kleid - Mia']       = { name: 'Kleid - Mia',       items: it('#ff0000') };
+      PROFILES['Kleid - Miav2']     = { name: 'Kleid - Miav2',     items: it('#ff0000') };   // identisch → löschbar
+      PROFILES['Kleid - Miav3']     = { name: 'Kleid - Miav3',     items: it('#0000ff') };   // andere Farbe → echte Variante, bleibt
+      PROFILES['Kleid - Miav4']     = { name: 'Kleid - Miav4',     items: it('#ff0000', { Name: 'Besonders' }) };   // anderes Craft → bleibt
+      PROFILES['Kleid - Ada (old)'] = { name: 'Kleid - Ada (old)', items: it('#00ff00') };   // vom Nutzer als (old) markiert → wie bisher löschbar
+      PROFILE_ALT_OWNERS = new Set(); PROFILE_FAVS.clear(); PROFILE_TAGS = {};
+    `);
+    return ctx;
+  }
+
+  it('v2/v3 werden nur gelöscht, wenn der Inhalt (Farben, Craft …) wirklich gleich ist; "(old)" bleibt wie bisher löschbar', () => {
+    const ctx = bootDup2();
+    expect(evalIn(ctx, '_profileOldDuplikate().sort()')).toEqual(['Kleid - Ada (old)', 'Kleid - Miav2']);
   });
 });

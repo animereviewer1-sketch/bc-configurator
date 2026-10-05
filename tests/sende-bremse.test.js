@@ -42,6 +42,14 @@ describe('Sende-Bremse: Einstellung', () => {
     expect(evalIn(boot(JSON.stringify({ an: false, limit: 'x' })).ctx, 'sendeBremseLesen()')).toEqual({ an: false, limit: 9 });
   });
 
+  it('ein leeres Feld ergibt den Vorschlag (9), nicht das Minimum', () => {
+    const { ctx } = boot();
+    expect(evalIn(ctx, "_sendeBremseLimit('')")).toBe(9);
+    expect(evalIn(ctx, '_sendeBremseLimit(null)')).toBe(9);
+    expect(evalIn(ctx, "_sendeBremseLimit('abc')")).toBe(9);
+    expect(evalIn(ctx, "_sendeBremseLimit('0')")).toBe(4);
+  });
+
   it('Eingaben in den Einstellungen werden gespeichert, begrenzt und im Feld korrigiert', () => {
     const { ctx, els } = boot();
     els.sendeBremseChk = Object.assign(makeElementStub(), { checked: true });

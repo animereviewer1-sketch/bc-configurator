@@ -164,19 +164,79 @@ async function idbScreenshotBatch(kind, puts, deletes) {
 function idbScreenshotPut(kind, key, img) { return idbScreenshotBatch(kind, [[key, img]], []); }
 function idbScreenshotDelete(kind, key) { return idbScreenshotBatch(kind, [], [key]); }
 
-async function idbScreenshotGetAll(kind) {
+// Alle Bilder einer Art. Ein einziges getAll über Hunderte MB hält die Oberfläche spürbar an – darum in Häppchen
+// (IDB_BILD_HAEPPCHEN Datensätze) mit Luft dazwischen. onChunk(teil) bekommt jedes Häppchen sofort ({ schluessel: bild }), so können
+// Bilder fortlaufend erscheinen; zurück kommt wie bisher das ganze Objekt. status (optional) bekommt .ok = true/false: nur bei true
+// sind wirklich ALLE Bilder gelesen (ein Fehler liefert bisher {} – das darf keine Sicherung für vollständig halten).
+const IDB_BILD_HAEPPCHEN = 100;
+async function idbScreenshotGetAll(kind, onChunk, status) {
+  const prefix = kind + '|';
+  const out = {};
   try {
     const db = await _idbOpen();
-    const records = await new Promise((resolve, reject) => {
+    let untere = prefix, offen = false;
+    for (;;) {
+      const records = await new Promise((resolve, reject) => {
+        const tx  = db.transaction(_IDB_SCREENSHOTS, 'readonly');
+        const req = tx.objectStore(_IDB_SCREENSHOTS).getAll(IDBKeyRange.bound(untere, prefix + '\uffff', offen, false), IDB_BILD_HAEPPCHEN);
+        req.onsuccess = () => resolve(req.result || []);
+        req.onerror   = e => reject(e.target.error);
+      });
+      if (!records.length) break;
+      const teil = {};
+      for (const rec of records) { const k = rec.id.slice(prefix.length); out[k] = rec.img; teil[k] = rec.img; }
+      if (typeof onChunk === 'function') {
+        try { onChunk(teil); } catch (err) { console.warn('[IDB] screenshots onChunk:', kind, err); }
+      }
+      if (records.length < IDB_BILD_HAEPPCHEN) break;
+      untere = records[records.length - 1].id; offen = true;
+      await new Promise(r => setTimeout(r, 0));   // der Oberfläche Luft lassen
+    }
+    if (status) status.ok = true;
+    return out;
+  } catch (err) {
+    console.warn('[IDB] screenshots getAll:', kind, err);
+    if (status) status.ok = false;
+    return out;
+  }
+}
+
+// Nur die Schlüssel einer Art (ohne die Bilder zu lesen) – dauert Millisekunden. Damit weiß die Oberfläche sofort, welche Karten
+// ein Bild haben, auch wenn die Bilder selbst noch laden.
+async function idbScreenshotKeysOf(kind) {
+  const prefix = kind + '|';
+  try {
+    const db = await _idbOpen();
+    const ids = await new Promise((resolve, reject) => {
       const tx  = db.transaction(_IDB_SCREENSHOTS, 'readonly');
-      const req = tx.objectStore(_IDB_SCREENSHOTS).getAll(IDBKeyRange.bound(kind + '|', kind + '|￿'));
+      const req = tx.objectStore(_IDB_SCREENSHOTS).getAllKeys(IDBKeyRange.bound(prefix, prefix + '\uffff'));
       req.onsuccess = () => resolve(req.result || []);
       req.onerror   = e => reject(e.target.error);
     });
-    const out = {};
-    for (const rec of records) out[rec.id.slice(kind.length + 1)] = rec.img;
-    return out;
-  } catch (err) { console.warn('[IDB] screenshots getAll:', kind, err); return {}; }
+    return ids.map(id => String(id).slice(prefix.length));
+  } catch (err) { console.warn('[IDB] screenshots keysOf:', kind, err); return null; }
+}
+
+// Einzelne Bilder gezielt holen ({ schluessel: bild }, nur die gefundenen) – für alles, was gerade sichtbar ist.
+async function idbScreenshotGetMany(kind, keys) {
+  const out = {};
+  if (!keys || !keys.length) return out;
+  try {
+    const db = await _idbOpen();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(_IDB_SCREENSHOTS, 'readonly');
+      const st = tx.objectStore(_IDB_SCREENSHOTS);
+      let offen = keys.length;
+      const fertig = () => { if (--offen === 0) resolve(); };
+      for (const k of keys) {
+        const req = st.get(_screenshotId(kind, k));
+        req.onsuccess = () => { if (req.result && req.result.img != null) out[k] = req.result.img; fertig(); };
+        req.onerror   = e => reject(e.target.error);
+      }
+      tx.onabort = e => reject(tx.error || e.target.error);
+    });
+  } catch (err) { console.warn('[IDB] screenshots getMany:', kind, err); }
+  return out;
 }
 
 async function idbScreenshotKeys() {
@@ -414,7 +474,7 @@ function _debounce(fn, delay) {
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     idbGet, idbSet, idbKvAlle, _idbOpen, _debounce,
-    idbScreenshotBatch, idbScreenshotPut, idbScreenshotDelete, idbScreenshotGetAll, idbScreenshotKeys,
+    idbScreenshotBatch, idbScreenshotPut, idbScreenshotDelete, idbScreenshotGetAll, idbScreenshotKeys, idbScreenshotKeysOf, idbScreenshotGetMany,
     idbSnapshotPut, idbSnapshotGetAll, idbSnapshotGet, idbSnapshotKeys, idbSnapshotDelete,
     _screenshotStoreReady, _migrateScreenshotsToStore,
     SCREENSHOT_KINDS, SCREENSHOT_LEGACY_KEYS, SCREENSHOT_MIGRATION_KEY,

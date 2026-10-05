@@ -234,6 +234,17 @@ describe('Ruhe nach freiwilligem Raumwechsel', () => {
     expect(log(t)[1]).toBe('resume');
   });
 
+  it('Stopp einer Serie direkt nach dem Raumwechsel stellt das Aussehen trotzdem zurück (die Ruhe gilt nur für Start/Fortsetzen)', () => {
+    const t = mitAblauf();
+    t.state(ANDERER);
+    expect(evalIn(t.ctx, '_gameOk(false)')).toBe(false);
+    expect(evalIn(t.ctx, '_gameOnline()')).toBe(true);
+    const vorher = t.execs().length;
+    evalIn(t.ctx, '_slideshowRunning = true; _stopProfileSlideshow();');
+    const codes = t.execs().slice(vorher);
+    expect(codes.some((c) => c.includes('__BCU_slideshowOrig'))).toBe(true);
+  });
+
   it('nach einem DC gibt es keine zusätzliche Ruhe (dort wartet DC_SETTLE_MS allein)', () => {
     const t = mitAblauf();
     t.state(OFFLINE);

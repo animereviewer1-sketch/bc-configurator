@@ -406,6 +406,10 @@ let vibratingExtraEffects = [];   // Effekte eines geladenen Items, die kein Kno
 
 // Craft-Objekt eines geladenen Profil-Items: Felder, die die Oberfläche nicht kennt (Color, Lock, MemberNumber …), bleiben erhalten
 let craftBasis = null;
+// Farben des geladenen Profil-Items, wie sie nach dem Laden im Item Manager standen: was unverändert bleibt, geht im Original zurück
+let farbenBasisUi = null;
+// Wurde die Option eines einfachen Items (Knebel o. Ä.) aus den Daten erkannt oder angeklickt? Sonst bleibt der gespeicherte Stand.
+let directOptionFest = false;
 
 // ── Direct options (BallGag) ─────────────────────────
 let classicOptionSel = 0;
@@ -582,17 +586,66 @@ async function _screenshotFlush(kind, map) {
   return ok;
 }
 
+// ── Bilder während des Ladens ────────────────────────────────────────────────
+// Die Bilder (zusammen leicht über 1 GB) werden im Hintergrund in Häppchen gelesen. Damit die Oberfläche trotzdem von Anfang an
+// stimmt (Karten mit Bild, Filter "Mit/Ohne Bild", "hat schon ein Bild?"):
+//  - _bildKeys[art] = Menge der gespeicherten Schlüssel, solange die Art noch lädt (null = fertig oder unbekannt). _hatBild() fragt
+//    zuerst den Speicher, dann diese Menge. Die Schlüssel zu lesen dauert Millisekunden.
+//  - Was sichtbar ist, aber noch nicht im Speicher liegt, wird einzeln aus der Datenbank geholt (_bildNachfordern).
+//  - _bildFertig[art] = true, wenn ALLE Bilder gelesen sind. Alles, was ein vollständiges Bild-Archiv braucht (Sicherungen,
+//    "alle löschen", Serien, die fehlende Bilder erzeugen), wartet darauf bzw. weicht auf _hatBild aus.
+const _bildKeys  = { profile: null, lscg: null, wheel: null };
+const _bildFertig = { profile: false, lscg: false, wheel: false };
+function _verzoegert() { let res; const p = new Promise(r => { res = r; }); p.fertig = res; return p; }
+const _bilderGeladen = { profile: _verzoegert(), lscg: _verzoegert(), wheel: _verzoegert() };
+function _bildMap(kind) { return kind === 'profile' ? PROFILE_SCREENSHOTS : kind === 'lscg' ? LSCG_SCREENSHOTS : _mbsWheelShots; }
+function _hatBild(kind, key) {
+  const m = _bildMap(kind);
+  if (m && m[key]) return true;
+  const ks = _bildKeys[kind];
+  return !!(ks && ks.has(key));
+}
+// Weiß das Tool sicher, welche Bilder es gibt? (Schlüssel bekannt oder alles geladen) – Voraussetzung für "fehlende Bilder erzeugen"
+function _bildExistenzSicher(kind) { return _bildFertig[kind] || _bildKeys[kind] != null; }
+function _bildKeyWeg(kind, key) { if (_bildKeys[kind]) _bildKeys[kind].delete(key); }
+// Ein Häppchen oder Einzelbild in den Speicher übernehmen: neu aufgenommene Bilder haben Vorrang (nie ersetzen, nur auffüllen)
+function _bilderEinfuegen(kind, teil) {
+  const m = _bildMap(kind);
+  for (const k of Object.keys(teil)) if (!(k in m)) m[k] = teil[k];
+  _screenshotShadowMerge(kind, teil);
+}
+// true nur, wenn alle drei Arten vollständig und ohne Fehler gelesen wurden
+function bcBilderGeladen() { return Promise.all([_bilderGeladen.profile, _bilderGeladen.lscg, _bilderGeladen.wheel]).then(r => r.every(Boolean)); }
+function _bilderAbwarten(maxMs) {
+  return Promise.race([bcBilderGeladen(), new Promise(r => setTimeout(() => r(false), maxMs || 300000))]);
+}
+// Eine Art laden: erst die Schlüssel, dann die Bilder in Häppchen (jedes sofort in den Speicher). onFertig(ok) am Ende.
+async function _bilderLaden(kind, onFertig, nachSchluessel) {
+  let ok = false;
+  try {
+    await _screenshotStoreReady();
+    const keys = await idbScreenshotKeysOf(kind);
+    if (keys) {
+      _bildKeys[kind] = new Set(keys);
+      _ladeMarke('Bilder-Schlüssel: ' + kind);
+      try { if (nachSchluessel) nachSchluessel(); } catch (e) {}
+    }
+    const status = {};
+    await idbScreenshotGetAll(kind, teil => _bilderEinfuegen(kind, teil), status);
+    ok = status.ok === true;
+    // Nur bei Erfolg ist der Speicher vollständig – sonst bleibt die Schlüsselmenge als Auskunft ("hat ein Bild") erhalten
+    if (ok) { _bildKeys[kind] = null; _bildFertig[kind] = true; }
+  } catch (e) { console.warn('[Bilder] Laden fehlgeschlagen:', kind, e); }
+  try { if (onFertig) onFertig(ok); } catch (e) {}
+  _bilderGeladen[kind].fertig(ok);
+  return ok;
+}
+
 let PROFILE_SCREENSHOTS = {};
-_screenshotStoreReady().then(() => idbScreenshotGetAll('profile')).then(d => {
-  if (d && typeof d === 'object') {
-    // Gespeicherte Bilder fuellen nur auf; waehrend des Ladens neu aufgenommene
-    // behalten Vorrang (Review CR-01) — wie bei LSCG/Wheel. Objekt-Identitaet
-    // bleibt erhalten, damit bestehende Referenzen weiter gueltig sind.
-    for (const k of Object.keys(d)) if (!(k in PROFILE_SCREENSHOTS)) PROFILE_SCREENSHOTS[k] = d[k];
-    _screenshotShadowMerge('profile', d);
-  }
-  _ladeMarke('Profil-Bilder geladen');
-});
+_bilderLaden('profile',
+  ok => { if (ok) _ladeMarke('Profil-Bilder geladen'); },
+  // Schlüssel da: war die Profil-Liste vorher schon gezeichnet (ohne zu wissen, wer ein Bild hat), jetzt einmal neu zeichnen
+  () => { if (_activeTab === 'outfit') _debouncedRenderProfileList(); });
 function _saveProfileScreenshotsJetzt() { return _screenshotFlush('profile', PROFILE_SCREENSHOTS); }
 function _saveProfileScreenshots() {
   _sammelSpeicher.plane('profilScreenshots', _saveProfileScreenshotsJetzt);
@@ -623,6 +676,29 @@ function toggleProfileAltOwner(owner) {
 
 // Benennt ALLE Profile um, indem " (old)" an den Owner-Teil des Namens angehängt wird.
 // Danach erscheinen neue Profile desselben Chars als separate Einträge.
+// Bild beim Umbenennen eines Profils mitnehmen. Liegt es noch nicht im Speicher (die Bilder laden im Hintergrund), wird es einzeln geholt;
+// die alte Datenbank-Zeile wird dabei mit aufgeräumt (Schatten), sonst bliebe sie als Waise zurück.
+function _profilBildUmziehen(altName, neuName) {
+  const fertig = () => { _bildKeyWeg('profile', altName); _saveProfileScreenshots(); };
+  if (PROFILE_SCREENSHOTS[altName]) {
+    PROFILE_SCREENSHOTS[neuName] = PROFILE_SCREENSHOTS[altName];
+    delete PROFILE_SCREENSHOTS[altName];
+    fertig();
+    return Promise.resolve(true);
+  }
+  if (!_hatBild('profile', altName)) return Promise.resolve(false);
+  return idbScreenshotGetMany('profile', [altName]).then(g => {
+    const bild = PROFILE_SCREENSHOTS[altName] || g[altName];
+    if (!bild) return false;
+    _screenshotShadowMerge('profile', { [altName]: g[altName] !== undefined ? g[altName] : bild });
+    PROFILE_SCREENSHOTS[neuName] = bild;
+    delete PROFILE_SCREENSHOTS[altName];
+    fertig();
+    _debouncedRenderProfileList();
+    return true;
+  });
+}
+
 function markAllProfilesOld() {
   const keys = Object.keys(PROFILES);
   if (!keys.length) { showStatus('ℹ️ Keine Profile vorhanden', 'info'); return; }
@@ -650,10 +726,7 @@ function markAllProfilesOld() {
     delete PROFILES[oldName];
 
     // Screenshot migrieren
-    if (PROFILE_SCREENSHOTS[oldName]) {
-      PROFILE_SCREENSHOTS[newName] = PROFILE_SCREENSHOTS[oldName];
-      delete PROFILE_SCREENSHOTS[oldName];
-    }
+    _profilBildUmziehen(oldName, newName);
 
     // Favorit migrieren
     if (PROFILE_FAVS.has(oldName)) {
@@ -780,7 +853,7 @@ function selectItem(group, asset) {
   tightnessOn = false; tightnessVal = 0;
   vibratingMode = 'Off'; vibratingIntensity = -1; vibratingTR = 0; vibratingEffects = new Set(['Egged']);
   classicOptionSel = 0; baselinePropVals = {};
-  vibratingExtraEffects = []; craftBasis = null;
+  vibratingExtraEffects = []; craftBasis = null; farbenBasisUi = null; directOptionFest = false;
 
   for (const key in (cfg.typeKeys || {})) {
     dimMode[key]     = 'single';
@@ -1132,7 +1205,7 @@ function buildDirectOptions() {
     btn.className = 'dir-opt-btn' + (i === 0 ? ' on' : '');
     btn.textContent = name;
     btn.onclick = () => {
-      classicOptionSel = i;
+      classicOptionSel = i; directOptionFest = true;
       container.querySelectorAll('.dir-opt-btn').forEach((b,j) => b.classList.toggle('on', j === i));
       generate();
     };
@@ -1935,7 +2008,7 @@ function _outfitCodeBauen(opts) {
   });
 
   _sortedOutfit.forEach((item, i) => {
-    const { group, asset, colors, tr, property, overridePriority, layerProperties, difficulty, lock, lockParams, _bodyOnly } = item;
+    const { group, asset, colors, tr, property, overridePriority, layerProperties, difficulty, lock, lockParams, craft, _bodyOnly } = item;
 
     // Pre-props: TypeRecord + all non-visual properties
     const preProp = {};
@@ -1982,6 +2055,16 @@ function _outfitCodeBauen(opts) {
             + (preB64 ? JSON.stringify(preB64) : 'null') + ','
             + (hasTr ? 'true' : 'false') + ','
             + (difficulty ?? 0) + ');\n';
+
+      // Craft (Name, Beschreibung, Eigenschaft …): wie in den anderen Wegen NACH dem Anziehen direkt am Item setzen – nicht als
+      // 7. Parameter von InventoryWear, das würde BC als Crafting-Rezept auswerten (u. a. ein Craft-Schloss anlegen).
+      // Ohne diesen Schritt kam das Item ohne Namen und Beschreibung im Spiel an.
+      if (craft && typeof craft === 'object' && craft.Name) {
+        const craftB64 = btoa(unescape(encodeURIComponent(JSON.stringify(craft))));
+        code += '{ const _ci=InventoryGet(TARGET,' + JSON.stringify(group) + ');\n'
+              + '  if(_ci){ _ci.Craft=JSON.parse(decodeURIComponent(escape(atob(' + JSON.stringify(craftB64) + '))));\n'
+              + '    if(_ci.Craft.MemberNumber==null&&TARGET===Player)_ci.Craft.MemberNumber=Player.MemberNumber; } }\n';
+      }
 
       // Einfache Option (z. B. Knebel-Variante) wie im Einzel-Code: erst die Option setzen, danach die Farbe erneut (TypedItem überschreibt sie)
       if (item.directOption) {
@@ -2135,7 +2218,10 @@ function loadProfile(name) {
                + ', MemberNumber: Player.MemberNumber,\n  }';
     }
 
-    const lockParams = { timer: 0, combo: '', password: '', relMember: item.lockMember || 0, relTimer: 0 };
+    // Eingestellte Schloss-Werte (Timer, Kombination, Passwort, Besitzer) aus dem Profil übernehmen – sonst wirken sie nie
+    const lockParams = Object.assign({ timer: 0, combo: '', password: '', relMember: 0, relTimer: 0 },
+      (item.lockParams && typeof item.lockParams === 'object') ? item.lockParams : {});
+    if (!lockParams.relMember) lockParams.relMember = item.lockMember || 0;
 
     restored.push({
       ...item,
@@ -2160,7 +2246,8 @@ function loadProfile(name) {
 // Ein Profil komplett entfernen: Daten, Bild, Favorit und Tags. Nur hinter bestätigten Aufrufern verwenden.
 function _profilEntfernen(name) {
   delete PROFILES[name];
-  if (PROFILE_SCREENSHOTS[name]) { delete PROFILE_SCREENSHOTS[name]; _saveProfileScreenshots(); }
+  if (PROFILE_SCREENSHOTS[name]) { delete PROFILE_SCREENSHOTS[name]; _bildKeyWeg('profile', name); _saveProfileScreenshots(); }
+  else if (_hatBild('profile', name)) { _bildKeyWeg('profile', name); idbScreenshotDelete('profile', name); }   // Bild war noch nicht im Speicher
   if (PROFILE_FAVS.has(name)) {
     PROFILE_FAVS.delete(name);
     try { localStorage.setItem('BC_PROFILE_FAVS_v1', JSON.stringify([...PROFILE_FAVS])); } catch {}
@@ -2237,9 +2324,28 @@ function _profileIstOld(name) {
 // Was "Duplikate entfernen" löschen darf: nur KOPIEN (DUP – das Original, ORG, bleibt immer), die als (old) markiert sind
 // oder auf v2/v3 … enden.
 // Duplikate bei aktuellen Profilen werden nie angefasst.
+// Genauer als der Fingerabdruck der Duplikat-Erkennung (nur Gruppe/Asset): auch Farben, Variante, Craft-Name und Schloss
+function _profilInhaltSig(p) {
+  if (p && p._outfitCode) return 'oc:' + String(p._outfitCode).trim();
+  return (p && p.items ? p.items : []).map(i => JSON.stringify([i.group, i.asset, i.colors ?? null, _trVonItem(i), i.craft?.Name ?? null, i.lock ?? null])).sort().join('|');
+}
+// Vom Nutzer als alt markiert ("(old)" im Namen oder 🔘-Markierung) – im Gegensatz zu "v2/v3", das das Tool beim erneuten Speichern vergibt
+function _profileOldMarkiert(name) {
+  const owner = _profileOwnerOf(name);
+  return PROFILE_ALT_OWNERS.has(owner) || /\(old\)/i.test(owner);
+}
 function _profileOldDuplikate(gruppen) {
   const weg = [];
-  (gruppen || _getProfileDuplicates()).forEach(names => { names.slice(1).forEach(n => { if (_profileIstOld(n)) weg.push(n); }); });
+  (gruppen || _getProfileDuplicates()).forEach(names => {
+    const behalten = [names[0]];
+    names.slice(1).forEach(n => {
+      if (!_profileIstOld(n)) { behalten.push(n); return; }
+      // "(old)" hat der Nutzer selbst gesetzt. "v2/v3" entsteht automatisch – dahinter kann eine echte Variante stecken (andere Farben,
+      // anderes Craft …): nur löschen, wenn der Inhalt genau dem eines behaltenen Profils entspricht.
+      const gleich = () => behalten.some(b => _profilInhaltSig(PROFILES[b]) === _profilInhaltSig(PROFILES[n]));
+      if (_profileOldMarkiert(n) || gleich()) weg.push(n); else behalten.push(n);
+    });
+  });
   return weg;
 }
 
@@ -2305,7 +2411,7 @@ function _profileCardHtml(name, idx, owner, blockId, dup) {
   const isEdit = _profileEditMode === name;
   const isDup = _dupProfileSet.has(name);
   const isOrg = _orgProfileSet.has(name);
-  const img = PROFILE_SCREENSHOTS[name];
+  const img = _hatBild('profile', name);
   const letter = escHtml((shortName[0] || '?').toUpperCase());
 
   const thumbContent = img
@@ -2442,8 +2548,8 @@ function _profilGefiltert() {
   }
   if (_profileFilter === 'fav')      keys = keys.filter(k => PROFILE_FAVS.has(k));
   if (_profileFilter === 'new')      keys = keys.filter(k => _profilIstNeu(PROFILES[k]));
-  if (_profileFilter === 'withshot') keys = keys.filter(k => !!PROFILE_SCREENSHOTS[k]);
-  if (_profileFilter === 'noshot')   keys = keys.filter(k => !PROFILE_SCREENSHOTS[k]);
+  if (_profileFilter === 'withshot') keys = keys.filter(k => _hatBild('profile', k));
+  if (_profileFilter === 'noshot')   keys = keys.filter(k => !_hatBild('profile', k));
   // (old) ausblenden – alle Profile deren Owner "(old)" im Namen hat
   if (_profileFilter === 'noold')    keys = keys.filter(k => !/\(old\)/i.test(_profileOwnerOf(k)));
   if (_profileTagFilter)             keys = keys.filter(k => profileGetTags(k).includes(_profileTagFilter));
@@ -2645,7 +2751,7 @@ function _profilFavAktualisieren(name) {
 function _profilBildAktualisieren(name) {
   const el = document.getElementById('profileListEl');
   if (!el || !Array.isArray(el._profileKeys) || !el._profileKeys.length) return false;
-  const hatBild = !!PROFILE_SCREENSHOTS[name];
+  const hatBild = _hatBild('profile', name);
   const filterNachBild = _profileFilter === 'withshot' || _profileFilter === 'noshot';
   const sichtbar = _profileFilter === 'withshot' ? hatBild : _profileFilter === 'noshot' ? !hatBild : true;
   const slot = Object.keys(_profileNameMap).find(k => _profileNameMap[k] === name);
@@ -2839,6 +2945,13 @@ function _gameOk(needRoom) {
   if (!g.online || !g.loggedIn) return false;
   if (Date.now() < _raumRuheBis) return false;
   return !needRoom || g.inRoom;
+}
+
+// Wie _gameOk, aber ohne die Ruhe nach Raumwechsel: für "Aussehen zurückstellen" – das muss auch gleich danach gehen
+function _gameOnline() {
+  if (!_connected) return false;
+  const g = _gameState;
+  return !g || !!(g.online && g.loggedIn);
 }
 
 function _gameWaitReason(needRoom) {
@@ -3181,8 +3294,9 @@ function toggleProfileSlideshow() {
 function _startProfileSlideshow() {
   if (!_connected) { showStatus('❌ Nicht verbunden mit BC', 'error'); return; }
   if (!_gameOk(false)) { showStatus('❌ ' + _gameWaitReason(false) + ' – Auto-Screenshot nicht gestartet', 'error'); return; }
-  // Alle Profile ohne Screenshot sammeln
-  _slideshowQueue = Object.keys(PROFILES).filter(n => !PROFILE_SCREENSHOTS[n]);
+  // Alle Profile ohne Screenshot sammeln – nur wenn bekannt ist, welche Bilder es gibt (sonst würden vorhandene neu erzeugt)
+  if (!_bildExistenzSicher('profile')) { showStatus('⏳ Die Bilder werden noch geladen – gleich nochmal versuchen', 'info'); return; }
+  _slideshowQueue = Object.keys(PROFILES).filter(n => !_hatBild('profile', n));
   _slideshowTotal  = _slideshowQueue.length;
   if (!_slideshowTotal) {
     showStatus('✅ Alle Profile haben bereits einen Screenshot', 'info');
@@ -3301,7 +3415,7 @@ function _stopProfileSlideshow() {
   Object.keys(_pendingProfileCapture).forEach(k => delete _pendingProfileCapture[k]);
   // Originaloutfit nach dem Slideshow wiederherstellen + Server-Sync.
   // Ist BC gerade vom Server getrennt, lädt der Relog das Original ohnehin vom Server.
-  if (_connected && _gameOk(false)) {
+  if (_gameOnline()) {
     // Pose von vor dem Durchlauf zurück (alle Bilder wurden stehend aufgenommen), dann Aussehen + Sync
     bcSend({ type: 'EXEC', code: _SHOT_POSE_ZURUECK + '(function(){'
       + 'if(!window.__BCU_slideshowOrig)return;'
@@ -3572,13 +3686,15 @@ body{display:flex;align-items:flex-start;justify-content:center;padding:32px 16p
 function _profilCodeOhneEingriff(name) {
   const p = PROFILES[name];
   if (!p || !(p.items || []).length || !Object.keys(CACHE).length) return null;
-  const outfit = OUTFIT, keep = _currentProfileKeepHairGroups;
+  const outfit = OUTFIT, keep = _currentProfileKeepHairGroups, ziel = _outfitTargetNum;
   let code = null;
   try {
+    // Das Bild zeigt immer dein eigenes Aussehen (Player.Canvas) – ein gewähltes Outfit-Ziel (anderer Spieler) darf hier nicht greifen
+    _outfitTargetNum = null;
     loadProfile(name);
     if (OUTFIT.length === p.items.length) code = _outfitCodeBauen({ ohneSchloesser: true });
   } finally {
-    OUTFIT = outfit; _currentProfileKeepHairGroups = keep;
+    OUTFIT = outfit; _currentProfileKeepHairGroups = keep; _outfitTargetNum = ziel;
     try { _autoOutfitCode(); } catch (e) {}
   }
   return code ? code.trim() : null;
@@ -3613,9 +3729,10 @@ function profilBildNeu(pname) {
 function removeProfileScreenshot(pname) {
   const name = _profileNameMap[pname] || pname;
   if (!name) return;
-  if (!PROFILE_SCREENSHOTS[name]) return;
+  if (!_hatBild('profile', name)) return;
   if (!confirm('Profil-Bild von "' + name + '" entfernen?')) return;
-  delete PROFILE_SCREENSHOTS[name];
+  if (PROFILE_SCREENSHOTS[name]) delete PROFILE_SCREENSHOTS[name]; else idbScreenshotDelete('profile', name);   // ggf. noch nicht im Speicher
+  _bildKeyWeg('profile', name);
   _saveProfileScreenshots();
   if (!_profilBildAktualisieren(name)) renderProfileList();
   const mod = document.getElementById('profileModal');
@@ -3672,6 +3789,13 @@ function _renderProfileModal(name) {
   const shortName = _profileShortName(name, owner);
   const isFav = PROFILE_FAVS.has(name);
   const img = PROFILE_SCREENSHOTS[name];
+  if (!img && _hatBild('profile', name)) {   // Bild liegt noch in der Datenbank: einzeln holen, danach das Fenster nachzeichnen
+    idbScreenshotGetMany('profile', [name]).then(g => {
+      if (!g[name]) return;
+      _bilderEinfuegen('profile', g);
+      if (document.getElementById('profileModal')?.classList.contains('open') && _profileModalName === name) _renderProfileModal(name);
+    });
+  }
   const idx = _profileModalIdx;
   const total = _profileModalNames.length;
 
@@ -3832,7 +3956,7 @@ function profileRename(slot) {
   PROFILES[newName] = { ...PROFILES[oldName], name: newName };
   delete PROFILES[oldName];
   // Migrate screenshot to new name
-  if (PROFILE_SCREENSHOTS[oldName]) { PROFILE_SCREENSHOTS[newName] = PROFILE_SCREENSHOTS[oldName]; delete PROFILE_SCREENSHOTS[oldName]; _saveProfileScreenshots(); }
+  _profilBildUmziehen(oldName, newName);
   _profileEditMode = newName;
     _saveProfiles();
   showStatus('✅ Profil umbenannt → "' + newName + '"', 'success');
@@ -3951,6 +4075,8 @@ function _itemManagerAktuell() {
   if (erw.override != null) property.OverridePriority = erw.override;
   if (erw.layer != null) property.LayerProperties = erw.layer;
   if (cfg.archetype === 'vibrating' && !('vibrating' in tr)) tr.vibrating = vibratingTR;
+  // Wie im Spiel-Snapshot steht die Variante auch in property.TypeRecord – Bots und andere Wege lesen nur property
+  if (Object.keys(tr).length) property.TypeRecord = Object.assign({}, tr);
 
   const { lock, lockParams } = _itemManagerSchloss();
 
@@ -3995,17 +4121,18 @@ function _baselineFeldSetzen(prop, v) {
   const label = prop.replace(/([A-Z])/g, ' $1').trim();
   const karte = Array.from(document.querySelectorAll('#baselineGrid .bl-card')).find(k => k.querySelector('.bl-card-label')?.textContent === label);
   if (!karte) return;
-  if (prop === 'TriggerValues') {
-    // Häkchen per Klick umlegen, damit der Merker der Oberfläche mitzieht
-    const soll = new Set(String(v).split(','));
-    karte.querySelectorAll('label').forEach(l => { const cb = l.querySelector('input'); if (cb && cb.checked !== soll.has(l.textContent)) cb.click(); });
-    return;
-  }
   const c = karte.querySelector('select, input');
   if (c) c.value = String(v);
 }
 
 // Die UI des Item Managers mit der gespeicherten Konfiguration eines Profil-Items belegen (selectItem ist schon gelaufen)
+// Die Variante eines Profil-Items: Feld tr, sonst property.TypeRecord (so speichern Bots und Spiel-Snapshots sie)
+function _trVonItem(item) {
+  if (item && item.tr && typeof item.tr === 'object' && Object.keys(item.tr).length) return item.tr;
+  const t = item && item.property && item.property.TypeRecord;
+  return (t && typeof t === 'object') ? t : {};
+}
+
 function _itemManagerBelegen(item) {
   const { cfg } = CURRENT;
   const eig = (item.property && typeof item.property === 'object') ? item.property : {};
@@ -4014,7 +4141,7 @@ function _itemManagerBelegen(item) {
   const angewendet = new Set();   // Eigenschaften, die ein Feld oben übernommen hat – alle anderen landen in "Erweitert"
 
   // 1. Optionen (TypeRecord): ein Wert unter der Optionszahl ist ein Index, größere Werte sind eine Bitmaske (Mehrfachauswahl)
-  const tr = (item.tr && typeof item.tr === 'object') ? item.tr : {};
+  const tr = _trVonItem(item);
   for (const key in typeKeys) {
     const opts = typeKeys[key] || [];
     const v = tr[key];
@@ -4056,7 +4183,9 @@ function _itemManagerBelegen(item) {
     if (opt) {
       vibratingMode = opt.mode; vibratingIntensity = opt.intensity; vibratingTR = opt.tr;
       document.querySelectorAll('#vibModeGrid .vib-mode-btn').forEach((b, j) => b.classList.toggle('on', VIB[j] === opt));
-      angewendet.add('Mode'); angewendet.add('Intensity');
+      // nur wenn der gespeicherte Wert genau dem Knopf entspricht – sonst bleibt er unter "Erweitert" unverändert erhalten
+      if (eig.Mode === opt.mode) angewendet.add('Mode');
+      if (eig.Intensity === opt.intensity) angewendet.add('Intensity');
     }
     if (Array.isArray(eig.Effect)) {
       const bekannt = ['Egged', 'Vibrating', 'UseRemote', 'Edged'];
@@ -4066,10 +4195,11 @@ function _itemManagerBelegen(item) {
       angewendet.add('Effect');
     }
     for (const k of Object.keys(baselinePropVals)) {
-      if (!(k in eig)) continue;
+      // TriggerValues: eigene Wörter und ihre Reihenfolge gehen nicht über die Häkchen → bleiben unter "Erweitert" unverändert
+      if (!(k in eig) || k === 'TriggerValues') continue;
       const v = eig[k], d = baselinePropVals[k];
-      if (k === 'TriggerValues' ? typeof v === 'string' : (d != null && typeof v === typeof d)) {
-        if (k !== 'TriggerValues') baselinePropVals[k] = v;
+      if (d != null && typeof v === typeof d) {
+        baselinePropVals[k] = v;
         _baselineFeldSetzen(k, v);
         angewendet.add(k);
       }
@@ -4079,16 +4209,19 @@ function _itemManagerBelegen(item) {
   // 4. Einfache Optionen (z. B. Knebel-Varianten)
   if (cfg.directOptions?.length && !vib) {
     const name = typeof item.directOption === 'string' ? item.directOption : eig.Type;
-    const i = typeof name === 'string' ? cfg.directOptions.indexOf(name) : -1;
+    let i = typeof name === 'string' ? cfg.directOptions.indexOf(name) : -1;
+    if (i < 0 && Number.isInteger(tr.typed) && tr.typed >= 0 && tr.typed < cfg.directOptions.length) i = tr.typed;   // sonst: Index im TypeRecord
     if (i >= 0) {
+      directOptionFest = true;
       classicOptionSel = i;
       document.querySelectorAll('#directOptsBtns .dir-opt-btn').forEach((b, j) => b.classList.toggle('on', j === i));
     }
   }
 
   // 5. Farben (nur echte Hex-Farben; "Default" bleibt Standard)
-  const farben = Array.isArray(item.colors) ? item.colors : (item.colors != null ? [item.colors] : []);
   const n = cfg.colorCount || 1;
+  // ein Text gilt in BC für alle Ebenen
+  const farben = Array.isArray(item.colors) ? item.colors : (typeof item.colors === 'string' ? Array(n).fill(item.colors) : []);
   for (let i = 0; i < n; i++) {
     let c = farben[i];
     if (typeof c !== 'string') continue;
@@ -4097,6 +4230,7 @@ function _itemManagerBelegen(item) {
     const el = document.getElementById('color_' + i);
     if (el) { el.value = c.toLowerCase(); onColorChange(i); }
   }
+  farbenBasisUi = getColors();   // so sieht es nach dem Laden aus; Ebenen, die so bleiben, gehen beim Übernehmen im Original zurück
 
   // 6. Schwierigkeit (Tightness) – auch wenn sie dem Basiswert des Items entspricht, damit sie 1:1 sichtbar bleibt
   let d = item.difficulty;
@@ -4170,10 +4304,18 @@ function profileOpenInItemManager(slot, iIdx) {
   const cfg = CACHE[item.group]?.[item.asset];
   if (cfg) {
     selectItem(item.group, item.asset);
-    try { _itemManagerBelegen(item); } catch (e) { console.warn('[Profil-Item] Belegen:', e); showStatus('⚠️ Konfiguration nur teilweise geladen: ' + e.message, 'info'); }
-    _profilEditKontext = { name, idx };
+    let geladen = true;
+    try { _itemManagerBelegen(item); } catch (e) {
+      geladen = false;
+      console.warn('[Profil-Item] Belegen:', e);
+      showStatus('❌ „' + item.asset + '" konnte nicht vollständig geladen werden (' + e.message + ') – Bearbeiten abgebrochen, das Profil ist unverändert', 'error');
+    }
+    if (geladen) {
+      // sig: so sah das Item beim Öffnen aus – hat es sich bis zum Übernehmen geändert (z. B. neu gespeichert), wird nichts überschrieben
+      _profilEditKontext = { name, idx, sig: JSON.stringify(item) };
+      showStatus('✏️ ' + item.asset + ' aus „' + name + '" geladen – anpassen und „Änderung ins Profil übernehmen"', 'info');
+    }
     _profilEditLeisteZeigen();
-    showStatus('✏️ ' + item.asset + ' aus „' + name + '" geladen – anpassen und „Änderung ins Profil übernehmen"', 'info');
   } else {
     // Nicht im Cache – Sidebar-Suche auf Asset-Name setzen
     const searchEl = document.querySelector('.sidebar-search');
@@ -4195,19 +4337,16 @@ function profilEditAbbrechen() {
 }
 
 // Gespeicherte Farben (Text für alle Ebenen oder Liste) mit den Farben des Item Managers zusammenführen, ohne etwas zu verfälschen:
-// ein Text bleibt ein Text, solange nur Ebene 1 diesen Wert hat und der Rest Standard ist; Ebenen, die der Item Manager nicht kennt,
-// und Nicht-Hex-Werte bleiben erhalten.
-function _farbenZusammen(alt, ui) {
-  const hex = c => typeof c === 'string' && /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(c);
-  const norm = c => { c = c.toLowerCase(); return c.length === 4 ? '#' + c[1] + c[1] + c[2] + c[2] + c[3] + c[3] : c; };
-  if (typeof alt === 'string') {
-    const unveraendert = ui.slice(1).every(c => c === 'Default')
-      && (hex(alt) ? norm(alt) === String(ui[0]).toLowerCase() : ui[0] === 'Default');
-    return unveraendert ? alt : ui;
-  }
-  if (!Array.isArray(alt)) return ui;
-  const aus = ui.map((c, i) => (c === 'Default' && typeof alt[i] === 'string' && alt[i] && !hex(alt[i])) ? alt[i] : c);
-  return alt.length > aus.length ? aus.concat(alt.slice(aus.length)) : aus;
+// Ebenen, die seit dem Laden nicht angefasst wurden (ui == basisUi), gehen im Original zurück ('Default', Text, Nicht-Hex …);
+// nur geänderte Ebenen bekommen den neuen Wert. Ein Text bleibt ein Text, solange alle Ebenen so geblieben sind; Ebenen,
+// die der Item Manager nicht kennt, bleiben erhalten.
+function _farbenZusammen(alt, ui, basisUi) {
+  if (!basisUi) return ui;
+  const altAt = (i) => typeof alt === 'string' ? alt : (Array.isArray(alt) ? alt[i] : undefined);
+  const aus = ui.map((c, i) => (c === basisUi[i] && altAt(i) !== undefined) ? altAt(i) : c);
+  if (typeof alt === 'string') return aus.every(c => c === alt) ? alt : aus;
+  if (Array.isArray(alt) && alt.length > aus.length) return aus.concat(alt.slice(aus.length));
+  return aus;
 }
 
 // Den aktuellen Stand des Item Managers ins Profil zurückschreiben: ersetzt genau dieses Item. Was die Oberfläche nicht kennt
@@ -4217,6 +4356,12 @@ function profilItemUebernehmen() {
   const p = k && PROFILES[k.name];
   const alt = p && p.items && p.items[k.idx];
   if (!alt || !CURRENT) { showStatus('❌ Kein Profil-Item in Bearbeitung', 'error'); return; }
+  if (k.sig && JSON.stringify(alt) !== k.sig) {
+    showStatus('⚠️ „' + alt.asset + '" im Profil hat sich seit dem Öffnen geändert – nichts übernommen. Bitte über ⚙️ neu öffnen', 'error');
+    _profilEditKontext = null;
+    _profilEditLeisteZeigen();
+    return;
+  }
   if (CURRENT.group !== alt.group || CURRENT.asset !== alt.asset) {
     showStatus('⚠️ Im Item Manager ist jetzt ein anderes Item gewählt – „' + alt.asset + '" erneut über ⚙️ öffnen', 'info');
     return;
@@ -4229,15 +4374,15 @@ function profilItemUebernehmen() {
 
   // Optionen und Farben
   const tr = Object.assign({}, rec.tr);
-  for (const [key, v] of Object.entries(alt.tr || {})) if (!(key in tr)) tr[key] = v;
+  for (const [key, v] of Object.entries(_trVonItem(alt))) if (!(key in tr)) tr[key] = v;
   neu.tr = tr;
   neu.trStr = JSON.stringify(tr);
   neu.typeStr = Object.entries(tr).map(([a, b]) => a + b).join('');
-  neu.colors = _farbenZusammen(alt.colors, rec.colors);
+  neu.colors = _farbenZusammen(alt.colors, rec.colors, farbenBasisUi);
 
   // Eigenschaften
   const eig = rec.property ? Object.assign({}, rec.property) : {};
-  const trGleich = Object.keys(cfg.typeKeys || {}).every(key => (alt.tr || {})[key] === rec.tr[key]);
+  const trGleich = Object.keys(cfg.typeKeys || {}).every(key => _trVonItem(alt)[key] === rec.tr[key]);
   if (trGleich && eigAlt.Type !== undefined && !cfg.directOptions?.length) eig.Type = eigAlt.Type;
   const schlossGleich = (alt.lock || null) === (rec.lock || null);
   if (schlossGleich) {   // Schloss-Eigenschaften (LockedBy, Zeiten …) gehören zum Schloss: unverändert lassen
@@ -4245,10 +4390,16 @@ function profilItemUebernehmen() {
     if (/Padlock$/.test(String(eigAlt.Name || ''))) eig.Name = eigAlt.Name;
   }
   if (!rec.lock && Array.isArray(eig.Effect)) eig.Effect = eig.Effect.filter(e => e !== 'Lock');
+  // Die Variante steht (wie im Spiel-Snapshot) auch in property.TypeRecord – Bots und andere Wege lesen nur property
+  if (Object.keys(tr).length) eig.TypeRecord = Object.assign({}, tr);
+  // Option eines einfachen Items: nicht erkannt und nicht angeklickt → gespeicherten Stand lassen, nichts erfinden
+  const optOffen = !!cfg.directOptions?.length && !directOptionFest;
+  if (optOffen) { if (eigAlt.Type !== undefined) eig.Type = eigAlt.Type; else delete eig.Type; }
   neu.property = Object.keys(eig).length ? eig : null;
   neu.overridePriority = null;   // steht jetzt (wie im Spiel-Snapshot) in property
   neu.layerProperties = null;
-  if (rec.directOption) neu.directOption = rec.directOption; else delete neu.directOption;
+  if (optOffen) { if (alt.directOption !== undefined) neu.directOption = alt.directOption; else delete neu.directOption; }
+  else if (rec.directOption) neu.directOption = rec.directOption; else delete neu.directOption;
 
   // Schwierigkeit, Schloss, Craft
   if (rec.difficulty != null) neu.difficulty = rec.difficulty; else delete neu.difficulty;
@@ -6359,7 +6510,7 @@ function autoBildSetzen(an) {
 }
 
 function _autoBildPlanen(name) {
-  if (!autoBildAn() || !PROFILES[name] || PROFILE_SCREENSHOTS[name]) return;
+  if (!autoBildAn() || !PROFILES[name] || _hatBild('profile', name)) return;
   if (!_autoBildQueue.includes(name)) _autoBildQueue.push(name);
   if (!_autoBildTimer) { _autoBildVersuche = 0; _autoBildTimer = setTimeout(_autoBildSchritt, AUTOBILD_WARTE_MS); }
 }
@@ -6368,7 +6519,7 @@ function _autoBildSchritt() {
   _autoBildTimer = null;
   if (!_autoBildQueue.length) return;
   // Nicht dazwischenfunken: läuft eine andere Aufnahme/Serie oder ist BC gerade nicht stabil, später noch einmal
-  const belegt = _slideshowRunning || _wheelGenRunning || _osCaptureRunning || !_connected || !_gameOk(false)
+  const belegt = _slideshowRunning || _wheelGenRunning || _osCaptureRunning || !_connected || !_gameOk(false) || !_bildExistenzSicher('profile')
     || Object.keys(_pendingProfileCapture).length > 0;
   if (belegt) {
     if (++_autoBildVersuche > AUTOBILD_MAX_VERSUCHE) { _autoBildQueue.length = 0; return; }
@@ -6376,7 +6527,7 @@ function _autoBildSchritt() {
     return;
   }
   const name = _autoBildQueue.shift();
-  if (name && PROFILES[name] && !PROFILE_SCREENSHOTS[name]) _profilBildAufnehmen(name, false);
+  if (name && PROFILES[name] && !_hatBild('profile', name)) _profilBildAufnehmen(name, false);
   if (_autoBildQueue.length) { _autoBildVersuche = 0; _autoBildTimer = setTimeout(_autoBildSchritt, 3000); }
 }
 try {
@@ -7190,7 +7341,7 @@ const SENDEBREMSE_STANDARD = { an: true, limit: 9 };
 const SENDEBREMSE_MIN = 4, SENDEBREMSE_MAX = 14;
 
 function _sendeBremseLimit(n) {
-  n = Math.round(Number(n));
+  n = (n === '' || n == null) ? NaN : Math.round(Number(n));
   return Number.isFinite(n) ? Math.min(SENDEBREMSE_MAX, Math.max(SENDEBREMSE_MIN, n)) : SENDEBREMSE_STANDARD.limit;
 }
 function sendeBremseLesen() {
@@ -8372,10 +8523,38 @@ const _LAZY_IMG_QUELLEN = {
 function _lazyImg(quelle, key) {
   return '<img data-lz="' + quelle + '" data-lk="' + escHtml(key) + '" alt="" decoding="async">';
 }
+const _LAZY_ART = { os: 'lscg', pf: 'profile', mw: 'wheel' };
 function _lazyImgLaden(img) {
   const q = _LAZY_IMG_QUELLEN[img.dataset.lz];
   const src = q ? q(img.dataset.lk) : null;
-  if (src) img.src = src;
+  if (src) { img.src = src; return; }
+  const art = _LAZY_ART[img.dataset.lz];
+  if (art && _bildKeys[art]) _bildNachfordern(art, img);   // noch nicht im Speicher → einzeln aus der Datenbank
+}
+// Anfragen sammeln und je Art in EINER Abfrage holen (Einzelabrufe dauern Millisekunden, auch während die große Ladung läuft)
+const _bildAnfragen = { profile: new Map(), lscg: new Map(), wheel: new Map() };
+let _bildAnfrageTimer = null;
+function _bildNachfordern(art, img) {
+  const m = _bildAnfragen[art], k = img.dataset.lk;
+  if (!m.has(k)) m.set(k, []);
+  m.get(k).push(img);
+  if (!_bildAnfrageTimer) _bildAnfrageTimer = setTimeout(_bildAnfragenAbarbeiten, 0);
+}
+async function _bildAnfragenAbarbeiten() {
+  _bildAnfrageTimer = null;
+  for (const art of Object.keys(_bildAnfragen)) {
+    const m = _bildAnfragen[art];
+    if (!m.size) continue;
+    const anfragen = new Map(m);
+    m.clear();
+    const gefunden = await idbScreenshotGetMany(art, [...anfragen.keys()]);
+    _bilderEinfuegen(art, gefunden);
+    const karte = _bildMap(art);
+    for (const [k, imgs] of anfragen) {
+      const v = karte[k];
+      if (v) imgs.forEach(i => { if (!i.getAttribute('src')) i.src = v; });
+    }
+  }
 }
 // Pro Container ein Observer. neu=true beim kompletten Neu-Rendern: der alte
 // Observer wird getrennt, damit er keine abgehaengten Elemente festhaelt.
@@ -9148,8 +9327,17 @@ async function _backupScansImport(scans) {
   return neu;
 }
 
+// Vor einer Sicherung: alle Bilder müssen gelesen sein, sonst fehlen sie in der Datei. Wartet (bis 5 Min.); bei einem Lesefehler Rückfrage.
+async function _bilderFuerSicherung() {
+  if (_bildFertig.profile && _bildFertig.lscg && _bildFertig.wheel) return true;
+  showStatus('⏳ Die Bilder werden noch geladen – die Sicherung wartet darauf…', 'info');
+  if (await _bilderAbwarten(300000)) return true;
+  return confirm('Nicht alle Bilder konnten gelesen werden – die Sicherung wäre unvollständig.\n\nTrotzdem erstellen?');
+}
+
 async function exportAllData() {
   try {
+    if (!(await _bilderFuerSicherung())) { showStatus('ℹ️ Backup abgebrochen', 'info'); return; }
     // Nichts Ausstehendes im Puffer lassen - der Export liest zwar aus dem
     // Arbeitsspeicher, aber danach soll die Datenbank denselben Stand haben.
     bcSpeichernJetzt();
@@ -10539,6 +10727,7 @@ window.repairOsOutfitCode = function(mk, vIdx, newCode) {
   // Altes Screenshot löschen damit er neu aufgenommen wird
   if (LSCG_SCREENSHOTS[vKey]) {
     delete LSCG_SCREENSHOTS[vKey];
+    _bildKeyWeg('lscg', vKey);
     _saveLscgScreenshots();
   }
 
@@ -10611,6 +10800,7 @@ window.testOsOutfit = function(mk, vIdx) {
 // ── Gestaffeltes Aufnehmen aller fehlenden Bilder ─────
 function captureAllMissingOsScreenshots() {
   if (!_connected) { showStatus('❌ Nicht verbunden mit BC', 'error'); return; }
+  if (!_bildExistenzSicher('lscg')) { showStatus('⏳ Die Bilder werden noch geladen – gleich nochmal versuchen', 'info'); return; }
   // Build a queue of {mk, vIdx} pairs that have no screenshot yet
   const queue = [];
   Object.keys(LSCG_DB).forEach(function(mk) {
@@ -10619,7 +10809,7 @@ function captureAllMissingOsScreenshots() {
     versions.forEach(function(v, vIdx) {
       const fp  = v?.fingerprint ?? null;
       const key = fp ? (mk + '|' + fp) : mk;
-      if (!LSCG_SCREENSHOTS[key]) {
+      if (!_hatBild('lscg', key)) {
         queue.push({ mk, vIdx });
       }
     });
@@ -11902,16 +12092,7 @@ function toggleOsChar(mk, hdrEl) {
   if (Array.isArray(favSaved)) _osFavs = new Set(favSaved);
   const ofavSaved = await idbGet(LSCG_OUTFIT_FAV_KEY);
   if (Array.isArray(ofavSaved)) ofavSaved.forEach(k => _osOutfitFavs.add(k)); // add statt ersetzen: ein Klick während des Ladens geht nicht verloren
-  await _screenshotStoreReady();
-  const ssSaved = await idbScreenshotGetAll('lscg');
-  if (ssSaved && typeof ssSaved === 'object') {
-    // Gespeicherte Bilder fuellen auf; waehrend des Ladens neu aufgenommene
-    // behalten Vorrang. Kein Ersetzen – sonst waeren sie weg.
-    LSCG_SCREENSHOTS = Object.assign({}, ssSaved, LSCG_SCREENSHOTS);
-    _screenshotShadowMerge('lscg', ssSaved);
-    console.log('[BCU] LSCG Screenshots geladen:', Object.keys(LSCG_SCREENSHOTS).length);
-    _ladeMarke('LSCG-Bilder geladen');
-  }
+  // Die LSCG-Bilder laden jetzt unabhängig (siehe _bilderLaden unten) – dieser Ablauf wartet nicht mehr auf über 700 MB
   // Gespeicherte LSCG-Outfit-Slots laden (persistierte Slot-Namen + Codes)
   const slotsSaved = await idbGet(LSCG_SLOTS_KEY);
   if (slotsSaved && typeof slotsSaved === 'object') {
@@ -11955,6 +12136,10 @@ function toggleOsChar(mk, hdrEl) {
   }
   if (_activeTab === 'outfit-scan') renderOutfitScanTab();
 })();
+// LSCG-Bilder: Schlüssel sofort, Bilder in Häppchen im Hintergrund. Neu aufgenommene Bilder behalten Vorrang (nur auffüllen).
+_bilderLaden('lscg', function (ok) {
+  if (ok) { console.log('[BCU] LSCG Screenshots geladen:', Object.keys(LSCG_SCREENSHOTS).length); _ladeMarke('LSCG-Bilder geladen'); }
+});
 
 async function _saveLscgDB() {
   // Vor dem Laden nur vormerken – siehe _lscgLoaded
@@ -12881,14 +13066,10 @@ function _mbsOutfitFp(o) {
 // Screenshots pro Outfit-Fingerprint (identische Outfits teilen sich das Bild)
 let _mbsWheelShots = {};   // fp → dataUrl
 const _pendingWheelShot = {}; // reqId → fp
-_screenshotStoreReady().then(function () { return idbScreenshotGetAll('wheel'); }).then(function(d) {
-  // Gespeicherte Bilder auffuellen, waehrend des Ladens neu aufgenommene behalten
-  if (d && typeof d === 'object') {
-    _mbsWheelShots = Object.assign({}, d, _mbsWheelShots);
-    _screenshotShadowMerge('wheel', d);
-    if (_activeTab === 'lscg-wheel') _renderMbsWheelTab();
-  }
-  _ladeMarke('Wheel-Bilder geladen');
+_bilderLaden('wheel', function (ok) {
+  if (ok) _ladeMarke('Wheel-Bilder geladen');
+  // Karten zeigen die Bilder schon beim Laden (Schlüssel + Einzelabruf); der Abschluss zeichnet nur die "niedrige Auflösung"-Hinweise nach
+  if (ok && _activeTab === 'lscg-wheel') _renderMbsWheelTab();
 });
 function _saveMbsWheelShotsJetzt() { return _screenshotFlush('wheel', _mbsWheelShots); }
 /* Wie bei LSCG buendeln - die Stapel-Erzeugung weiter unten laeuft sonst
@@ -13052,9 +13233,9 @@ function _renderMbsWheelTab() {
     } else if (_mbsWheelFilter === 'new') {
       pairs = pairs.filter(([o]) => _mbsOutfitIsNew(o));
     } else if (_mbsWheelFilter === 'withshot') {
-      pairs = pairs.filter(([o]) => !!_mbsWheelShots[_mbsOutfitFp(o)]);
+      pairs = pairs.filter(([o]) => _hatBild('wheel', _mbsOutfitFp(o)));
     } else if (_mbsWheelFilter === 'noshot') {
-      pairs = pairs.filter(([o]) => !_mbsWheelShots[_mbsOutfitFp(o)]);
+      pairs = pairs.filter(([o]) => !_hatBild('wheel', _mbsOutfitFp(o)));
     }
     // Favorisierte Outfits innerhalb des Spielers nach oben
     pairs.sort(function(a, b) {
@@ -13114,7 +13295,7 @@ function _renderMbsWheelTab() {
   // (_wheelBildAktualisieren), statt den ganzen Tab neu zu bauen.
   function _wheelKarteHtml(mn, o, oi) {
     const fp     = _mbsOutfitFp(o);
-    const shot   = _mbsWheelShots[fp] || null;
+    const shot   = _hatBild('wheel', fp) ? true : null;
     const oFav   = _mbsWheelOutfitFavs.has(_mbsOutfitFavKey(mn, o));
     const isNew  = _mbsOutfitIsNew(o);
     const others = (fpMap[fp] || []).filter(x => x.mn !== mn);
@@ -13237,6 +13418,7 @@ function mbsWheelDeleteShot(mn, oi) {
   if (!_mbsWheelShots[fp]) return;
   if (!confirm('Wheel-Bild von "' + (o.name || '?') + '" löschen?')) return;
   delete _mbsWheelShots[fp];
+  _bildKeyWeg('wheel', fp);
   _saveMbsWheelShots();
   _renderMbsWheelTab();
 }
@@ -13261,6 +13443,7 @@ function mbsWheelGenerateAll() {
   if (_wheelGenRunning) { mbsWheelGenerateStop(); return; }
   if (!_connected) { showStatus('❌ Nicht verbunden', 'error'); return; }
   if (!_gameOk(false)) { showStatus('❌ ' + _gameWaitReason(false) + ' – Bilderserie nicht gestartet', 'error'); return; }
+  if (!_bildFertig.wheel) { showStatus('⏳ Die Wheel-Bilder werden noch geladen (die Auflösung wird geprüft) – gleich nochmal versuchen', 'info'); return; }
 
   // Queue: alle Outfits ohne Bild UND alle mit einem Bild in niedriger Auflösung (die werden neu gemacht), per
   // Fingerprint dedupliziert. Ein vorhandenes Bild wird erst ersetzt, wenn das neue fertig ist.
@@ -13348,7 +13531,7 @@ function _wheelGenWeiter(reqId) {
 // Ausgangslage zurück (Aussehen + Pose von vor der Serie) und EIN Sync – das Ende der Serie. Ist BC gerade
 // getrennt, lädt der Relog das Original ohnehin vom Server.
 function _wheelOrigZurueck() {
-  if (!_connected || !_gameOk(false)) return;
+  if (!_gameOnline()) return;
   bcSend({ type: 'EXEC', code: _SHOT_POSE_ZURUECK + '(function(){'
     + 'if(!window.__BCU_wheelOrig)return;'
     + 'Player.Appearance.splice(0,Player.Appearance.length);'
@@ -13426,6 +13609,7 @@ function _updateWheelGenBtn() {
 
 // ── Alle Bilder löschen (Outfits bleiben erhalten) ────────────────────────────
 function mbsWheelClearAllShots() {
+  if (!_bildFertig.wheel) { showStatus('⏳ Die Bilder werden noch geladen – bitte einen Moment warten, dann erneut versuchen', 'info'); return; }
   const n = Object.keys(_mbsWheelShots).length;
   if (!n) { showStatus('Keine Wheel-Bilder vorhanden', 'info'); return; }
   if (!confirm(n + ' Wheel-Bilder löschen?\n(Die Outfits selbst bleiben erhalten)')) return;
@@ -13966,7 +14150,7 @@ function _handleOutfitScanData(data) {
             if (!v) return;
             const fp  = v.fingerprint ?? null;
             const key = fp ? (nv.mk + '|' + fp) : nv.mk;
-            if (!LSCG_SCREENSHOTS[key] && !existingKeys.has(nv.mk + '|' + nv.vIdx)) {
+            if (!_hatBild('lscg', key) && _bildExistenzSicher('lscg') && !existingKeys.has(nv.mk + '|' + nv.vIdx)) {
               toCapture.push(nv);
             }
           });
@@ -13993,7 +14177,7 @@ function _handleOutfitScanData(data) {
       versions.forEach(function(v, vIdx) {
         const fp  = v?.fingerprint ?? null;
         const key = fp ? (mk + '|' + fp) : mk;
-        if (!LSCG_SCREENSHOTS[key] && !existingKeys.has(mk + '|' + vIdx)) {
+        if (!_hatBild('lscg', key) && _bildExistenzSicher('lscg') && !existingKeys.has(mk + '|' + vIdx)) {
           toCapture.push({ mk, vIdx });
         }
       });
@@ -14070,7 +14254,7 @@ function _osVersionPasst(v, mk, idx) {
   if (_osFavFilter && !_osOutfitFavs.has(_osOutfitFavKey(mk, v, idx))) return false;
   if (_osBildFilter === 'new') { if (!(v && v.ts && Date.now() - v.ts < NEU_MS)) return false; }
   else if (_osBildFilter) {
-    const hatBild = !!LSCG_SCREENSHOTS[v && v.fingerprint ? mk + '|' + v.fingerprint : mk];   // wie die Karte (Versions-Schlüssel)
+    const hatBild = _hatBild('lscg', v && v.fingerprint ? mk + '|' + v.fingerprint : mk);   // wie die Karte (Versions-Schlüssel)
     if (hatBild !== (_osBildFilter === 'withshot')) return false;
   }
   // Datum in der Suche: nur die Outfits (Versionen) von diesem Tag
@@ -14250,7 +14434,7 @@ function renderOutfitScanTab() {
       const hasCode  = !!v.code;
       // Strict lookup: only version-specific key, never the legacy mk fallback
       const vKey     = fp ? (mk + '|' + fp) : mk;
-      const vThumb   = LSCG_SCREENSHOTS[vKey] || null;
+      const vThumb   = _hatBild('lscg', vKey) ? true : null;
       const isBroken = !!_osBrokenCodes[vKey];
       const tagHtml  = saved.length
         ? '<span class="os-card-tag saved" title="' + saved.map(function(k){return escHtml(k);}).join(', ') + '">✅ PROFIL</span>'
@@ -14510,6 +14694,7 @@ function deleteOsScreenshot(mk) {
   if (!confirm('Bild für #' + mk + ' löschen?\n\n' + _LSCG_PROFIL_KOPIEN_HINWEIS)) return;
   const n = _removeLscgScreenshotKeyFromProfiles(mk);
   delete LSCG_SCREENSHOTS[mk];
+  _bildKeyWeg('lscg', mk);
   _saveLscgScreenshots();
   if (_activeTab === 'outfit-scan') renderOutfitScanTab();
   showStatus('🗑️ Bild für #' + mk + ' gelöscht' + (n ? ' (+' + n + ' Profil-Kopien)' : ''), 'info');
@@ -14521,6 +14706,7 @@ function deleteOsScreenshotKey(key) {
   if (!confirm('Dieses Bild löschen?\n\n' + _LSCG_PROFIL_KOPIEN_HINWEIS)) return;
   const n = _removeLscgScreenshotKeyFromProfiles(key);
   delete LSCG_SCREENSHOTS[key];
+  _bildKeyWeg('lscg', key);
   _saveLscgScreenshots();
   if (_activeTab === 'outfit-scan') renderOutfitScanTab();
   showStatus('🗑️ Bild gelöscht' + (n ? ' (+' + n + ' Profil-Kopien)' : ''), 'info');
@@ -14563,6 +14749,7 @@ function deleteLscgVersion(mk, vIdx) {
   if (key && LSCG_SCREENSHOTS[key]) {
     _removeLscgScreenshotKeyFromProfiles(key);
     delete LSCG_SCREENSHOTS[key];
+    _bildKeyWeg('lscg', key);
     _saveLscgScreenshots();
   }
   // Fingerprint-Map bereinigen
@@ -14582,6 +14769,7 @@ function deleteLscgVersion(mk, vIdx) {
 }
 
 function clearAllProfileScreenshots() {
+  if (!_bildFertig.profile) { showStatus('⏳ Die Bilder werden noch geladen – bitte einen Moment warten, dann erneut versuchen', 'info'); return; }
   const count = Object.keys(PROFILE_SCREENSHOTS).length;
   if (!count) { showStatus('ℹ️ Keine Profil-Bilder vorhanden', 'info'); return; }
   if (!confirm('Alle ' + count + ' Profil-Screenshots löschen?\n\nDie Profile selbst bleiben erhalten.')) return;
@@ -14592,6 +14780,7 @@ function clearAllProfileScreenshots() {
 }
 
 function clearAllLscgScreenshots() {
+  if (!_bildFertig.lscg) { showStatus('⏳ Die Bilder werden noch geladen – bitte einen Moment warten, dann erneut versuchen', 'info'); return; }
   const count = Object.keys(LSCG_SCREENSHOTS).length;
   if (!count) { showStatus('ℹ️ Keine Bilder vorhanden', 'info'); return; }
   if (!confirm('Alle ' + count + ' gespeicherten Bilder löschen?\n\nDie Outfit-Codes bleiben erhalten.\n' + _LSCG_PROFIL_KOPIEN_HINWEIS)) return;

@@ -310,6 +310,12 @@
     laeuft = true;
     var t0 = Date.now();
     try {
+      // Erst sichern, wenn ALLE Bilder gelesen sind: sonst fehlen sie in der Datei, und das Aufräumen ersetzt dabei vollständige ältere
+      // Generationen. Nicht geschafft = kein Tagesvermerk, der nächste Versuch kommt automatisch (stündlich / nächster Start).
+      if (typeof bcBilderGeladen === 'function') {
+        var bereit = await Promise.race([bcBilderGeladen(), new Promise(function (r) { setTimeout(function () { r(false); }, 300000); })]);
+        if (!bereit) return { uebersprungen: 'Bilder noch nicht vollstaendig geladen' };
+      }
       var daten = await ergaenzeDaten(baueDaten());
       var voll = vollErzwingen || !stand.basis || !stand.manifest || stand.zaehler >= cfg.proVoll;
 
