@@ -144,6 +144,7 @@ describe('Löschen nur mit Bestätigung (STAB-09)', () => {
       'profileRename',                     // Umbenennung, kein Datenverlust
       'repairOsOutfitCode',                // Konsolen-Reparatur, nicht UI-erreichbar
       '_removeLscgScreenshotFromProfiles', // Aufräum-Helfer, läuft nur hinter bereits bestätigten Aufrufern
+      '_profilBildUmziehen',               // Umbenennen: das Bild zieht auf den neuen Namen um, nichts geht verloren
       '_profilEntfernen',                  // Profil + Bild + Favorit + Tags; läuft nur hinter deleteProfile / removeProfileDuplicates (beide mit confirm)
     ];
 

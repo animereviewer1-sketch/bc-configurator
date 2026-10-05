@@ -201,6 +201,12 @@ export function loadScript(files, extraGlobals = {}) {
   for (const file of expandLoadOrder(files)) {
     loadInto(sandbox, file);
   }
+  // items.js lädt die Bilder im Hintergrund; bis das fertig ist, verweigern "alle löschen", Sicherungen und "fehlende Bilder erzeugen"
+  // ihren Dienst. Tests laufen synchron nach dem Laden – darum gilt das Archiv hier als geladen. Tests, die das Warten prüfen,
+  // setzen die Flags selbst zurück (_bildFertig.profile = false …).
+  try {
+    vm.runInContext("if (typeof _bildFertig !== 'undefined') { _bildFertig.profile = true; _bildFertig.lscg = true; _bildFertig.wheel = true; }", sandbox);
+  } catch (e) { /* items.js nicht geladen */ }
   return sandbox;
 }
 

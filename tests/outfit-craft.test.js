@@ -66,6 +66,26 @@ describe('Profil ausführen: Craft kommt im Spiel an', () => {
     expect(g.Player.Appearance[0].Craft.MemberNumber).toBe(100);
   });
 
+  it('Crafter = du: Nummer und Name aus dem Profil kommen im Spiel an (nichts wird durch deine eigenen Werte überschrieben)', () => {
+    const { ctx } = boot();
+    const eigen = { ...CRAFT, MemberNumber: 999, MemberName: 'Ich' };
+    evalIn(ctx, `PROFILES['P'] = { name: 'P', items: [{ group: 'ItemNeck', asset: 'HighCollar', colors: ['#fff'], tr: {}, craft: ${JSON.stringify(eigen)} }] };`);
+    ctx.loadProfile('P');
+    const g = spiel();
+    vm.runInContext(evalIn(ctx, '_outfitCodeBauen({})'), g);
+    expect(g.Player.Appearance[0].Craft).toMatchObject({ MemberNumber: 999, MemberName: 'Ich' });
+  });
+
+  it('fehlt Nummer und Name, trägt der Outfit-Code dich ein (bei dir selbst als Ziel)', () => {
+    const { ctx } = boot();
+    const ohne = { ...CRAFT }; delete ohne.MemberNumber;
+    evalIn(ctx, `PROFILES['P'] = { name: 'P', items: [{ group: 'ItemNeck', asset: 'HighCollar', colors: ['#fff'], tr: {}, craft: ${JSON.stringify(ohne)} }] };`);
+    ctx.loadProfile('P');
+    const g = spiel(); g.Player.Name = 'Ich';
+    vm.runInContext(evalIn(ctx, '_outfitCodeBauen({})'), g);
+    expect(g.Player.Appearance[0].Craft).toMatchObject({ MemberNumber: 100, MemberName: 'Ich' });
+  });
+
   it('auch bei Screenshot-Durchläufen (ohne Schlösser) und für andere Spieler als Ziel bleibt das Craft', () => {
     const { ctx } = boot();
     evalIn(ctx, `PROFILES['P'] = { name: 'P', items: [{ group: 'ItemNeck', asset: 'HighCollar', colors: ['#fff'], tr: {}, craft: ${JSON.stringify(CRAFT)}, lock: 'MetalPadlock' }] };`);

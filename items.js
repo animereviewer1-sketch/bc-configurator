@@ -1542,8 +1542,12 @@ function generate() {
   const craftProp = document.getElementById('craftProp').value;
   const firstColor = colors.find(c => c !== 'Default') ?? '#808080';
   const craftPrivat = !!document.getElementById('craftPrivate')?.checked;
+  // Crafter: leer = du selbst; sonst die eingetragene Nummer (und der Name dazu)
+  const craftCrafter = _craftCrafterLesen();
   const craftStr  = craftName
-    ? ',\n  {\n    Name: ' + JSON.stringify(craftName) + ',\n    Description: ' + JSON.stringify(craftDesc) + ',\n    Property: "' + craftProp + '",\n    Color: ' + JSON.stringify(firstColor) + ',\n    Lock: "", Item: ' + JSON.stringify(asset) + ', Private: ' + craftPrivat + ', MemberNumber: Player.MemberNumber,\n  }'
+    ? ',\n  {\n    Name: ' + JSON.stringify(craftName) + ',\n    Description: ' + JSON.stringify(craftDesc) + ',\n    Property: "' + craftProp + '",\n    Color: ' + JSON.stringify(firstColor) + ',\n    Lock: "", Item: ' + JSON.stringify(asset) + ', Private: ' + craftPrivat
+      + ', MemberNumber: ' + (craftCrafter.nummer ? craftCrafter.nummer : 'Player.MemberNumber')
+      + (craftCrafter.name ? ', MemberName: ' + JSON.stringify(craftCrafter.name) : '') + ',\n  }'
     : '';
 
   // Erweitert: Override-Priorität, Ebenen und weitere Eigenschaften (JSON) – ungültige Eingaben werden gemeldet, nicht still verworfen
@@ -2063,7 +2067,8 @@ function _outfitCodeBauen(opts) {
         const craftB64 = btoa(unescape(encodeURIComponent(JSON.stringify(craft))));
         code += '{ const _ci=InventoryGet(TARGET,' + JSON.stringify(group) + ');\n'
               + '  if(_ci){ _ci.Craft=JSON.parse(decodeURIComponent(escape(atob(' + JSON.stringify(craftB64) + '))));\n'
-              + '    if(_ci.Craft.MemberNumber==null&&TARGET===Player)_ci.Craft.MemberNumber=Player.MemberNumber; } }\n';
+              + '    if(_ci.Craft.MemberNumber==null&&TARGET===Player){_ci.Craft.MemberNumber=Player.MemberNumber;'
+              + 'if(_ci.Craft.MemberName==null&&typeof Player.Name==="string")_ci.Craft.MemberName=Player.Name;} } }\n';
       }
 
       // Einfache Option (z. B. Knebel-Variante) wie im Einzel-Code: erst die Option setzen, danach die Farbe erneut (TypedItem überschreibt sie)
@@ -4013,9 +4018,25 @@ function _erweitertLesen() {
   return r;
 }
 
+// Crafter-Felder im Craft-Bereich: nummer = positive ganze Zahl (0 = leer), name = Text
+function _craftCrafterLesen() {
+  const n = parseInt(document.getElementById('craftMember')?.value);
+  return { nummer: Number.isInteger(n) && n > 0 ? n : 0, name: (document.getElementById('craftMemberName')?.value || '').trim() };
+}
+// „Auf mich“: Nummer und Name des verbundenen Spielers als Crafter eintragen
+function craftCrafterAufMich() {
+  if (!_myMemberNumber) { showStatus('❌ Deine Mitgliedsnummer ist noch nicht bekannt – erst mit dem BC-Tab verbinden', 'error'); return; }
+  const n = document.getElementById('craftMember'), nm = document.getElementById('craftMemberName');
+  if (n) n.value = _myMemberNumber;
+  if (nm) nm.value = _myMemberName || '';
+  if (CURRENT) generate();
+  showStatus('👤 Crafter: du (#' + _myMemberNumber + ')', 'info');
+}
+
 function _erweitertZuruecksetzen() {
   ['extraProps', 'extraLayers', 'extraOverride'].forEach(id => { const e = document.getElementById(id); if (e) e.value = ''; });
   const p = document.getElementById('craftPrivate'); if (p) p.checked = false;
+  ['craftMember', 'craftMemberName'].forEach(id => { const e = document.getElementById(id); if (e) e.value = ''; });
   const f = document.getElementById('extraFehler'); if (f) { f.textContent = ''; f.style.display = 'none'; }
 }
 
@@ -4090,6 +4111,12 @@ function _itemManagerAktuell() {
       Item: asset,
       Private: !!document.getElementById('craftPrivate')?.checked,
     });
+    // Crafter: eine eingetragene Nummer gilt. Leer lassen = so lassen, wie es war (neues Craft: beim Anlegen du selbst).
+    const crafter = _craftCrafterLesen();
+    const alteNummer = craftBasis && craftBasis.MemberNumber;
+    if (crafter.nummer) craft.MemberNumber = crafter.nummer;
+    if (crafter.name) craft.MemberName = crafter.name;
+    else if (crafter.nummer && crafter.nummer !== alteNummer) delete craft.MemberName;   // anderer Crafter, aber kein Name: der alte Name passt nicht mehr
   }
 
   return {
@@ -4273,6 +4300,7 @@ function _itemManagerBelegen(item) {
     }
     if (prop) prop.value = wert;
     const priv = document.getElementById('craftPrivate'); if (priv) priv.checked = !!cr.Private;
+    setze('craftMember', cr.MemberNumber != null ? cr.MemberNumber : ''); setze('craftMemberName', cr.MemberName != null ? cr.MemberName : '');
   }
 
   // 9. Erweitert: Priorität, Ebenen und alles, was oben kein Feld bekommen hat
@@ -7785,6 +7813,8 @@ async function exportInfoSammeln() {
   z.push('LSCG-Bilder: ' + zahl(bl.n) + ' · ' + MB(bl.summe) + ' · größtes ' + KB(bl.max));
   z.push('Wheel-Bilder: ' + zahl(wShots.n) + ' · ' + MB(wShots.summe) + ' · größtes ' + KB(wShots.max));
   z.push('Alle Bilder zusammen: ' + MB(bp.summe + bl.summe + wShots.summe));
+  z.push('Bilder-Laden (im Hintergrund, in Häppchen): ' + [['Profil', 'profile'], ['LSCG', 'lscg'], ['Wheel', 'wheel']]
+    .map(([n, k]) => n + (_bildFertig[k] ? ' ✓ fertig' : ' … läuft noch (Zahlen oben unvollständig)')).join(' · '));
 
   // ── Speicher im Browser ──
   z.push('');
@@ -8294,6 +8324,7 @@ function executeOutfitCode() {
 // ══════════════════════════════════════════════════════
 let _roomScanInterval = null;
 let _myMemberNumber    = null;
+let _myMemberName      = null;
 let _selectedMemberNum = null;  // Konfigurator-Ziel
 let _outfitTargetNum   = null;  // Outfit-Ziel (null = selbst)
 let _lastRoomMembers   = [];    // letzter bekannter Raum-Snapshot
@@ -8387,6 +8418,7 @@ function renderRoomMembers(data) {
   if (btn) { btn.textContent = '🔄'; btn.classList.remove('room-scanning'); }
 
   _myMemberNumber = data.memberNumber;
+  if (typeof data.name === 'string' && data.name) _myMemberName = data.name;
   const freshMembers = data.members ?? [];
   const freshNums    = new Set(freshMembers.map(m => m.num));
 

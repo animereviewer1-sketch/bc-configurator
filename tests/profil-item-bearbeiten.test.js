@@ -497,3 +497,60 @@ describe('Prüfbericht: Duplikate mit v2/v3', () => {
     expect(evalIn(ctx, '_profileOldDuplikate().sort()')).toEqual(['Kleid - Ada (old)', 'Kleid - Miav2']);
   });
 });
+
+describe('Crafter anpassen: das Item läuft auf dich', () => {
+  it('öffnet das Item mit der bisherigen Crafter-Nummer und dem Namen', () => {
+    const { ctx, els } = boot();
+    const it = seilItem(); it.craft.MemberName = 'Fremde';
+    oeffnen(ctx, it);
+    expect(els.craftMember.value).toBe(7);
+    expect(els.craftMemberName.value).toBe('Fremde');
+  });
+
+  it('„Auf mich“ trägt deine Nummer und deinen Namen ein; „Übernehmen“ schreibt sie ins Profil, der Rest des Crafts bleibt', () => {
+    const { ctx, els } = boot();
+    const it = seilItem(); it.craft.MemberName = 'Fremde';
+    oeffnen(ctx, it);
+    evalIn(ctx, "_myMemberNumber = 999; _myMemberName = 'Ich';");
+    els.craftName.value = 'Hübsch (neu)';
+    ctx.craftCrafterAufMich();
+    expect([els.craftMember.value, els.craftMemberName.value]).toEqual([999, 'Ich']);
+    ctx.profilItemUebernehmen();
+    const c = profilItem(ctx).craft;
+    expect(c).toMatchObject({ Name: 'Hübsch (neu)', MemberNumber: 999, MemberName: 'Ich', Description: 'weich', Color: '#ff0000', Private: true });
+  });
+
+  it('nur die Nummer geändert, Name nicht angefasst: der alte Name des fremden Crafters wird nicht stehen gelassen', () => {
+    const { ctx, els } = boot();
+    const it = seilItem(); it.craft.MemberName = 'Fremde';
+    oeffnen(ctx, it);
+    els.craftMember.value = 555;
+    els.craftMemberName.value = '';
+    ctx.profilItemUebernehmen();
+    const c = profilItem(ctx).craft;
+    expect(c.MemberNumber).toBe(555);
+    expect(c.MemberName).toBeUndefined();
+  });
+
+  it('ohne Auswahl bleibt der Crafter unverändert; ohne bekannte Nummer meldet „Auf mich“ den Grund', () => {
+    const { ctx, meldungen } = boot();
+    const vorher = seilItem();
+    oeffnen(ctx, vorher);
+    ctx.craftCrafterAufMich();
+    expect(meldungen.some(m => m.includes('Mitgliedsnummer ist noch nicht bekannt'))).toBe(true);
+    ctx.profilItemUebernehmen();
+    expect(profilItem(ctx).craft).toEqual(vorher.craft);
+  });
+
+  it('der erzeugte Code setzt den gewählten Crafter statt Player.MemberNumber', () => {
+    const { ctx, els } = boot();
+    ctx.selectItem('ItemArms', 'TestRope');
+    els.craftName.value = 'Mein Item';
+    ctx.generate();
+    expect(els.codeOut.value).toContain('MemberNumber: Player.MemberNumber');
+    els.craftMember.value = 999; els.craftMemberName.value = 'Ich';
+    ctx.generate();
+    expect(els.codeOut.value).toContain('MemberNumber: 999, MemberName: "Ich"');
+    expect(els.codeOut.value).not.toContain('MemberNumber: Player.MemberNumber');
+  });
+});

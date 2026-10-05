@@ -2827,7 +2827,15 @@ button { cursor: pointer; }
               <input type="checkbox" id="craftPrivate" style="width:auto;accent-color:var(--purple)" onchange="generate()"> Craft privat (nur für mich sichtbar)
             </label>
           </div>
+          <div class="field"><label>Crafter (Mitgliedsnummer)</label>
+            <div style="display:flex;gap:6px;flex-wrap:wrap">
+              <input type="number" id="craftMember" min="1" placeholder="leer = du selbst" style="flex:1 1 130px;min-width:0" oninput="generate()">
+              <button class="btn btn-primary" type="button" style="white-space:nowrap;font-size:.75rem;padding:4px 10px" onclick="craftCrafterAufMich()" title="Crafter auf dich setzen (Nummer und Name aus der Verbindung zum BC-Tab)">👤 Auf mich</button>
+            </div>
+          </div>
+          <div class="field"><label>Crafter (Name)</label><input type="text" id="craftMemberName" placeholder="leer = Name wie beim Crafter" oninput="generate()"></div>
         </div>
+        <div class="hint">Wer das Item gecraftet hat. Das Tool wertet ein Craft als verflucht, wenn Name oder Beschreibung „cursed“ oder „enchanted“ enthalten, und ordnet LSCG-Flüche über Crafter-Nummer und Craft-Name zu. Soll das Item nicht mehr zum Curse eines anderen gehören: Name und Beschreibung ändern und den Crafter auf dich setzen.</div>
       </div>
 
       <!-- SCHLOSS -->
