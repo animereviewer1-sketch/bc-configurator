@@ -169,6 +169,18 @@ function idbScreenshotDelete(kind, key) { return idbScreenshotBatch(kind, [], [k
 // Bilder fortlaufend erscheinen; zurück kommt wie bisher das ganze Objekt. status (optional) bekommt .ok = true/false: nur bei true
 // sind wirklich ALLE Bilder gelesen (ein Fehler liefert bisher {} – das darf keine Sicherung für vollständig halten).
 const IDB_BILD_HAEPPCHEN = 100;
+// Kurze Pause für die Oberfläche. Per MessageChannel statt setTimeout: Timer werden in verdeckten/minimierten Fenstern stark
+// gedrosselt (bis zu einmal pro Sekunde oder weniger), Nachrichten nicht – sonst zöge sich das Laden bei verdecktem Fenster.
+function _idbLuft() {
+  if (typeof MessageChannel === 'function') {
+    return new Promise(resolve => {
+      const mc = new MessageChannel();
+      mc.port1.onmessage = () => { mc.port1.close(); resolve(); };
+      mc.port2.postMessage(0);
+    });
+  }
+  return new Promise(resolve => setTimeout(resolve, 0));
+}
 async function idbScreenshotGetAll(kind, onChunk, status) {
   const prefix = kind + '|';
   const out = {};
@@ -190,7 +202,7 @@ async function idbScreenshotGetAll(kind, onChunk, status) {
       }
       if (records.length < IDB_BILD_HAEPPCHEN) break;
       untere = records[records.length - 1].id; offen = true;
-      await new Promise(r => setTimeout(r, 0));   // der Oberfläche Luft lassen
+      await _idbLuft();   // der Oberfläche Luft lassen
     }
     if (status) status.ok = true;
     return out;

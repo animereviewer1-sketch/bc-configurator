@@ -5,6 +5,9 @@ import { loadScript, evalIn, makeElementStub } from './helpers/loadScript.js';
 // Gesamt-Backup: wirklich alles. Neben den benannten Feldern steckt JEDER Schlüssel der Datenbank und des localStorage
 // ('extras') und jeder Spiel-Scan ('spielScans') in der Datei. Einspielen ergänzt nur – nichts wird ersetzt.
 
+const FAV_SCHLUESSEL = ['BC_FAVORITES_v9', 'BC_PROFILE_FAVS_v1', 'BC_FAV_MEMBERS_v1'];
+const nichtFav = (k) => !FAV_SCHLUESSEL.includes(k);
+
 function boot({ confirm = () => true } = {}) {
   const idb = new IDBFactory();           // eigene, leere Datenbank je "Rechner"
   const teile = [];
@@ -47,15 +50,25 @@ describe('Export: extras und spielScans', () => {
     ctx.localStorage.setItem('BC_StartFilter_v1', '{"curse":{}}');
     ctx.localStorage.setItem('BC_PROFILES_v11', '{"x":1}');
     const e = await ctx._backupExtras();
-    expect(Object.keys(e.idb).sort()).toEqual(['BC_LSCG_FAVS_v1', 'BC_PROFILE_TAGS_v1', 'IRGENDWAS_NEUES_v1']);
+    // (die Favoriten-Schlüssel legt das Tool beim Start selbst an – siehe eigener Test unten)
+    expect(Object.keys(e.idb).filter(nichtFav).sort()).toEqual(['BC_LSCG_FAVS_v1', 'BC_PROFILE_TAGS_v1', 'IRGENDWAS_NEUES_v1']);
     expect(e.idb.BC_PROFILE_TAGS_v1).toEqual({ 'Mia - A': ['sommer'] });
-    expect(Object.keys(e.ls)).toEqual(['BC_StartFilter_v1']);
+    expect(Object.keys(e.ls).filter(nichtFav)).toEqual(['BC_StartFilter_v1']);
+  });
+
+  it('Favoriten liegen in der Datenbank und damit im Backup (nicht nur im vollen localStorage)', async () => {
+    const { ctx } = boot();
+    evalIn(ctx, "PROFILE_FAVS.add('Mia - A'); FAVORITES.add('Cloth::Dress'); _kleinStatus['BC_PROFILE_FAVS_v1'].geladen = true; _kleinStatus['BC_FAVORITES_v9'].geladen = true; _kleinSpeichern('BC_PROFILE_FAVS_v1', PROFILE_FAVS); _kleinSpeichern('BC_FAVORITES_v9', FAVORITES);");
+    await new Promise(r => setTimeout(r, 80));
+    const e = await ctx._backupExtras();
+    expect(e.idb.BC_PROFILE_FAVS_v1).toEqual(['Mia - A']);
+    expect(e.idb.BC_FAVORITES_v9).toEqual(['Cloth::Dress']);
   });
 
   it('die Alt-Kopien der Bilder (eingefroren) stecken nicht doppelt drin', async () => {
     const { ctx } = boot();
     for (const k of ['BC_PROFILE_SCREENSHOTS_v1', 'BC_LSCG_SCREENSHOTS_v1', 'BC_MBS_WHEEL_SS_v1']) await ctx.idbSet(k, { a: 'bild' });
-    expect(Object.keys((await ctx._backupExtras()).idb)).toEqual([]);
+    expect(Object.keys((await ctx._backupExtras()).idb).filter(nichtFav)).toEqual([]);
   });
 
   it('Spiel-Scans: alle Datensätze nach id', async () => {

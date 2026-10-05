@@ -391,6 +391,58 @@ let dimSubProps  = {};
 let globalPropVals = {};
 let colorIsDefault = {};  // i → true wenn "Default" aktiv
 
+// ── Voller Browser-Speicher (localStorage) darf nie still scheitern ───────────────────────────────────────────────────
+// Der localStorage fasst nur ~5 MB. Ist er voll, warf setItem – und fast jede Stelle schluckte den Fehler mit catch {}: Einstellungen
+// und Favoriten waren nach dem Neuladen weg, ohne dass es jemand merkte. Jetzt meldet das Tool es (höchstens alle 30 s).
+let _lsVollGemeldet = 0;
+function _lsVollMelden(key, err) {
+  console.error('[Speicher] localStorage voll – nicht gespeichert:', key, err);
+  if (Date.now() - _lsVollGemeldet < 30000) return;
+  _lsVollGemeldet = Date.now();
+  if (typeof showStatus === 'function') {
+    showStatus('⚠️ Der Browser-Speicher (localStorage) ist voll – "' + key + '" konnte dort nicht gespeichert werden. Favoriten sind trotzdem sicher in der Datenbank; alte Profil-Kopie unter Einstellungen → Gefahrenzone entfernen schafft wieder Platz.', 'error');
+  }
+}
+try {
+  if (typeof Storage !== 'undefined' && Storage.prototype && !Storage.prototype.__bcuQuota) {
+    const _origSetItem = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (k, v) {
+      try { return _origSetItem.call(this, k, v); }
+      catch (e) { if (this === window.localStorage) _lsVollMelden(k, e); throw e; }
+    };
+    Storage.prototype.__bcuQuota = true;
+  }
+} catch (e) {}
+
+// ── Kleine Nutzerdaten (Favoriten): die Datenbank ist maßgeblich, der localStorage nur ein schneller Spiegel ─────────
+// Jede Änderung geht in die IndexedDB (verlässlich, Fehler sind sichtbar) und zusätzlich in den localStorage (darf scheitern).
+// Beim Start gilt sofort der localStorage-Stand (synchron, wie bisher); danach kommt die Datenbank: ist dort schon ein Stand
+// gespeichert, ersetzt er den Spiegel – Klicks, die vor dem Laden kamen, werden darauf angewendet. Fehlt er noch, wird der
+// localStorage-Stand dort angelegt (einmalige Übernahme).
+const _kleinStatus = {};
+function _kleinLaden(key, satz, nachLaden) {
+  const st = _kleinStatus[key] = { satz, start: new Set(satz), geladen: false };
+  idbGet(key).then(d => {
+    if (Array.isArray(d)) {
+      const neu = new Set(d);
+      for (const k of st.start) if (!satz.has(k)) neu.delete(k);   // seit dem Start entfernt
+      for (const k of satz) if (!st.start.has(k)) neu.add(k);      // seit dem Start hinzugefügt
+      satz.clear();
+      neu.forEach(k => satz.add(k));
+    }
+    st.geladen = true;
+    _kleinSpeichern(key, satz);
+    try { if (nachLaden) nachLaden(); } catch (e) {}
+  });
+}
+function _kleinSpeichern(key, satz) {
+  const st = _kleinStatus[key];
+  try { localStorage.setItem(key, JSON.stringify([...satz])); } catch (e) {}   // Spiegel: darf scheitern (meldet es dann sichtbar)
+  // In die Datenbank erst nach dem Lesen, sonst würde ein alter Spiegel den dort gespeicherten Stand überschreiben (_kleinLaden schreibt danach selbst)
+  if (st && !st.geladen) return;
+  idbSet(key, [...satz]);
+}
+
 let FAVORITES = new Set();
 let OUTFIT    = [];
 
@@ -554,7 +606,12 @@ function _saveProfilesJetzt() {
   idbSet('BC_PROFILES_v12', PROFILES);
   // Spiegel im localStorage als Rueckfallebene. JSON.stringify plus der
   // synchrone Schreibvorgang blockieren den Hauptthread, darum gebuendelt.
-  try { localStorage.setItem('BC_PROFILES_v11', JSON.stringify(PROFILES)); } catch(e) {}
+  // Nur bei kleinen Bestaenden: der localStorage fasst ~5 MB. Tausende Profile passen nicht hinein – der Spiegel fuellte ihn dann
+  // bis zum Rand, und alles andere dort (Favoriten, Einstellungen) liess sich nicht mehr speichern; ausserdem blockierte das
+  // Serialisieren von zig MB bei jedem Speichern. Die Datenbank (oben) ist der verlaessliche Speicher.
+  if (Object.keys(PROFILES).length <= 500) {
+    try { localStorage.setItem('BC_PROFILES_v11', JSON.stringify(PROFILES)); } catch(e) {}
+  }
 }
 function _saveProfiles() {
   _sammelSpeicher.plane('profile', _saveProfilesJetzt);
@@ -607,12 +664,18 @@ function _hatBild(kind, key) {
 }
 // Weiß das Tool sicher, welche Bilder es gibt? (Schlüssel bekannt oder alles geladen) – Voraussetzung für "fehlende Bilder erzeugen"
 function _bildExistenzSicher(kind) { return _bildFertig[kind] || _bildKeys[kind] != null; }
-function _bildKeyWeg(kind, key) { if (_bildKeys[kind]) _bildKeys[kind].delete(key); }
+// Gelöscht, während die Art noch lädt: ein Häppchen, das vor dem Löschen gelesen wurde, darf das Bild nicht wieder einsetzen
+const _bildGeloescht = { profile: new Set(), lscg: new Set(), wheel: new Set() };
+function _bildKeyWeg(kind, key) {
+  if (_bildKeys[kind]) _bildKeys[kind].delete(key);
+  if (!_bildFertig[kind]) _bildGeloescht[kind].add(key);
+}
 // Ein Häppchen oder Einzelbild in den Speicher übernehmen: neu aufgenommene Bilder haben Vorrang (nie ersetzen, nur auffüllen)
 function _bilderEinfuegen(kind, teil) {
   const m = _bildMap(kind);
-  for (const k of Object.keys(teil)) if (!(k in m)) m[k] = teil[k];
-  _screenshotShadowMerge(kind, teil);
+  const weg = _bildGeloescht[kind];
+  for (const k of Object.keys(teil)) if (!(k in m) && !weg.has(k)) m[k] = teil[k];
+  _screenshotShadowMerge(kind, teil);   // der Schatten kennt den gespeicherten Stand – so wird ein inzwischen gelöschtes Bild beim nächsten Speichern auch aus der Datenbank entfernt
 }
 // true nur, wenn alle drei Arten vollständig und ohne Fehler gelesen wurden
 function bcBilderGeladen() { return Promise.all([_bilderGeladen.profile, _bilderGeladen.lscg, _bilderGeladen.wheel]).then(r => r.every(Boolean)); }
@@ -634,7 +697,7 @@ async function _bilderLaden(kind, onFertig, nachSchluessel) {
     await idbScreenshotGetAll(kind, teil => _bilderEinfuegen(kind, teil), status);
     ok = status.ok === true;
     // Nur bei Erfolg ist der Speicher vollständig – sonst bleibt die Schlüsselmenge als Auskunft ("hat ein Bild") erhalten
-    if (ok) { _bildKeys[kind] = null; _bildFertig[kind] = true; }
+    if (ok) { _bildKeys[kind] = null; _bildFertig[kind] = true; _bildGeloescht[kind].clear(); }
   } catch (e) { console.warn('[Bilder] Laden fehlgeschlagen:', kind, e); }
   try { if (onFertig) onFertig(ok); } catch (e) {}
   _bilderGeladen[kind].fertig(ok);
@@ -656,6 +719,7 @@ let PROFILE_FAVS = new Set();
 let PROFILE_TAGS = {};
 let _profileTagFilter = null; // null = all, string = tag name
 try { PROFILE_FAVS = new Set(JSON.parse(localStorage.getItem('BC_PROFILE_FAVS_v1') || '[]')); } catch {}
+_kleinLaden('BC_PROFILE_FAVS_v1', PROFILE_FAVS, () => { if (typeof _activeTab !== 'undefined' && _activeTab === 'outfit') _debouncedRenderProfileList(); });
 let _profileFilter = 'all'; // 'all' | 'fav' | 'noold'
 
 // ── Profile Alt-Owner ─────────────────────────────────
@@ -747,7 +811,7 @@ function markAllProfilesOld() {
 
   _saveProfiles();
   _saveProfileScreenshots();
-  try { localStorage.setItem('BC_PROFILE_FAVS_v1', JSON.stringify([...PROFILE_FAVS])); } catch {}
+  _kleinSpeichern('BC_PROFILE_FAVS_v1', PROFILE_FAVS);
   _saveProfileAltOwners();
   renderProfileList();
   showStatus('✅ ' + toRename.length + ' Profile → "(old)" im Namen eingetragen', 'success');
@@ -758,6 +822,7 @@ try {
   const fav = localStorage.getItem('BC_FAVORITES_v9');
   if (fav) FAVORITES = new Set(JSON.parse(fav));
 } catch {}
+_kleinLaden('BC_FAVORITES_v9', FAVORITES, () => { if (typeof renderGroups === 'function') renderGroups(document.querySelector('.sidebar-search')?.value || ''); });
 
 // ══════════════════════════════════════════════════════
 //  CACHE
@@ -784,7 +849,7 @@ function toggleFav(group, name, e) {
   const k = favKey(group, name);
   if (FAVORITES.has(k)) FAVORITES.delete(k);
   else FAVORITES.add(k);
-  try { localStorage.setItem('BC_FAVORITES_v9', JSON.stringify([...FAVORITES])); } catch {}
+  _kleinSpeichern('BC_FAVORITES_v9', FAVORITES);
   renderGroups(document.querySelector('.sidebar-search')?.value || '');
 }
 
@@ -2255,7 +2320,7 @@ function _profilEntfernen(name) {
   else if (_hatBild('profile', name)) { _bildKeyWeg('profile', name); idbScreenshotDelete('profile', name); }   // Bild war noch nicht im Speicher
   if (PROFILE_FAVS.has(name)) {
     PROFILE_FAVS.delete(name);
-    try { localStorage.setItem('BC_PROFILE_FAVS_v1', JSON.stringify([...PROFILE_FAVS])); } catch {}
+    _kleinSpeichern('BC_PROFILE_FAVS_v1', PROFILE_FAVS);
   }
   if (PROFILE_TAGS[name]) { delete PROFILE_TAGS[name]; _saveProfileTags(); }
 }
@@ -2937,22 +3002,15 @@ const DC_SETTLE_MS = 5000;
 let _gameState = null;
 const _dcJobs = {};  // id → { label, active(), pause(reason), resume(), alwaysRoom, needRoom, paused, readySince, waitMsg }
 
-// Ruhe nach einem freiwilligen Raumwechsel: Beim Betreten sendet BC (und jeder Mod) in kurzer Zeit viel an den Server – genau dann
-// ist der Server am empfindlichsten ("ErrorRateLimited"). Bilderserien und andere lange Abläufe warten darum diese Zeit ab, bevor sie
-// weitermachen (danach gilt wie üblich noch DC_SETTLE_MS). Nach einem DC gilt das nicht zusätzlich – dort greift DC_SETTLE_MS allein.
-const RAUM_RUHE_MS = 8000;
-let _raumRuheBis = 0;
-
 function _gameOk(needRoom) {
   if (!_connected) return false;
   const g = _gameState;
   if (!g) return true;
   if (!g.online || !g.loggedIn) return false;
-  if (Date.now() < _raumRuheBis) return false;
   return !needRoom || g.inRoom;
 }
 
-// Wie _gameOk, aber ohne die Ruhe nach Raumwechsel: für "Aussehen zurückstellen" – das muss auch gleich danach gehen
+// Verbunden und eingeloggt (ohne Raum-Bedingung): für "Aussehen zurückstellen" beim Stopp einer Serie
 function _gameOnline() {
   if (!_connected) return false;
   const g = _gameState;
@@ -2965,7 +3023,6 @@ function _gameWaitReason(needRoom) {
   if (!g) return '';
   if (!g.online) return 'BC-Server getrennt';
   if (!g.loggedIn) return 'BC noch nicht wieder eingeloggt';
-  if (Date.now() < _raumRuheBis) return 'Raumwechsel – kurze Ruhe, damit der Beitritt nicht gedrosselt wird';
   if (needRoom && !g.inRoom) return 'nicht in einem Raum';
   return '';
 }
@@ -3054,11 +3111,6 @@ function _gameStateSet(g) {
   _gameState = (g && typeof g === 'object')
     ? { online: g.online !== false, loggedIn: !!g.loggedIn, screen: String(g.screen || ''), inRoom: !!g.inRoom, room: g.room ? String(g.room) : null }
     : null;
-  // Freiwilliger Raumwechsel (vorher gesund eingeloggt, jetzt in einem anderen Raum) → Ruhe; nach einem DC nicht (dort wartet DC_SETTLE_MS)
-  if (prev && _gameState && prev.online && prev.loggedIn && _gameState.online && _gameState.loggedIn
-      && _gameState.inRoom && _gameState.room !== prev.room) {
-    _raumRuheBis = Date.now() + RAUM_RUHE_MS;
-  }
   if (_gameState && prev?.online !== _gameState.online) {
     if (!_gameState.online) console.warn('[BCK-Popup] BC-Server getrennt');
     else if (prev) console.log('[BCK-Popup] BC-Server wieder verbunden');
@@ -3207,12 +3259,22 @@ function _dcPopupTick() {
 // ── Profile Screenshot: Canvas-Capture via BC ────────
 const _pendingScreenshot = {}; // reqId → profileName
 
-function captureProfileScreenshot(pname) {
+// nachher (optional): wird genau EINMAL aufgerufen – sobald das Bild gespeichert ist, bei einem Fehler, oder spätestens nach 8 s.
+// So kann etwas erst NACH dem Foto passieren (z. B. das Outfit wechseln).
+const _screenshotNachher = {};   // reqId → einmal()
+function captureProfileScreenshot(pname, nachher) {
   const name = _profileNameMap[pname] || pname;
-  if (!name || !PROFILES[name]) return;
-  if (!_connected) { showStatus('❌ Nicht verbunden mit BC', 'error'); return; }
+  let einmal = () => {};
+  if (typeof nachher === 'function') {
+    let erledigt = false;
+    einmal = () => { if (erledigt) return; erledigt = true; try { nachher(); } catch (e) { console.warn('[Screenshot] nachher:', e); } };
+  }
+  if (!name || !PROFILES[name]) { einmal(); return; }
+  if (!_connected) { showStatus('❌ Nicht verbunden mit BC', 'error'); einmal(); return; }
   const reqId = 'ss_' + Date.now();
   _pendingScreenshot[reqId] = name;
+  _screenshotNachher[reqId] = einmal;
+  setTimeout(() => { delete _screenshotNachher[reqId]; einmal(); }, 8000);   // Sicherheitsnetz: bleibt die Antwort aus, geht es trotzdem weiter
 
   // Nutzt Player.Canvas (wie LSCG-Outfit): schneller, nur der Charakter, kein UI-Hintergrund.
   // Sendet SCREENSHOT_DATA (nicht CANVAS_PREVIEW_DATA) damit kein Slideshow-Callback ausgelöst wird.
@@ -3445,9 +3507,11 @@ function _handleScreenshotData(data) {
   }
   const name = _pendingScreenshot[data.reqId];
   delete _pendingScreenshot[data.reqId];
-  if (!name) return;
-  if (data.err) { showStatus('❌ Screenshot: ' + data.err, 'error'); return; }
-  if (!data.data) { showStatus('❌ Screenshot: Keine Daten', 'error'); return; }
+  const nach = _screenshotNachher[data.reqId] || (() => {});
+  delete _screenshotNachher[data.reqId];
+  if (!name) { nach(); return; }
+  if (data.err) { showStatus('❌ Screenshot: ' + data.err, 'error'); nach(); return; }
+  if (!data.data) { showStatus('❌ Screenshot: Keine Daten', 'error'); nach(); return; }
 
   // Resize to max 520×693 before storing (keeps file small)
   const imgEl = new Image();
@@ -3465,7 +3529,9 @@ function _handleScreenshotData(data) {
     showStatus('✅ Screenshot gespeichert für "' + name + '"', 'success');
     const mod = document.getElementById('profileModal');
     if (mod?.classList.contains('open') && _profileModalName === name) _renderProfileModal(name);
+    nach();
   };
+  imgEl.onerror = () => { showStatus('❌ Screenshot: Bild nicht lesbar', 'error'); nach(); };
   imgEl.src = data.data;
 }
 
@@ -3932,7 +3998,7 @@ function profileExecuteBySlot(slot) {
 function toggleProfileFav(name) {
   if (PROFILE_FAVS.has(name)) PROFILE_FAVS.delete(name);
   else PROFILE_FAVS.add(name);
-  try { localStorage.setItem('BC_PROFILE_FAVS_v1', JSON.stringify([...PROFILE_FAVS])); } catch {}
+  _kleinSpeichern('BC_PROFILE_FAVS_v1', PROFILE_FAVS);
   if (!_profilFavAktualisieren(name)) renderProfileList();
 }
 
@@ -6501,7 +6567,8 @@ function _uniqueProfileName(base) {
 
 // Core save helper – called after we have the item list (online or fallback)
 // afterSave: optional callback, called after successful save (e.g. to apply default outfit)
-function _doSaveProfile(items, defaultName, keepHairGroups, afterSave) {
+// vomTragen: die Items wurden gerade aus dem getragenen Aussehen von DIR gelesen (nicht aus der Datenbank / von einem anderen Spieler)
+function _doSaveProfile(items, defaultName, keepHairGroups, afterSave, vomTragen) {
   const suggested = _uniqueProfileName(defaultName);
   const name = prompt('Profil-Name:', suggested);
   if (!name?.trim()) return;
@@ -6516,8 +6583,18 @@ function _doSaveProfile(items, defaultName, keepHairGroups, afterSave) {
   try {
     _saveProfiles();
     showStatus('✅ Profil "' + trimmed + '" gespeichert (' + items.length + ' Items) – nutzbar in Bot-Triggern!', 'success');
-    if (typeof afterSave === 'function') afterSave();
-    _autoBildPlanen(trimmed);
+    const weiter = () => {
+      if (typeof afterSave === 'function') afterSave();
+      _autoBildPlanen(trimmed);   // klappt das Foto nicht, holt Auto-Bild es wie sonst nach (ein vorhandenes Bild wird nie ersetzt)
+    };
+    // Du trägst das Profil gerade: ERST fotografieren, DANN das Outfit wechseln (afterSave). Sonst wäre es schon weg (oder müsste
+    // erst wieder angezogen werden). Nur wenn gerade nichts anderes aufnimmt und es noch kein Bild gibt.
+    const frei = !_slideshowRunning && !_wheelGenRunning && !_osCaptureRunning && Object.keys(_pendingProfileCapture).length === 0;
+    if (vomTragen && autoBildAn() && _connected && _gameOk(false) && _bildExistenzSicher('profile') && !_hatBild('profile', trimmed) && frei) {
+      captureProfileScreenshot(trimmed, weiter);
+    } else {
+      weiter();
+    }
   } catch(e) { showStatus('❌ Speichern fehlgeschlagen: ' + e.message, 'error'); }
 }
 
@@ -6763,7 +6840,7 @@ function _fetchOutfitAndSave(ownerNum, defaultName, fallbackItems, afterSave) {
       return;
     }
     const { filteredItems, keepHairGroups } = _applyHairBaseline(items);
-    _doSaveProfile(filteredItems.map(_appearanceItemToProfile), defaultName, keepHairGroups, afterSave);
+    _doSaveProfile(filteredItems.map(_appearanceItemToProfile), defaultName, keepHairGroups, afterSave, !tgtNum);
   };
 
   bcSend({ type: 'GET_CHAR_APPEARANCE', memberNum: tgtNum, reqId });
@@ -6782,7 +6859,7 @@ function scanOutfitAndSave() {
   _pendingOutfitSave[reqId] = function(items) {
     if (!items?.length) { showStatus('❌ Keine Items erhalten', 'error'); return; }
     const { filteredItems, keepHairGroups } = _applyHairBaseline(items);
-    _doSaveProfile(filteredItems.map(_appearanceItemToProfile), defaultName, keepHairGroups);
+    _doSaveProfile(filteredItems.map(_appearanceItemToProfile), defaultName, keepHairGroups, undefined, !tgtNum);
     renderProfileList();
   };
 
@@ -7831,8 +7908,12 @@ async function exportInfoSammeln() {
   } catch (e) {}
   z.push('Datenbank: ' + zahl(kvAnzahl) + ' Schlüssel · ca. ' + MB(kvZeichen) + (kvGroesster ? ' · größter: ' + kvGroesster + ' (' + MB(kvMax) + ')' : ''));
   let lsAnzahl = 0, lsZeichen = 0;
-  try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); lsAnzahl++; lsZeichen += String(localStorage.getItem(k) || '').length + k.length; } } catch (e) {}
-  z.push('localStorage: ' + zahl(lsAnzahl) + ' Schlüssel · ca. ' + MB(lsZeichen));
+  const lsGroesse = [];
+  try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); const l = String(localStorage.getItem(k) || '').length + k.length; lsAnzahl++; lsZeichen += l; lsGroesse.push([k, l]); } } catch (e) {}
+  lsGroesse.sort((x, y) => y[1] - x[1]);
+  // Der localStorage fasst nur ~5 MB (5,0 "MB" hier = voll): ist er voll, scheitert dort jedes Speichern
+  z.push('localStorage: ' + zahl(lsAnzahl) + ' Schlüssel · ca. ' + MB(lsZeichen) + ' von etwa 5 MB' + (lsZeichen > 4.5 * 1048576 ? ' ⚠️ FAST VOLL – Speichern dort schlägt fehl' : '')
+    + (lsGroesse.length ? ' · größte: ' + lsGroesse.slice(0, 3).map(([k, l]) => k + ' (' + MB(l) + ')').join(', ') : ''));
   let scanAnzahl = 0;
   try { scanAnzahl = (await idbSnapshotKeys()).length; } catch (e) {}
   z.push('Spiel-Scans: ' + zahl(scanAnzahl));
@@ -7884,6 +7965,30 @@ async function exportInfoSammeln() {
   z.push('Einstellungen/Schlüssel: ' + zahl(Object.keys(ex.idb).length + Object.keys(ex.ls).length) + ' · ' + tEx + ' ms · Spiel-Scans: ' + zahl(Object.keys(sc).length) + ' · ' + tSc + ' ms');
   z.push('Geschätzte Größe der Backup-Datei: ca. ' + MB(bp.summe + bl.summe + wShots.summe + lCodeZeichen + kvZeichen));
   return z.join('\n');
+}
+
+// Alte Profil-Kopie im localStorage (BC_PROFILES_v11): Rückfallebene aus der Zeit vor der Datenbank. Bei tausenden Profilen füllt sie
+// den ~5 MB großen localStorage und veraltet; nur mit Rückfrage entfernen, und erst wenn alles davon in der Datenbank steht.
+function lsProfilKopieEntfernen() {
+  let roh = null;
+  try { roh = localStorage.getItem('BC_PROFILES_v11'); } catch (e) {}
+  if (!roh) { showStatus('ℹ️ Keine alte Profil-Kopie im Browser-Speicher vorhanden', 'info'); return; }
+  let kopie = null;
+  try { kopie = JSON.parse(roh); } catch (e) {}
+  const mb = (roh.length / 1048576).toFixed(1).replace('.', ',');
+  const nurKopie = (kopie && typeof kopie === 'object') ? Object.keys(kopie).filter(n => !PROFILES[n]) : [];
+  if (nurKopie.length) {
+    if (!confirm(nurKopie.length + ' Profile stehen nur in der alten Kopie, nicht in der Datenbank:\n\n'
+        + nurKopie.slice(0, 10).join('\n') + (nurKopie.length > 10 ? '\n… und ' + (nurKopie.length - 10) + ' weitere' : '')
+        + '\n\nOK = diese Profile zuerst in die Datenbank übernehmen (nichts geht verloren)\nAbbrechen = nichts verändern')) return;
+    nurKopie.forEach(n => { PROFILES[n] = kopie[n]; });
+    _saveProfilesJetzt();
+    showStatus('✅ ' + nurKopie.length + ' Profile aus der alten Kopie in die Datenbank übernommen', 'success');
+  }
+  if (!confirm('Alte Profil-Kopie (' + mb + ' MB) aus dem Browser-Speicher entfernen?\n\nAlle ' + Object.keys(PROFILES).length
+      + ' Profile bleiben in der Datenbank erhalten. Danach ist im Browser-Speicher wieder Platz für Einstellungen.')) return;
+  try { localStorage.removeItem('BC_PROFILES_v11'); showStatus('🧹 Alte Profil-Kopie (' + mb + ' MB) entfernt – die Profile liegen in der Datenbank', 'success'); }
+  catch (e) { showStatus('❌ Entfernen fehlgeschlagen: ' + e.message, 'error'); }
 }
 
 let _exportInfoText = '';
@@ -8345,9 +8450,10 @@ try {
   const _fv = localStorage.getItem('BC_FAV_MEMBERS_v1');
   if (_fv) _favMembers = new Set(JSON.parse(_fv));
 } catch(e) {}
+_kleinLaden('BC_FAV_MEMBERS_v1', _favMembers);   // die Raumliste zeichnet sich beim nächsten Spieler-Update von selbst neu
 
 function _saveFavMembers() {
-  try { localStorage.setItem('BC_FAV_MEMBERS_v1', JSON.stringify([..._favMembers])); } catch(e) {}
+  _kleinSpeichern('BC_FAV_MEMBERS_v1', _favMembers);
 }
 
 // ── Auto-Scan: Craft/Curse + LSCG-Outfits ─────────────────────
@@ -10007,7 +10113,7 @@ function importAllData() {
         if (d.lscgDB) { lscgNeu = _lscgMerge(LSCG_DB, d.lscgDB); _saveLscgDB(); }
         if (d.lscgSlots)          { Object.assign(_lscgSlots, d.lscgSlots); _saveLscgSlots(); }
         // Screenshots (lscg/profile/wheel) wurden schon beim Lesen ergaenzt – _bildEinspieler
-        if (d.profileFavs)        { d.profileFavs.forEach(k => PROFILE_FAVS.add(k)); try { localStorage.setItem('BC_PROFILE_FAVS_v1', JSON.stringify([...PROFILE_FAVS])); } catch {} }
+        if (d.profileFavs)        { d.profileFavs.forEach(k => PROFILE_FAVS.add(k)); _kleinSpeichern('BC_PROFILE_FAVS_v1', PROFILE_FAVS); }
         if (Array.isArray(d.mbsWheel)) {
           _mbsMerge(_mbsWheelData, d.mbsWheel);
           _saveMbsWheelData();
@@ -10171,6 +10277,7 @@ function _removeLscgScreenshotFromProfiles(fp, img) {
   for (const k of keys) {
     if (PROFILE_SCREENSHOTS[k] === img) {
       delete PROFILE_SCREENSHOTS[k];
+      _bildKeyWeg('profile', k);
       n++;
     }
   }

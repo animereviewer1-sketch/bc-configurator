@@ -222,3 +222,33 @@ describe('Alles, was ein vollständiges Archiv braucht, wartet auf die Bilder', 
     expect(src).toContain("uebersprungen: 'Bilder noch nicht vollstaendig geladen'");
   });
 });
+
+describe('Löschen während des Ladens: ein verspätetes Häppchen setzt das Bild nicht wieder ein', () => {
+  it('Grabstein hält das Bild draußen; der nächste Speichervorgang entfernt es auch aus der Datenbank', async () => {
+    const ctx = await boot();
+    const k = id('grab');
+    await ctx.idbScreenshotBatch('profile', [[k, 'data:x']], []);
+    const K = JSON.stringify(k);
+    evalIn(ctx, `_bildFertig.profile = false; _bildKeys.profile = new Set([${K}]);
+      PROFILE_SCREENSHOTS[${K}] = 'data:x'; _screenshotShadow.profile.set(${K}, 'data:x');
+      delete PROFILE_SCREENSHOTS[${K}]; _bildKeyWeg('profile', ${K});`);
+    evalIn(ctx, `_bilderEinfuegen('profile', { [${K}]: 'data:x' });`);   // das Häppchen war schon unterwegs
+    expect(evalIn(ctx, 'PROFILE_SCREENSHOTS')[k]).toBeUndefined();
+    await ctx._saveProfileScreenshotsJetzt();
+    expect((await ctx.idbScreenshotGetAll('profile'))[k]).toBeUndefined();
+  });
+
+  it('ein neu aufgenommenes Bild unter demselben Schlüssel bleibt, auch wenn er einen Grabstein hat', async () => {
+    const ctx = await boot();
+    const K = JSON.stringify(id('neu'));
+    evalIn(ctx, `_bildFertig.profile = false; _bildKeyWeg('profile', ${K}); PROFILE_SCREENSHOTS[${K}] = 'data:frisch';
+      _bilderEinfuegen('profile', { [${K}]: 'data:alt' });`);
+    expect(evalIn(ctx, `PROFILE_SCREENSHOTS[${K}]`)).toBe('data:frisch');
+  });
+
+  it('ist alles geladen, werden die Grabsteine verworfen', async () => {
+    const ctx = loadScript(['items.js'], { console: quiet });
+    await ctx.bcBilderGeladen();
+    expect(evalIn(ctx, '[_bildGeloescht.profile.size, _bildGeloescht.lscg.size, _bildGeloescht.wheel.size]')).toEqual([0, 0, 0]);
+  });
+});

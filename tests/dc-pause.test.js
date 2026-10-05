@@ -28,7 +28,6 @@ function boot(files = ['items.js']) {
   const state = (game) => send({ type: 'GAME_STATE', game });
   // Settle-Fenster "vorspulen": erste Auswertung setzt readySince, dann 6 s zurückdatieren
   const settle = (id) => {
-    evalIn(ctx, '_raumRuheBis = 0');   // Zeit vorspulen: auch die Ruhe nach einem Raumwechsel ist vorbei
     evalIn(ctx, '_dcEvaluate()');
     evalIn(ctx, `_dcJobs[${JSON.stringify(id)}].readySince -= 6000`);
     evalIn(ctx, '_dcEvaluate()');
@@ -199,7 +198,7 @@ describe('Tool: Spiel-Server-Wächter', () => {
   });
 });
 
-describe('Ruhe nach freiwilligem Raumwechsel', () => {
+describe('Raumwechsel: Abläufe laufen ohne Pause weiter', () => {
   const ANDERER = { online: true, loggedIn: true, screen: 'ChatRoom', inRoom: true, room: 'Anderer Raum' };
   function mitAblauf() {
     const t = boot();
@@ -213,53 +212,37 @@ describe('Ruhe nach freiwilligem Raumwechsel', () => {
   }
   const log = (t) => evalIn(t.ctx, '_tLog.slice()');
 
-  it('Raumwechsel hält laufende Abläufe an und nennt den Grund', () => {
+  it('ein Raumwechsel (auch Halle → Raum) hält laufende Abläufe NICHT an – Bilder werden direkt gemacht', () => {
     const t = mitAblauf();
+    t.state(HALL);
     t.state(ANDERER);
-    expect(log(t).length).toBe(1);
-    expect(log(t)[0]).toMatch(/^pause:Raumwechsel/);
+    t.state(ROOM);
+    t.state(ANDERER);
+    expect(log(t)).toEqual([]);
+    expect(evalIn(t.ctx, '_gameOk(false)')).toBe(true);
+    expect(evalIn(t.ctx, '_gameOk(true)')).toBe(true);
+    expect(evalIn(t.ctx, "_dcJobs['s'].paused")).toBe(false);
   });
 
-  it('weiter geht es erst nach der Ruhe UND dem Settle-Fenster, nicht schon nach dem Settle-Fenster allein', () => {
+  it('nach einem echten DC gilt weiter das Beruhigungsfenster (DC_SETTLE_MS) – nur dort wird gewartet', () => {
     const t = mitAblauf();
-    t.state(ANDERER);
+    t.state(OFFLINE);
+    expect(log(t)).toHaveLength(1);
+    t.state(ROOM);
     evalIn(t.ctx, '_dcEvaluate()');
-    evalIn(t.ctx, "_dcJobs['s'].readySince -= 6000");
-    evalIn(t.ctx, '_dcEvaluate()');
-    expect(log(t)).toEqual([expect.stringMatching(/^pause:/)]);   // Ruhe läuft noch → kein resume
-    evalIn(t.ctx, '_raumRuheBis = 0');
-    evalIn(t.ctx, '_dcEvaluate()');
-    evalIn(t.ctx, "_dcJobs['s'].readySince -= 6000");
-    evalIn(t.ctx, '_dcEvaluate()');
+    expect(log(t)).toHaveLength(1);   // noch nicht fortgesetzt
+    t.settle('s');
     expect(log(t)[1]).toBe('resume');
   });
 
-  it('Stopp einer Serie direkt nach dem Raumwechsel stellt das Aussehen trotzdem zurück (die Ruhe gilt nur für Start/Fortsetzen)', () => {
+  it('Stopp einer Serie stellt das Aussehen zurück', () => {
     const t = mitAblauf();
     t.state(ANDERER);
-    expect(evalIn(t.ctx, '_gameOk(false)')).toBe(false);
     expect(evalIn(t.ctx, '_gameOnline()')).toBe(true);
     const vorher = t.execs().length;
     evalIn(t.ctx, '_slideshowRunning = true; _stopProfileSlideshow();');
     const codes = t.execs().slice(vorher);
     expect(codes.some((c) => c.includes('__BCU_slideshowOrig'))).toBe(true);
-  });
-
-  it('nach einem DC gibt es keine zusätzliche Ruhe (dort wartet DC_SETTLE_MS allein)', () => {
-    const t = mitAblauf();
-    t.state(OFFLINE);
-    t.state(ROOM);
-    expect(evalIn(t.ctx, '_raumRuheBis')).toBe(0);
-    t.settle('s');
-    expect(log(t)[1]).toBe('resume');
-  });
-
-  it('derselbe Raum (nur ein neuer Zustandsbericht) löst keine Ruhe aus', () => {
-    const t = mitAblauf();
-    t.state(ROOM);
-    t.state(ROOM);
-    expect(evalIn(t.ctx, '_raumRuheBis')).toBe(0);
-    expect(log(t)).toEqual([]);
   });
 });
 
