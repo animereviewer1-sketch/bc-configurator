@@ -2427,29 +2427,38 @@ window.CurseScanner = (() => {
     })();
 
     (function installSendMonSocket() {
-      if (typeof ServerSocket === 'undefined') { setTimeout(installSendMonSocket, 1000); return; }
-      ServerSocket.on('ForceDisconnect', function (grund) {
-        try { _smVorfall('ForceDisconnect: ' + (typeof grund === 'string' ? grund : JSON.stringify(grund))); } catch (e) {}
-      });
-      ServerSocket.on('disconnect', function (grund) {
-        try { _smVorfall('disconnect: ' + String(grund)); } catch (e) {}
-      });
-      // Leitungs-Zähler: nur zählen, Rückgabe und Argumente unverändert
-      try {
-        const orig = ServerSocket.emit;
-        if (typeof orig === 'function' && !orig.__bckSM) {
-          const RESERVIERT = ['connect', 'connect_error', 'disconnect', 'disconnecting', 'newListener', 'removeListener', 'error'];
-          const gezaehlt = function (ev) {
-            try { if (typeof ev === 'string' && RESERVIERT.indexOf(ev) < 0) _smLeitung(); } catch (e) {}
-            return orig.apply(this, arguments);
-          };
-          gezaehlt.__bckSM = true;
-          ServerSocket.emit = gezaehlt;
-          sm.leitung.aktiv = true;
+      // Nach einer Trennung und dem Neuanmelden legt BC ein NEUES Socket-Objekt an: die Zähler und Trennungs-Hörer am alten gehen damit
+      // verloren (im Bericht: "An der Leitung: 0" und kein ForceDisconnect-Grund bei der zweiten und dritten Trennung). Darum wird
+      // regelmäßig geprüft, ob ServerSocket noch dasselbe Objekt ist, und sonst neu verdrahtet.
+      let verdrahtet = null;
+      const verdrahten = function () {
+        if (typeof ServerSocket === 'undefined' || !ServerSocket || ServerSocket === verdrahtet) return;
+        verdrahtet = ServerSocket;
+        ServerSocket.on('ForceDisconnect', function (grund) {
+          try { _smVorfall('ForceDisconnect: ' + (typeof grund === 'string' ? grund : JSON.stringify(grund))); } catch (e) {}
+        });
+        ServerSocket.on('disconnect', function (grund) {
+          try { _smVorfall('disconnect: ' + String(grund)); } catch (e) {}
+        });
+        // Leitungs-Zähler: nur zählen, Rückgabe und Argumente unverändert
+        try {
+          const orig = ServerSocket.emit;
+          if (typeof orig === 'function' && !orig.__bckSM) {
+            const RESERVIERT = ['connect', 'connect_error', 'disconnect', 'disconnecting', 'newListener', 'removeListener', 'error'];
+            const gezaehlt = function (ev) {
+              try { if (typeof ev === 'string' && RESERVIERT.indexOf(ev) < 0) _smLeitung(); } catch (e) {}
+              return orig.apply(this, arguments);
+            };
+            gezaehlt.__bckSM = true;
+            ServerSocket.emit = gezaehlt;
+            sm.leitung.aktiv = true;
+          }
+        } catch (e) {
+          BCK.warn('[SendMonitor] Leitungs-Zähler nicht installiert:', e.message);
         }
-      } catch (e) {
-        BCK.warn('[SendMonitor] Leitungs-Zähler nicht installiert:', e.message);
-      }
+      };
+      verdrahten();
+      setInterval(verdrahten, 2000);   // ServerSocket gibt es evtl. noch nicht – und nach einem Relog gibt es ein neues
     })();
   }
 

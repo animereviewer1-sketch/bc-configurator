@@ -124,6 +124,23 @@ describe('Sync-Sperre: der Hook', () => {
     expect(env.g.__BCU_sperreRaum).toBe(true);
   });
 
+  it('mit Sperre: Gesichtsausdrücke (ChatRoomCharacterExpressionUpdate) werden abgefangen – eine Bilderserie flutet den Server nicht mehr', () => {
+    const b = bausteine();
+    const env = bc();
+    sperreAn(env, b);
+    for (let i = 0; i < 40; i++) env.g.ServerSend('ChatRoomCharacterExpressionUpdate', { Name: 'Closed', Group: 'Eyes', Appearance: ['TEMP'] });
+    expect(env.z.gesendet).toEqual([]);
+    expect(env.g.__BCU_sperreAusdr).toBe(40);   // gezählt, damit man sieht, wie viele es waren
+  });
+
+  it('ohne Sperre gehen Gesichtsausdrücke normal durch', () => {
+    const b = bausteine();
+    const env = bc();
+    env.lauf(b.install);
+    env.g.ServerSend('ChatRoomCharacterExpressionUpdate', { Name: 'Closed', Group: 'Eyes' });
+    expect(env.z.gesendet.map((m) => m.typ)).toEqual(['ChatRoomCharacterExpressionUpdate']);
+  });
+
   it('Aktionen an ANDEREN Spielern und alles andere gehen weiter durch', () => {
     const b = bausteine();
     const env = bc();

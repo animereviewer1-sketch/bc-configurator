@@ -585,3 +585,30 @@ describe('Sende-Monitor (Tool): Bericht', () => {
     expect(els.sendMonInfo?.textContent || '').not.toContain('ServerSend-Aufrufe seit Start');
   });
 });
+
+describe('Sende-Monitor (Loader): neues Socket nach einem Relog', () => {
+  it('Zähler und Trennungs-Hörer werden am neuen Socket-Objekt neu angehängt – und nicht doppelt', () => {
+    const intervals = [];
+    const { sb } = bootLoader({ globals: { setInterval: (fn) => { intervals.push(fn); return intervals.length; } } });
+    const neu = { handlers: {}, on(ev, cb) { (this.handlers[ev] ||= []).push(cb); }, off() {}, emit: vi.fn(() => 'ok') };
+    sb.ctx.ServerSocket = neu;          // BC legt nach dem Neuanmelden ein neues Socket an
+    intervals.forEach((f) => f());
+    expect(Object.keys(neu.handlers).sort()).toEqual(['ForceDisconnect', 'disconnect']);
+    expect(neu.emit('ChatRoomChat', {})).toBe('ok');   // Rückgabe unverändert
+    expect(sb.ctx.__BCK_sendMonSnapshot().leitung.gesamt).toBe(1);
+    intervals.forEach((f) => f());                      // dasselbe Objekt: nicht noch einmal verdrahten
+    expect(neu.handlers.ForceDisconnect).toHaveLength(1);
+    neu.emit('ChatRoomChat', {});
+    expect(sb.ctx.__BCK_sendMonSnapshot().leitung.gesamt).toBe(2);
+  });
+
+  it('eine Trennung am neuen Socket wird mit ihrem Grund festgehalten', () => {
+    const intervals = [];
+    const { sb } = bootLoader({ globals: { setInterval: (fn) => { intervals.push(fn); return intervals.length; } } });
+    const neu = { handlers: {}, on(ev, cb) { (this.handlers[ev] ||= []).push(cb); }, off() {}, emit() {} };
+    sb.ctx.ServerSocket = neu;
+    intervals.forEach((f) => f());
+    neu.handlers.ForceDisconnect[0]('ErrorRateLimited');
+    expect(sb.ctx.__BCK_sendMonSnapshot().vorfaelle[0].grund).toContain('ForceDisconnect: ErrorRateLimited');
+  });
+});

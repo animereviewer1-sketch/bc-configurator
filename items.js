@@ -7846,6 +7846,11 @@ async function exportInfoSammeln() {
     const est = await navigator.storage.estimate();
     z.push('Browser-Speicher: ' + MB(est.usage) + ' von ' + MB(est.quota) + ' belegt');
   } catch (e) { z.push('Browser-Speicher: nicht abfragbar'); }
+  try {
+    if (navigator.storage && typeof navigator.storage.persisted === 'function') {
+      z.push('Dauerhafter Speicher (vom Browser nicht von selbst räumbar): ' + ((await navigator.storage.persisted()) ? 'ja' : 'nein – bei knappem Plattenplatz könnte der Browser aufräumen; regelmäßig ein Gesamt-Backup anlegen'));
+    }
+  } catch (e) {}
 
   // ── Bestände ──
   z.push('');
@@ -7991,6 +7996,25 @@ function lsProfilKopieEntfernen() {
   catch (e) { showStatus('❌ Entfernen fehlgeschlagen: ' + e.message, 'error'); }
 }
 
+// Katalog-Kopie im localStorage (BC_CACHE_v12) entfernen – der Item-Katalog liegt in der Datenbank. Nur mit Rückfrage; steht er dort noch
+// nicht, wird er vorher übernommen.
+async function lsKatalogKopieEntfernen() {
+  let roh = null;
+  try { roh = localStorage.getItem(KATALOG_KEY); } catch (e) {}
+  if (!roh) { showStatus('ℹ️ Keine Katalog-Kopie im Browser-Speicher vorhanden', 'info'); return; }
+  const mb = (roh.length / 1048576).toFixed(1).replace('.', ',');
+  if (!confirm('Katalog-Kopie (' + mb + ' MB) aus dem Browser-Speicher entfernen?\n\nDer Item-Katalog liegt in der Datenbank (und wird beim nächsten Laden aus dem Spiel erneuert).')) return;
+  const inDb = await idbGet(KATALOG_KEY);
+  if (!(inDb && Object.keys(inDb).length)) {
+    let kopie = null;
+    try { kopie = JSON.parse(roh); } catch (e) {}
+    if (!kopie || !Object.keys(kopie).length) { showStatus('❌ Katalog-Kopie nicht lesbar – nichts entfernt', 'error'); return; }
+    if (!(await idbSet(KATALOG_KEY, kopie))) { showStatus('❌ Katalog konnte nicht in die Datenbank übernommen werden – nichts entfernt', 'error'); return; }
+  }
+  try { localStorage.removeItem(KATALOG_KEY); showStatus('🧹 Katalog-Kopie (' + mb + ' MB) entfernt – der Katalog liegt in der Datenbank', 'success'); }
+  catch (e) { showStatus('❌ Entfernen fehlgeschlagen: ' + e.message, 'error'); }
+}
+
 let _exportInfoText = '';
 async function exportInfoErzeugen() {
   const box = document.getElementById('exportInfoText');
@@ -8122,7 +8146,9 @@ onBridgeMessage('CACHE_DATA', function(ev) {
       // Asset-Basis fuer Vorschaubild-URLs merken (Export-Katalog)
       if (ev.data.assetBase)   { BC_ASSET_BASE   = ev.data.assetBase;   try { localStorage.setItem('BC_ASSET_BASE_v1', BC_ASSET_BASE); } catch {} }
       if (ev.data.assetFamily) { BC_ASSET_FAMILY = ev.data.assetFamily; try { localStorage.setItem('BC_ASSET_FAMILY_v1', BC_ASSET_FAMILY); } catch {} }
-      try { localStorage.setItem('BC_CACHE_v12', JSON.stringify(_data)); } catch {}
+      _katalogVomSpiel = true;
+      // Datenbank statt localStorage (der Katalog sprengt dort das 5-MB-Limit); die alte Kopie dort geht erst nach erfolgreichem Schreiben weg
+      idbSet(KATALOG_KEY, _data).then(ok => { if (ok) { try { localStorage.removeItem(KATALOG_KEY); } catch {} } });
       const _mc = Object.values(_data).flatMap(g => Object.values(g)).filter(i => i.archetype === 'modular').length;
       document.getElementById('cacheInfo').textContent = '\u2705 ' + _items + ' Items \u00b7 ' + Object.keys(_data).length + ' Gruppen \u00b7 \ud83e\udde9 ' + _mc + ' modular';
       document.getElementById('clearBtn').classList.remove('hidden');
@@ -8386,7 +8412,9 @@ function loadCacheFromBC() {
 function clearCache() {
   if (!confirm('Cache l\u00f6schen?')) return;
   CACHE = {};
-  try { localStorage.removeItem('BC_CACHE_v12'); } catch {}
+  _katalogVomSpiel = true;
+  idbSet(KATALOG_KEY, {});
+  try { localStorage.removeItem(KATALOG_KEY); } catch {}
   document.getElementById('cacheInfo').textContent = 'Kein Cache';
   document.getElementById('clearBtn').classList.add('hidden');
   document.getElementById('connectHint')?.classList.remove('hidden');
@@ -8897,23 +8925,43 @@ function renderLeiste() {
 }
 
 // ── Auto-load + initial PING ──────────────────────────
+const KATALOG_KEY = 'BC_CACHE_v12';
+let _katalogVomSpiel = false;   // true, sobald der Katalog frisch aus dem Spiel kam (dann darf kein älterer Stand ihn ersetzen)
 (function() {
   console.log('[BCK-Popup] Auto-Init | opener=' + !!window.opener);
+  // Item-Katalog des Spiels (mehrere MB): die Datenbank ist maßgeblich – der localStorage fasst nur ~5 MB und scheiterte still. Der
+  // Stand älterer Versionen im localStorage wird weiter sofort gelesen und einmalig in die Datenbank übernommen.
+  const katalogAnzeigen = (quelle) => {
+    const items = Object.values(CACHE).reduce((n,g) => n + Object.keys(g).length, 0);
+    if (!(items > 0)) return false;
+    const mc = Object.values(CACHE).flatMap(g => Object.values(g)).filter(i => i.archetype === 'modular').length;
+    document.getElementById('cacheInfo').textContent = '\u2705 ' + items + ' Items (lokal gecacht) \u00b7 \ud83e\udde9 ' + mc + ' modular';
+    document.getElementById('clearBtn').classList.remove('hidden');
+    document.getElementById('connectHint')?.classList.add('hidden');
+    renderGroups(); showEmpty(); renderProfileList();
+    console.log('[BCK-Popup] Cache aus ' + quelle + ': ' + items + ' Items');
+    return true;
+  };
   try {
-    const s = localStorage.getItem('BC_CACHE_v12');
-    if (s) {
-      CACHE = JSON.parse(s);
-      const items = Object.values(CACHE).reduce((n,g) => n + Object.keys(g).length, 0);
-      if (items > 0) {
-        const mc = Object.values(CACHE).flatMap(g => Object.values(g)).filter(i => i.archetype === 'modular').length;
-        document.getElementById('cacheInfo').textContent = '\u2705 ' + items + ' Items (lokal gecacht) \u00b7 \ud83e\udde9 ' + mc + ' modular';
-        document.getElementById('clearBtn').classList.remove('hidden');
-        document.getElementById('connectHint')?.classList.add('hidden');
-        renderGroups(); showEmpty(); renderProfileList();
-        console.log('[BCK-Popup] Cache aus localStorage: ' + items + ' Items');
-      }
-    }
+    const s = localStorage.getItem(KATALOG_KEY);
+    if (s) { CACHE = JSON.parse(s); katalogAnzeigen('localStorage'); }
   } catch(e) { console.warn('[BCK-Popup] localStorage Fehler:', e.message); }
+  idbGet(KATALOG_KEY).then(d => {
+    if (_katalogVomSpiel) return;   // frischere Daten aus dem Spiel haben Vorrang
+    if (d && typeof d === 'object' && Object.keys(d).length) {
+      CACHE = d;
+      katalogAnzeigen('Datenbank');
+    } else if (Object.keys(CACHE).length) {
+      // einmalige Übernahme des alten localStorage-Stands; die Kopie dort wird erst nach erfolgreichem Schreiben entfernt
+      idbSet(KATALOG_KEY, CACHE).then(ok => { if (ok) { try { localStorage.removeItem(KATALOG_KEY); } catch (e) {} } });
+    }
+  }).catch(() => {});
+  // Dauerhafter Speicher: schützt die Daten davor, dass der Browser sie bei knappem Plattenplatz von selbst aufräumt
+  try {
+    if (navigator.storage && typeof navigator.storage.persist === 'function') {
+      navigator.storage.persist().then(ok => console.info('[Speicher] Dauerhafter Speicher:', ok ? 'gewährt' : 'nicht gewährt')).catch(() => {});
+    }
+  } catch (e) {}
 
   // Sofortiger PING + Retry-Schleife
   // Bootstrap-PING über bcSend: vor dem Handshake lässt bcSend nur PING durch (an '*', STAB-04-Ausnahme in bridge.js)
@@ -10490,7 +10538,8 @@ const _SHOT_VORBEREITEN = '(function(){'
 // BC berechnet das Aussehen beim Aufruf (ServerPlayerAppearanceSync) und sendet sofort; nicht erzwungene Updates
 // anderer Mods warten bis zu 2 s im ServerAccountUpdate – mit dem Aussehen von damals.
 //  - Während der Sperre fängt ein Hook auf ServerSend ab: AccountUpdate mit Aussehen (die übrigen Felder gehen
-//    durch), ChatRoomCharacterUpdate und ChatRoomCharacterItemUpdate für dich.
+//    durch), ChatRoomCharacterUpdate und ChatRoomCharacterItemUpdate für dich sowie ChatRoomCharacterExpressionUpdate
+//    (Gesichtsausdrücke des Test-Outfits – sonst flutet eine Bilderserie den Server und löst ErrorRateLimited aus).
 //  - Gelöst wird sie erst NACH dem Wiederherstellen (_shotSperreAus). Wurde etwas abgefangen oder wartet bei BC
 //    noch ein Aussehen in der Warteschlange, geht danach EIN frischer Sync mit deinem echten Aussehen raus.
 //  - Eigentümer ist der jeweils neueste Lauf (Token); die Sperre verfällt nach ms von selbst, damit ein
@@ -10513,6 +10562,10 @@ const _SHOT_SPERRE_INSTALL = '(function(){'
   +     'if(t==="ChatRoomCharacterItemUpdate"){'
   +       'if(d&&d.Target!==undefined&&d.Target!==Player.MemberNumber)return true;'
   +       'window.__BCU_sperreRaum=true;return false;}'
+  // Gesichtsausdrücke: das Anlegen/Wiederherstellen der Test-Outfits setzt Ausdrücke (Augen, Mund, Blush …) und BC bzw. Mods melden
+  // jeden einzeln an den Raum – im Sende-Monitor waren das 72 von 80 Sendungen in den 10 s vor einer ErrorRateLimited-Trennung
+  // (4 Stück pro Aufnahme). Sie gehören zum Test-Outfit, nicht zu dir; nach der Aufnahme stimmt der Server-Stand ohnehin noch.
+  +     'if(t==="ChatRoomCharacterExpressionUpdate"){window.__BCU_sperreAusdr=(window.__BCU_sperreAusdr|0)+1;return false;}'
   +     'if(t==="AccountUpdate"&&d&&typeof d==="object"&&("Appearance" in d)){'
   +       'window.__BCU_sperreAcc=true;delete d.Appearance;delete d.AssetFamily;'
   +       'return Object.keys(d).length>0;}'

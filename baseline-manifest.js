@@ -147,6 +147,7 @@ const BASELINE_MANIFEST = {
       "name": "ChatRoomCharacterExpressionUpdate",
       "kind": "unknown",
       "files": [
+        "items.js",
         "loader.js"
       ]
     },

@@ -2581,6 +2581,8 @@ button { cursor: pointer; }
     <div class="set-card set-card-gefahr">
       <div class="set-li"><div><b>🧹 Alte Profil-Kopie im Browser-Speicher entfernen</b><div class="set-hint">Der Browser-Speicher (localStorage) fasst nur ~5 MB. Eine alte Kopie aller Profile füllt ihn bei vielen Profilen und verhindert dort das Speichern von Einstellungen. Die Profile selbst liegen in der Datenbank und bleiben; nur mit Rückfrage.</div></div>
         <div class="set-r"><button class="tweaks-btn set-danger" onclick="lsProfilKopieEntfernen()">🧹 Entfernen</button></div></div>
+      <div class="set-li"><div><b>🧹 Katalog-Kopie im Browser-Speicher entfernen</b><div class="set-hint">Der Item-Katalog des Spiels (mehrere MB) lag früher im Browser-Speicher (localStorage, ~5 MB) und liegt jetzt in der Datenbank. Die alte Kopie nimmt dort Platz weg; nur mit Rückfrage.</div></div>
+        <div class="set-r"><button class="tweaks-btn set-danger" onclick="lsKatalogKopieEntfernen()">🧹 Entfernen</button></div></div>
       <div class="set-li"><div><b>🧪 „Neu“-Markierungen zurücksetzen</b><div class="set-hint">Alle Craft/Curse-Einträge verlieren das Neu-Badge sofort (umgeht die 1 h).</div></div>
         <div class="set-r"><button class="tweaks-btn set-danger" onclick="curseResetNeuTimestamps()">🗑️ Zurücksetzen</button></div></div>
       <div class="set-li"><div><b>🔓 DOGS-Schlösser entfernen</b><div class="set-hint">Alle DOGS Padlocks vom eigenen Charakter entfernen.</div><div id="dogsLockStatus" class="set-info"></div></div>
