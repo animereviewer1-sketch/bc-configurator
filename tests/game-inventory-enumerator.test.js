@@ -386,7 +386,7 @@ describe('statisch: Loader-Änderung minimal und read-only', () => {
     expect(count(L, "case 'GET_GAME_INVENTORY':")).toBe(1);
     expect(count(L, 'function buildGameInventory(reqId, post)')).toBe(1);
     expect(count(L, 'window.__BCK_buildGameInventory = buildGameInventory;')).toBe(1);
-    expect((L.match(/ALLOWED_ORIGIN/g) || []).length).toBe(37); // +1 GAME_STATE-Post (Server-Wächter), +2 Sende-Monitor
+    expect((L.match(/ALLOWED_ORIGIN/g) || []).length).toBe(45); // +1 GAME_STATE-Post (Server-Wächter), +2 Sende-Monitor, +2 Spielerprofile (Antwort/Fehler), +6 Profil-Speicher/Bilder (je 3)
 
     const lines = L.split('\n');
     const startIdx = lines.findIndex((l) => l.includes('── Gamecode-Inventar'));

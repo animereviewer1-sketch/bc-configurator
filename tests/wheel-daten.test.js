@@ -175,11 +175,28 @@ describe('Wheel-Bildgröße', () => {
     expect(ctx._jpegGroesse(jpeg(500, 1000))).toEqual({ w: 500, h: 1000 });
     expect(ctx._wheelBildNiedrig(jpeg(260, 520))).toBe(true);
     expect(ctx._wheelBildNiedrig(jpeg(180, 520))).toBe(true);
+    expect(ctx._wheelBildNiedrig(jpeg(260, 400))).toBe(true);    // an der Breitengrenze der alten Größe abgeschnitten
     expect(ctx._wheelBildNiedrig(jpeg(500, 1000))).toBe(false);
     for (const u of ['data:image/png;base64,AAAA', 'data:image/jpeg;base64,AAAA', '', undefined, 'unsinn']) {
       expect(ctx._jpegGroesse(u)).toBeNull();
       expect(ctx._wheelBildNiedrig(u)).toBe(false);
     }
+  });
+
+  it('neue Bilder kurzer Posen (unter 560 Pixel hoch, z. B. kniend) gelten NICHT als niedrig – sonst kämen sie bei jedem Klick wieder dran', () => {
+    const { ctx } = boot();
+    expect(ctx._wheelBildNiedrig(jpeg(400, 540))).toBe(false);
+    expect(ctx._wheelBildNiedrig(jpeg(300, 450))).toBe(false);
+    expect(ctx._wheelBildNiedrig(jpeg(480, 300))).toBe(false);
+    expect(ctx._wheelBildNiedrig(jpeg(200, 300))).toBe(false);   // klein, aber nicht an der alten Grenze verkleinert
+  });
+
+  it('ein Outfit, das in der aktuellen Größe aufgenommen wurde, gilt nie wieder als niedrig – auch bei zufällig altem Maß', () => {
+    const { ctx } = boot();
+    expect(ctx._wheelBildNiedrig(jpeg(260, 520), 'fpA')).toBe(true);
+    evalIn(ctx, "_wheelHoch.add('fpA')");
+    expect(ctx._wheelBildNiedrig(jpeg(260, 520), 'fpA')).toBe(false);
+    expect(ctx._wheelBildNiedrig(jpeg(260, 520), 'fpB')).toBe(true);
   });
 
   function speichere(naturlichB, naturlichH) {
@@ -207,6 +224,21 @@ describe('Wheel-Bildgröße', () => {
     const { z } = speichere(400, 900);
     expect([z.w, z.h]).toEqual([400, 900]);
   });
+
+  it('ein frisch gespeichertes Bild wird als "aktuelle Größe" vermerkt und in der Datenbank abgelegt', () => {
+    const t = boot();
+    const z = [];
+    t.ctx.Image = class { set src(v) { this.naturalWidth = 400; this.naturalHeight = 540; this.onload(); } };
+    const alt = t.ctx.document.createElement;
+    t.ctx.document.createElement = (tag) => (tag === 'canvas'
+      ? { set width(v) {}, set height(v) {}, getContext: () => ({ drawImage() {} }), toDataURL: () => 'data:neu' }
+      : alt(tag));
+    t.ctx.__z = z;
+    evalIn(t.ctx, "idbSet = function (k, v) { __z.push([k, v]); }; _pendingWheelShot['wss_1'] = 'fpX'; _saveMbsWheelShots = function () {}; _activeTab = 'x'; _wheelGenWeiter = function () {};");
+    t.ctx._handleWheelShotData({ reqId: 'wss_1', data: 'data:in' });
+    expect(lies(t.ctx, '_wheelHoch.has("fpX")')).toBe(true);
+    expect(z).toContainEqual(['BC_WHEEL_HOCH_v1', ['fpX']]);
+  });
 });
 
 describe('"Alle erstellen": fehlende und niedrig aufgelöste Bilder', () => {
@@ -225,6 +257,46 @@ describe('"Alle erstellen": fehlende und niedrig aufgelöste Bilder', () => {
     expect(gefragt).toContain('1 fehlende');
     expect(gefragt).toContain('1 in niedriger Auflösung');
     expect(lies(t.ctx, '_wheelGenRunning')).toBe(false);   // abgebrochen → nichts gestartet
+  });
+
+  it('Kernfehler: ein Outfit mit kurzem NEUEN Bild kommt beim nächsten Klick nicht wieder in die Queue', () => {
+    let queue = null;
+    const t = boot({ confirm: () => { queue = lies(t.ctx, '_wheelGenQueue.map(j => j.mn + ":" + j.oi)'); return false; } });
+    t.ctx.__kurz = jpeg(400, 540);     // neu aufgenommen, aber wegen der Pose unter 560 hoch
+    setze(t.ctx, [{ memberNumber: 5, name: 'Mia', ts: 1, outfits: [outfit('Kniend', ['Cloth', 'K']), outfit('Fehlt', ['Cloth', 'F'])] }]);
+    evalIn(t.ctx, "_connected = true; _mbsWheelShots = { 'Cloth:K': __kurz }");
+    t.ctx.mbsWheelGenerateAll();
+    expect(queue).toEqual(['5:1']);   // nur das fehlende Outfit
+  });
+
+  it('sind alle Outfits einmal in aktueller Größe fotografiert, meldet "Alle erstellen" nichts zu tun – auch bei zufällig altem Maß', () => {
+    let gefragt = false;
+    const t = boot({ confirm: () => { gefragt = true; return true; } });
+    t.ctx.__alt = jpeg(260, 520);
+    setze(t.ctx, [{ memberNumber: 5, name: 'Mia', ts: 1, outfits: [outfit('Klein', ['Cloth', 'S'])] }]);
+    evalIn(t.ctx, "_connected = true; _mbsWheelShots = { 'Cloth:S': __alt }; _wheelHoch.add('Cloth:S')");
+    t.ctx.mbsWheelGenerateAll();
+    expect(gefragt).toBe(false);
+    expect(t.meldungen.at(-1)).toMatch(/guter Auflösung/);
+  });
+
+  it('solange die Liste der aktuellen Bilder noch nicht geladen ist, startet nichts (sonst würden sie neu gemacht)', () => {
+    let gefragt = false;
+    const t = boot({ confirm: () => { gefragt = true; return true; } });
+    setze(t.ctx, [{ memberNumber: 5, name: 'Mia', ts: 1, outfits: [outfit('A', ['Cloth', 'A'])] }]);
+    evalIn(t.ctx, "_connected = true; _kleinStatus['BC_WHEEL_HOCH_v1'].geladen = false");
+    t.ctx.mbsWheelGenerateAll();
+    expect(gefragt).toBe(false);
+    expect(t.meldungen.at(-1)).toMatch(/noch geladen/);
+  });
+
+  it('Bild löschen nimmt das Outfit aus der Liste der aktuellen Bilder – ein neu eingespieltes altes Bild wird dann wieder erkannt', () => {
+    const t = boot();
+    setze(t.ctx, [{ memberNumber: 5, name: 'Mia', ts: 1, outfits: [outfit('A', ['Cloth', 'A'])] }]);
+    evalIn(t.ctx, "_mbsWheelShots = { 'Cloth:A': 'data:x' }; _wheelHoch.add('Cloth:A'); _renderMbsWheelTab = function () {}");
+    t.ctx.confirm = () => true;
+    t.ctx.mbsWheelDeleteShot(5, 0);
+    expect(lies(t.ctx, '_wheelHoch.has("Cloth:A")')).toBe(false);
   });
 
   it('sind alle Bilder gut: nichts zu tun, keine Rückfrage', () => {

@@ -5,7 +5,8 @@ import { loadScript, evalIn, makeElementStub } from './helpers/loadScript.js';
 // Gesamt-Backup: wirklich alles. Neben den benannten Feldern steckt JEDER Schlüssel der Datenbank und des localStorage
 // ('extras') und jeder Spiel-Scan ('spielScans') in der Datei. Einspielen ergänzt nur – nichts wird ersetzt.
 
-const FAV_SCHLUESSEL = ['BC_FAVORITES_v9', 'BC_PROFILE_FAVS_v1', 'BC_FAV_MEMBERS_v1'];
+// Kleine Mengen, die das Tool beim Start selbst in die Datenbank legt (Favoriten, Wheel-Bilder in aktueller Größe)
+const FAV_SCHLUESSEL = ['BC_FAVORITES_v9', 'BC_PROFILE_FAVS_v1', 'BC_FAV_MEMBERS_v1', 'BC_WHEEL_HOCH_v1'];
 const nichtFav = (k) => !FAV_SCHLUESSEL.includes(k);
 
 function boot({ confirm = () => true } = {}) {

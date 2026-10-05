@@ -593,7 +593,8 @@ describe('Sende-Monitor (Loader): neues Socket nach einem Relog', () => {
     const neu = { handlers: {}, on(ev, cb) { (this.handlers[ev] ||= []).push(cb); }, off() {}, emit: vi.fn(() => 'ok') };
     sb.ctx.ServerSocket = neu;          // BC legt nach dem Neuanmelden ein neues Socket an
     intervals.forEach((f) => f());
-    expect(Object.keys(neu.handlers).sort()).toEqual(['ForceDisconnect', 'disconnect']);
+    // (ChatRoomMessage ist der Hörer der Spielerprofile für versteckte Mod-Nachrichten – er hängt am neuen Socket ebenfalls)
+    expect(Object.keys(neu.handlers).sort()).toEqual(['ChatRoomMessage', 'ForceDisconnect', 'disconnect']);
     expect(neu.emit('ChatRoomChat', {})).toBe('ok');   // Rückgabe unverändert
     expect(sb.ctx.__BCK_sendMonSnapshot().leitung.gesamt).toBe(1);
     intervals.forEach((f) => f());                      // dasselbe Objekt: nicht noch einmal verdrahten

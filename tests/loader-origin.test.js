@@ -53,6 +53,8 @@ describe('loader.js Origin-Ableitung und Source-Pinning (STAB-06)', () => {
     const allowedOriginCount = (L.match(/ALLOWED_ORIGIN/g) || []).length;
     // 35: +1 für den GAME_STATE-Post des Server-Wächters (DC-Pause im Tool)
     // 37: +2 für den Sende-Monitor (Antwort auf GET_SEND_LOG, SEND_MON_VORFALL bei Trennung)
-    expect(allowedOriginCount).toBe(37);
+    // 37 + 2: GET_SPIELER_PROFILE antwortet an den Tool-Origin (Erfolg und Fehler), wie jeder andere Fall
+    // 39 + 6: GET_SPIELER_CACHE (Fehler, Stapel, Abbruch) und GET_SPIELER_BILDER (belegt, Ergebnis, Fehler) antworten an den Tool-Origin
+    expect(allowedOriginCount).toBe(45);
   });
 });

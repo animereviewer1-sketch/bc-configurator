@@ -205,7 +205,9 @@ export function loadScript(files, extraGlobals = {}) {
   // ihren Dienst. Tests laufen synchron nach dem Laden – darum gilt das Archiv hier als geladen. Tests, die das Warten prüfen,
   // setzen die Flags selbst zurück (_bildFertig.profile = false …).
   try {
-    vm.runInContext("if (typeof _bildFertig !== 'undefined') { _bildFertig.profile = true; _bildFertig.lscg = true; _bildFertig.wheel = true; }", sandbox);
+    vm.runInContext("if (typeof _bildFertig !== 'undefined') { _bildFertig.profile = true; _bildFertig.lscg = true; _bildFertig.wheel = true; }"
+      // Die Liste der Wheel-Bilder in aktueller Größe kommt aus der Datenbank – im Test gilt sie als geladen
+      + "; if (typeof _kleinStatus !== 'undefined' && _kleinStatus['BC_WHEEL_HOCH_v1']) _kleinStatus['BC_WHEEL_HOCH_v1'].geladen = true;", sandbox);
   } catch (e) { /* items.js nicht geladen */ }
   return sandbox;
 }

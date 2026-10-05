@@ -1542,6 +1542,48 @@ window.CurseScanner = (() => {
           break;
         }
 
+        case 'GET_SPIELER_PROFILE': {
+          // Spielerprofile (Tab "Spielerprofile"): alles Auslesbare der Spieler im Raum + du selbst. Nur lesen.
+          // fehlt / erzwingen: Nummern, von denen das Tool ein Bild haben will (Aufnahme nur, wenn der Spieler im Raum ist)
+          try {
+            const r = _spielerProfileScan({ fehlt: ev.data.fehlt, erzwingen: ev.data.erzwingen });
+            src.postMessage({ app: APP, type: 'SPIELER_PROFILE_DATA', reqId: ev.data.reqId, results: r.results, room: r.room,
+              gameVersion: r.gameVersion, scanTime: Date.now() }, ALLOWED_ORIGIN);
+          } catch (ex) {
+            src.postMessage({ app: APP, type: 'SPIELER_PROFILE_DATA', reqId: ev.data.reqId, err: ex.message }, ALLOWED_ORIGIN);
+          }
+          break;
+        }
+
+        case 'GET_SPIELER_CACHE': {
+          // Der Profil-Speicher von WCE/FBC ("/profiles"): alle gespeicherten Profile in Stapeln. Nur lesen.
+          const reqId = ev.data.reqId;
+          if (window.__BCK_SP_CACHE_LAEUFT) { src.postMessage({ app: APP, type: 'SPIELER_CACHE_DATA', reqId: reqId, err: 'Das Einlesen läuft bereits' }, ALLOWED_ORIGIN); break; }
+          window.__BCK_SP_CACHE_LAEUFT = true;
+          let teil = 0;
+          _spCacheLesen(Number.isFinite(ev.data.seit) ? ev.data.seit : 0, function (m) {
+            m.app = APP; m.type = 'SPIELER_CACHE_DATA'; m.reqId = reqId; m.teil = teil++;
+            src.postMessage(m, ALLOWED_ORIGIN);
+          }).catch(function (ex) {
+            src.postMessage({ app: APP, type: 'SPIELER_CACHE_DATA', reqId: reqId, teil: teil++, err: String((ex && ex.message) || ex) }, ALLOWED_ORIGIN);
+          }).then(function () { window.__BCK_SP_CACHE_LAEUFT = false; });
+          break;
+        }
+
+        case 'GET_SPIELER_BILDER': {
+          // Bilder für die genannten Spieler (höchstens 10 je Anfrage): im Raum → deren Zeichenpuffer, sonst aus dem WCE/FBC-Speicher
+          const reqId = ev.data.reqId;
+          const nrs = (Array.isArray(ev.data.nrs) ? ev.data.nrs : []).filter(Number.isInteger).slice(0, 10);
+          if (_spBilderLaeuft) { src.postMessage({ app: APP, type: 'SPIELER_BILDER_DATA', reqId: reqId, err: 'belegt' }, ALLOWED_ORIGIN); break; }
+          _spBilderLaeuft = true;
+          _spBilderErzeugen(nrs).then(function (r) {
+            src.postMessage({ app: APP, type: 'SPIELER_BILDER_DATA', reqId: reqId, bilder: r.bilder, fehler: r.fehler }, ALLOWED_ORIGIN);
+          }, function (ex) {
+            src.postMessage({ app: APP, type: 'SPIELER_BILDER_DATA', reqId: reqId, err: String((ex && ex.message) || ex) }, ALLOWED_ORIGIN);
+          }).then(function () { _spBilderLaeuft = false; });
+          break;
+        }
+
         case 'GET_POS': {
           try {
             const P = window.Player;
@@ -2461,6 +2503,458 @@ window.CurseScanner = (() => {
       setInterval(verdrahten, 2000);   // ServerSocket gibt es evtl. noch nicht – und nach einem Relog gibt es ein neues
     })();
   }
+
+  // ── Spielerprofile: alles, was von den Spielern im Raum auslesbar ist ───────────────────────────────────────────
+  // Das Tool (Tab "Spielerprofile") fragt mit GET_SPIELER_PROFILE; hier wird gelesen, was BC im Speicher hält: Beschreibung, Titel,
+  // Besitzer/Lover, Konto-Alter, geteilte Mod-Einstellungen, Crafts … und – so gut es geht – welche Mods ein Spieler hat.
+  // Nur lesen, nichts senden, nichts verändern. Alles wird vor dem Verschicken in reine Daten umgewandelt (keine Funktionen,
+  // keine DOM-Knoten, keine Kreisverweise, begrenzte Tiefe/Größe), damit postMessage nie scheitert.
+  //
+  // Mods erkennt man an versteckten Chat-Nachrichten ("Hidden"): jeder Mod meldet sich mit einem Namen (BCXMsg, LSCGMsg, BCEMsg,
+  // MoonCE, DOGS, KIKILINK/1 …). Der Loader merkt sich je Absender nur den NAMEN, wann zuerst/zuletzt und – falls die Nachricht eine
+  // Version nennt – die Version, nie den Inhalt. Dazu kommen Merkmale am Charakter (LSCG, FBC, MBS) und für dich selbst ModSDK.
+  const SP_STRING_MAX  = 30000;
+  const SP_ARRAY_MAX   = 100;
+  const SP_KEYS_MAX    = 80;
+  const SP_TIEFE_MAX   = 4;
+  const SP_KNOTEN_MAX  = 4000;
+  const SP_ROH_MAX     = 60000;   // Zeichen je Spieler für den Rohdaten-Block
+  // Große oder für ein Profil unwichtige Teile: Aussehen (Outfits haben eigene Tabs), Zeichenpuffer, Listen des eigenen Kontos
+  const SP_UEBERSPRINGEN = new Set(['Canvas', 'CanvasBlink', 'MustDraw', 'Appearance', 'AppearanceLayers', 'DrawAppearance', 'DrawPose',
+    'DrawPoseMapping', 'Inventory', 'Wardrobe', 'FriendList', 'FriendNames', 'BlackList', 'WhiteList', 'GhostList', 'Crafting',
+    'AllowItem', 'Hooks', 'Dialog', 'FocusGroup', 'ArousalZoom', 'IsPlayer']);
+  const SP_ZUERST = ['Description', 'Title', 'Nickname', 'Name', 'Ownership', 'Lovership', 'Owner', 'Lover', 'Difficulty', 'ItemPermission',
+    'Creation', 'Reputation', 'OnlineSharedSettings', 'OnlineSettings', 'ArousalSettings', 'Game', 'LabelColor', 'Skill', 'Effect', 'ActivePose'];
+
+  const _spSauber = function (v, tiefe, st) {
+    if (v === null) return null;
+    const t = typeof v;
+    if (t === 'string') { if (v.length > SP_STRING_MAX) { st.gekuerzt = true; return v.slice(0, SP_STRING_MAX); } return v; }
+    if (t === 'number') return isFinite(v) ? v : null;
+    if (t === 'boolean') return v;
+    if (t !== 'object') return undefined;                      // Funktionen, Symbole, undefined, BigInt
+    if (st.knoten++ >= SP_KNOTEN_MAX || tiefe > SP_TIEFE_MAX) { st.gekuerzt = true; return undefined; }
+    try { if (typeof v.nodeType === 'number' || v === window) return undefined; } catch (e) { return undefined; }   // DOM-Knoten, Fenster
+    if (st.gesehen.has(v)) return undefined;                   // Kreisverweis
+    st.gesehen.add(v);
+    try {
+      if (Array.isArray(v)) {
+        const out = [];
+        for (let i = 0; i < v.length && i < SP_ARRAY_MAX; i++) { const x = _spSauber(v[i], tiefe + 1, st); out.push(x === undefined ? null : x); }
+        if (v.length > SP_ARRAY_MAX) st.gekuerzt = true;
+        return out;
+      }
+      const out = {};
+      let n = 0;
+      for (const k of Object.keys(v)) {
+        if (n >= SP_KEYS_MAX) { st.gekuerzt = true; break; }
+        let w;
+        try { w = v[k]; } catch (e) { continue; }
+        const x = _spSauber(w, tiefe + 1, st);
+        if (x !== undefined) { out[k] = x; n++; }
+      }
+      return out;
+    } finally { st.gesehen.delete(v); }                        // dasselbe Objekt an zwei Stellen ist kein Kreis
+  };
+
+  // Alle auslesbaren Eigenschaften eines Charakters als reine Daten (die wichtigen zuerst, damit sie nie dem Größenlimit zum Opfer fallen)
+  const _spRoh = function (C) {
+    const st = { knoten: 0, gesehen: new WeakSet(), gekuerzt: false };
+    const out = {};
+    let schluessel = [];
+    try { schluessel = Object.keys(C); } catch (e) {}
+    schluessel.sort(function (a, b) {
+      const ia = SP_ZUERST.indexOf(a), ib = SP_ZUERST.indexOf(b);
+      return (ia < 0 ? 999 : ia) - (ib < 0 ? 999 : ib);
+    });
+    for (const k of schluessel) {
+      if (SP_UEBERSPRINGEN.has(k)) continue;
+      let w;
+      try { w = C[k]; } catch (e) { continue; }
+      const x = _spSauber(w, 1, st);
+      if (x !== undefined) out[k] = x;
+    }
+    let groesse = 0;
+    try { groesse = JSON.stringify(out).length; } catch (e) { groesse = SP_ROH_MAX + 1; }
+    if (groesse > SP_ROH_MAX) { st.gekuerzt = true; return { roh: { _hinweis: 'zu groß für die Ablage (' + groesse + ' Zeichen) – die wichtigen Felder stehen oben im Profil' }, gekuerzt: true }; }
+    return { roh: out, gekuerzt: st.gekuerzt };
+  };
+
+  // Sichtungen versteckter Mod-Nachrichten: Absender → { Modname → { erstmals, zuletzt, anzahl, version? } }
+  const _spSichtungen = window.__BCK_SPIELER_SICHTUNGEN = window.__BCK_SPIELER_SICHTUNGEN || {};
+  const _spVersion = function (dict) {
+    const pruefe = function (o) {
+      if (!o || typeof o !== 'object') return null;
+      const keys = ['version', 'Version', 'ver', 'v'];
+      for (let i = 0; i < keys.length; i++) {
+        const w = o[keys[i]];
+        if ((typeof w === 'string' && w.length > 0 && w.length <= 40) || (typeof w === 'number' && isFinite(w))) return String(w);
+      }
+      return null;
+    };
+    if (Array.isArray(dict)) {
+      for (let i = 0; i < dict.length; i++) { const r = pruefe(dict[i]) || pruefe(dict[i] && dict[i].message); if (r) return r; }
+      return null;
+    }
+    return pruefe(dict) || pruefe(dict && dict.message);
+  };
+  const _spHidden = function (data) {
+    try {
+      if (!data || data.Type !== 'Hidden' || typeof data.Content !== 'string') return;
+      const nr = data.Sender;
+      if (!Number.isInteger(nr)) return;
+      const name = data.Content.split(/[\s:{]/)[0].slice(0, 40);
+      if (!name) return;
+      const t = Date.now();
+      const m = _spSichtungen[nr] || (_spSichtungen[nr] = {});
+      const e = m[name] || (m[name] = { erstmals: t, zuletzt: t, anzahl: 0 });
+      e.zuletzt = t; e.anzahl++;
+      const v = _spVersion(data.Dictionary);
+      if (v) e.version = v;
+    } catch (e) {}
+  };
+
+  // Hören, bis sich ein Mod meldet. BC legt nach einem Relog ein NEUES Socket an – darum regelmäßig prüfen und neu anhängen.
+  (function installSpielerHidden() {
+    const gen = window.__BCK_SP_GEN = Date.now() + Math.random();   // ein erneut eingespielter Loader löst den alten ab
+    let verdrahtet = null;
+    const verdrahten = function () {
+      if (window.__BCK_SP_GEN !== gen) return;
+      if (typeof ServerSocket === 'undefined' || !ServerSocket || ServerSocket === verdrahtet) return;
+      verdrahtet = ServerSocket;
+      try { ServerSocket.on('ChatRoomMessage', function (data) { if (window.__BCK_SP_GEN === gen) _spHidden(data); }); }
+      catch (e) { BCK.warn('[Spielerprofile] Nachrichten-Hörer nicht angehängt:', e.message); }
+    };
+    verdrahten();
+    const timer = setInterval(function () { if (window.__BCK_SP_GEN !== gen) { clearInterval(timer); return; } verdrahten(); }, 2000);
+  })();
+
+  const _spKurz = function (w, max) { return typeof w === 'string' ? w.slice(0, max) : (typeof w === 'number' && isFinite(w) ? String(w) : null); };
+
+  // Ein Spieler: die wichtigsten Felder ausgeschrieben (stabil benannt, deutsch) + alles Übrige als "roh"
+  // (ohneRoh: für die vielen Profile aus dem WCE/FBC-Speicher – dort genügen die ausgeschriebenen Felder)
+  const _spProfil = function (C, ichNr, ohneRoh) {
+    const nr = C.MemberNumber;
+    const d = {
+      nr: nr,
+      name: _spKurz(C.Name, 100),
+      nickname: _spKurz(C.Nickname, 100),
+      titel: _spKurz(C.Title, 100),
+      beschreibung: typeof C.Description === 'string' ? C.Description.slice(0, SP_STRING_MAX) : null,
+      istIch: nr === ichNr,
+      erstellt: typeof C.Creation === 'number' && isFinite(C.Creation) ? C.Creation : null,
+      schwierigkeit: C.Difficulty && typeof C.Difficulty.Level === 'number' ? C.Difficulty.Level : null,
+      itemPermission: typeof C.ItemPermission === 'number' ? C.ItemPermission : null,
+      spielVersion: C.OnlineSharedSettings && typeof C.OnlineSharedSettings === 'object' ? _spKurz(C.OnlineSharedSettings.GameVersion, 40) : null,
+      geteilt: [],
+      besitzer: null,
+      lover: [],
+      pronomen: null,
+      items: Array.isArray(C.Appearance) ? C.Appearance.length : null,
+      crafts: [],
+      mods: [],
+    };
+    try {
+      if (C.OnlineSharedSettings && typeof C.OnlineSharedSettings === 'object') d.geteilt = Object.keys(C.OnlineSharedSettings).slice(0, 60);
+      const o = C.Ownership;
+      if (o && typeof o === 'object') d.besitzer = { nr: Number.isInteger(o.MemberNumber) ? o.MemberNumber : null, name: _spKurz(o.Name, 100), seit: typeof o.Start === 'number' ? o.Start : null, stufe: typeof o.Stage === 'number' ? o.Stage : null };
+      else if (typeof C.Owner === 'string' && C.Owner) d.besitzer = { nr: null, name: C.Owner.slice(0, 100), seit: null, stufe: null };
+      if (Array.isArray(C.Lovership)) {
+        d.lover = C.Lovership.filter(Boolean).slice(0, 10).map(function (l) {
+          return { nr: Number.isInteger(l.MemberNumber) ? l.MemberNumber : null, name: _spKurz(l.Name, 100), seit: typeof l.Start === 'number' ? l.Start : null, stufe: typeof l.Stage === 'number' ? l.Stage : null };
+        });
+      }
+      // Im Spiel steht das Item mit Asset.Group.Name, in einem gespeicherten Profil (WCE/FBC) als { Group, Name }
+      const pr = (C.Appearance || []).find(function (i) { return i && ((i.Asset && i.Asset.Group && i.Asset.Group.Name === 'Pronouns') || i.Group === 'Pronouns'); });
+      if (pr) d.pronomen = _spKurz(pr.Asset ? pr.Asset.Name : pr.Name, 40);
+      if (Array.isArray(C.Crafting)) {
+        d.crafts = C.Crafting.filter(function (c) { return c && c.Item; }).slice(0, 100).map(function (c) {
+          return { name: _spKurz(c.Name, 100) || '', item: _spKurz(c.Item, 100), beschreibung: _spKurz(c.Description, 300) || '', eigenschaft: _spKurz(typeof c.Property === 'string' ? c.Property : '', 40) || '' };
+        });
+      }
+    } catch (e) {}
+
+    // Mods: Sichtungen aus versteckten Nachrichten + Merkmale am Charakter (+ ModSDK bei dir selbst)
+    const mods = {};
+    const merke = function (name, quelle, extra) {
+      if (!name) return;
+      const e = mods[name] || (mods[name] = { name: name, quelle: quelle });
+      if (extra) { if (extra.version) e.version = extra.version; if (extra.erstmals) e.erstmals = extra.erstmals; if (extra.zuletzt) e.zuletzt = extra.zuletzt; }
+    };
+    const s = _spSichtungen[nr];
+    if (s) Object.keys(s).forEach(function (k) { merke(k, 'Nachricht', s[k]); });
+    try {
+      if (C.LSCG && typeof C.LSCG === 'object') merke('LSCG', 'Charakterdaten');
+      if (C.FBC !== undefined && C.FBC !== null) merke('FBC', 'Charakterdaten', { version: _spKurz(typeof C.FBC === 'object' ? C.FBC.version : C.FBC, 40) });
+      if (C.OnlineSharedSettings && C.OnlineSharedSettings.MBS !== undefined) merke('MBS', 'geteilte Einstellung');
+      if (nr === ichNr && typeof bcModSdk !== 'undefined' && bcModSdk && typeof bcModSdk.getModsInfo === 'function') {
+        (bcModSdk.getModsInfo() || []).forEach(function (m) { if (m && typeof m.name === 'string') merke(m.name, 'ModSDK', { version: _spKurz(m.version, 40) }); });
+      }
+    } catch (e) {}
+    d.mods = Object.keys(mods).map(function (k) { return mods[k]; });
+
+    if (ohneRoh) return d;
+    const r = _spRoh(C);
+    d.roh = r.roh;
+    d.gekuerzt = r.gekuerzt;
+    return d;
+  };
+
+  // ── Bilder der Spieler ───────────────────────────────────────────────────────
+  // Von einem Zeichenpuffer (BC-Canvas, durchsichtiger Hintergrund) bleibt der Bereich um die Figur: zugeschnitten, auf höchstens
+  // SP_BILD_W × SP_BILD_H verkleinert, als JPEG auf dunklem Grund. null = nichts zu sehen / nicht lesbar.
+  const SP_BILD_W = 180, SP_BILD_H = 360, SP_BILDER_MAX = 40;
+  const _spBildVonCanvas = function (src) {
+    try {
+      if (!src || !src.width || !src.height) return null;
+      const W = src.width, H = src.height;
+      const oc = document.createElement('canvas');
+      oc.width = W; oc.height = H;
+      const octx = oc.getContext('2d');
+      octx.drawImage(src, 0, 0);
+      const px = octx.getImageData(0, 0, W, H).data;
+      let x0 = W, x1 = -1, y0 = H, y1 = -1;
+      for (let y = 0; y < H; y++) {
+        for (let x = 0; x < W; x++) {
+          if (px[(y * W + x) * 4 + 3] > 12) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+        }
+      }
+      if (x1 < x0 || (x1 - x0) < 30 || (y1 - y0) < 60) return null;   // leer oder nur ein Fleck
+      const pad = 10;
+      x0 = Math.max(0, x0 - pad); y0 = Math.max(0, y0 - pad); x1 = Math.min(W - 1, x1 + pad); y1 = Math.min(H - 1, y1 + pad);
+      const cw = x1 - x0 + 1, ch = y1 - y0 + 1;
+      const s = Math.min(1, SP_BILD_W / cw, SP_BILD_H / ch);
+      const ow = Math.max(1, Math.round(cw * s)), oh = Math.max(1, Math.round(ch * s));
+      const out = document.createElement('canvas');
+      out.width = ow; out.height = oh;
+      const ctx = out.getContext('2d');
+      ctx.fillStyle = '#14141a'; ctx.fillRect(0, 0, ow, oh);
+      ctx.drawImage(oc, x0, y0, cw, ch, 0, 0, ow, oh);
+      return out.toDataURL('image/jpeg', 0.72);
+    } catch (e) { return null; }   // z. B. SecurityError bei einem "tainted" Canvas
+  };
+  // Prüfsumme eines Zeichenpuffers (grob, schnell): ändert sie sich nicht mehr, sind alle Bilder geladen
+  const _spCanvasHash = function (canvas) {
+    try {
+      const d = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data;
+      const n = d.length / 4, step = Math.max(1, Math.floor(n / 400));
+      let r = 0;
+      for (let i = 0; i < n; i += step) { const k = i * 4; r = ((r * 31) | 0) + d[k] + d[k + 1] + d[k + 2] + d[k + 3]; }
+      return r;
+    } catch (e) { return -1; }
+  };
+  const _spSchlafen = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
+
+  // Ein Spieler, der gerade im Raum ist (oder du): sein bereits gezeichneter Puffer
+  const _spBildLive = function (C) {
+    try { if (typeof CharacterLoadCanvas === 'function') CharacterLoadCanvas(C); } catch (e) {}
+    return _spBildVonCanvas(C.Canvas);
+  };
+
+  const _spielerProfileScan = function (opt) {
+    const ich = window.Player;
+    const ichNr = ich ? ich.MemberNumber : null;
+    const liste = [];
+    const gesehen = new Set();
+    const dazu = function (C) { if (C && Number.isInteger(C.MemberNumber) && !gesehen.has(C.MemberNumber)) { gesehen.add(C.MemberNumber); liste.push(C); } };
+    (window.ChatRoomCharacter || []).forEach(dazu);
+    dazu(ich);                                                    // du selbst gehörst immer dazu, auch ohne Raum
+    // Bilder gibt es nur für die Spieler, die das Tool noch ohne Bild hat (fehlt) bzw. neu aufnehmen will (erzwingen)
+    const brauchtBild = new Set();
+    [opt && opt.fehlt, opt && opt.erzwingen].forEach(function (l) { if (Array.isArray(l)) l.forEach(function (n) { if (Number.isInteger(n)) brauchtBild.add(n); }); });
+    let bilder = 0;
+    const results = [];
+    liste.forEach(function (C) {
+      try {
+        const p = _spProfil(C, ichNr);
+        if (bilder < SP_BILDER_MAX && brauchtBild.has(C.MemberNumber)) {
+          const img = _spBildLive(C);
+          if (img) { p.bild = { img: img, stabil: true }; bilder++; }
+        }
+        results.push(p);
+      } catch (e) { BCK.warn('[Spielerprofile] #' + C.MemberNumber + ':', e.message); }
+    });
+    return {
+      results: results,
+      room: window.ChatRoomData && typeof window.ChatRoomData.Name === 'string' ? window.ChatRoomData.Name.slice(0, 100) : null,
+      gameVersion: typeof window.GameVersion === 'string' ? window.GameVersion : null,
+    };
+  };
+
+  // ── Der Profil-Speicher von WCE/FBC ("/profiles" im Spiel) ───────────────────────────────────────────────────
+  // WCE/FBC legt jeden gesehenen Charakter in der Browser-Datenbank "bce-past-profiles" ab: Speicher "profiles"
+  // { memberNumber, name, lastNick, seen, characterBundle (Text, JSON) } und "notes" { memberNumber, note, updatedAt }.
+  // Hier wird nur GELESEN: die Datenbank wird nie angelegt (nur geöffnet, wenn sie existiert), nie beschrieben, nie verändert.
+  const SP_CACHE_DB = 'bce-past-profiles';
+  const SP_CACHE_STAPEL = 60;
+
+  // → { db } | { fehlt: true, andere: [...] } | { fehler: '…' }
+  const _spCacheOeffnen = function () {
+    return new Promise(function (resolve) {
+      try {
+        if (typeof indexedDB === 'undefined' || !indexedDB || typeof indexedDB.databases !== 'function') { resolve({ fehler: 'Dieser Browser kann die vorhandenen Datenbanken nicht auflisten (indexedDB.databases)' }); return; }
+        indexedDB.databases().then(function (liste) {
+          const namen = (liste || []).map(function (d) { return d && d.name; }).filter(Boolean);
+          if (namen.indexOf(SP_CACHE_DB) < 0) { resolve({ fehlt: true, andere: namen.filter(function (n) { return /profil|bce|fbc|wce/i.test(String(n)); }).slice(0, 10) }); return; }
+          const rq = indexedDB.open(SP_CACHE_DB);
+          // Ohne Versionsnummer wird eine vorhandene Datenbank unverändert geöffnet. Käme trotzdem ein Upgrade, wird es abgebrochen.
+          rq.onupgradeneeded = function () { try { rq.transaction.abort(); } catch (e) {} };
+          rq.onsuccess = function () { resolve({ db: rq.result }); };
+          rq.onerror = function () { resolve({ fehler: 'Öffnen fehlgeschlagen: ' + ((rq.error && rq.error.message) || 'unbekannt') }); };
+          rq.onblocked = function () { resolve({ fehler: 'Öffnen blockiert' }); };
+        }, function (e) { resolve({ fehler: String((e && e.message) || e) }); });
+      } catch (e) { resolve({ fehler: String((e && e.message) || e) }); }
+    });
+  };
+
+  // Einträge eines Speichers nach dem Schlüssel `nach` (ohne Schlüssel = ab Anfang), höchstens n
+  const _spStoreBatch = function (db, store, nach, n) {
+    return new Promise(function (resolve, reject) {
+      try {
+        const rq = db.transaction(store, 'readonly').objectStore(store).getAll(nach == null ? undefined : IDBKeyRange.lowerBound(nach, true), n);
+        rq.onsuccess = function () { resolve(rq.result || []); };
+        rq.onerror = function () { reject(rq.error || new Error('Lesefehler')); };
+      } catch (e) { reject(e); }
+    });
+  };
+  const _spStoreAnzahl = function (db, store) {
+    return new Promise(function (resolve) {
+      try {
+        const rq = db.transaction(store, 'readonly').objectStore(store).count();
+        rq.onsuccess = function () { resolve(rq.result || 0); };
+        rq.onerror = function () { resolve(0); };
+      } catch (e) { resolve(0); }
+    });
+  };
+
+  // Alle gespeicherten Profile (neuer als `seit`) in Stapeln an `senden` geben. Jedes Profil wie ein Raum-Scan, ohne Rohdaten.
+  const _spCacheLesen = async function (seit, senden) {
+    const o = await _spCacheOeffnen();
+    if (!o.db) { senden({ vorhanden: false, grund: o.fehler || null, andere: o.andere || [], results: [], fertig: true }); return; }
+    const db = o.db;
+    try {
+      if (!db.objectStoreNames.contains('profiles')) { senden({ vorhanden: false, grund: 'Der Speicher "profiles" fehlt in ' + SP_CACHE_DB, andere: [], results: [], fertig: true }); return; }
+      const notizen = {};
+      if (db.objectStoreNames.contains('notes')) {
+        let nach = null;
+        for (;;) {
+          const teil = await _spStoreBatch(db, 'notes', nach, 200);
+          if (!teil.length) break;
+          nach = teil[teil.length - 1].memberNumber;
+          teil.forEach(function (n) { if (n && Number.isInteger(n.memberNumber) && typeof n.note === 'string' && n.note) notizen[n.memberNumber] = n; });
+        }
+      }
+      const gesamt = await _spStoreAnzahl(db, 'profiles');
+      const ichNr = window.Player ? window.Player.MemberNumber : null;
+      let nach = null, gelesen = 0, maxSeen = 0;
+      for (;;) {
+        const zeilen = await _spStoreBatch(db, 'profiles', nach, SP_CACHE_STAPEL);
+        if (!zeilen.length) break;
+        nach = zeilen[zeilen.length - 1].memberNumber;
+        const results = [];
+        zeilen.forEach(function (z) {
+          gelesen++;
+          if (!z || !Number.isInteger(z.memberNumber)) return;
+          const seen = typeof z.seen === 'number' && isFinite(z.seen) ? z.seen : 0;
+          if (seit && seen <= seit) return;                     // seit dem letzten Einlesen unverändert
+          if (seen > maxSeen) maxSeen = seen;
+          let b = null;
+          try { b = typeof z.characterBundle === 'string' ? JSON.parse(z.characterBundle) : z.characterBundle; } catch (e) {}
+          let p;
+          try { p = b && typeof b === 'object' ? _spProfil(b, ichNr, true) : null; } catch (e) { p = null; }
+          if (!p) p = { nr: z.memberNumber };
+          p.nr = z.memberNumber;                                // maßgeblich ist der Schlüssel der Zeile
+          if (!p.name) p.name = _spKurz(z.name, 100);
+          if (!p.nickname && z.lastNick) p.nickname = _spKurz(z.lastNick, 100);
+          p.istIch = p.nr === ichNr;
+          p.gesehen = seen;
+          const nz = notizen[z.memberNumber];
+          if (nz) { p.notiz = nz.note.slice(0, SP_STRING_MAX); p.notizTs = typeof nz.updatedAt === 'number' ? nz.updatedAt : 0; }
+          results.push(p);
+        });
+        senden({ vorhanden: true, results: results, gesamt: gesamt, gelesen: gelesen, fertig: false });
+        await _spSchlafen(15);                                  // dem Spiel Luft lassen
+      }
+      senden({ vorhanden: true, results: [], gesamt: gesamt, gelesen: gelesen, fertig: true, maxSeen: maxSeen });
+    } finally { try { db.close(); } catch (e) {} }
+  };
+
+  // Ein einzelnes Profil aus dem Speicher (Bilder)
+  const _spCacheZeile = async function (db, nr) {
+    return new Promise(function (resolve) {
+      try {
+        const rq = db.transaction('profiles', 'readonly').objectStore('profiles').get(nr);
+        rq.onsuccess = function () { resolve(rq.result || null); };
+        rq.onerror = function () { resolve(null); };
+      } catch (e) { resolve(null); }
+    });
+  };
+
+  // Bild eines Spielers, der NICHT im Raum ist, aus seinem gespeicherten Profil: WCE/FBC öffnet dafür selbst einen Charakter per
+  // CharacterLoadOnline (Befehl "/profiles" → Öffnen). Hier ebenso, aber mit einer eigenen Kennung (berührt keinen echten Charakter)
+  // und der Charakter wird gleich danach wieder aus der Liste des Spiels genommen. Nichts wird gesendet.
+  const _spBildAusBundle = async function (bundle, nr) {
+    if (typeof CharacterLoadOnline !== 'function') throw new Error('CharacterLoadOnline fehlt in dieser BC-Version');
+    if (typeof Character === 'undefined' || !Array.isArray(Character)) throw new Error('Die Charakterliste des Spiels fehlt');
+    const kopie = JSON.parse(JSON.stringify(bundle));
+    kopie.ID = 'bcu-bild-' + nr;
+    kopie.MemberNumber = nr;
+    let C = null;
+    try {
+      C = CharacterLoadOnline(kopie, nr);
+      if (!C) throw new Error('Charakter wurde nicht erzeugt');
+      let vorher = null, stabil = false;
+      for (let i = 0; i < 12; i++) {
+        try {
+          if (i === 0 && typeof CharacterRefresh === 'function') CharacterRefresh(C, false, false);
+          if (typeof CharacterLoadCanvas === 'function') CharacterLoadCanvas(C);
+        } catch (e) {}
+        await _spSchlafen(i === 0 ? 40 : 90);
+        const h = C.Canvas ? _spCanvasHash(C.Canvas) : -1;
+        if (h !== -1 && h === vorher) { stabil = true; break; }   // zwei gleiche Zeichnungen hintereinander: alle Teile sind geladen
+        vorher = h;
+      }
+      const img = _spBildVonCanvas(C.Canvas);
+      if (!img) throw new Error('Der Zeichenpuffer ist leer');
+      return { img: img, stabil: stabil };
+    } finally {
+      try { const i = C ? Character.indexOf(C) : -1; if (i >= 0) Character.splice(i, 1); } catch (e) {}
+    }
+  };
+
+  // Bilder für mehrere Spieler nacheinander: im Raum → deren Puffer, sonst aus dem WCE/FBC-Speicher
+  let _spBilderLaeuft = false;
+  const _spBilderErzeugen = async function (nrs) {
+    const bilder = [], fehler = [];
+    let cache = null;
+    try {
+      for (let k = 0; k < nrs.length; k++) {
+        const nr = nrs[k];
+        try {
+          const raum = (window.ChatRoomCharacter || []).concat(window.Player ? [window.Player] : []);
+          const live = raum.find(function (c) { return c && c.MemberNumber === nr; });
+          if (live) {
+            const img = _spBildLive(live);
+            if (img) bilder.push({ nr: nr, img: img, stabil: true, quelle: 'raum' }); else fehler.push({ nr: nr, grund: 'Der Zeichenpuffer ist leer' });
+            continue;
+          }
+          if (!cache) cache = await _spCacheOeffnen();
+          if (!cache.db) { fehler.push({ nr: nr, grund: cache.fehlt ? 'Kein WCE/FBC-Profilspeicher gefunden' : (cache.fehler || 'Profilspeicher nicht lesbar') }); continue; }
+          const zeile = await _spCacheZeile(cache.db, nr);
+          if (!zeile || !zeile.characterBundle) { fehler.push({ nr: nr, grund: 'Nicht im Profilspeicher' }); continue; }
+          let b = null;
+          try { b = typeof zeile.characterBundle === 'string' ? JSON.parse(zeile.characterBundle) : zeile.characterBundle; } catch (e) {}
+          if (!b || typeof b !== 'object') { fehler.push({ nr: nr, grund: 'Gespeichertes Profil nicht lesbar' }); continue; }
+          const r = await _spBildAusBundle(b, nr);
+          bilder.push({ nr: nr, img: r.img, stabil: r.stabil, quelle: 'cache' });
+        } catch (e) {
+          fehler.push({ nr: nr, grund: String((e && e.message) || e).slice(0, 160) });
+        }
+        await _spSchlafen(20);
+      }
+    } finally { if (cache && cache.db) { try { cache.db.close(); } catch (e) {} } }
+    return { bilder: bilder, fehler: fehler };
+  };
 
   // ── Auto-Scan bei Raumwechsel / Member-Join ───────────────────────────
   const _outfitRunId = Date.now();

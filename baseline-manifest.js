@@ -11,10 +11,10 @@ const BASELINE_MANIFEST = {
   ],
   "identifierPattern": "\\b(Inventory|Character|ChatRoom|Server|Asset|Player|Dialog|Common|Item|Lock|Wardrobe|Pose|Skill|Reputation|Online|Chat)[A-Z]\\w+",
   "counts": {
-    "identifiers": 99,
-    "function": 26,
-    "assetGroup": 33,
-    "unknown": 40
+    "identifiers": 102,
+    "function": 27,
+    "assetGroup": 34,
+    "unknown": 41
   },
   "identifiers": [
     {
@@ -86,7 +86,15 @@ const BASELINE_MANIFEST = {
       "name": "CharacterLoadCanvas",
       "kind": "function",
       "files": [
-        "items.js"
+        "items.js",
+        "loader.js"
+      ]
+    },
+    {
+      "name": "CharacterLoadOnline",
+      "kind": "function",
+      "files": [
+        "loader.js"
       ]
     },
     {
@@ -584,6 +592,13 @@ const BASELINE_MANIFEST = {
       ]
     },
     {
+      "name": "ItemPermission",
+      "kind": "assetGroup",
+      "files": [
+        "loader.js"
+      ]
+    },
+    {
       "name": "ItemRemove",
       "kind": "assetGroup",
       "files": [
@@ -658,6 +673,13 @@ const BASELINE_MANIFEST = {
       "kind": "unknown",
       "files": [
         "items.js"
+      ]
+    },
+    {
+      "name": "OnlineSettings",
+      "kind": "unknown",
+      "files": [
+        "loader.js"
       ]
     },
     {

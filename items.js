@@ -5563,7 +5563,7 @@ function deleteProfileByIdx(idx) {
 let _activeTab = 'items';
 // Obertab-Gruppen: welche Untertabs gehören zu welchem Obertab
 const TAB_GROUPS = {
-  items: ['items','outfit','curse','outfit-scan','lscg-wheel','outfit-import','locks'],
+  items: ['items','outfit','curse','outfit-scan','lscg-wheel','outfit-import','spielerprofile','locks'],
   bots:  ['bot','shop','rank','money','itemdefs','inventar','log','spieler','variablen','scan'],
 };
 let _activeGroup = 'items';
@@ -5592,7 +5592,7 @@ function switchTab(tab) {
   // Sichtbarkeits-Schleife nur, wenn sich der Obertab wirklich ändert (verhindert Lag bei Tab-Wechsel innerhalb einer Gruppe)
   const _grp = _tabGroupOf(tab);
   if (_grp !== _activeGroup) _applyGroupUI(_grp);
-  ['items','outfit','curse','bot','log','money','events','rank','shop','outfit-import','outfit-scan','lscg-wheel','locks','spieler','variablen','itemdefs','inventar','scan'].forEach(t => {
+  ['items','outfit','curse','bot','log','money','events','rank','shop','outfit-import','outfit-scan','lscg-wheel','locks','spielerprofile','spieler','variablen','itemdefs','inventar','scan'].forEach(t => {
     document.getElementById('tab-'+t)?.classList.toggle('active', t===tab);
     document.getElementById('tab-'+t+'-btn')?.classList.toggle('active', t===tab);
   });
@@ -5608,6 +5608,7 @@ function switchTab(tab) {
   if (tab === 'inventar')      { if (typeof renderInventarTab === 'function') renderInventarTab(); }
   if (tab === 'scan')          { if (typeof renderScanTab === 'function') renderScanTab(); }
   if (tab === 'outfit-import') { renderOutfitImportTab(); }
+  if (tab === 'spielerprofile') { if (typeof renderSpielerProfileTab === 'function') { renderSpielerProfileTab(); spielerProfileScan('tab'); } }
   // Start-Schlossfilter: osSetLockFilter entpackt die Codes in Häppchen und zeichnet danach selbst
   if (tab === 'outfit-scan')   { if (!_sfOsErstmals()) renderOutfitScanTab(); }
   if (tab === 'lscg-wheel')   { if (_mbsWheelData.length) _renderMbsWheelTab(); scanWheelOutfits(); }
@@ -7870,11 +7871,17 @@ async function exportInfoSammeln() {
     lCodeZeichen += String(v.code || '').length;
     if (LSCG_SCREENSHOTS[v.fingerprint ? k + '|' + v.fingerprint : k]) lMitBild++;
   }
+  if (typeof SPIELER_DB !== 'undefined') {
+    const spR = Object.values(SPIELER_DB);
+    z.push('Spielerprofile: ' + zahl(spR.length) + ' Spieler · ' + zahl(spR.filter(r => r.beschreibung).length) + ' mit Beschreibung · '
+      + zahl(spR.filter(r => Object.keys(r.mods || {}).length).length) + ' mit erkannten Mods · ' + zahl(spR.filter(r => r.inCache).length) + ' im WCE/FBC-Speicher · '
+      + zahl(spR.filter(r => r.bild).length) + ' mit Bild · ' + zahl(spR.reduce((n, r) => n + ((r.verlauf || []).length), 0)) + ' Änderungen im Verlauf');
+  }
   z.push('LSCG Outfits: ' + zahl(lKeys.length) + ' Spieler · ' + zahl(lVers) + ' Versionen (' + zahl(lMitBild) + ' mit Bild) · meiste Versionen bei einem Spieler ' + zahl(lMax)
     + ' · Codes ' + MB(lCodeZeichen) + ' · Favoriten: ' + zahl(_osFavs.size) + ' Spieler, ' + zahl(_osOutfitFavs.size) + ' Outfits');
   const wOutfits = _mbsWheelData.reduce((s, r) => s + (r.outfits || []).length, 0);
   const wShots = bilder(_mbsWheelShots);
-  const wNiedrig = sicher(() => Object.keys(_mbsWheelShots).filter(k => _wheelBildNiedrig(_mbsWheelShots[k])).length, 0);
+  const wNiedrig = sicher(() => Object.keys(_mbsWheelShots).filter(k => _wheelBildNiedrig(_mbsWheelShots[k], k)).length, 0);
   z.push('MBS Wheel: ' + zahl(_mbsWheelData.length) + ' Spieler · ' + zahl(wOutfits) + ' Outfits · ' + zahl(wShots.n) + ' Bilder (' + zahl(wNiedrig)
     + ' in niedriger Auflösung) · Favoriten: ' + zahl(_mbsWheelFavs.size) + ' Spieler, ' + zahl(_mbsWheelOutfitFavs.size) + ' Outfits');
   const cKeys = Object.keys(CURSE_DB);
@@ -8089,6 +8096,7 @@ onBridgeMessage('PONG', function(ev) {
         setTimeout(function() {
           if (!_connected) return;
           _triggerLscgScan('join-retry');
+          if (typeof spielerProfileScan === 'function') spielerProfileScan('join-retry');   // Mods melden sich oft erst nach ein paar Sekunden
           _updateAutoScanBadge('join-retry');
         }, 12000);
         // Pausierte Abläufe (Auto-Screenshot, Bilderserien …) setzt der
@@ -8188,6 +8196,7 @@ onBridgeMessage('PLAYER_DATA', function(ev) {
         const _pi = document.getElementById('playerInfo');
         if (_pi) { _pi.textContent = '👤 ' + ev.data.name + ' #' + ev.data.memberNumber; _pi.style.display = ''; }
         renderRoomMembers(ev.data);
+        if (typeof spielerSichtung === 'function') spielerSichtung(ev.data);   // bekannte Spieler im Raum: "zuletzt gesehen" aktuell halten
         if (typeof _spielerSetRoom === 'function') _spielerSetRoom(ev.data);
       } else {
         console.warn('[BCK-Popup] PLAYER_DATA Fehler:', ev.data.err);
@@ -8515,6 +8524,7 @@ function _triggerAutoScan(reason) {
     if (!_connected) return;
     _triggerLscgScan(_autoScanLastReason);
     _triggerCurseScan(_autoScanLastReason);
+    if (typeof spielerProfileScan === 'function') spielerProfileScan(_autoScanLastReason);   // Spielerprofile: Beschreibung, Mods … der Spieler im Raum
     _updateAutoScanBadge(_autoScanLastReason);
   }, 1500);
 }
@@ -13611,6 +13621,7 @@ function mbsWheelDeleteShot(mn, oi) {
   if (!confirm('Wheel-Bild von "' + (o.name || '?') + '" löschen?')) return;
   delete _mbsWheelShots[fp];
   _bildKeyWeg('wheel', fp);
+  if (_wheelHoch.delete(fp)) _kleinSpeichern(WHEEL_HOCH_KEY, _wheelHoch);
   _saveMbsWheelShots();
   _renderMbsWheelTab();
 }
@@ -13635,7 +13646,7 @@ function mbsWheelGenerateAll() {
   if (_wheelGenRunning) { mbsWheelGenerateStop(); return; }
   if (!_connected) { showStatus('❌ Nicht verbunden', 'error'); return; }
   if (!_gameOk(false)) { showStatus('❌ ' + _gameWaitReason(false) + ' – Bilderserie nicht gestartet', 'error'); return; }
-  if (!_bildFertig.wheel) { showStatus('⏳ Die Wheel-Bilder werden noch geladen (die Auflösung wird geprüft) – gleich nochmal versuchen', 'info'); return; }
+  if (!_bildFertig.wheel || !_kleinStatus[WHEEL_HOCH_KEY]?.geladen) { showStatus('⏳ Die Wheel-Bilder werden noch geladen (die Auflösung wird geprüft) – gleich nochmal versuchen', 'info'); return; }
 
   // Queue: alle Outfits ohne Bild UND alle mit einem Bild in niedriger Auflösung (die werden neu gemacht), per
   // Fingerprint dedupliziert. Ein vorhandenes Bild wird erst ersetzt, wenn das neue fertig ist.
@@ -13646,7 +13657,7 @@ function mbsWheelGenerateAll() {
     r.outfits.forEach(function(o, oi) {
       const fp = _mbsOutfitFp(o);
       const vorh = _mbsWheelShots[fp];
-      if ((vorh && !_wheelBildNiedrig(vorh)) || seen.has(fp)) return;
+      if ((vorh && !_wheelBildNiedrig(vorh, fp)) || seen.has(fp)) return;
       seen.add(fp);
       if (vorh) niedrig++; else fehlend++;
       _wheelGenQueue.push({ mn: r.memberNumber, oi });
@@ -13684,7 +13695,7 @@ function _wheelGenStep() {
   const o = r?.outfits[job.oi];
   if (!o) { _wheelGenStep(); return; }
   const fp = _mbsOutfitFp(o);
-  if (_mbsWheelShots[fp] && !_wheelBildNiedrig(_mbsWheelShots[fp])) { _wheelGenStep(); return; } // inzwischen in guter Auflösung vorhanden
+  if (_mbsWheelShots[fp] && !_wheelBildNiedrig(_mbsWheelShots[fp], fp)) { _wheelGenStep(); return; } // inzwischen in guter Auflösung vorhanden
 
   _wheelGenJob = job;
   const tok = _wheelGenTok;
@@ -13806,6 +13817,7 @@ function mbsWheelClearAllShots() {
   if (!n) { showStatus('Keine Wheel-Bilder vorhanden', 'info'); return; }
   if (!confirm(n + ' Wheel-Bilder löschen?\n(Die Outfits selbst bleiben erhalten)')) return;
   _mbsWheelShots = {};
+  if (_wheelHoch.size) { _wheelHoch.clear(); _kleinSpeichern(WHEEL_HOCH_KEY, _wheelHoch); }
   _saveMbsWheelShots();
   _renderMbsWheelTab();
   showStatus('🖼️ ' + n + ' Bilder gelöscht', 'success');
@@ -13889,6 +13901,7 @@ const _TAB_ZAEHLER = [
   { id: 'outfit',        name: '👗 Outfit & Profile', anzahl: () => Object.keys(PROFILES).length },
   { id: 'outfit-scan',   name: '🧬 LSCG Outfits',     anzahl: () => Object.values(LSCG_DB).reduce((s, e) => s + (e?.versions?.length || 0), 0) },
   { id: 'curse',         name: '🔮 Craft & Curse',    anzahl: () => Object.keys(CURSE_DB).length },
+  { id: 'spielerprofile', name: '🪪 Spielerprofile', anzahl: () => (typeof SPIELER_DB !== 'undefined') ? Object.keys(SPIELER_DB).length : 0 },
   { id: 'outfit-import', name: '📥 Outfit Import',    anzahl: () => (typeof OI_LIST !== 'undefined' && Array.isArray(OI_LIST)) ? OI_LIST.length : 0 },
 ];
 const _tabZaehlerStand = {};
@@ -14083,7 +14096,16 @@ function _wheelShotCode(reqId, items, serie) {
 
 // Größe der Wheel-Bilder (wie Profil und LSCG). Die alten Bilder waren höchstens 260×520.
 const WHEEL_BILD_MAX_W = 520, WHEEL_BILD_MAX_H = 1040;
-const WHEEL_BILD_NIEDRIG_H = 560;   // darunter gilt ein Bild als "niedrige Auflösung" (alte Bilder: höchstens 520 hoch)
+// Alte Bilder wurden auf 260×520 verkleinert: ein Bild in diesen Grenzen, das die Grenze auch erreicht, war größer und
+// ist zu klein geraten. (Früher galt jedes Bild unter 560 Pixeln Höhe als "niedrig" – neue Bilder kurzer Posen, z. B.
+// kniend, blieben darunter und kamen bei JEDEM Klick auf "Alle erstellen" wieder dran.)
+const WHEEL_ALT_W = 260, WHEEL_ALT_H = 520;
+
+// Outfits, deren Bild mit der aktuellen Größe aufgenommen wurde: die gelten nie wieder als "niedrig aufgelöst",
+// egal wie klein das Bild ausfiel. In der Datenbank (und damit im Gesamt-Backup), damit es nach einem Neustart bleibt.
+const WHEEL_HOCH_KEY = 'BC_WHEEL_HOCH_v1';
+const _wheelHoch = new Set();
+_kleinLaden(WHEEL_HOCH_KEY, _wheelHoch, function () { if (_activeTab === 'lscg-wheel') _debouncedRenderMbsWheelTab(); });
 
 // Breite × Höhe eines JPEG-Data-URLs aus dem Kopf (Marker SOF0/1/2); null, wenn nicht lesbar
 function _jpegGroesse(url) {
@@ -14105,10 +14127,13 @@ function _jpegGroesse(url) {
   } catch (e) {}
   return null;
 }
-// true = das Bild ist bekannt niedrig aufgelöst (alte 260×520-Bilder); unlesbare Bilder gelten als in Ordnung
-function _wheelBildNiedrig(url) {
+// true = das Bild ist bekannt niedrig aufgelöst (altes, auf 260×520 verkleinertes Bild); unlesbare Bilder und
+// Outfits, die schon in der aktuellen Größe aufgenommen wurden (fp), gelten als in Ordnung
+function _wheelBildNiedrig(url, fp) {
+  if (fp !== undefined && _wheelHoch.has(fp)) return false;
   const g = _jpegGroesse(url);
-  return !!g && g.h > 0 && g.h < WHEEL_BILD_NIEDRIG_H;
+  if (!g || g.w <= 0 || g.h <= 0) return false;
+  return g.w <= WHEEL_ALT_W + 1 && g.h <= WHEEL_ALT_H + 1 && (g.w >= WHEEL_ALT_W - 1 || g.h >= WHEEL_ALT_H - 1);
 }
 
 function _handleWheelShotData(data) {
@@ -14136,6 +14161,8 @@ function _handleWheelShotData(data) {
     canvas.getContext('2d').drawImage(imgEl, 0, 0, w, h);
     _mbsWheelShots[fp] = canvas.toDataURL('image/jpeg', 0.88);
     _saveMbsWheelShots();
+    // In der aktuellen Größe aufgenommen → nie wieder als "niedrig aufgelöst" neu machen (auch wenn die Pose das Bild klein hält)
+    if (!_wheelHoch.has(fp)) { _wheelHoch.add(fp); _kleinSpeichern(WHEEL_HOCH_KEY, _wheelHoch); }
     // Nur die Karten mit diesem Bild austauschen – nicht den ganzen Tab (jedes Bild neu) nach jedem Foto
     if (_activeTab === 'lscg-wheel' && !_wheelBildAktualisieren(fp)) _debouncedRenderMbsWheelTab();
     showStatus('✅ Wheel-Screenshot gespeichert', 'success');
