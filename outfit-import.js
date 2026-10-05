@@ -639,16 +639,6 @@ function oiDelete(idx) {
   renderOutfitImportTab();
 }
 
-function oiClearAll() {
-  if (!OI_LIST.length) return;
-  if (!confirm('Alle ' + OI_LIST.length + ' Outfit-Codes löschen?')) return;
-  OI_LIST = [];
-  _oiSeqRunning = false;
-  _oiSave();
-  renderOutfitImportTab();
-  showStatus('🗑️ Import-Liste geleert', 'success');
-}
-
 // ── Init ─────────────────────────────────────────────────────────────
 Promise.all([_oiLoad(), _oiLoadBodyBase()]).then(() => {
   if (typeof renderOutfitImportTab === 'function') renderOutfitImportTab();

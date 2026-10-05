@@ -45,11 +45,11 @@
   /* Sammlungen als Schluessel/Wert-Paare – hier wird inkrementell verglichen. */
   var SAMMLUNGEN = ['profiles', 'curseDatabase', 'lscgTable', 'lscgCache', 'curseComments',
     'curseOutfitFlags', 'lscgDB', 'lscgSlots', 'lscgScreenshots', 'profileScreenshots',
-    'mbsWheelShots'];
+    'mbsWheelShots', 'spielScans'];
   /* Alles Uebrige ist klein bzw. schlecht teilbar und wandert jedes Mal komplett mit. */
   var KOMPLETT = ['curseFavourites', 'profileFavs', 'mbsWheel', 'mbsWheelFavs',
     'mbsWheelOutfitFavs', 'lscgOutfitFavs', 'rangDaten', 'moneyDaten', 'botLogs', 'defaultOutfit',
-    'bots', 'botGroups', 'botVars', 'playerKeys', 'shopDaten'];
+    'bots', 'botGroups', 'botVars', 'playerKeys', 'shopDaten', 'extras'];
 
   /* Kalendertag als Schluessel – die Sicherung laeuft einmal pro Tag,
      beim ersten Start. */
@@ -215,6 +215,16 @@
     };
   }
 
+  /* "Wirklich alles": zusaetzlich jeder Schluessel der Datenbank und des localStorage
+     ('extras') und alle Spiel-Scans ('spielScans') – die Funktionen stehen in items.js. */
+  async function ergaenzeDaten(daten) {
+    try { if (typeof _backupExtras === 'function') daten.extras = await _backupExtras(); }
+    catch (e) { console.warn('[Backup] extras:', e); }
+    try { if (typeof _backupScans === 'function') daten.spielScans = await _backupScans(); }
+    catch (e) { console.warn('[Backup] spielScans:', e); }
+    return daten;
+  }
+
   // ── Schreiben ─────────────────────────────────────────────────────────
   async function schreibeDatei(name, inhalt) {
     var datei = await ordner.getFileHandle(name, { create: true });
@@ -300,7 +310,7 @@
     laeuft = true;
     var t0 = Date.now();
     try {
-      var daten = baueDaten();
+      var daten = await ergaenzeDaten(baueDaten());
       var voll = vollErzwingen || !stand.basis || !stand.manifest || stand.zaehler >= cfg.proVoll;
 
       var name, bytes, info;

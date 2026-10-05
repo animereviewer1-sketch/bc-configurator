@@ -212,12 +212,14 @@ describe('LSCG: Filter "Favoriten" zeigt nur die einzeln markierten', () => {
     expect(zeichnen(ctx)).toContain('Keine einzeln favorisierten Outfits');
   });
 
-  it('osToggleFavFilter schaltet um und markiert den Knopf', () => {
+  it('osToggleFavFilter schaltet um und markiert den Knopf "Favoriten" in der Filter-Reihe', () => {
     const { ctx, els, spur } = lscg();
-    els.osFavFilterBtn = { classList: klassen() };
+    els.osFilter_fav = { classList: klassen() };
+    els.osFilter_all = { classList: klassen() };
     ctx.osToggleFavFilter();
     expect(evalIn(ctx, '_osFavFilter')).toBe(true);
-    expect(els.osFavFilterBtn.classList.toggle).toHaveBeenCalledWith('on', true);
+    expect(els.osFilter_fav.classList.toggle).toHaveBeenCalledWith('on', true);
+    expect(els.osFilter_all.classList.toggle).toHaveBeenCalledWith('on', false);
     expect(spur()).toContain('os-neu');
     ctx.osToggleFavFilter();
     expect(evalIn(ctx, '_osFavFilter')).toBe(false);

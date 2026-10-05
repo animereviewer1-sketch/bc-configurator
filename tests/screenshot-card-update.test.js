@@ -329,7 +329,7 @@ describe('Aufrufstellen nutzen die Einzel-Aktualisierung', () => {
 
   it('nach jedem Setzen/Entfernen eines Profil-Bildes steht _profilBildAktualisieren vor dem Komplett-Rendern', () => {
     const treffer = SRC.match(/_saveProfileScreenshots\(\);\s*\n\s*if \(!_profilBildAktualisieren\(name\)\) renderProfileList\(\);/g) || [];
-    expect(treffer.length).toBe(4); // Einzel-Screenshot, Auto-Screenshot, Upload, Entfernen
+    expect(treffer.length).toBe(3); // Einzel-Screenshot, Auto-Screenshot, Entfernen (das Hochladen eigener Dateien gibt es nicht mehr)
   });
 
   it('der Auto-Screenshot der Outfit-Scan-Bilder ersetzt nur die betroffenen Karten', () => {

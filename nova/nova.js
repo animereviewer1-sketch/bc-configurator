@@ -416,7 +416,7 @@
       ['manualReconnect',      'Verbinden',                   'Verbindung zum Spiel neu herstellen',           'refresh'],
       ['scanRoom',             'Raum scannen',                'Spieler im aktuellen Raum neu einlesen',        'users'],
       ['triggerGameScan',      'Spiel scannen',               'Read-only-Snapshot des Spiels speichern',       'search'],
-      ['exportAllData',        'Komplett-Backup exportieren', 'Alle Daten in eine Datei sichern',              'download'],
+      ['exportAllData',        'Gesamt-Backup erstellen',     'Wirklich alles in eine Datei sichern',          'download'],
       ['exportScreenshotsOnly','Screenshots exportieren',     'Alle Bild-Sammlungen als JSON sichern',         'camera'],
       ['itemsExportCatalog',   'Item-Katalog exportieren',    'Alle Items mit Bild-URLs als JSON',             'package'],
       ['importLscgOutfits',    'Nur LSCG-Outfits wiederherstellen', 'Aus Backup-Dateien (auch sehr große) nur die Outfits zurückholen', 'layers']

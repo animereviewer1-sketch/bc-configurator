@@ -92,11 +92,6 @@ const DELETE_PATHS = [
     gone: (ctx) => evalIn(ctx, 'Object.keys(LSCG_SCREENSHOTS).length === 0'),
   },
   {
-    name: 'clearAllLscgOutfits',
-    call: (ctx) => ctx.clearAllLscgOutfits(),
-    gone: (ctx) => evalIn(ctx, 'Object.keys(LSCG_DB).length === 0 && Object.keys(LSCG_SCREENSHOTS).length === 0'),
-  },
-  {
     name: 'mbsWheelClearAllShots',
     call: (ctx) => ctx.mbsWheelClearAllShots(),
     gone: (ctx) => evalIn(ctx, 'Object.keys(_mbsWheelShots).length === 0'),
@@ -141,7 +136,7 @@ describe('Löschen nur mit Bestätigung (STAB-09)', () => {
     const CONFIRM_REQUIRED = [
       'deleteProfile', 'removeProfileScreenshot', 'deleteOsScreenshot', 'deleteOsScreenshotKey',
       'mbsWheelDeleteShot', 'deleteOsScreenshotFromLb', 'deleteLscgVersion', 'clearAllProfileScreenshots',
-      'clearAllLscgScreenshots', 'clearAllLscgOutfits', 'mbsWheelClearAllShots', 'mbsWheelClearAll',
+      'clearAllLscgScreenshots', 'mbsWheelClearAllShots', 'removeProfileDuplicates',
     ];
     // Bewusste Ausnahmen — kein confirm() nötig:
     const ALLOWED_WITHOUT_CONFIRM = [
@@ -149,6 +144,7 @@ describe('Löschen nur mit Bestätigung (STAB-09)', () => {
       'profileRename',                     // Umbenennung, kein Datenverlust
       'repairOsOutfitCode',                // Konsolen-Reparatur, nicht UI-erreichbar
       '_removeLscgScreenshotFromProfiles', // Aufräum-Helfer, läuft nur hinter bereits bestätigten Aufrufern
+      '_profilEntfernen',                  // Profil + Bild + Favorit + Tags; läuft nur hinter deleteProfile / removeProfileDuplicates (beide mit confirm)
     ];
 
     let currentFn = null;
@@ -166,7 +162,7 @@ describe('Löschen nur mit Bestätigung (STAB-09)', () => {
 
     const unexpected = hits.filter(h => !CONFIRM_REQUIRED.includes(h.fn) && !ALLOWED_WITHOUT_CONFIRM.includes(h.fn));
     expect(unexpected, 'Unerwartete Lösch-Zeilen außerhalb bekannter Funktionen: ' + JSON.stringify(unexpected)).toEqual([]);
-    expect(hits.length).toBeGreaterThanOrEqual(15);
+    expect(hits.length).toBeGreaterThanOrEqual(12);
 
     for (const name of CONFIRM_REQUIRED) {
       const startIdx = fnStartIdx[name];
@@ -178,5 +174,22 @@ describe('Löschen nur mit Bestätigung (STAB-09)', () => {
       }
       expect(body, `Funktion ${name} hat kein confirm() im Körper`).toMatch(/confirm\(/);
     }
+  });
+});
+
+describe('Keine Massenlöschung für Outfits', () => {
+  // Wunsch: Löschfunktionen, die eine Masse an Outfits entfernen, gibt es nicht mehr. Einzelne Löschwege (mit Rückfrage)
+  // und das Entfernen doppelter (old)-Profile bleiben.
+  const src = (f) => fs.readFileSync(path.join(REPO_ROOT, f), 'utf8');
+
+  it('die Funktionen existieren nicht mehr', () => {
+    for (const name of ['clearAllLscgOutfits', 'mbsWheelClearAll', 'oiClearAll']) {
+      expect(src('items.js') + src('outfit-import.js'), name).not.toMatch(new RegExp('function ' + name + '\\b'));
+    }
+  });
+
+  it('und es gibt keinen Knopf mehr dafür', () => {
+    const html = src('index.html');
+    for (const name of ['clearAllLscgOutfits', 'mbsWheelClearAll()', 'oiClearAll']) expect(html, name).not.toContain(name);
   });
 });

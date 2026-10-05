@@ -590,6 +590,8 @@ function _saveProfileScreenshots() {
 
 // ── Profile Favoriten ─────────────────────────────────
 let PROFILE_FAVS = new Set();
+let PROFILE_TAGS = {};
+let _profileTagFilter = null; // null = all, string = tag name
 try { PROFILE_FAVS = new Set(JSON.parse(localStorage.getItem('BC_PROFILE_FAVS_v1') || '[]')); } catch {}
 let _profileFilter = 'all'; // 'all' | 'fav' | 'noold'
 
@@ -2119,27 +2121,59 @@ function loadProfile(name) {
   showStatus('✅ Profil "' + name + '" geladen (' + restored.length + ' Items)', 'success');
 }
 
+// Ein Profil komplett entfernen: Daten, Bild, Favorit und Tags. Nur hinter bestätigten Aufrufern verwenden.
+function _profilEntfernen(name) {
+  delete PROFILES[name];
+  if (PROFILE_SCREENSHOTS[name]) { delete PROFILE_SCREENSHOTS[name]; _saveProfileScreenshots(); }
+  if (PROFILE_FAVS.has(name)) {
+    PROFILE_FAVS.delete(name);
+    try { localStorage.setItem('BC_PROFILE_FAVS_v1', JSON.stringify([...PROFILE_FAVS])); } catch {}
+  }
+  if (PROFILE_TAGS[name]) { delete PROFILE_TAGS[name]; _saveProfileTags(); }
+}
+
 function deleteProfile(name) {
   if (!confirm('Profil "' + name + '" löschen?')) return;
-  delete PROFILES[name];
-  // Screenshot cleanup
-  if (PROFILE_SCREENSHOTS[name]) { delete PROFILE_SCREENSHOTS[name]; _saveProfileScreenshots(); }
-    _saveProfiles();
-  renderProfileList();
+  // Hat das Profil Kopien/ein Original, ändern sich ORG/DUP-Abzeichen anderer Karten → dann komplett neu zeichnen
+  let hatKopien = true;
+  try { hatKopien = [..._getProfileDuplicates().values()].some(names => names.includes(name)); } catch (e) {}
+  _profilEntfernen(name);
+  _saveProfiles();
+  if (hatKopien || !_profilKarteAusListe(name)) renderProfileList();
+}
+
+// Die Karte eines gelöschten Profils aus der gezeichneten Liste nehmen, ohne alles neu zu bauen.
+// true = erledigt (auch wenn keine Karte zu sehen war); false = komplett neu zeichnen.
+function _profilKarteAusListe(name) {
+  const el = document.getElementById('profileListEl');
+  if (!el || !Array.isArray(el._profileKeys) || !el._profileKeys.length) return false;
+  const slot = Object.keys(_profileNameMap).find(k => _profileNameMap[k] === name);
+  const card = slot ? document.getElementById('prow_' + slot.slice(2)) : null;
+  if (!card) return true;
+  return _profilKarteEntfernen(el, card);
 }
 
 // ── Profile name map for safe event binding ───────────
 const _profileNameMap = {}; // slotKey → profileName
 
 // ── Profil-Duplikat-Erkennung ─────────────────────────
+// Der Fingerabdruck wird je Profil gemerkt (solange Items und Code dieselben sind). Vorher wurde er bei JEDEM Zeichnen der
+// Liste für alle Profile neu berechnet (Sortieren mit localeCompare, mehrfach) – bei 2000 Profilen ~80 ms nur dafür.
+const _profilFpCache = new WeakMap();   // Profil-Objekt → { items, len, oc, fp }
 function _profileFingerprint(p) {
   if (!p) return '';
-  // Outfit-Code Profile: Code-String als Fingerprint
-  if (p._outfitCode) return 'oc:' + p._outfitCode.trim();
-  // Normal-Profile: sortierte Group/Asset-Paare
-  const items = (p.items || []).slice()
-    .sort((a, b) => (a.group || '').localeCompare(b.group || '') || (a.asset || '').localeCompare(b.asset || ''));
-  return items.map(i => (i.group || '') + '/' + (i.asset || '')).join('|');
+  const items = p.items, len = items ? items.length : -1;
+  const c = _profilFpCache.get(p);
+  if (c && c.items === items && c.len === len && c.oc === p._outfitCode) return c.fp;
+  let fp;
+  if (p._outfitCode) {
+    fp = 'oc:' + p._outfitCode.trim();   // Outfit-Code Profile: Code-String als Fingerprint
+  } else {
+    // Normal-Profile: sortierte Group/Asset-Paare (Reihenfolge der Items ist egal)
+    fp = (items || []).map(i => (i.group || '') + '/' + (i.asset || '')).sort().join('|');
+  }
+  _profilFpCache.set(p, { items, len, oc: p._outfitCode, fp });
+  return fp;
 }
 
 function _getProfileDuplicates() {
@@ -2156,25 +2190,31 @@ function _getProfileDuplicates() {
   return dupeGroups;
 }
 
+// Ein Profil gilt als "old", wenn sein Owner per (old) im Namen oder über die Alt-Markierung (🔘 (old)) markiert ist
+function _profileIstOld(name) {
+  const owner = _profileOwnerOf(name);
+  return PROFILE_ALT_OWNERS.has(owner) || /\(old\)/i.test(owner);
+}
+
+// Was "Duplikate entfernen" löschen darf: nur KOPIEN (DUP – das Original, ORG, bleibt immer), die als (old) markiert sind.
+// Duplikate bei aktuellen Profilen werden nie angefasst.
+function _profileOldDuplikate(gruppen) {
+  const weg = [];
+  (gruppen || _getProfileDuplicates()).forEach(names => { names.slice(1).forEach(n => { if (_profileIstOld(n)) weg.push(n); }); });
+  return weg;
+}
+
 function removeProfileDuplicates() {
-  const dupeGroups = _getProfileDuplicates();
-  if (!dupeGroups.size) { showStatus('✅ Keine Duplikate gefunden', 'success'); return; }
-  // Vorher fragen – die Funktion loeschte bisher ohne jede Rueckfrage. Die
-  // Eintraege haben zwar dieselbe Item-Zusammensetzung, aber eigene Namen.
-  const _weg = [];
-  dupeGroups.forEach(names => { names.slice(1).forEach(n => _weg.push(n)); });
-  if (!confirm(_weg.length + ' doppelte Profile löschen?\n\n'
+  const _weg = _profileOldDuplikate();
+  if (!_weg.length) { showStatus('✅ Keine Duplikate mit (old) gefunden', 'success'); return; }
+  if (!confirm(_weg.length + ' doppelte (old)-Profile löschen?\n\n'
       + _weg.slice(0, 12).join('\n')
       + (_weg.length > 12 ? '\n… und ' + (_weg.length - 12) + ' weitere' : '')
-      + '\n\nDas lässt sich nicht rückgängig machen.')) return;
-  let removed = 0;
-  dupeGroups.forEach(names => {
-    // Ersten behalten, Rest löschen
-    names.slice(1).forEach(n => { delete PROFILES[n]; removed++; });
-  });
+      + '\n\nDas Original (ORG) bleibt jeweils erhalten. Das lässt sich nicht rückgängig machen.')) return;
+  _weg.forEach(_profilEntfernen);
   _saveProfiles();
   renderProfileList();
-  showStatus('🗑️ ' + removed + ' doppelte' + (removed !== 1 ? ' Profile' : 's Profil') + ' entfernt', 'success');
+  showStatus('🗑️ ' + _weg.length + ' doppelte (old)-Profile entfernt', 'success');
 }
 
 function _profileDupSets() {
@@ -2206,7 +2246,10 @@ function _profileOwnerOf(name) {
 }
 
 function _profileShortName(name, owner) {
-  return name.replace(new RegExp('\\s*-\\s+' + owner.replace(/[.*+?^${}()|[\]\\]/g,'\\$&') + '$'), '').trim() || name;
+  // Entfernt " - Owner" am Ende (ohne für jede Karte einen neuen regulären Ausdruck zu bauen)
+  if (!owner || !name.endsWith(owner)) return name.trim() || name;
+  const kopf = name.slice(0, name.length - owner.length);
+  return /\s*-\s+$/.test(kopf) ? (kopf.replace(/\s*-\s+$/, '').trim() || name) : (name.trim() || name);
 }
 
 // ── Profile Edit Mode State ───────────────────────────
@@ -2265,31 +2308,123 @@ function _profileCardHtml(name, idx, owner, blockId, dup) {
 
 // Duplikat-Zuordnung für die Karten (ORG/DUP-Abzeichen)
 function _profilDupInfo() {
-  const { dupSet, orgSet } = _profileDupSets();
+  const gruppen = _getProfileDuplicates();   // nur EINMAL berechnen (früher dreimal je Zeichnen)
+  const dupSet = new Set(), orgSet = new Set();
   const groupMap = new Map(); // name → [alle siblings] für Tooltip
-  _getProfileDuplicates().forEach(names => { names.forEach(n => groupMap.set(n, names)); });
-  return { dupSet, orgSet, groupMap };
+  gruppen.forEach(names => {
+    orgSet.add(names[0]);
+    names.forEach((n, i) => { if (i) dupSet.add(n); groupMap.set(n, names); });
+  });
+  return { dupSet, orgSet, groupMap, gruppen };
+}
+
+// ── Suche mit Datum (Outfit & Profile, LSCG Outfits, MBS Wheel) ──────────────────────────────────
+// Die Suche besteht aus Begriffen (durch Leerzeichen getrennt); Textbegriffe müssen ALLE passen. Ein Begriff in
+// Datumsform findet Einträge von diesem Tag – mit oder ohne führende Null ("5.10." = "05.10.2026"):
+//   TT.MM · TT.MM. · TT.MM.JJ · TT.MM.JJJJ · MM.JJJJ
+// Mehrere Datumsbegriffe sind Alternativen ("5.10. 6.10." = einer der beiden Tage). Ein Datumsbegriff passt auch,
+// wenn der Text ihn enthält (z. B. "v1.2" im Profilnamen).
+function _sucheZerlegen(q) {
+  const such = { text: [], datum: [] };
+  String(q == null ? '' : q).toLowerCase().split(/\s+/).filter(Boolean).forEach(function(t) {
+    let tag = null, monat = null, jahr = null, m;
+    if ((m = /^(\d{1,2})\.(\d{1,2})(?:\.(\d{4}|\d{2})?)?$/.exec(t))) {
+      tag = +m[1]; monat = +m[2]; jahr = m[3] ? (m[3].length === 2 ? 2000 + (+m[3]) : +m[3]) : null;
+    } else if ((m = /^(\d{1,2})\.(\d{4})$/.exec(t))) {
+      monat = +m[1]; jahr = +m[2];
+    }
+    const gueltig = monat != null && monat >= 1 && monat <= 12 && (tag == null || (tag >= 1 && tag <= 31));
+    if (gueltig) such.datum.push({ text: t, tag, monat, jahr }); else such.text.push(t);
+  });
+  return such;
+}
+
+// wert: Zeitstempel in ms oder "TT.MM.JJJJ" (so speichern Profile ihr Datum)
+function _datumPasst(d, wert) {
+  let t = null;
+  if (typeof wert === 'number' && isFinite(wert)) t = new Date(wert);
+  else if (typeof wert === 'string') {
+    const m = /^(\d{1,2})\.(\d{1,2})\.(\d{4})$/.exec(wert.trim());
+    if (m) t = new Date(+m[3], +m[2] - 1, +m[1]);
+  }
+  if (!t || isNaN(t.getTime())) return false;
+  return (d.tag == null || t.getDate() === d.tag) && t.getMonth() + 1 === d.monat && (d.jahr == null || t.getFullYear() === d.jahr);
+}
+
+// text = durchsuchbarer Text des Eintrags (klein), daten = seine Zeitstempel/Datumsangaben
+function _sucheTrifft(such, text, daten) {
+  if (!such.text.every(t => text.includes(t))) return false;
+  if (!such.datum.length) return true;
+  return such.datum.some(d => text.includes(d.text) || (daten || []).some(w => _datumPasst(d, w)));
+}
+
+// Das Datum eines Profils ("5.10.2026", ohne Uhrzeit) als Tagesbeginn in ms; 0 = unbekannt
+function _profilDatumMs(p) {
+  const m = /^(\d{1,2})\.(\d{1,2})\.(\d{4})$/.exec(String(p?.date ?? '').trim());
+  return m ? new Date(+m[3], +m[2] - 1, +m[1]).getTime() : 0;
+}
+// "Neu" = in den letzten 48 Stunden angelegt. Das Profil kennt nur den Tag, darum zählt ab Tagesbeginn von vor 48 Stunden.
+function _profilIstNeu(p) {
+  const ms = _profilDatumMs(p);
+  if (!ms) return false;
+  const grenze = new Date(Date.now() - NEU_MS); grenze.setHours(0, 0, 0, 0);
+  return ms >= grenze.getTime();
+}
+
+// Sortierung der Liste: 'name' (nach Besitzer, dann Name) oder 'ts' (neueste zuerst; bei gleichem Tag das später angelegte)
+let _profileSort = 'name';
+try { if (localStorage.getItem('BC_PROFILE_SORT_v1') === 'ts') _profileSort = 'ts'; } catch (e) {}
+function profileToggleSort() {
+  _profileSort = _profileSort === 'name' ? 'ts' : 'name';
+  try { localStorage.setItem('BC_PROFILE_SORT_v1', _profileSort); } catch (e) {}
+  renderProfileList();
+}
+function _profilSortieren(keys) {
+  if (_profileSort === 'ts') {
+    const reihenfolge = new Map(Object.keys(PROFILES).map((k, i) => [k, i]));
+    return keys.slice().sort((a, b) => (_profilDatumMs(PROFILES[b]) - _profilDatumMs(PROFILES[a])) || (reihenfolge.get(b) - reihenfolge.get(a)));
+  }
+  // Sortierschlüssel einmal je Profil berechnen statt bei jedem Vergleich
+  const sk = new Map(keys.map(k => [k, _profileSortKey(k)]));
+  return keys.slice().sort((a, b) => sk.get(a).localeCompare(sk.get(b)));
+}
+
+// Alle Profile, die Suche (Name, Items, Tags, Datum) und die gewählten Filter durchlassen.
+function _profilGefiltert() {
+  const such = _sucheZerlegen(document.getElementById('profileSearch')?.value || '');
+  const suche = such.text.length || such.datum.length;
+  let keys = Object.keys(PROFILES);
+  if (suche) {
+    keys = keys.filter(function(k) {
+      const p = PROFILES[k];
+      const text = [k, ...(p?.items || []).map(it => (it.asset || '') + ' ' + (it.group || '')), ...profileGetTags(k)].join(' ').toLowerCase();
+      return _sucheTrifft(such, text, [p?.date]);
+    });
+  }
+  if (_profileFilter === 'fav')      keys = keys.filter(k => PROFILE_FAVS.has(k));
+  if (_profileFilter === 'new')      keys = keys.filter(k => _profilIstNeu(PROFILES[k]));
+  if (_profileFilter === 'withshot') keys = keys.filter(k => !!PROFILE_SCREENSHOTS[k]);
+  if (_profileFilter === 'noshot')   keys = keys.filter(k => !PROFILE_SCREENSHOTS[k]);
+  // (old) ausblenden – alle Profile deren Owner "(old)" im Namen hat
+  if (_profileFilter === 'noold')    keys = keys.filter(k => !/\(old\)/i.test(_profileOwnerOf(k)));
+  if (_profileTagFilter)             keys = keys.filter(k => profileGetTags(k).includes(_profileTagFilter));
+  return keys;
 }
 
 function renderProfileList() {
   const el = document.getElementById('profileListEl');
   if (!el) return;
-  const q = (document.getElementById('profileSearch')?.value || '').toLowerCase();
-  let keys = Object.keys(PROFILES).filter(k => !q || k.toLowerCase().includes(q));
-  // Favoriten-Filter
-  if (_profileFilter === 'fav')     keys = keys.filter(k => PROFILE_FAVS.has(k));
-  if (_profileFilter === 'withshot') keys = keys.filter(k => !!PROFILE_SCREENSHOTS[k]);
-  if (_profileFilter === 'noshot')  keys = keys.filter(k => !PROFILE_SCREENSHOTS[k]);
-  // (old) ausblenden – alle Profile deren Owner "(old)" im Namen hat
-  if (_profileFilter === 'noold')  keys = keys.filter(k => !/\(old\)/i.test(_profileOwnerOf(k)));
+  let keys = _profilGefiltert();
   document.querySelectorAll('.profile-fc').forEach(chip => chip.classList.toggle('on', chip.dataset.filter === _profileFilter));
   if (!keys.length) {
     el.innerHTML = '<p style="color:var(--text3);font-size:.8125rem">Noch keine Profile gespeichert.</p>';
     el._profileKeys = [];
     return;
   }
-  keys = keys.slice().sort((a, b) => _profileSortKey(a).localeCompare(_profileSortKey(b)));
+  keys = _profilSortieren(keys);
   el._profileKeys = keys;
+  const sortKnopf = document.getElementById('profileSortBtn');
+  if (sortKnopf) sortKnopf.textContent = _profileSort === 'ts' ? '🕐 Zuletzt' : '🔤 Name';
 
   // Build name map for safe event binding
   Object.keys(_profileNameMap).forEach(k => delete _profileNameMap[k]);
@@ -2385,9 +2520,9 @@ function renderProfileList() {
   // Duplikat-Button ein-/ausblenden
   const dupBtn = document.getElementById('profileDupBtn');
   if (dupBtn) {
-    const dupCount = _dupInfo.dupSet.size;
+    const dupCount = _profileOldDuplikate(_dupInfo.gruppen).length;
     if (dupCount > 0) {
-      dupBtn.textContent = '⚠️ ' + dupCount + ' Duplikat' + (dupCount !== 1 ? 'e' : '') + ' entfernen';
+      dupBtn.textContent = '⚠️ ' + dupCount + ' (old)-Duplikat' + (dupCount !== 1 ? 'e' : '') + ' entfernen';
       dupBtn.style.display = '';
     } else {
       dupBtn.style.display = 'none';
@@ -2400,6 +2535,7 @@ function renderProfileList() {
 // Filter war das der Fall bei JEDEM Bild. false = der Aufrufer muss komplett neu zeichnen (Besitzer-Block fehlt,
 // Suche/Tag-Filter aktiv: dort entscheidet renderProfileList, was zu sehen ist).
 function _profilKarteEinfuegen(el, name) {
+  if (_profileSort !== 'name') return false;   // die Einsortier-Stelle kennt nur die Namens-Sortierung
   if ((document.getElementById('profileSearch')?.value || '').trim()) return false;
   if (typeof _profileTagFilter !== 'undefined' && _profileTagFilter) return false;
   const owner = _profileOwnerOf(name);
@@ -3374,37 +3510,30 @@ body{display:flex;align-items:flex-start;justify-content:center;padding:32px 16p
   showStatus('🖼 Canvas-Vorschau geöffnet', 'success');
 }
 
-// ── Fallback: Screenshot manuell hochladen ────────────
-function uploadProfileScreenshot(pname) {
+// ── Bild neu aufnehmen (Profil) ───────────────────────
+// Wie ein Durchlauf des Auto-Screenshots für ein einzelnes Profil: das Profil wird lokal angezogen (stehend, ohne
+// Schloss, AFK-Uhr zurück), fotografiert und dein Aussehen kommt zurück. Das vorhandene Bild wird erst ersetzt,
+// wenn das neue fertig ist. (Ein Hochladen eigener Dateien gibt es nicht mehr.)
+function profilBildNeu(pname) {
   const name = _profileNameMap[pname] || pname;
-  if (!name || !PROFILES[name]) return;
-  const inp = document.createElement('input');
-  inp.type = 'file'; inp.accept = 'image/*';
-  inp.onchange = () => {
-    const file = inp.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const imgEl = new Image();
-      imgEl.onload = () => {
-        const MAX_W = 520, MAX_H = 1040;
-        let w = imgEl.naturalWidth, h = imgEl.naturalHeight;
-        const scale = Math.min(1, MAX_W / w, MAX_H / h);
-        w = Math.round(w * scale); h = Math.round(h * scale);
-        const canvas = document.createElement('canvas');
-        canvas.width = w; canvas.height = h;
-        canvas.getContext('2d').drawImage(imgEl, 0, 0, w, h);
-        PROFILE_SCREENSHOTS[name] = canvas.toDataURL('image/jpeg', 0.88);
-        _saveProfileScreenshots();
-        if (!_profilBildAktualisieren(name)) renderProfileList();
-        const mod = document.getElementById('profileModal');
-        if (mod?.classList.contains('open') && _profileModalName === name) _renderProfileModal(name);
-      };
-      imgEl.src = e.target.result;
-    };
-    reader.readAsDataURL(file);
-  };
-  inp.click();
+  const p = name && PROFILES[name];
+  if (!p) return;
+  if (!_connected) { showStatus('❌ Nicht verbunden mit BC', 'error'); return; }
+  if (_slideshowRunning) { showStatus('⏳ Der Auto-Screenshot läuft – danach einzeln aufnehmen', 'info'); return; }
+  if (!_gameOk(false)) { showStatus('❌ ' + _gameWaitReason(false) + ' – Bild nicht aufgenommen', 'error'); return; }
+  if (p._outfitCode) {
+    captureProfileViaCanvas(name, p._outfitCode, null);
+  } else {
+    if (!(p.items || []).length) { showStatus('❌ Profil "' + name + '" hat keine Items', 'error'); return; }
+    if (!Object.keys(CACHE).length) { showStatus('❌ Cache nicht geladen! Erst Dump-Script ausführen und Cache importieren.', 'error'); return; }
+    loadProfile(name);   // wie "Run": setzt den Outfit-Aufbau auf dieses Profil
+    setTimeout(() => {
+      const roh = _outfitCodeBauen({ ohneSchloesser: true });
+      if (!roh) { showStatus('❌ Kein Code generiert', 'error'); return; }
+      captureProfileViaCanvas(name, null, roh.trim());
+    }, 20);
+  }
+  showStatus('📸 Bild von "' + name + '" wird aufgenommen…', 'info');
 }
 
 function removeProfileScreenshot(pname) {
@@ -3494,12 +3623,10 @@ function _renderProfileModal(name) {
     imgPanel.insertBefore(ph, imgPanel.firstChild);
   }
 
-  // Screenshot / upload / remove buttons
+  // Bild aufnehmen / neu aufnehmen / entfernen
   const captureBtn = document.getElementById('pmodCaptureBtn');
-  const uploadBtn  = document.getElementById('pmodUploadBtn');
   const removeBtn  = document.getElementById('pmodRemoveBtn');
-  if (captureBtn) captureBtn.dataset.pname = name;
-  if (uploadBtn)  uploadBtn.dataset.pname  = name;
+  if (captureBtn) { captureBtn.dataset.pname = name; captureBtn.textContent = img ? '🔄 Bild neu aufnehmen' : '📸 Bild aufnehmen'; }
   if (removeBtn)  { removeBtn.dataset.pname = name; removeBtn.style.display = img ? '' : 'none'; }
 
   // Fav button
@@ -6527,14 +6654,18 @@ onBridgeMessage('SEND_MON_VORFALL', function(ev) {
 // Eintrag fällt auf die Standardwerte zurück, es geht nie etwas verloren.
 const START_FILTER_KEY = 'BC_StartFilter_v1';
 const SF_CURSE_FILTER  = ['neu', 'cursed', 'fav', 'outfit', 'no-outfit'];
-const SF_PROFIL_FILTER = ['all', 'fav', 'withshot', 'noshot', 'noold'];
-const SF_WHEEL_FILTER  = ['all', 'fav', 'new'];
+// Die gemeinsamen Filter von Outfit & Profile, LSCG Outfits und MBS Wheel (überall gleich; "noold" gibt es nur bei den Profilen)
+const FILTER_GEMEINSAM = [['all', 'Alle'], ['fav', '⭐ Favoriten'], ['new', '🆕 Neu'], ['withshot', '📷 Mit Bild'], ['noshot', '🚫 Ohne Bild']];
+const NEU_MS = 48 * 60 * 60 * 1000;   // "Neu" = in den letzten 48 Stunden gesehen/angelegt
+const SF_PROFIL_FILTER = [...FILTER_GEMEINSAM.map(f => f[0]), 'noold'];
+const SF_WHEEL_FILTER  = FILTER_GEMEINSAM.map(f => f[0]);
+const SF_OS_FILTER     = FILTER_GEMEINSAM.map(f => f[0]);
 const SF_OS_SCHLOESSER = ['', 'schloss', 'dogs', 'afc', 'lover', 'owner', 'timer', 'code', 'mod'];
 const SF_TEXT_MAX      = 80;
 const START_FILTER_STANDARD = {
   curse:   { filter: ['neu', 'cursed', 'no-outfit'], cache: false, slot: '', suche: '' },
-  profile: { filter: 'all', suche: '' },
-  os:      { schloss: '', suche: '' },
+  profile: { filter: 'all', tag: '', suche: '' },
+  os:      { filter: 'all', schloss: '', suche: '' },
   wheel:   { filter: 'all', suche: '' },
 };
 
@@ -6551,8 +6682,9 @@ function _sfNormieren(roh) {
   if (cf.includes('outfit') && (cf.includes('neu') || cf.includes('no-outfit'))) cf = cf.filter(k => k !== 'outfit');
   return {
     curse:   { filter: cf, cache: c.cache === true, slot: _sfText(c.slot), suche: _sfText(c.suche) },
-    profile: { filter: SF_PROFIL_FILTER.includes(p.filter) ? p.filter : std.profile.filter, suche: _sfText(p.suche) },
-    os:      { schloss: SF_OS_SCHLOESSER.includes(o.schloss) ? o.schloss : std.os.schloss, suche: _sfText(o.suche) },
+    profile: { filter: SF_PROFIL_FILTER.includes(p.filter) ? p.filter : std.profile.filter, tag: _sfText(p.tag), suche: _sfText(p.suche) },
+    os:      { filter: SF_OS_FILTER.includes(o.filter) ? o.filter : std.os.filter,
+               schloss: SF_OS_SCHLOESSER.includes(o.schloss) ? o.schloss : std.os.schloss, suche: _sfText(o.suche) },
     wheel:   { filter: SF_WHEEL_FILTER.includes(w.filter) ? w.filter : std.wheel.filter, suche: _sfText(w.suche) },
   };
 }
@@ -6592,13 +6724,16 @@ function startFilterAnwenden(bereich) {
   }
   if (alle || bereich === 'profile') {
     _profileFilter = f.profile.filter;
+    _profileTagFilter = f.profile.tag || null;
     document.querySelectorAll('.profile-fc').forEach(c => c.classList.toggle('on', c.dataset.filter === _profileFilter));
+    try { _renderProfileTagFilterRow(); } catch (e) {}
     const s = el('profileSearch'); if (s) s.value = f.profile.suche;
     if (_activeTab === 'outfit') renderProfileList();
   }
   if (alle || bereich === 'os') {
     const s = el('osSearchInput'); if (s) s.value = f.os.suche;
     _osSearchQuery = f.os.suche.trim().toLowerCase();
+    _osFilterSetzen(f.os.filter);
     if (_activeTab === 'outfit-scan') {
       osSetLockFilter(f.os.schloss);   // entpackt die Codes in Häppchen und zeichnet danach
     } else {
@@ -6634,9 +6769,9 @@ function startFilterUebernehmen(bereich) {
       slot: el('slotFilter')?.value || '', suche: el('curseSearch')?.value || '',
     };
   } else if (bereich === 'profile') {
-    _startFilter.profile = { filter: _profileFilter, suche: el('profileSearch')?.value || '' };
+    _startFilter.profile = { filter: _profileFilter, tag: _profileTagFilter || '', suche: el('profileSearch')?.value || '' };
   } else if (bereich === 'os') {
-    _startFilter.os = { schloss: _osLockFilter || '', suche: el('osSearchInput')?.value || '' };
+    _startFilter.os = { filter: _osFilterWert(), schloss: _osLockFilter || '', suche: el('osSearchInput')?.value || '' };
   } else if (bereich === 'wheel') {
     _startFilter.wheel = { filter: _mbsWheelFilter, suche: el('wheelSearchInput')?.value || '' };
   } else return;
@@ -6711,15 +6846,19 @@ function startFilterRender() {
       + '<input class="os-search" list="sfSlotListe" maxlength="' + SF_TEXT_MAX + '" placeholder="Slot (leer = alle)" value="' + escHtml(f.curse.slot) + '" style="width:130px"'
       + ' onfocus="sfSlotListeFuellen()" onchange="sfSet(\'curse\',\'slot\',this.value.trim())"><datalist id="sfSlotListe"></datalist>'
       + suche(f.curse.suche, 'curse'));
+  const tagListe = (() => { try { return _allUsedTags(); } catch (e) { return []; } })();
+  if (f.profile.tag && !tagListe.includes(f.profile.tag)) tagListe.push(f.profile.tag);   // ein gesetzter, aber (noch) nicht vergebener Tag bleibt wählbar
   html += zeile('👗 Outfit &amp; Profile', 'Filter oben in der Profil-Liste.', 'profile',
-      wahl([['all', 'Alle'], ['fav', '⭐ Favs'], ['withshot', '📷 Mit Bild'], ['noshot', '🚫 Ohne Bild'], ['noold', '🙈 (old) aus']], f.profile.filter, 'sfSet(\'profile\',\'filter\',this.value)')
+      wahl([...FILTER_GEMEINSAM, ['noold', '🙈 (old) aus']], f.profile.filter, 'sfSet(\'profile\',\'filter\',this.value)')
+      + wahl([['', 'Tag: alle'], ...tagListe.map(t => [t, '#' + t])], f.profile.tag, 'sfSet(\'profile\',\'tag\',this.value)')
       + suche(f.profile.suche, 'profile'));
   html += zeile('🧬 LSCG Outfits', 'Der Schlossfilter wird beim ersten Öffnen des Tabs angewendet (die Codes müssen dafür entpackt werden).', 'os',
-      wahl([['', 'Schloss: alle Outfits'], ['schloss', 'Mit Schloss (jede Art)'], ['dogs', 'DOGS Devious'], ['afc', 'AFC Heart Padlock'], ['lover', 'Lover (BC)'],
+      wahl(FILTER_GEMEINSAM, f.os.filter, 'sfSet(\'os\',\'filter\',this.value)')
+      + wahl([['', 'Schloss: alle Outfits'], ['schloss', 'Mit Schloss (jede Art)'], ['dogs', 'DOGS Devious'], ['afc', 'AFC Heart Padlock'], ['lover', 'Lover (BC)'],
         ['owner', 'Owner'], ['timer', 'Timer (jede Art)'], ['code', 'Passwort / Kombination / Safeword'], ['mod', 'Andere Mod-Schlösser']], f.os.schloss, 'sfSet(\'os\',\'schloss\',this.value)')
       + suche(f.os.suche, 'os'));
-  html += zeile('🎡 MBS Wheel', 'Die drei Knöpfe oben im Tab.', 'wheel',
-      wahl([['all', 'Alle'], ['fav', '⭐ Favoriten'], ['new', '🆕 Neu']], f.wheel.filter, 'sfSet(\'wheel\',\'filter\',this.value)')
+  html += zeile('🎡 MBS Wheel', 'Die Knöpfe oben im Tab.', 'wheel',
+      wahl(FILTER_GEMEINSAM, f.wheel.filter, 'sfSet(\'wheel\',\'filter\',this.value)')
       + suche(f.wheel.suche, 'wheel'));
   box.innerHTML = html;
 }
@@ -7497,7 +7636,7 @@ function _lazyImgBeobachten(container, neu) {
         io.unobserve(e.target);
         _lazyImgLaden(e.target);
       }
-    }, { rootMargin: '600px 400px' });
+    }, { rootMargin: '2000px 1200px' });   // weit vor dem Sichtbereich: beim Scrollen ist das Bild schon da
     _lazyImgIOs.set(container, io);
   }
   imgs.forEach(i => io.observe(i));
@@ -8148,7 +8287,111 @@ function _backupNebenDatenImport(d) {
   return dazu;
 }
 
-function exportAllData() {
+// ══ Gesamt-Backup: wirklich alles ═════════════════════════════════════════════════════════════
+// Neben den benannten Feldern (Profile, LSCG, Wheel, Bilder, Bots …) sichert das Backup JEDEN Schlüssel der Datenbank und
+// des localStorage ('extras') und alle Spiel-Scans ('spielScans'). Dadurch fehlt nichts – auch nichts, was später
+// dazukommt. Einzige Ausnahmen: was schon in einem eigenen Feld steckt (nicht doppelt) und was sich nicht sichern lässt.
+const BACKUP_EXTRAS_AUSSER = {
+  idb: [
+    'BC_AUTOBACKUP_v2',                                                           // Ordner-Zugriff, nicht speicherbar
+    'BC_LSCG_OUTFITS_v3', 'BC_PROFILES_v12', 'BC_CURSE_DB_v1', 'BC_MBS_WHEEL_v1', // eigene Felder: lscgDB, profiles, curseDatabase, mbsWheel
+    ...Object.values(SCREENSHOT_LEGACY_KEYS),                                     // eingefrorene Alt-Kopien der Bilder (die Bilder selbst sind im Backup)
+    SCREENSHOT_MIGRATION_KEY,                                                     // Marke dieses Rechners "Bilder sind umgezogen" – darf auf einem anderen nicht gesetzt werden
+  ],
+  ls: ['BC_PROFILES_v11', 'BC_LSCG_OUTFITS_LS_v3'],                              // Spiegel dieser Bestände
+};
+let _backupNachWartezeitMs = 1500;   // nach dem Einspielen kurz warten, bis laufende Schreibvorgänge fertig sind (vor der Frage nach dem Neuladen)
+// Beim Einspielen nie übernehmen: gehört zur Sitzung (sonst Meldung "anderer Account" o. ä.)
+const BACKUP_EXTRAS_NICHT_EINSPIELEN = ['BC_LAST_MEMBER_v1'];
+
+// Alle Schlüssel/Werte der Datenbank und des localStorage (außer BACKUP_EXTRAS_AUSSER)
+async function _backupExtras() {
+  const idb = {}, ls = {};
+  try {
+    const alle = await idbKvAlle();
+    for (const [k, v] of Object.entries(alle)) if (!BACKUP_EXTRAS_AUSSER.idb.includes(k)) idb[k] = v;
+  } catch (e) { console.warn('[Backup] Datenbank-Schlüssel:', e); }
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k != null && !BACKUP_EXTRAS_AUSSER.ls.includes(k)) ls[k] = localStorage.getItem(k);
+    }
+  } catch (e) { console.warn('[Backup] localStorage:', e); }
+  return { idb, ls };
+}
+
+// Alle Spiel-Scans als Objekt id → Datensatz
+async function _backupScans() {
+  const aus = {};
+  try { (await idbSnapshotGetAll()).forEach(r => { if (r && r.id != null) aus[String(r.id)] = r; }); }
+  catch (e) { console.warn('[Backup] Spiel-Scans:', e); }
+  return aus;
+}
+
+// Ergänzt "alt" um alles, was in "neu" steht und noch fehlt – ersetzt nie etwas Vorhandenes.
+// Listen: Vereinigung; Objekte: fehlende Einträge (rekursiv); Einzelwerte: das Vorhandene bleibt.
+function _ergaenzen(alt, neu, tiefe) {
+  tiefe = tiefe || 0;
+  const istObj = (x) => x !== null && typeof x === 'object' && !Array.isArray(x);
+  if (alt === undefined || alt === null) return { wert: neu, geaendert: neu !== undefined && neu !== null };
+  if (Array.isArray(alt) && Array.isArray(neu)) {
+    const bekannt = new Set(alt.map(x => JSON.stringify(x)));
+    const dazu = neu.filter(x => !bekannt.has(JSON.stringify(x)));
+    return dazu.length ? { wert: alt.concat(dazu), geaendert: true } : { wert: alt, geaendert: false };
+  }
+  if (istObj(alt) && istObj(neu) && tiefe < 6) {
+    const wert = Object.assign({}, alt);
+    let geaendert = false;
+    for (const k of Object.keys(neu)) {
+      if (k === '__proto__' || k === 'constructor' || k === 'prototype') continue;
+      if (!(k in wert)) { wert[k] = neu[k]; geaendert = true; continue; }
+      const r = _ergaenzen(wert[k], neu[k], tiefe + 1);
+      if (r.geaendert) { wert[k] = r.wert; geaendert = true; }
+    }
+    return { wert, geaendert };
+  }
+  return { wert: alt, geaendert: false };
+}
+
+// Spiegelt die gesicherten Schlüssel zurück – nur Ergänzungen. Gibt die Anzahl der Schlüssel zurück, an denen sich etwas
+// geändert hat. Die Module lesen ihre Einstellungen beim Start; sie greifen daher nach dem Neuladen.
+async function _backupExtrasImport(extras) {
+  if (!extras || typeof extras !== 'object') return 0;
+  let geaendert = 0;
+  const skip = (k) => BACKUP_EXTRAS_NICHT_EINSPIELEN.includes(k);
+  const vorhanden = await idbKvAlle();
+  for (const [k, v] of Object.entries(extras.idb || {})) {
+    if (skip(k) || BACKUP_EXTRAS_AUSSER.idb.includes(k)) continue;
+    const r = _ergaenzen(vorhanden[k], v);
+    if (r.geaendert && await idbSet(k, r.wert)) geaendert++;
+  }
+  for (const [k, v] of Object.entries(extras.ls || {})) {
+    if (skip(k) || BACKUP_EXTRAS_AUSSER.ls.includes(k) || typeof v !== 'string') continue;
+    try {
+      const alt = localStorage.getItem(k);
+      if (alt === null) { localStorage.setItem(k, v); geaendert++; continue; }
+      let a, b;
+      try { a = JSON.parse(alt); b = JSON.parse(v); } catch (e) { continue; }   // kein JSON: das Vorhandene bleibt
+      const r = _ergaenzen(a, b);
+      if (r.geaendert) { localStorage.setItem(k, JSON.stringify(r.wert)); geaendert++; }
+    } catch (e) { console.warn('[Backup] localStorage-Import:', k, e); }
+  }
+  return geaendert;
+}
+
+// Spiel-Scans einspielen: nur die, deren id noch fehlt (Scans werden nie überschrieben)
+async function _backupScansImport(scans) {
+  if (!scans || typeof scans !== 'object') return 0;
+  const vorhanden = new Set((await idbSnapshotKeys()).map(String));
+  let neu = 0;
+  for (const [id, rec] of Object.entries(scans)) {
+    if (!rec || typeof rec !== 'object' || vorhanden.has(String(id))) continue;
+    if (await idbSnapshotPut(rec)) neu++;
+  }
+  return neu;
+}
+
+async function exportAllData() {
   try {
     // Nichts Ausstehendes im Puffer lassen - der Export liest zwar aus dem
     // Arbeitsspeicher, aber danach soll die Datenbank denselben Stand haben.
@@ -8163,15 +8406,19 @@ function exportAllData() {
       showStatus('⚠️ Keine Daten zum Exportieren', 'info');
       return;
     }
+    const extras     = await _backupExtras();
+    const spielScans = await _backupScans();
     const payload = {
       _meta: {
         exportedAt: new Date().toISOString(),
-        version:    3,
+        version:    4,
         tool:       'BC Konfigurator',
         counts: {
           profiles:  profileCount,
           curseDB:   curseCount,
           lscgCache: Object.keys(CURSE_CACHE_LSCG).length,
+          extras:    Object.keys(extras.idb).length + Object.keys(extras.ls).length,
+          spielScans: Object.keys(spielScans).length,
         }
       },
       profiles:         PROFILES,
@@ -8197,6 +8444,9 @@ function exportAllData() {
       // Namen identisch zu bc-autobackup.js, damit bcBackupRekonstruieren()
       // eine Datei erzeugt, die importAllData() lesen kann.
       ..._backupNebenDaten(),
+      // v4: wirklich alles – jeder übrige Schlüssel der Datenbank/des localStorage und alle Spiel-Scans
+      extras,
+      spielScans,
     };
     // Stueckweise serialisieren statt JSON.stringify(payload) am Stueck:
     // Bei grossen Screenshot-Speichern sprengt ein einzelner String das
@@ -8589,8 +8839,14 @@ function _backupSammler() {
       else if (Array.isArray(v) && Array.isArray(ziel[k]) && /Fav|favourites/i.test(k)) {
         ziel[k] = [...new Set([...ziel[k], ...v])];
       }
+      else if (k === 'extras' && v && typeof v === 'object') {
+        // alle übrigen Schlüssel: Vereinigung der Dateien, bei gleichem Schlüssel gewinnt die neuere
+        const z = ziel.extras || (ziel.extras = { idb: {}, ls: {} });
+        z.idb = Object.assign(z.idb || {}, v.idb || {});
+        z.ls  = Object.assign(z.ls  || {}, v.ls  || {});
+      }
       else if (v && typeof v === 'object' && !Array.isArray(v) && ziel[k] && typeof ziel[k] === 'object' && !Array.isArray(ziel[k])
-               && ['profiles','curseDatabase','lscgTable','lscgCache','curseComments','curseOutfitFlags','lscgSlots','lscgScreenshots','profileScreenshots','mbsWheelShots'].includes(k)) {
+               && ['profiles','curseDatabase','lscgTable','lscgCache','curseComments','curseOutfitFlags','lscgSlots','lscgScreenshots','profileScreenshots','mbsWheelShots','spielScans'].includes(k)) {
         Object.assign(ziel[k], v);
       }
       else ziel[k] = v;   // Einzelwerte/kleine Bestaende: neuere Datei gewinnt
@@ -8743,6 +8999,8 @@ function importAllData() {
           + 'Profile: ' + Object.keys(d.profiles ?? {}).length + '\n'
           + 'Curse-Einträge: ' + Object.keys(d.curseDatabase ?? {}).length + '\n'
           + 'LSCG-Outfits: ' + lscgSpieler + ' Spieler, ' + lscgVersionen + ' Versionen\n'
+          + (d.spielScans ? 'Spiel-Scans: ' + Object.keys(d.spielScans).length + '\n' : '')
+          + (d.extras ? 'Weitere Einstellungen und Daten: ' + (Object.keys(d.extras.idb ?? {}).length + Object.keys(d.extras.ls ?? {}).length) + ' Einträge\n' : '')
           + (bilderNeu ? 'Bereits ergänzte Bilder: ' + bilder.neu.lscg + ' LSCG, ' + bilder.neu.profile + ' Profile, ' + bilder.neu.wheel + ' Wheel\n' : '')
           + (ohneMeta ? '⚠ ' + ohneMeta + ' Datei(en) ohne Backup-Kennung übersprungen\n' : '')
           + (nurInkr ? '⚠ Nur Inkremente gewählt – sie enthalten nur Änderungen. Für den vollen Bestand die passende BC_Voll_…-Datei mit auswählen.\n' : '')
@@ -8792,6 +9050,11 @@ function importAllData() {
         // dann passiert hier schlicht nichts.
         const neben = _backupNebenDatenImport(d);
 
+        // v4: Spiel-Scans und alle übrigen Schlüssel (nur ergänzen; ältere Backups haben das nicht)
+        const scansNeu  = await _backupScansImport(d.spielScans);
+        const extrasNeu = await _backupExtrasImport(d.extras);
+        _mbsFavMigrieren();   // alte Wheel-Favoriten ("Spieler|Name") auf die eindeutigen Schlüssel
+
         renderProfileList();
         if (_activeTab === 'curse') renderCurseTab();
         if (_activeTab === 'outfit-scan') renderOutfitScanTab();
@@ -8814,7 +9077,17 @@ function importAllData() {
           + Object.keys(CURSE_DB).length + ' Curse-Einträge, '
           + Object.keys(LSCG_DB).length + ' LSCG-Spieler (' + lscgNeu + ' Versionen neu)'
           + (bilderNeu ? ', ' + bilderNeu + ' Bilder ergänzt' : '')
+          + (scansNeu ? ', ' + scansNeu + ' Spiel-Scans' : '')
+          + (extrasNeu ? ', ' + extrasNeu + ' Einstellungen ergänzt' : '')
           + (nebenText ? ', neu: ' + nebenText : ''), 'success');
+        // Einstellungen anderer Module werden beim Start gelesen – nach dem Neuladen greift alles
+        if (extrasNeu) {
+          await new Promise(r => setTimeout(r, _backupNachWartezeitMs));   // laufende Schreibvorgänge abschließen lassen
+          if (confirm(extrasNeu + ' Einstellungen wurden ergänzt.\n\nDas Tool muss neu geladen werden, damit sie wirken '
+              + '(bis dahin können Änderungen sie wieder überschreiben).\n\nJetzt neu laden?')) {
+            try { location.reload(); } catch (e) {}
+          }
+        }
       } catch(err) {
         console.error('[importAllData]', err);
         showStatus('❌ Import fehlgeschlagen: ' + err.message, 'error');
@@ -9868,16 +10141,40 @@ function _osFavKarteAktualisieren(mk, idx, isFav) {
   return true;
 }
 
-function osToggleFavFilter() {
-  _osFavFilter = !_osFavFilter;
-  document.getElementById('osFavFilterBtn')?.classList.toggle('on', _osFavFilter);
+// Die gemeinsamen Filter (wie in Outfit & Profile und MBS Wheel): genau einer ist aktiv.
+// 'fav' nutzt _osFavFilter, 'new' | 'withshot' | 'noshot' nutzen _osBildFilter, 'all' ist keins von beiden.
+let _osBildFilter = '';
+function _osFilterWert() { return _osFavFilter ? 'fav' : (_osBildFilter || 'all'); }
+function _osFilterKnoepfeSync() {
+  const aktiv = _osFilterWert();
+  for (const f of ['all', 'fav', 'new', 'withshot', 'noshot']) document.getElementById('osFilter_' + f)?.classList.toggle('on', aktiv === f);
+}
+// Nur den Zustand setzen (Start-Filter), ohne zu zeichnen
+function _osFilterSetzen(f) {
+  _osFavFilter = f === 'fav';
+  _osBildFilter = (f === 'new' || f === 'withshot' || f === 'noshot') ? f : '';
+  _osFilterKnoepfeSync();
+}
+function osSetFilter(f) {
+  _osFilterSetzen(f);
   renderOutfitScanTab();
 }
+function osToggleFavFilter() { osSetFilter(_osFavFilter ? 'all' : 'fav'); }
+
+// Sortierung der Spielerliste: 'name' oder 'ts' (Spieler mit dem neuesten Outfit zuerst); Spieler-Sterne stehen immer oben
+let _osSort = 'name';
+try { if (localStorage.getItem('BC_LSCG_SORT_v1') === 'ts') _osSort = 'ts'; } catch (e) {}
+function osToggleSort() {
+  _osSort = _osSort === 'name' ? 'ts' : 'name';
+  try { localStorage.setItem('BC_LSCG_SORT_v1', _osSort); } catch (e) {}
+  renderOutfitScanTab();
+}
+function _osNeuesterTs(mk) { return (LSCG_DB[mk]?.versions || []).reduce((m, v) => Math.max(m, (v && v.ts) || 0), 0); }
 
 // Anzahl-Anzeige der Spielerzeile: mit Filter "Treffer/alle"
 function _osVcntText(mk) {
   const versions = LSCG_DB[mk]?.versions || [];
-  return (_osLockFilter || _osFavFilter)
+  return _osVersionenGefiltert()
     ? versions.filter(function(v, i) { return _osVersionPasst(v, mk, i); }).length + '/' + versions.length + 'x'
     : versions.length + 'x';
 }
@@ -11844,9 +12141,33 @@ function mbsWheelToggleFav(mn) {
   _renderMbsWheelTab();
 }
 
-// ── Einzelne Outfits als Favorit (Key: mn|OutfitName) ────────────────────────
+// ── Einzelne Outfits als Favorit ─────────────────────────────────────────────
+// Wheel-Outfits haben einen eigenen Namen, und mehrere dürfen GLEICH heißen. Der Schlüssel enthält darum zusätzlich die
+// Items (Fingerabdruck): "o2|Spieler|Name|Fingerabdruck". Früher "Spieler|Name" – dann teilten sich gleichnamige Outfits
+// einen Stern. Alte Schlüssel werden beim Zeichnen umgesetzt (_mbsFavMigrieren), ohne etwas zu verlieren.
 const _MBS_WHEEL_OFAVS_KEY = 'BC_MBS_WHEEL_OFAVS_v1';
 let _mbsWheelOutfitFavs = new Set();
+function _mbsOutfitFavKey(mn, o) { return 'o2|' + _mbsNum(mn) + '|' + (o.name ?? '') + '|' + _mbsOutfitFp(o); }
+function _mbsFavGehoertZu(k, mn) { return String(k).startsWith('o2|' + mn + '|') || String(k).startsWith(mn + '|'); }
+
+// Alte "Spieler|Name"-Favoriten: jedes Outfit dieses Spielers mit diesem Namen bekommt den neuen Schlüssel (so war es
+// vorher auch markiert). Passt kein Outfit (Spieler/Outfit nicht geladen), bleibt der alte Schlüssel stehen.
+function _mbsFavMigrieren() {
+  let geaendert = false;
+  for (const k of [..._mbsWheelOutfitFavs]) {
+    if (String(k).startsWith('o2|')) continue;
+    const i = String(k).indexOf('|');
+    if (i < 0) continue;
+    const mn = _mbsNum(String(k).slice(0, i)), name = String(k).slice(i + 1);
+    const r = _mbsWheelData.find(x => _mbsNum(x.memberNumber) === mn);
+    const treffer = (r?.outfits || []).filter(o => o.name === name);
+    if (!treffer.length) continue;
+    treffer.forEach(o => _mbsWheelOutfitFavs.add(_mbsOutfitFavKey(mn, o)));
+    _mbsWheelOutfitFavs.delete(k);
+    geaendert = true;
+  }
+  if (geaendert) _saveMbsWheelOutfitFavs();
+}
 idbGet(_MBS_WHEEL_OFAVS_KEY).then(function(d) {
   if (Array.isArray(d)) d.forEach(k => _mbsWheelOutfitFavs.add(k));
   let ls = null;
@@ -11866,15 +12187,33 @@ function mbsWheelToggleOutfitFav(mn, oi) {
   const r = _mbsWheelData.find(x => _mbsNum(x.memberNumber) === mn);
   const o = r?.outfits[oi];
   if (!o) return;
-  const key = mn + '|' + o.name;
+  const key = _mbsOutfitFavKey(mn, o);
   if (_mbsWheelOutfitFavs.has(key)) _mbsWheelOutfitFavs.delete(key);
   else _mbsWheelOutfitFavs.add(key);
   _saveMbsWheelOutfitFavs();
-  _renderMbsWheelTab();
+  if (!_wheelFavKarteAktualisieren(mn, oi, _mbsWheelOutfitFavs.has(key))) _renderMbsWheelTab();
+}
+
+// Nur der Stern dieser Karte ändert sich (kein Neuzeichnen des ganzen Tabs mit allen Bildern); ein neuer Favorit rutscht
+// nach vorn in die Reihe seines Spielers. Im Filter "Favoriten" verschwindet die Karte beim Entfernen → dort komplett
+// neu zeichnen (Zähler, leere Zeilen). true = erledigt.
+function _wheelFavKarteAktualisieren(mn, oi, istFav) {
+  if (_mbsWheelFilter === 'fav' && !istFav) return false;
+  const body = document.getElementById('wheelOutfitBody');
+  if (!body) return false;
+  const karte = Array.from(body.querySelectorAll('.os-card[data-mn]')).find(c => c.dataset.mn === String(mn) && c.dataset.oi === String(oi));
+  if (!karte) return false;
+  const stern = karte.querySelector('.os-card-fav');
+  if (stern) { stern.classList.toggle('on', istFav); stern.textContent = istFav ? '⭐' : '☆'; }
+  const knopf = karte.querySelector('.os-card-favbtn');
+  if (knopf) { knopf.classList.toggle('fav-on', istFav); knopf.textContent = istFav ? '⭐' : '☆'; }
+  const reihe = karte.parentElement;
+  if (istFav && reihe && reihe.firstChild !== karte) reihe.insertBefore(karte, reihe.firstChild);
+  return true;
 }
 
 // ── Filter: 'all' | 'fav' (Outfit- oder Spieler-Favoriten) | 'new' (< 48h) ───
-const _MBS_WHEEL_NEW_MS = 48 * 60 * 60 * 1000;
+const _MBS_WHEEL_NEW_MS = NEU_MS;   // gemeinsame Definition von "Neu" (48 Stunden)
 let _mbsWheelFilter = 'all';
 function mbsWheelSetFilter(f) {
   _mbsWheelFilter = f;
@@ -11898,25 +12237,11 @@ function mbsWheelDeletePlayer(mn) {
   _mbsWheelData = _mbsWheelData.filter(x => _mbsNum(x.memberNumber) !== mn);
   _mbsWheelFavs.delete(mn);
   for (const k of [..._mbsWheelOutfitFavs]) {
-    if (k.startsWith(mn + '|')) _mbsWheelOutfitFavs.delete(k);
+    if (_mbsFavGehoertZu(k, mn)) _mbsWheelOutfitFavs.delete(k);
   }
   _saveMbsWheelData();
   _saveMbsWheelFavs();
   _saveMbsWheelOutfitFavs();
-  _renderMbsWheelTab();
-}
-
-function mbsWheelClearAll() {
-  if (!confirm('Alle gespeicherten MBS Wheel-Outfits + Bilder löschen?')) return;
-  _mbsWheelData = [];
-  _mbsWheelFavs.clear();
-  _mbsWheelOutfitFavs.clear();
-  _mbsWheelShots = {};
-  _saveMbsWheelData();
-  _saveMbsWheelFavs();
-  _saveMbsWheelOutfitFavs();
-  _saveMbsWheelShots();
-  _updateWheelTabBadge();
   _renderMbsWheelTab();
 }
 
@@ -11936,16 +12261,20 @@ function _renderMbsWheelTab() {
     return;
   }
 
+  _mbsFavMigrieren();   // alte "Spieler|Name"-Favoriten auf die eindeutigen Schlüssel umsetzen
+
   // Suche (auch nach Datum: "02.07" oder "02.07.2026" findet Scans/neue Outfits von dem Tag)
   let visible = _mbsWheelData;
   if (_mbsWheelSearch) {
+    const such = _sucheZerlegen(_mbsWheelSearch);
     visible = _mbsWheelData.filter(function(r) {
-      const dates = [r.ts, ...r.outfits.map(o => o.firstSeen)]
-        .filter(Boolean)
+      const zeiten = [r.ts, ...r.outfits.map(o => o.firstSeen)].filter(Boolean);
+      // Die ausgeschriebenen Daten bleiben im Suchtext: auch Teile wie "07.2026" oder "02.0" finden (wie bisher)
+      const dates = zeiten
         .map(t => new Date(t).toLocaleDateString('de-DE', {day:'2-digit',month:'2-digit',year:'numeric'}))
         .join(' ');
       const haystack = (r.name + ' ' + r.memberNumber + ' ' + r.outfits.map(o=>o.name).join(' ') + ' ' + dates).toLowerCase();
-      return haystack.includes(_mbsWheelSearch);
+      return _sucheTrifft(such, haystack, zeiten);
     });
   }
 
@@ -11954,15 +12283,19 @@ function _renderMbsWheelTab() {
   const entries = visible.map(function(r) {
     let pairs = r.outfits.map((o, oi) => [o, oi]);
     if (_mbsWheelFilter === 'fav') {
-      const playerFav = _mbsWheelFavs.has(_mbsNum(r.memberNumber));
-      pairs = pairs.filter(([o]) => playerFav || _mbsWheelOutfitFavs.has(_mbsNum(r.memberNumber) + '|' + o.name));
+      // Nur die einzeln markierten Outfits (der Stern in der Spielerzeile schiebt den Spieler nur nach oben)
+      pairs = pairs.filter(([o]) => _mbsWheelOutfitFavs.has(_mbsOutfitFavKey(r.memberNumber, o)));
     } else if (_mbsWheelFilter === 'new') {
       pairs = pairs.filter(([o]) => _mbsOutfitIsNew(o));
+    } else if (_mbsWheelFilter === 'withshot') {
+      pairs = pairs.filter(([o]) => !!_mbsWheelShots[_mbsOutfitFp(o)]);
+    } else if (_mbsWheelFilter === 'noshot') {
+      pairs = pairs.filter(([o]) => !_mbsWheelShots[_mbsOutfitFp(o)]);
     }
     // Favorisierte Outfits innerhalb des Spielers nach oben
     pairs.sort(function(a, b) {
-      const fa = _mbsWheelOutfitFavs.has(r.memberNumber + '|' + a[0].name);
-      const fb = _mbsWheelOutfitFavs.has(r.memberNumber + '|' + b[0].name);
+      const fa = _mbsWheelOutfitFavs.has(_mbsOutfitFavKey(r.memberNumber, a[0]));
+      const fb = _mbsWheelOutfitFavs.has(_mbsOutfitFavKey(r.memberNumber, b[0]));
       if (fa !== fb) return fa ? -1 : 1;
       return 0;
     });
@@ -11987,7 +12320,7 @@ function _renderMbsWheelTab() {
   if (sortBtn) sortBtn.textContent = _mbsWheelSort === 'name' ? '🔤 Name' : '🕐 Zuletzt';
 
   // Filter-Chips markieren
-  [['wheelFilterAll','all'],['wheelFilterFav','fav'],['wheelFilterNew','new']].forEach(function([id, f]) {
+  [['wheelFilterAll','all'],['wheelFilterFav','fav'],['wheelFilterNew','new'],['wheelFilterWithshot','withshot'],['wheelFilterNoshot','noshot']].forEach(function([id, f]) {
     const el = document.getElementById(id);
     if (!el) return;
     const on = _mbsWheelFilter === f;
@@ -11997,7 +12330,9 @@ function _renderMbsWheelTab() {
   });
 
   if (!entries.length) {
-    const why = _mbsWheelFilter === 'fav' ? 'Keine Favoriten' : _mbsWheelFilter === 'new' ? 'Nichts Neues (48h)' : 'Keine Ergebnisse für „' + escHtml(_mbsWheelSearch) + '"';
+    const why = _mbsWheelFilter === 'fav' ? 'Keine Favoriten' : _mbsWheelFilter === 'new' ? 'Nichts Neues (48h)'
+      : _mbsWheelFilter === 'withshot' ? 'Keine Outfits mit Bild' : _mbsWheelFilter === 'noshot' ? 'Alle Outfits haben ein Bild'
+      : 'Keine Ergebnisse für „' + escHtml(_mbsWheelSearch) + '"';
     body.innerHTML = '<span style="font-size:.75rem;color:var(--text3);font-style:italic">' + why + '</span>';
     return;
   }
@@ -12016,7 +12351,7 @@ function _renderMbsWheelTab() {
   function _wheelKarteHtml(mn, o, oi) {
     const fp     = _mbsOutfitFp(o);
     const shot   = _mbsWheelShots[fp] || null;
-    const oFav   = _mbsWheelOutfitFavs.has(mn + '|' + o.name);
+    const oFav   = _mbsWheelOutfitFavs.has(_mbsOutfitFavKey(mn, o));
     const isNew  = _mbsOutfitIsNew(o);
     const others = (fpMap[fp] || []).filter(x => x.mn !== mn);
     const letter = escHtml((o.name[0] || '?').toUpperCase());
@@ -12035,7 +12370,8 @@ function _renderMbsWheelTab() {
       ? 'mbsWheelOpenShot(0,' + mn + ',' + oi + ')'
       : 'mbsWheelCaptureShot(' + mn + ',' + oi + ')';
     const delBtn = shot
-      ? '<button class="os-card-del" onclick="event.stopPropagation();mbsWheelDeleteShot(' + mn + ',' + oi + ')" title="Bild löschen">🗑</button>'
+      ? '<button class="os-card-redo" onclick="event.stopPropagation();mbsWheelCaptureShot(' + mn + ',' + oi + ')" title="Bild neu aufnehmen">🔄</button>'
+        + '<button class="os-card-del" onclick="event.stopPropagation();mbsWheelDeleteShot(' + mn + ',' + oi + ')" title="Bild löschen">🗑</button>'
       : '';
 
     return '<div class="os-card" data-fp="' + escHtml(fp) + '" data-mn="' + mn + '" data-oi="' + oi + '">'
@@ -12048,7 +12384,7 @@ function _renderMbsWheelTab() {
       + '<div class="os-card-meta">' + o.items.length + ' Items · ' + seenStr + '</div>'
       + '<div class="os-card-actions">'
       + '<button class="os-card-btn primary" onclick="mbsWheelApply(' + mn + ',' + oi + ')" title="Auf mich anwenden">▶ Run</button>'
-      + '<button class="os-card-btn' + (oFav ? ' fav-on' : '') + '" onclick="mbsWheelToggleOutfitFav(' + mn + ',' + oi + ')">' + (oFav ? '⭐' : '☆') + '</button>'
+      + '<button class="os-card-btn os-card-favbtn' + (oFav ? ' fav-on' : '') + '" title="Nur dieses Outfit als Favorit" onclick="mbsWheelToggleOutfitFav(' + mn + ',' + oi + ')">' + (oFav ? '⭐' : '☆') + '</button>'
       + '<button class="os-card-btn" onclick="mbsWheelSaveProfile(' + mn + ',' + oi + ')" title="Als Profil speichern">💾</button>'
       + '<button class="os-card-btn" onclick="mbsWheelExport(' + mn + ',' + oi + ')" title="Als JSON kopieren">📤</button>'
       + '</div>'
@@ -12082,20 +12418,24 @@ function _renderMbsWheelTab() {
       + '</div>';
   }
 
-  // Chunk-Rendering wie bei LSCG: erste 30 sofort, Rest nachladen (kein UI-Freeze)
+  // Die ersten 30 Spieler sofort (füllen mehr als den Bildschirm), der Rest im Hintergrund in kleinen Häppchen von
+  // höchstens ~10 ms – kein Einfrieren, und man sieht nichts nachladen, weil alles fertig ist, bevor man hinscrollt.
+  // Ein neues Zeichnen bricht das Nachfüllen der vorigen ab (früher hängte sich der Rest einer alten Zeichnung an die neue).
   const CHUNK = 30;
+  const token = ++_wheelFuellToken;
   body.innerHTML = entries.slice(0, CHUNK).map(_buildWheelMemberHtml).join('');
   _lazyImgBeobachten(body, true);
   if (entries.length > CHUNK) {
     const rest = entries.slice(CHUNK);
-    setTimeout(function _more() {
-      if (_activeTab !== 'lscg-wheel') return;
-      const slice = rest.splice(0, CHUNK);
-      if (!slice.length) return;
-      body.insertAdjacentHTML('beforeend', slice.map(_buildWheelMemberHtml).join(''));
-      _lazyImgBeobachten(body);
-      if (rest.length) setTimeout(_more, 30);
-    }, 30);
+    const nachfuellen = function() {
+      if (token !== _wheelFuellToken || _activeTab !== 'lscg-wheel') return;
+      const t0 = Date.now();
+      let html = '';
+      while (rest.length && Date.now() - t0 < 10) html += _buildWheelMemberHtml(rest.shift());
+      if (html) { body.insertAdjacentHTML('beforeend', html); _lazyImgBeobachten(body); }
+      if (rest.length) _naechsterLeerlauf(nachfuellen);
+    };
+    _naechsterLeerlauf(nachfuellen);
   }
 }
 
@@ -12104,6 +12444,7 @@ function mbsWheelToggleMember(mn) {
 }
 
 let _wheelKartenBauer = null; // (mn, outfit, oi) → Karten-HTML; wird von _renderMbsWheelTab gesetzt
+let _wheelFuellToken = 0;     // zählt die Zeichnungen des Wheel-Tabs (Nachfüllen einer älteren bricht ab)
 
 // Nach einem neuen Bild nur die Karten austauschen, die dieses Bild zeigen (gleicher Fingerabdruck = gleiches
 // Bild, auch bei anderen Spielern). _renderMbsWheelTab() baut ALLE Karten neu: jedes Bild wird neu angelegt und
@@ -12157,19 +12498,24 @@ function mbsWheelGenerateAll() {
   if (!_connected) { showStatus('❌ Nicht verbunden', 'error'); return; }
   if (!_gameOk(false)) { showStatus('❌ ' + _gameWaitReason(false) + ' – Bilderserie nicht gestartet', 'error'); return; }
 
-  // Queue: alle Outfits ohne Bild, per Fingerprint dedupliziert
+  // Queue: alle Outfits ohne Bild UND alle mit einem Bild in niedriger Auflösung (die werden neu gemacht), per
+  // Fingerprint dedupliziert. Ein vorhandenes Bild wird erst ersetzt, wenn das neue fertig ist.
   const seen = new Set();
+  let fehlend = 0, niedrig = 0;
   _wheelGenQueue = [];
   for (const r of _mbsWheelData) {
     r.outfits.forEach(function(o, oi) {
       const fp = _mbsOutfitFp(o);
-      if (_mbsWheelShots[fp] || seen.has(fp)) return;
+      const vorh = _mbsWheelShots[fp];
+      if ((vorh && !_wheelBildNiedrig(vorh)) || seen.has(fp)) return;
       seen.add(fp);
+      if (vorh) niedrig++; else fehlend++;
       _wheelGenQueue.push({ mn: r.memberNumber, oi });
     });
   }
-  if (!_wheelGenQueue.length) { showStatus('✅ Alle Outfits haben bereits Bilder', 'info'); return; }
-  if (!confirm(_wheelGenQueue.length + ' Outfit-Bilder werden erstellt.\n\n'
+  if (!_wheelGenQueue.length) { showStatus('✅ Alle Outfits haben bereits Bilder in guter Auflösung', 'info'); return; }
+  if (!confirm(_wheelGenQueue.length + ' Outfit-Bilder werden erstellt ('
+    + [fehlend ? fehlend + ' fehlende' : '', niedrig ? niedrig + ' in niedriger Auflösung, die durch neue ersetzt werden' : ''].filter(Boolean).join(', ') + ').\n\n'
     + 'Jedes Outfit wird kurz LOKAL angezogen (stehend, ohne Schlösser) und fotografiert – andere Spieler sehen davon nichts. '
     + 'Nach jedem Bild ist dein Aussehen wieder da.\n'
     + (CURSE_DEFAULT_OUTFIT_CODE
@@ -12199,7 +12545,7 @@ function _wheelGenStep() {
   const o = r?.outfits[job.oi];
   if (!o) { _wheelGenStep(); return; }
   const fp = _mbsOutfitFp(o);
-  if (_mbsWheelShots[fp]) { _wheelGenStep(); return; } // inzwischen vorhanden
+  if (_mbsWheelShots[fp] && !_wheelBildNiedrig(_mbsWheelShots[fp])) { _wheelGenStep(); return; } // inzwischen in guter Auflösung vorhanden
 
   _wheelGenJob = job;
   const tok = _wheelGenTok;
@@ -12363,14 +12709,11 @@ function mbsWheelImportDB() {
           showStatus('❌ Keine gültige Wheel-Export-Datei', 'error');
           return;
         }
-        // Spieler mergen: neuerer ts gewinnt, unbekannte werden angehängt
-        let added = 0, updated = 0;
-        for (const r of d.data) {
-          const idx = _mbsWheelData.findIndex(x => x.memberNumber === r.memberNumber);
-          if (idx >= 0) {
-            if ((r.ts || 0) > (_mbsWheelData[idx].ts || 0)) { _mbsWheelData[idx] = r; updated++; }
-          } else { _mbsWheelData.push(r); added++; }
-        }
+        // Nur ergänzen: unbekannte Spieler kommen dazu, bei bekannten nur die Outfits, die noch fehlen. Nichts
+        // Vorhandenes wird ersetzt (Wheel-Outfits lassen sich nicht neu scannen).
+        const bekannte = new Set(_mbsWheelData.map(x => _mbsNum(x.memberNumber)));
+        const added = new Set(d.data.filter(r => r && !bekannte.has(_mbsNum(r.memberNumber))).map(r => _mbsNum(r.memberNumber))).size;
+        const updated = _mbsMerge(_mbsWheelData, d.data);   // = neue Outfits
         if (d.favs)       d.favs.forEach(k => _mbsWheelFavs.add(_mbsNum(k)));
         if (d.outfitFavs) d.outfitFavs.forEach(k => _mbsWheelOutfitFavs.add(k));
         if (d.shots) {
@@ -12384,7 +12727,7 @@ function mbsWheelImportDB() {
         _saveMbsWheelShots();
         _updateWheelTabBadge();
         _renderMbsWheelTab();
-        showStatus('📥 Import: ' + added + ' neue Spieler, ' + updated + ' aktualisiert', 'success');
+        showStatus('📥 Import: ' + added + ' neue Spieler, ' + updated + ' neue Outfits ergänzt (vorhandenes bleibt unverändert)', 'success');
       } catch(err) { showStatus('❌ Import fehlgeschlagen: ' + err.message, 'error'); }
     };
     rd.readAsText(e.target.files[0]);
@@ -12398,6 +12741,30 @@ function _updateWheelTabBadge() {
   const n = _mbsWheelData.reduce((s,r)=>s+r.outfits.length,0);
   btn.textContent = '🎡 MBS Wheel' + (n ? ' (' + n + ')' : '');
 }
+
+// Anzahl im Tab-Namen – wie beim Wheel jetzt auch bei Outfit & Profile, LSCG Outfits, Craft & Curse und Outfit Import.
+// (Die Seitenleiste liest die Zahl aus dem Namen.) Läuft im Takt, weil die Bestände an vielen Stellen wachsen
+// (Scans, Importe, Löschen); es wird nur geschrieben, wenn sich die Zahl geändert hat.
+const _TAB_ZAEHLER = [
+  { id: 'outfit',        name: '👗 Outfit & Profile', anzahl: () => Object.keys(PROFILES).length },
+  { id: 'outfit-scan',   name: '🧬 LSCG Outfits',     anzahl: () => Object.values(LSCG_DB).reduce((s, e) => s + (e?.versions?.length || 0), 0) },
+  { id: 'curse',         name: '🔮 Craft & Curse',    anzahl: () => Object.keys(CURSE_DB).length },
+  { id: 'outfit-import', name: '📥 Outfit Import',    anzahl: () => (typeof OI_LIST !== 'undefined' && Array.isArray(OI_LIST)) ? OI_LIST.length : 0 },
+];
+const _tabZaehlerStand = {};
+function _tabZaehlerAktualisieren() {
+  for (const z of _TAB_ZAEHLER) {
+    let n = 0;
+    try { n = z.anzahl(); } catch (e) { continue; }
+    if (_tabZaehlerStand[z.id] === n) continue;
+    const btn = document.getElementById('tab-' + z.id + '-btn');
+    if (!btn) continue;
+    _tabZaehlerStand[z.id] = n;
+    btn.textContent = z.name + (n ? ' (' + n + ')' : '');
+  }
+  _updateWheelTabBadge();
+}
+try { setInterval(_tabZaehlerAktualisieren, 3000); setTimeout(_tabZaehlerAktualisieren, 1500); } catch (e) {}
 
 // Item-Liste eines Outfits ein-/ausklappen (lazy befüllt)
 function mbsWheelToggleItems(mn, oi) {
@@ -12442,15 +12809,19 @@ function _mbsImportOutfitObj(d) {
     entry = { memberNumber: mn, name: name, outfits: [], room: '📥 Import', ts: Date.now() };
     _mbsWheelData.push(entry);
   }
-  // Gleichnamiges Outfit ersetzen, sonst anhängen
+  // Nur ergänzen: dasselbe Outfit (gleiche Items) ist schon da → nichts ändern; sonst anhängen. Gleiche Namen sind
+  // erlaubt (Wheel-Outfits dürfen gleich heißen), ein vorhandenes Outfit wird nie ersetzt.
   d.outfit.firstSeen = d.outfit.firstSeen ?? Date.now();
-  const idx = entry.outfits.findIndex(o => o.name === d.outfit.name);
-  if (idx >= 0) entry.outfits[idx] = d.outfit;
-  else entry.outfits.push(d.outfit);
+  const fp = _mbsOutfitFp(d.outfit);
+  if (entry.outfits.some(o => _mbsOutfitFp(o) === fp)) {
+    showStatus('ℹ️ Outfit "' + d.outfit.name + '" ist bei ' + name + ' schon vorhanden – nichts geändert', 'info');
+    return;
+  }
+  entry.outfits.push(d.outfit);
   _saveMbsWheelData();
   _updateWheelTabBadge();
   _renderMbsWheelTab();
-  showStatus('📥 Outfit "' + d.outfit.name + '" importiert (' + name + ')', 'success');
+  showStatus('📥 Outfit "' + d.outfit.name + '" ergänzt (' + name + ')', 'success');
 }
 
 function mbsWheelImport() {
@@ -12570,6 +12941,36 @@ function _wheelShotCode(reqId, items, serie) {
     + '})();';
 }
 
+// Größe der Wheel-Bilder (wie Profil und LSCG). Die alten Bilder waren höchstens 260×520.
+const WHEEL_BILD_MAX_W = 520, WHEEL_BILD_MAX_H = 1040;
+const WHEEL_BILD_NIEDRIG_H = 560;   // darunter gilt ein Bild als "niedrige Auflösung" (alte Bilder: höchstens 520 hoch)
+
+// Breite × Höhe eines JPEG-Data-URLs aus dem Kopf (Marker SOF0/1/2); null, wenn nicht lesbar
+function _jpegGroesse(url) {
+  try {
+    const m = /^data:image\/jpe?g;base64,/i.exec(url || '');
+    if (!m) return null;
+    let b64 = String(url).slice(m[0].length, m[0].length + 12000);
+    b64 = b64.slice(0, b64.length - (b64.length % 4));
+    const bin = atob(b64);
+    const c = (i) => bin.charCodeAt(i);
+    let i = 2;
+    while (i + 9 < bin.length) {
+      if (c(i) !== 0xFF) { i++; continue; }
+      const marker = c(i + 1);
+      if (marker === 0xC0 || marker === 0xC1 || marker === 0xC2) return { w: (c(i + 7) << 8) | c(i + 8), h: (c(i + 5) << 8) | c(i + 6) };
+      if (marker === 0xD8 || marker === 0x01 || (marker >= 0xD0 && marker <= 0xD7)) { i += 2; continue; }
+      i += 2 + ((c(i + 2) << 8) | c(i + 3));
+    }
+  } catch (e) {}
+  return null;
+}
+// true = das Bild ist bekannt niedrig aufgelöst (alte 260×520-Bilder); unlesbare Bilder gelten als in Ordnung
+function _wheelBildNiedrig(url) {
+  const g = _jpegGroesse(url);
+  return !!g && g.h > 0 && g.h < WHEEL_BILD_NIEDRIG_H;
+}
+
 function _handleWheelShotData(data) {
   const fp = _pendingWheelShot[data.reqId];
   delete _pendingWheelShot[data.reqId];
@@ -12585,14 +12986,15 @@ function _handleWheelShotData(data) {
   _wheelGenWeiter(data.reqId);
   const imgEl = new Image();
   imgEl.onload = () => {
-    const MAX_W = 260, MAX_H = 520;
+    // Gleiche Größe wie bei Profil- und LSCG-Bildern (früher nur 260×520 – zu unscharf in der Großansicht)
+    const MAX_W = WHEEL_BILD_MAX_W, MAX_H = WHEEL_BILD_MAX_H;
     let w = imgEl.naturalWidth, h = imgEl.naturalHeight;
     const scale = Math.min(1, MAX_W / w, MAX_H / h);
     w = Math.round(w * scale); h = Math.round(h * scale);
     const canvas = document.createElement('canvas');
     canvas.width = w; canvas.height = h;
     canvas.getContext('2d').drawImage(imgEl, 0, 0, w, h);
-    _mbsWheelShots[fp] = canvas.toDataURL('image/jpeg', 0.85);
+    _mbsWheelShots[fp] = canvas.toDataURL('image/jpeg', 0.88);
     _saveMbsWheelShots();
     // Nur die Karten mit diesem Bild austauschen – nicht den ganzen Tab (jedes Bild neu) nach jedem Foto
     if (_activeTab === 'lscg-wheel' && !_wheelBildAktualisieren(fp)) _debouncedRenderMbsWheelTab();
@@ -12615,9 +13017,12 @@ function mbsWheelOpenShot(_unused, mn, oi) {
   _osLightboxMk     = null;
   _osLightboxKey    = null;
   _osLightboxWheelFp = fp;
+  _osLightboxNeuSetzen(() => mbsWheelCaptureShot(mn, oi));
   document.getElementById('osLbImg').src = img;
   document.getElementById('osLbName').textContent = o.name;
-  document.getElementById('osLbSub').textContent  = '🎡 ' + (r.name || '') + ' #' + mn;
+  // wie bei LSCG: Spieler, Nummer und Datum (wann das Outfit zuerst gesehen wurde)
+  document.getElementById('osLbSub').textContent  = '🎡 ' + (r.name || '') + ' #' + mn
+    + (o.firstSeen ? ' · ' + new Date(o.firstSeen).toLocaleDateString('de-DE') : '');
   document.getElementById('osLightbox').classList.add('open');
 }
 
@@ -12724,7 +13129,13 @@ function mbsWheelSaveProfile(mn, oi) {
     items: o.items,
   };
   _saveProfiles();
-  showStatus('✅ Profil "' + trimmed + '" gespeichert (' + o.items.length + ' Items)', 'success');
+  // Das Wheel-Bild dieses Outfits geht mit ins Profil (ein überschriebenes Profil bekommt das passende Bild)
+  const bild = _mbsWheelShots[_mbsOutfitFp(o)];
+  if (bild) {
+    PROFILE_SCREENSHOTS[trimmed] = bild;
+    _saveProfileScreenshots();
+  }
+  showStatus('✅ Profil "' + trimmed + '" gespeichert (' + o.items.length + ' Items' + (bild ? ', inkl. Bild' : '') + ')', 'success');
 }
 
 function _handleOutfitScanData(data) {
@@ -12879,8 +13290,27 @@ const OS_LOCK_FILTER = {
 let _osLockFilter = '';
 let _osLockScanToken = 0;
 
+// Der Suchtext zerlegt (Textbegriffe + Datumsbegriffe), nur neu berechnet, wenn sich der Suchtext ändert
+let _osSucheCache = { q: null, such: null };
+function _osSuche() {
+  if (_osSucheCache.q !== _osSearchQuery) _osSucheCache = { q: _osSearchQuery, such: _sucheZerlegen(_osSearchQuery) };
+  return _osSucheCache.such;
+}
+// true, sobald nicht mehr jede Version eines Spielers gezeigt wird (Schloss-, Favoriten- oder Datumsfilter)
+function _osVersionenGefiltert() {
+  return !!(_osLockFilter || _osFavFilter || _osBildFilter || _osSuche().datum.length);
+}
+
 function _osVersionPasst(v, mk, idx) {
   if (_osFavFilter && !_osOutfitFavs.has(_osOutfitFavKey(mk, v, idx))) return false;
+  if (_osBildFilter === 'new') { if (!(v && v.ts && Date.now() - v.ts < NEU_MS)) return false; }
+  else if (_osBildFilter) {
+    const hatBild = !!LSCG_SCREENSHOTS[v && v.fingerprint ? mk + '|' + v.fingerprint : mk];   // wie die Karte (Versions-Schlüssel)
+    if (hatBild !== (_osBildFilter === 'withshot')) return false;
+  }
+  // Datum in der Suche: nur die Outfits (Versionen) von diesem Tag
+  const datum = _osSuche().datum;
+  if (datum.length && !datum.some(d => _datumPasst(d, v && v.ts))) return false;
   if (!_osLockFilter) return true;
   const pred = OS_LOCK_FILTER[_osLockFilter];
   if (!pred || !v || !v.code) return false;
@@ -12931,6 +13361,14 @@ function osSetLockFilter(val) {
 }
 
 let _osStripIO = null;   // Observer fuer noch leere Spieler-Streifen (renderOutfitScanTab)
+let _osFuellToken = 0;   // zählt die Zeichnungen: ein Hintergrund-Füller einer älteren hört auf
+// Nächster freier Moment des Browsers (Leerlauf); ohne requestIdleCallback ein kurzer Timer
+function _naechsterLeerlauf(fn) {
+  try {
+    if (typeof requestIdleCallback === 'function') { requestIdleCallback(fn, { timeout: 400 }); return; }
+  } catch (e) {}
+  setTimeout(fn, 16);
+}
 let _osKartenBauer = null; // (mk, nurIdx) → Karten-HTML; wird von renderOutfitScanTab gesetzt, siehe _osBildAktualisieren
 
 // Nach einem neuen Bild nur die Karten austauschen, die dieses Bild zeigen. renderOutfitScanTab() baut
@@ -12979,10 +13417,12 @@ function renderOutfitScanTab() {
   }
 
   if (_osSearchQuery) {
+    // Textbegriffe suchen im Spielernamen; Datumsbegriffe (5.10. · 05.10.2026 · 10.2026) filtern die Outfits (_osVersionPasst)
+    const such = _osSuche();
     members = members.filter(function(mk) {
       const e = LSCG_DB[mk];
       const h = ((e.name ?? '') + ' ' + (e.nickname ?? '') + ' ' + mk).toLowerCase();
-      return h.includes(_osSearchQuery);
+      return such.text.every(t => h.includes(t));
     });
     if (!members.length) {
       body.innerHTML = '<div class="os-empty">Keine Ergebnisse f\xfcr „' + escHtml(_osSearchQuery) + '“</div>';
@@ -12991,14 +13431,18 @@ function renderOutfitScanTab() {
   }
 
   // Schloss- und Favoriten-Filter: nur Spieler mit mindestens einer passenden Version
-  if (_osLockFilter || _osFavFilter) {
+  if (_osVersionenGefiltert()) {
     members = members.filter(function(mk) {
       return LSCG_DB[mk].versions.some(function(v, i) { return _osVersionPasst(v, mk, i); });
     });
     if (!members.length) {
       body.innerHTML = '<div class="os-empty">' + (_osFavFilter
         ? 'Keine einzeln favorisierten Outfits' + (_osLockFilter ? ' mit diesem Schloss' : '') + '.<br>Der Stern auf einer Karte merkt nur dieses eine Outfit.'
-        : 'Keine Outfits mit diesem Schloss gefunden.') + '</div>';
+        : _osBildFilter === 'new' ? 'Keine neuen Outfits (letzte 48 Stunden).'
+        : _osBildFilter === 'withshot' ? 'Keine Outfits mit Bild.'
+        : _osBildFilter === 'noshot' ? 'Alle Outfits haben ein Bild.'
+        : _osLockFilter ? 'Keine Outfits mit diesem Schloss gefunden.'
+        : 'Keine Outfits zu diesem Datum gefunden.') + '</div>';
       return;
     }
   }
@@ -13006,8 +13450,12 @@ function renderOutfitScanTab() {
   members.sort(function(a, b) {
     const fa = _osFavs.has(a), fb = _osFavs.has(b);
     if (fa !== fb) return fa ? -1 : 1;
+    if (_osSort === 'ts') { const d = _osNeuesterTs(b) - _osNeuesterTs(a); if (d) return d; }
     return (LSCG_DB[a].name ?? '').localeCompare(LSCG_DB[b].name ?? '');
   });
+  const sortKnopf = document.getElementById('osSortBtn');
+  if (sortKnopf) sortKnopf.textContent = _osSort === 'ts' ? '🕐 Zuletzt' : '🔤 Name';
+  _osFilterKnoepfeSync();
 
   // Karten eines Spielers als HTML (wird erst gebaut, wenn der Block in die
   // Naehe des Sichtbereichs kommt – siehe _osStripIO unten)
@@ -13048,7 +13496,8 @@ function renderOutfitScanTab() {
             ? '<div class="os-card-placeholder broken">⚠️</div>'
             : '<div class="os-card-placeholder">' + letter + '</div>');
       const delBtn = vThumb
-        ? '<button class="os-card-del" onclick="event.stopPropagation();deleteOsScreenshotKey(\'' + vKey + '\')" title="Bild löschen">🗑</button>'
+        ? '<button class="os-card-redo" onclick="event.stopPropagation();captureOsScreenshot(\'' + mk + '\',' + realIdx + ');showStatus(\'📸 Bild wird neu aufgenommen…\',\'info\')" title="Bild neu aufnehmen">🔄</button>'
+          + '<button class="os-card-del" onclick="event.stopPropagation();deleteOsScreenshotKey(\'' + vKey + '\')" title="Bild löschen">🗑</button>'
         : '';
       const hintIcon = vThumb
         ? '<span class="os-card-hint">🔍</span>'
@@ -13117,6 +13566,7 @@ function renderOutfitScanTab() {
   const SOFORT = 8;
   try {
     if (_osStripIO) { _osStripIO.disconnect(); _osStripIO = null; }
+    _osFuellToken++;   // ein noch laufender Hintergrund-Füller der vorigen Zeichnung hört auf
     body.innerHTML = members.map(function(mk, i) { return _buildMemberHtml(mk, i >= SOFORT); }).join('');
     _lazyImgBeobachten(body, true);
     // Platzhalterhoehe = echte Streifenhoehe, damit beim Befuellen nichts springt
@@ -13125,11 +13575,24 @@ function renderOutfitScanTab() {
     const lazyStrips = body.querySelectorAll('.os-strip[data-os-lazy]');
     if (lazyStrips.length) {
       const fuellen = function(strip) {
+        if (!strip.hasAttribute('data-os-lazy')) return;          // schon befüllt (Sichtkontakt oder Hintergrund)
         const mk = strip.getAttribute('data-os-lazy');
         strip.removeAttribute('data-os-lazy');
         strip.innerHTML = _buildCardsHtml(mk);
         _lazyImgBeobachten(body);
       };
+      // Die übrigen Spieler füllen sich im Hintergrund, sobald der Browser Luft hat – lange bevor man hinscrollt. So
+      // sieht man beim Scrollen keine leeren Streifen mehr (vorher nur beim Näherkommen). Ein neues Zeichnen bricht ab.
+      const token = ++_osFuellToken;
+      const offene = Array.from(lazyStrips);
+      let naechster = 0;
+      const hintergrund = function() {
+        if (token !== _osFuellToken) return;
+        const t0 = Date.now();
+        while (naechster < offene.length && Date.now() - t0 < 10) fuellen(offene[naechster++]);   // je Runde höchstens ~10 ms
+        if (naechster < offene.length) _naechsterLeerlauf(hintergrund);
+      };
+      _naechsterLeerlauf(hintergrund);
       if (typeof IntersectionObserver === 'undefined') { lazyStrips.forEach(fuellen); }
       else {
         const io = _osStripIO = new IntersectionObserver(function(entries) {
@@ -13168,6 +13631,18 @@ function osThumbClick(mk) {
 let _osLightboxMk  = null;
 let _osLightboxKey = null;  // version-specific key (mk|fp) or null
 let _osLightboxWheelFp = null;  // MBS-Wheel: Outfit-Fingerprint (kann '' sein)
+let _osLightboxNeu = null;       // Funktion, die das gezeigte Bild neu aufnimmt (null = nicht möglich)
+function _osLightboxNeuSetzen(fn) {
+  _osLightboxNeu = fn || null;
+  const b = document.getElementById('osLbNeuBtn');
+  if (b) b.style.display = _osLightboxNeu ? '' : 'none';
+}
+// Lightbox schließen und das gezeigte Outfit neu fotografieren (das alte Bild bleibt, bis das neue da ist)
+function osLightboxNeuAufnehmen() {
+  const fn = _osLightboxNeu;
+  closeOsLightbox();
+  if (fn) fn();
+}
 
 function openOsLightbox(mk) {
   const img = _getLscgScreenshot(mk);
@@ -13176,6 +13651,7 @@ function openOsLightbox(mk) {
   _osLightboxMk  = mk;
   _osLightboxKey = null;
   _osLightboxWheelFp = null;
+  _osLightboxNeuSetzen(null);
   document.getElementById('osLbImg').src   = img;
   document.getElementById('osLbName').textContent = entry ? (entry.name ?? mk) : mk;
   document.getElementById('osLbSub').textContent  = '#' + mk + (entry?.nickname ? ' · „' + entry.nickname + '”' : '');
@@ -13194,6 +13670,7 @@ function openOsLightboxVersion(mk, vIdx) {
   _osLightboxMk  = mk;
   _osLightboxKey = key;
   _osLightboxWheelFp = null;
+  _osLightboxNeuSetzen(() => { captureOsScreenshot(mk, vIdx); showStatus('📸 Bild wird neu aufgenommen…', 'info'); });
   document.getElementById('osLbImg').src   = img;
   document.getElementById('osLbName').textContent = entry ? (entry.name ?? mk) : mk;
   document.getElementById('osLbSub').textContent  = '#' + mk
@@ -13208,6 +13685,7 @@ function closeOsLightbox() {
   _osLightboxMk  = null;
   _osLightboxKey = null;
   _osLightboxWheelFp = null;
+  _osLightboxNeu = null;
 }
 
 function deleteOsScreenshotFromLb() {
@@ -13323,28 +13801,13 @@ function clearAllLscgScreenshots() {
   showStatus('🗑️ Alle Bilder gelöscht' + (n ? ' (+' + n + ' Profil-Kopien)' : ''), 'info');
 }
 
-function clearAllLscgOutfits() {
-  if (!confirm('Alle gespeicherten LSCG-Outfits löschen?\n\nDies löscht alle Codes und Bilder.\n' + _LSCG_PROFIL_KOPIEN_HINWEIS)) return;
-  _removeAllLscgScreenshotsFromProfiles();
-  LSCG_DB = {};
-  LSCG_SCREENSHOTS = {};
-  _lscgSlots = {};
-  _lscgFpMap = {};
-  _saveLscgDB();
-  _saveLscgScreenshots();
-  _saveLscgSlots();
-  renderOutfitScanTab();
-  showStatus('🗑️ LSCG Outfits geleert', 'info');
-}
-
 // ════════════════════════════════════════════════════════════════
 //  FEATURE BLOCK: Tags · Quick-Switch · Stats · Color Tools
 // ════════════════════════════════════════════════════════════════
 
 // ── Feature 4: Profil-Tags ────────────────────────────────────
 
-let PROFILE_TAGS = {};
-let _profileTagFilter = null; // null = all, string = tag name
+// (PROFILE_TAGS und _profileTagFilter stehen oben bei PROFILE_FAVS – renderProfileList braucht sie)
 
 (async () => {
   const saved = await idbGet('BC_PROFILE_TAGS_v1');
@@ -13419,63 +13882,6 @@ function _renderProfileTagFilterRow() {
     `<span class="tag-filter-chip${_profileTagFilter === t ? ' on' : ''}" onclick="setProfileTagFilter(${JSON.stringify(t)})">#${escHtml(t)}</span>`
   ).join('');
 }
-
-// ── Extend renderProfileList with tag + item full-text search ──
-// Monkey-patch: store original and wrap with extended filter
-const _origRenderProfileList = renderProfileList;
-renderProfileList = function() {
-  // Intercept only the key filter — rebuild from scratch inline
-  const el = document.getElementById('profileListEl');
-  if (!el) { _origRenderProfileList(); return; }
-
-  const q = (document.getElementById('profileSearch')?.value || '').toLowerCase();
-  let keys = Object.keys(PROFILES).filter(k => {
-    if (!q) return true;
-    // name match
-    if (k.toLowerCase().includes(q)) return true;
-    // item match
-    const items = PROFILES[k]?.items || [];
-    if (items.some(it => (it.asset||'').toLowerCase().includes(q) || (it.group||'').toLowerCase().includes(q))) return true;
-    // tag match
-    if (profileGetTags(k).some(t => t.includes(q))) return true;
-    return false;
-  });
-
-  // Existing filters
-  if (_profileFilter === 'fav')      keys = keys.filter(k => PROFILE_FAVS.has(k));
-  if (_profileFilter === 'withshot') keys = keys.filter(k => !!PROFILE_SCREENSHOTS[k]);
-  if (_profileFilter === 'noshot')   keys = keys.filter(k => !PROFILE_SCREENSHOTS[k]);
-  if (_profileFilter === 'noold')    keys = keys.filter(k => !/\(old\)/i.test(_profileOwnerOf(k)));
-
-  // Tag filter
-  if (_profileTagFilter) keys = keys.filter(k => profileGetTags(k).includes(_profileTagFilter));
-
-  document.querySelectorAll('.profile-fc').forEach(chip => chip.classList.toggle('on', chip.dataset.filter === _profileFilter));
-
-  // Delegate rendering back to original by temporarily storing filtered keys
-  // Actually call original — it will re-filter, but we control display via CSS none if needed.
-  // Simpler: override keys in _profileNameMap by calling original (it re-reads from DOM)
-  // Since we can't cleanly inject, call original which re-reads the search input.
-  // Instead, if tag or item filter active just hide non-matching cards after render.
-  _origRenderProfileList();
-
-  // Post-filter by tag + item search after original renders
-  if (!q && !_profileTagFilter) return;
-  const allowedSet = new Set(keys);
-  // Hide owner blocks that have no matching cards
-  document.querySelectorAll('[id^="pb_"]').forEach(block => {
-    const thumbs = block.querySelectorAll('.pc-thumb[data-slot]');
-    let any = false;
-    thumbs.forEach(th => {
-      const name = _profileNameMap[th.dataset.slot];
-      const show = name && allowedSet.has(name);
-      const pc = th.closest('.pc');
-      if (pc) pc.style.display = show ? '' : 'none';
-      if (show) any = true;
-    });
-    block.style.display = any ? '' : 'none';
-  });
-};
 
 // Extend _renderProfileModal to also render tags
 const _origRenderProfileModal = _renderProfileModal;

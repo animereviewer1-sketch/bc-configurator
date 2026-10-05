@@ -82,13 +82,6 @@ describe('Bestätigtes Löschen hinterlässt keine verwaisten Kopien (STAB-10)',
     expect(evalIn(ctx, 'Object.keys(LSCG_DB).length')).toBe(2);
   });
 
-  it('clearAllLscgOutfits leert LSCG_DB, LSCG_SCREENSHOTS, _lscgFpMap und alle identischen Profil-Kopien', () => {
-    ctx.clearAllLscgOutfits();
-    expect(profShots(ctx)).toEqual({ Anna_v2b: 'data:manual', Fremd: 'data:other' });
-    expect(evalIn(ctx, 'Object.keys(LSCG_DB).length')).toBe(0);
-    expect(evalIn(ctx, 'Object.keys(_lscgFpMap).length')).toBe(0);
-  });
-
   it('Helfer-Vertrag: _removeLscgScreenshotFromProfiles(fp, img) entfernt nur identische Slots und liefert die Anzahl', () => {
     expect(ctx._removeLscgScreenshotFromProfiles('FP2', 'data:img1')).toBe(1); // nur Anna_v2c
     expect(ctx._removeLscgScreenshotFromProfiles(null, 'x')).toBe(0);

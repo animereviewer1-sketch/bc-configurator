@@ -77,6 +77,23 @@ async function idbGet(key) {
   } catch (err) { console.warn('[IDB] get:', err); return null; }
 }
 
+// Alle Schlüssel und Werte des Haupt-Speichers (kv) – für das Gesamt-Backup. Liest nur.
+async function idbKvAlle() {
+  try {
+    const db = await _idbOpen();
+    return await new Promise((resolve, reject) => {
+      const out = {};
+      const tx  = db.transaction(_IDB_STORE, 'readonly');
+      const req = tx.objectStore(_IDB_STORE).openCursor();
+      req.onsuccess = e => {
+        const c = e.target.result;
+        if (c) { out[c.key] = c.value; c.continue(); } else resolve(out);
+      };
+      req.onerror = e => reject(e.target.error);
+    });
+  } catch (err) { console.warn('[IDB] kvAlle:', err); return {}; }
+}
+
 /* Gibt true zurueck, wenn wirklich geschrieben wurde. Wirft nicht – die
    meisten Aufrufer speichern nebenbei und warten das Ergebnis nicht ab.
    Ein Fehler ist hier aber nichts zum Verschlucken: bei vollem Speicher
@@ -396,7 +413,7 @@ function _debounce(fn, delay) {
 // Dual-Export für Vitest (CJS-Require); im Browser ist `module` undefined.
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
-    idbGet, idbSet, _idbOpen, _debounce,
+    idbGet, idbSet, idbKvAlle, _idbOpen, _debounce,
     idbScreenshotBatch, idbScreenshotPut, idbScreenshotDelete, idbScreenshotGetAll, idbScreenshotKeys,
     idbSnapshotPut, idbSnapshotGetAll, idbSnapshotGet, idbSnapshotKeys, idbSnapshotDelete,
     _screenshotStoreReady, _migrateScreenshotsToStore,

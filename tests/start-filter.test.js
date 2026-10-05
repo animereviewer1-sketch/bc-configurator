@@ -33,8 +33,8 @@ describe('Normieren und Laden', () => {
     const { ctx } = boot();
     expect(lies(ctx, '_startFilter')).toEqual({
       curse:   { filter: ['neu', 'cursed', 'no-outfit'], cache: false, slot: '', suche: '' },
-      profile: { filter: 'all', suche: '' },
-      os:      { schloss: '', suche: '' },
+      profile: { filter: 'all', tag: '', suche: '' },
+      os:      { filter: 'all', schloss: '', suche: '' },
       wheel:   { filter: 'all', suche: '' },
     });
   });
@@ -201,7 +201,41 @@ describe('Einstellungen: ändern, übernehmen, zurücksetzen', () => {
     expect(s.curse.slot).toBe('ItemArms');
     expect(s.profile.filter).toBe('withshot');
     expect(s.wheel.filter).toBe('fav');
-    expect(s.os).toEqual({ schloss: 'dogs', suche: 'bea' });
+    expect(s.os).toEqual({ filter: 'all', schloss: 'dogs', suche: 'bea' });
+  });
+
+  it('die gemeinsamen Filter (Alle · Favoriten · Neu · Mit Bild · Ohne Bild) gelten für Profile, LSCG und Wheel gleich', () => {
+    const { ctx } = boot();
+    for (const f of ['all', 'fav', 'new', 'withshot', 'noshot']) {
+      evalIn(ctx, `sfSet('profile','filter','${f}'); sfSet('os','filter','${f}'); sfSet('wheel','filter','${f}')`);
+      expect(lies(ctx, '[_startFilter.profile.filter, _startFilter.os.filter, _startFilter.wheel.filter]')).toEqual([f, f, f]);
+    }
+    evalIn(ctx, "sfSet('profile','filter','noold')");   // nur bei den Profilen
+    expect(lies(ctx, '_startFilter.profile.filter')).toBe('noold');
+    evalIn(ctx, "sfSet('os','filter','noold'); sfSet('wheel','filter','noold')");
+    expect(lies(ctx, '[_startFilter.os.filter, _startFilter.wheel.filter]')).toEqual(['all', 'all']);   // dort gibt es "(old) aus" nicht → Standard
+  });
+
+  it('Profil-Tag als Start-Filter', () => {
+    const { ctx } = boot();
+    evalIn(ctx, "sfSet('profile','tag','sommer')");
+    expect(lies(ctx, '_startFilter.profile.tag')).toBe('sommer');
+    evalIn(ctx, "startFilterAnwenden('profile')");
+    expect(lies(ctx, '_profileTagFilter')).toBe('sommer');
+    evalIn(ctx, "sfSet('profile','tag','')");
+    evalIn(ctx, "startFilterAnwenden('profile')");
+    expect(lies(ctx, '_profileTagFilter')).toBeNull();
+  });
+
+  it('LSCG-Filter als Start-Filter: gesetzt beim Anwenden, wird mit "Aktuelle Auswahl" übernommen', () => {
+    const { ctx } = boot();
+    evalIn(ctx, "sfSet('os','filter','withshot'); startFilterAnwenden('os')");
+    expect(lies(ctx, '[_osFavFilter, _osBildFilter]')).toEqual([false, 'withshot']);
+    evalIn(ctx, "osSetFilter('fav')");
+    evalIn(ctx, "startFilterUebernehmen('os')");
+    expect(lies(ctx, '_startFilter.os.filter')).toBe('fav');
+    evalIn(ctx, "sfSet('os','filter','all'); startFilterAnwenden('os')");
+    expect(lies(ctx, '[_osFavFilter, _osBildFilter]')).toEqual([false, '']);
   });
 
   it('ungültige Einzelwerte werden zurückgewiesen (Filter fällt auf Standard, Fremdes ändert nichts)', () => {
@@ -223,7 +257,7 @@ describe('Einstellungen: ändern, übernehmen, zurücksetzen', () => {
     evalIn(ctx, "_profileFilter = 'noold'");
     el('profileSearch').value = 'x';
     evalIn(ctx, "startFilterUebernehmen('profile')");
-    expect(gespeichert(ctx).profile).toEqual({ filter: 'noold', suche: 'x' });
+    expect(gespeichert(ctx).profile).toEqual({ filter: 'noold', tag: '', suche: 'x' });
 
     evalIn(ctx, "_mbsWheelFilter = 'new'; _osLockFilter = 'afc'");
     evalIn(ctx, "startFilterUebernehmen('wheel'); startFilterUebernehmen('os')");

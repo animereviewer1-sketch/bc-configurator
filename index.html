@@ -2453,13 +2453,13 @@ button { cursor: pointer; }
       <div class="set-card-b"><div id="bcBackupInfo" class="set-info">–</div></div>
     </div>
     <div class="set-card">
-      <div class="set-card-h"><span class="tweaks-section-title">💾 Komplett-Backup</span></div>
+      <div class="set-card-h"><span class="tweaks-section-title">💾 Gesamt-Backup</span></div>
       <div class="set-card-b set-2col">
-        <div><b>Alles exportieren</b><div class="set-hint">Eine Datei mit allen Daten.</div>
-          <div class="tweaks-btn-group"><button class="tweaks-btn" onclick="exportAllData()" title="Alle Daten in einer Datei sichern">⬇️ Exportieren</button></div></div>
-        <div><b>Wiederherstellen</b><div class="set-hint">Ergänzt nur – löscht nie etwas. Auch BC_Voll_/BC_Inkr_-Dateien, mehrere auf einmal.</div>
+        <div><b>Gesamt-Backup erstellen</b><div class="set-hint">Eine Datei mit wirklich allem: Profile, LSCG-Outfits, Wheel, Curse, alle Bilder, Bots, Shop, Rang, Geld, Spiel-Scans und alle Einstellungen.</div>
+          <div class="tweaks-btn-group"><button class="tweaks-btn" onclick="exportAllData()" title="Alles in einer Datei sichern – inklusive aller Bilder und Einstellungen">⬇️ Gesamt-Backup erstellen</button></div></div>
+        <div><b>Gesamt-Backup einspielen</b><div class="set-hint">Ergänzt nur – löscht und überschreibt nie etwas. Auch BC_Voll_/BC_Inkr_-Dateien, mehrere auf einmal.</div>
           <div class="tweaks-btn-group">
-            <button class="tweaks-btn" onclick="importAllData()" title="Backup einlesen – auch BC_Voll_/BC_Inkr_-Dateien aus dem automatischen Backup, mehrere Dateien auf einmal möglich. Führt nur zusammen, löscht nichts.">⬆️ Komplett</button>
+            <button class="tweaks-btn" onclick="importAllData()" title="Backup einlesen – auch BC_Voll_/BC_Inkr_-Dateien aus dem automatischen Backup, mehrere Dateien auf einmal möglich. Führt nur zusammen, löscht nichts.">⬆️ Gesamt-Backup einspielen</button>
             <button class="tweaks-btn" onclick="importLscgOutfits()" title="Nur die LSCG-Outfits aus beliebig vielen/großen Backup-Dateien zurückholen (BC_Voll_/BC_Inkr_ auswählen). Alles andere wird übersprungen – braucht kaum Speicher.">🧬 Nur LSCG-Outfits</button>
           </div></div>
       </div>
@@ -2906,15 +2906,17 @@ button { cursor: pointer; }
         <div class="section-hdr2">
           <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
             <span>📁 Profile</span>
-            <div class="search-wrap" data-icon="search"><input class="outfit-search" id="profileSearch" placeholder="🔍 Profil suchen..." oninput="_debouncedRenderProfileList()" style="width:140px;font-size:.75rem;padding:3px 8px"></div>
+            <div class="search-wrap" data-icon="search"><input class="outfit-search" id="profileSearch" placeholder="🔍 Name, Item, Tag oder Datum…" title="Datum z. B. 5.10. · 05.10.2026 · 10.2026 – auch zusammen mit einem Namen" oninput="_debouncedRenderProfileList()" style="width:190px;font-size:.75rem;padding:3px 8px"></div>
             <span class="filter-chip profile-fc on" data-filter="all" onclick="setProfileFilter('all')" style="font-size:.6875rem;padding:3px 9px">Alle</span>
             <span class="filter-chip profile-fc" data-filter="fav" onclick="setProfileFilter('fav')" title="Nur Favoriten" style="font-size:.6875rem;padding:3px 9px">⭐ Favs</span>
+            <span class="filter-chip profile-fc" data-filter="new" onclick="setProfileFilter('new')" title="Nur Profile der letzten 48 Stunden (das Profil speichert nur das Datum, nicht die Uhrzeit)" style="font-size:.6875rem;padding:3px 9px">🆕 Neu</span>
             <span class="filter-chip profile-fc" data-filter="withshot" onclick="setProfileFilter('withshot')" title="Nur Profile mit Screenshot" style="font-size:.6875rem;padding:3px 9px">📷 Mit Bild</span>
             <span class="filter-chip profile-fc" data-filter="noshot" onclick="setProfileFilter('noshot')" title="Nur Profile ohne Screenshot" style="font-size:.6875rem;padding:3px 9px">🚫 Ohne Bild</span>
             <span class="filter-chip profile-fc" data-filter="noold" onclick="setProfileFilter('noold')" title="(old)-Profile ausblenden" style="font-size:.6875rem;padding:3px 9px">🙈 (old) aus</span>
+            <button class="btn" id="profileSortBtn" onclick="profileToggleSort()" title="Sortierung umschalten: nach Name oder nach Datum (neueste zuerst)" style="font-size:.6875rem;padding:3px 9px">🔤 Name</button>
             <button class="btn btn-primary" id="profileSlideshowBtn" onclick="toggleProfileSlideshow()" title="Alle Profile ohne Screenshot im 5s-Takt ausführen und fotografieren" style="font-size:.6875rem;padding:3px 9px">📸 Auto-Screenshot</button>
             <button class="btn" onclick="clearAllProfileScreenshots()" title="Alle Profil-Screenshots löschen (Profile bleiben erhalten)" style="font-size:.6875rem;padding:3px 9px;color:#fb7185;border-color:rgba(251,113,133,0.3)">🖼️ Alle Bilder löschen</button>
-            <button class="btn btn-red" id="profileDupBtn" onclick="removeProfileDuplicates()" title="Doppelte Profile entfernen (erstes Vorkommen bleibt)" style="display:none;font-size:.6875rem;padding:3px 9px">⚠️ Duplikate entfernen</button>
+            <button class="btn btn-red" id="profileDupBtn" onclick="removeProfileDuplicates()" title="Doppelte Profile entfernen – nur Kopien, die als (old) markiert sind (das Original bleibt)" style="display:none;font-size:.6875rem;padding:3px 9px">⚠️ Duplikate entfernen</button>
             <button class="btn btn-primary" onclick="toggleDefaultHairPanel()" title="Standard-Haare festlegen – wird beim Profil-Speichern als Baseline genutzt" style="font-size:.6875rem;padding:3px 9px">💇 Standard-Haare</button>
             <button class="btn btn-red" onclick="markAllProfilesOld()" title="Alle Profile umbenennen: Owner bekommt '(old)' im Namen – neue Profile werden danach als eigene Einträge gespeichert" style="font-size:.6875rem;padding:3px 9px">🗂️ Alle → (old)</button>
             <button class="btn btn-primary" onclick="openStatsModal()" title="Item- und Farbstatistiken über alle Profile" style="font-size:.6875rem;padding:3px 9px">📊 Statistiken</button>
@@ -2991,11 +2993,8 @@ button { cursor: pointer; }
       </div>
       <!-- Screenshot -->
       <div style="display:flex;flex-direction:column;gap:5px">
-        <button class="pmod-upload-btn" id="pmodCaptureBtn" onclick="captureProfileScreenshot(this.dataset.pname)">📸 Screenshot aus BC aufnehmen</button>
-        <div style="display:flex;gap:5px">
-          <button class="pmod-upload-btn" id="pmodUploadBtn" onclick="uploadProfileScreenshot(this.dataset.pname)" style="font-size:.75rem;padding:5px 10px;flex:1">📁 Datei hochladen</button>
-          <button class="pmod-remove-btn" id="pmodRemoveBtn" onclick="removeProfileScreenshot(this.dataset.pname)" style="display:none;flex:1">✕ Entfernen</button>
-        </div>
+        <button class="pmod-upload-btn" id="pmodCaptureBtn" onclick="profilBildNeu(this.dataset.pname)" title="Zieht das Profil lokal an (stehend, ohne Schloss) und fotografiert es – dein Aussehen bleibt unverändert">📸 Bild aufnehmen</button>
+        <button class="pmod-remove-btn" id="pmodRemoveBtn" onclick="removeProfileScreenshot(this.dataset.pname)" style="display:none">✕ Bild entfernen</button>
       </div>
       <!-- Detail grid -->
       <div class="pmod-detail">
@@ -3723,7 +3722,6 @@ document.write('<scr'+'ipt src="bc-autobackup.js?_='+_cbv+'"><\/scr'+'ipt>');
         <button class="btn btn-primary" id="oiSeqBtn"  onclick="oiStartSequential()" title="Alle sequenziell ausführen">▶▶ Sequenziell</button>
         <button class="btn btn-red"     id="oiStopBtn" onclick="oiStopSequential()"  style="display:none" title="Sequenz stoppen">⏹ Stop</button>
         <button class="btn btn-red" id="oiDupBtn" onclick="oiRemoveDuplicates()" title="Doppelte Outfit-Codes entfernen (erstes Vorkommen bleibt)" style="display:none">⚠️ Duplikate entfernen</button>
-        <button class="btn btn-red"     onclick="oiClearAll()" title="Alle Einträge löschen">🗑️ Alle löschen</button>
       </div>
     </div>
 
@@ -3754,9 +3752,14 @@ document.write('<scr'+'ipt src="bc-autobackup.js?_='+_cbv+'"><\/scr'+'ipt>');
 <div id="tab-outfit-scan" class="tab-pane">
   <div class="os-header">
     <button class="btn btn-primary" onclick="scanOutfits()">▶ Scannen</button>
-    <div class="search-wrap" data-icon="search"><input id="osSearchInput" class="os-search" type="text" placeholder="🔍 Name suchen…"
+    <div class="search-wrap" data-icon="search"><input id="osSearchInput" class="os-search" type="text" placeholder="🔍 Name oder Datum suchen…" title="Datum z. B. 5.10. · 05.10.2026 · 10.2026 – zeigt nur die Outfits von diesem Tag; auch zusammen mit einem Namen"
            oninput="osSearch(this.value)" value=""></div>
-    <button id="osFavFilterBtn" class="os-filter-btn" onclick="osToggleFavFilter()" title="Nur die einzeln mit dem Stern auf der Karte markierten Outfits zeigen">⭐ Favoriten</button>
+    <button id="osFilter_all" class="os-filter-btn on" onclick="osSetFilter('all')">Alle</button>
+    <button id="osFilter_fav" class="os-filter-btn" onclick="osSetFilter('fav')" title="Nur die einzeln mit dem Stern auf der Karte markierten Outfits zeigen">⭐ Favoriten</button>
+    <button id="osFilter_new" class="os-filter-btn" onclick="osSetFilter('new')" title="Nur Outfits der letzten 48 Stunden">🆕 Neu</button>
+    <button id="osFilter_withshot" class="os-filter-btn" onclick="osSetFilter('withshot')" title="Nur Outfits mit Bild">📷 Mit Bild</button>
+    <button id="osFilter_noshot" class="os-filter-btn" onclick="osSetFilter('noshot')" title="Nur Outfits ohne Bild">🚫 Ohne Bild</button>
+    <button id="osSortBtn" class="os-filter-btn" onclick="osToggleSort()" title="Sortierung umschalten: nach Name oder nach dem letzten Outfit (neueste zuerst)">🔤 Name</button>
     <select id="osLockFilter" class="os-filter-btn" onchange="osSetLockFilter(this.value)" title="Nur Outfits mit bestimmten Schlössern zeigen – zum Testen der Schloss-Regeln (Einstellungen → Werkzeuge)">
       <option value="">Schloss: alle Outfits</option>
       <option value="schloss">Mit Schloss (jede Art)</option>
@@ -3773,7 +3776,6 @@ document.write('<scr'+'ipt src="bc-autobackup.js?_='+_cbv+'"><\/scr'+'ipt>');
     <button class="btn" onclick="clearAllLscgScreenshots()" title="Alle Bilder löschen (Codes bleiben)" style="font-size:.75rem;padding:4px 10px;color:#fb7185;border-color:rgba(251,113,133,0.3)">🖼️ Alle Bilder löschen</button>
     <button class="btn" onclick="exportLscgDB()" title="Alle LSCG Outfits als JSON-Datei sichern" style="font-size:.75rem;padding:4px 10px">📤 Export</button>
     <button class="btn" onclick="importLscgDB()" title="LSCG Outfits aus JSON importieren (Merge)" style="font-size:.75rem;padding:4px 10px">📥 Import</button>
-    <button class="btn btn-red" onclick="clearAllLscgOutfits()" title="Alle Outfits + Bilder löschen">🗑️</button>
     <span id="osAutoScanStatus" style="display:none;font-size:.75rem;color:var(--accent-text);margin-left:4px"></span>
   </div>
   <div id="osIgnorePanel" class="os-ignore-panel" style="display:none">
@@ -3797,10 +3799,9 @@ document.write('<scr'+'ipt src="bc-autobackup.js?_='+_cbv+'"><\/scr'+'ipt>');
     <button onclick="mbsWheelImport()" class="btn" style="font-size:.6875rem;padding:2px 8px;flex-shrink:0" title="Einzelnes Outfit-JSON aus Zwischenablage einfügen">📋 JSON</button>
     <button onclick="mbsWheelExportDB()" class="btn" style="font-size:.6875rem;padding:2px 8px;flex-shrink:0" title="Alle Wheel-Outfits + Bilder als JSON-Datei sichern">📤 Export</button>
     <button onclick="mbsWheelImportDB()" class="btn" style="font-size:.6875rem;padding:2px 8px;flex-shrink:0" title="Wheel-Export-Datei importieren (Merge)">📥 Import</button>
-    <button id="wheelGenBtn" onclick="mbsWheelGenerateAll()" class="btn" style="font-size:.6875rem;padding:2px 8px;flex-shrink:0" title="Fehlende Outfit-Bilder automatisch erstellen (Outfits werden nacheinander lokal angezogen + fotografiert)">🖼 Alle erstellen</button>
+    <button id="wheelGenBtn" onclick="mbsWheelGenerateAll()" class="btn" style="font-size:.6875rem;padding:2px 8px;flex-shrink:0" title="Fehlende Outfit-Bilder und Bilder in niedriger Auflösung neu erstellen (Outfits werden nacheinander lokal angezogen – stehend, ohne Schloss – und fotografiert; ein vorhandenes Bild wird erst ersetzt, wenn das neue fertig ist)">🖼 Alle erstellen</button>
     <button onclick="mbsWheelClearAllShots()" class="btn" style="font-size:.6875rem;padding:2px 8px;flex-shrink:0;color:#fb7185;border-color:rgba(251,113,133,0.3)" title="Alle Bilder löschen (Outfits bleiben)">🖼️ Bilder löschen</button>
     <button onclick="_mbsWheelPending=false;scanWheelOutfits()" class="btn" style="font-size:.6875rem;padding:2px 8px;flex-shrink:0">🔄 Scannen</button>
-    <button onclick="mbsWheelClearAll()" class="btn btn-red" style="font-size:.6875rem;padding:2px 8px;flex-shrink:0" title="Alle Outfits + Bilder löschen">🗑️</button>
   </div>
   <div style="padding-bottom:6px">
     <div class="search-wrap" data-icon="search"><input id="wheelSearchInput" type="text" placeholder="🔍 Spieler, Outfit oder Datum (z.B. 02.07.) suchen…"
@@ -3811,6 +3812,8 @@ document.write('<scr'+'ipt src="bc-autobackup.js?_='+_cbv+'"><\/scr'+'ipt>');
     <button id="wheelFilterAll" onclick="mbsWheelSetFilter('all')" class="btn" style="font-size:.6875rem;padding:2px 10px">Alle</button>
     <button id="wheelFilterFav" onclick="mbsWheelSetFilter('fav')" class="btn" style="font-size:.6875rem;padding:2px 10px">⭐ Favoriten</button>
     <button id="wheelFilterNew" onclick="mbsWheelSetFilter('new')" class="btn" style="font-size:.6875rem;padding:2px 10px">🆕 Neu</button>
+    <button id="wheelFilterWithshot" onclick="mbsWheelSetFilter('withshot')" class="btn" style="font-size:.6875rem;padding:2px 10px">📷 Mit Bild</button>
+    <button id="wheelFilterNoshot" onclick="mbsWheelSetFilter('noshot')" class="btn" style="font-size:.6875rem;padding:2px 10px">🚫 Ohne Bild</button>
   </div>
   <div id="wheelOutfitBody" style="display:flex;flex-direction:column;gap:4px">
     <span style="font-size:.75rem;color:var(--text3);font-style:italic">Wird geladen…</span>
@@ -4167,6 +4170,9 @@ document.write('<scr'+'ipt src="bc-autobackup.js?_='+_cbv+'"><\/scr'+'ipt>');
 .os-strip::-webkit-scrollbar-thumb { background:var(--border2); border-radius:99px; }
 
 .os-card { flex:0 0 130px; display:flex; flex-direction:column; scroll-snap-align:start; }
+/* Performance: Karten außerhalb des Sichtbereichs zeichnet der Browser gar nicht erst (bleiben aber im Dokument) – bei
+   hunderten Karten kein Ruckeln und kein Nachladen im Skript. 130×270 px ist die gemessene Kartengröße. */
+.pc, .os-card { content-visibility: auto; contain-intrinsic-size: auto 130px auto 270px; }
 
 .os-card-thumb {
   position:relative; width:130px; height:174px;
@@ -4200,6 +4206,13 @@ document.write('<scr'+'ipt src="bc-autobackup.js?_='+_cbv+'"><\/scr'+'ipt>');
                opacity:0; transition:opacity .12s; }
 .os-card-thumb:hover .os-card-del { opacity:1; }
 .os-card-del:hover { background:rgba(251,113,133,0.3); }
+.os-card-redo { position:absolute; bottom:7px; left:32px; width:20px; height:20px;
+                display:grid; place-items:center; border-radius:5px;
+                background:rgba(0,0,0,0.6); backdrop-filter:blur(6px);
+                color:var(--accent-text); font-size:11px; border:none; cursor:pointer;
+                opacity:0; transition:opacity .12s; }
+.os-card-thumb:hover .os-card-redo { opacity:1; }
+.os-card-redo:hover { background:var(--accent-soft); }
 .os-card-hint { position:absolute; bottom:7px; right:7px; width:20px; height:20px;
                 display:grid; place-items:center; border-radius:5px;
                 background:rgba(0,0,0,0.6); backdrop-filter:blur(6px);
@@ -4256,6 +4269,8 @@ document.write('<scr'+'ipt src="bc-autobackup.js?_='+_cbv+'"><\/scr'+'ipt>');
 .os-lightbox-btn.close:hover { background:rgba(255,255,255,0.12); }
 .os-lightbox-btn.del { background:rgba(251,113,133,0.1); border-color:rgba(251,113,133,0.3); color:#fb7185; }
 .os-lightbox-btn.del:hover { background:rgba(251,113,133,0.2); }
+.os-lightbox-btn.neu { background:var(--accent-soft); border-color:var(--accent-line); color:var(--accent-text); }
+.os-lightbox-btn.neu:hover { filter:brightness(1.15); }
 </style>
 
 <!-- ── Lightbox DOM ── -->
@@ -4264,6 +4279,7 @@ document.write('<scr'+'ipt src="bc-autobackup.js?_='+_cbv+'"><\/scr'+'ipt>');
   <div class="os-lightbox-sub"  id="osLbSub"></div>
   <img class="os-lightbox-img"  id="osLbImg" src="" alt="">
   <div class="os-lightbox-actions">
+    <button class="os-lightbox-btn neu"   id="osLbNeuBtn" onclick="osLightboxNeuAufnehmen()" title="Das Outfit lokal anziehen (stehend, ohne Schloss) und neu fotografieren – das alte Bild wird erst ersetzt, wenn das neue fertig ist">🔄 Neu aufnehmen</button>
     <button class="os-lightbox-btn del"   onclick="deleteOsScreenshotFromLb()">🗑️ Bild löschen</button>
     <button class="os-lightbox-btn close" onclick="closeOsLightbox()">✕ Schließen</button>
   </div>
