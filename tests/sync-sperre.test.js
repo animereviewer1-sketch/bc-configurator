@@ -391,42 +391,66 @@ describe('Alle Aufnahme-Pfade sperren VOR dem Anlegen und lösen NACH dem Wieder
     expect(sync).toBeGreaterThan(loesen);
   });
 
-  it('Wheel: Anlegen in der Serie sperrt, normales Anlegen (mit Sync) nicht', () => {
-    const { ctx } = tool();
+  const wheelCode = (ctx, serie = true) => {
     ctx.__i = [{ group: 'ItemArms', asset: 'X', colors: ['#fff'] }];
-    const serie = evalIn(ctx, '_mbsBuildApplyCode(__i, true)');
-    const normal = evalIn(ctx, '_mbsBuildApplyCode(__i, false)');
-    expect(serie).toContain('window.__BCU_sperreGen="wheel"');
-    expect(idx(serie, '__BCU_sperreGen')).toBeLessThan(idx(serie, 'InventoryWear('));
-    expect(normal).not.toContain('__BCU_sperreGen');
-    expect(() => new Function(serie)).not.toThrow();
+    return evalIn(ctx, `_wheelShotCode('wss_1', __i, ${serie})`);
+  };
+
+  it('Wheel: Sperre → Ausgangslage sichern → Anlegen; Lösen steht hinter dem Zurücksetzen (Normalfall und Fehlerfall)', () => {
+    const { ctx } = tool();
+    const code = wheelCode(ctx);
+    expect(() => new Function(code)).not.toThrow();
+    const an = idx(code, 'window.__BCU_sperreGen=myGen');
+    expect(an).toBeGreaterThan(-1);
+    expect(an).toBeLessThan(idx(code, 'var origApp='));
+    expect(an).toBeLessThan(idx(code, 'InventoryWear('));
+    const rest = idx(code, 'function _restore(){');
+    const block = code.slice(rest, idx(code, 'function _canvasHash', rest));
+    expect(idx(block, 'origApp.forEach')).toBeLessThan(idx(block, '__BCU_sperreGen!==myGen'));
+    expect(idx(block, 'CharacterRefresh(Player,false,false)')).toBeLessThan(idx(block, '__BCU_sperreGen!==myGen'));
+    // Fehlerfall des Anlegens: erst zurücksetzen, dann lösen, dann melden
+    const fehler = idx(code, 'APPLY_FAIL');
+    const zurueck = code.lastIndexOf('origApp.forEach', fehler);
+    const loesen = code.lastIndexOf('__BCU_sperreGen!==myGen', fehler);
+    expect(zurueck).toBeGreaterThan(-1);
+    expect(loesen).toBeGreaterThan(zurueck);
+    expect(loesen).toBeLessThan(fehler);
   });
 
-  it('Wheel: Zurückstellen löst die Sperre nach dem Wiederherstellen und vor dem Sync', () => {
+  it('Wheel: das normale Anlegen (Run-Button) sperrt nicht und synchronisiert danach', () => {
+    const { ctx } = tool();
+    ctx.__i = [{ group: 'ItemArms', asset: 'X', colors: ['#fff'] }];
+    const normal = evalIn(ctx, '_mbsBuildApplyCode(__i)');
+    expect(normal).not.toContain('__BCU_sperreGen');
+    expect(normal).toContain('ServerPlayerAppearanceSync');
+    expect(() => new Function(normal)).not.toThrow();
+  });
+
+  it('Wheel: Zurückstellen (Undo) stellt wieder her und synchronisiert danach', () => {
     const { ctx, execs } = tool();
     evalIn(ctx, '_connected = true');
     ctx.bcuUndoAppearance();
     const code = execs().at(-1);
     expect(() => new Function(code)).not.toThrow();
     const wiederher = idx(code, 'ServerAppearanceLoadFromBundle');
-    const loesen = idx(code, '__BCU_sperreGen!=="wheel"', wiederher);
     const sync = idx(code, 'ServerPlayerAppearanceSync();', wiederher);
     expect(wiederher).toBeGreaterThan(-1);
-    expect(loesen).toBeGreaterThan(wiederher);
-    expect(sync).toBeGreaterThan(loesen);
+    expect(sync).toBeGreaterThan(wiederher);
   });
 
-  it('Wheel: scheitert die Sperre, meldet der nächste Foto-Schritt es – statt ein Bild vom falschen Aussehen zu liefern', () => {
+  it('Wheel: kann die Sperre nicht gesetzt werden, wird NICHTS angelegt und der Fehler geht ans Tool', () => {
     const { ctx } = tool();
-    const foto = evalIn(ctx, "_buildCanvasShotCode('wss_1')");
+    const code = wheelCode(ctx);
+    const env = bc({ serverSend: false, extra: { Uint8ClampedArray, performance: { now: () => 1 }, CharacterRefresh() {},
+      AssetGet() { throw new Error('darf nicht angelegt werden'); }, document: { createElement: () => leinwand(() => 0) } } });
+    env.Player.Canvas = leinwand(() => 0);
     const meldungen = [];
-    const g = { window: null, __BCK_popupRef: { postMessage: (m) => meldungen.push(m) }, __BCU_sperreFehler: 1,
-      CharacterRefresh() { throw new Error('darf nicht erreicht werden'); }, Player: {}, document: {}, setTimeout() {} };
-    g.window = g;
-    vm.runInContext(foto, vm.createContext(g));
+    env.g.__BCK_popupRef = { postMessage: (m) => meldungen.push(m) };
+    env.lauf(code);
+    expect(env.Player.Appearance.map((i) => i.Asset.Name)).toEqual(['ORIG']);
     expect(meldungen.length).toBe(1);
+    expect(meldungen[0]).toMatchObject({ type: 'SCREENSHOT_DATA', reqId: 'wss_1' });
     expect(meldungen[0].err).toMatch(/^SPERRE_FAIL/);
-    expect(g.__BCU_sperreFehler).toBe(0);
   });
 });
 

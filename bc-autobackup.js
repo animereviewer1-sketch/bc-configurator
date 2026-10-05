@@ -48,7 +48,7 @@
     'mbsWheelShots'];
   /* Alles Uebrige ist klein bzw. schlecht teilbar und wandert jedes Mal komplett mit. */
   var KOMPLETT = ['curseFavourites', 'profileFavs', 'mbsWheel', 'mbsWheelFavs',
-    'mbsWheelOutfitFavs', 'rangDaten', 'moneyDaten', 'botLogs', 'defaultOutfit',
+    'mbsWheelOutfitFavs', 'lscgOutfitFavs', 'rangDaten', 'moneyDaten', 'botLogs', 'defaultOutfit',
     'bots', 'botGroups', 'botVars', 'playerKeys', 'shopDaten'];
 
   /* Kalendertag als Schluessel – die Sicherung laeuft einmal pro Tag,
@@ -197,6 +197,7 @@
       mbsWheel:           g([], function () { return _mbsWheelData; }),
       mbsWheelFavs:       g([], function () { return Array.from(_mbsWheelFavs); }),
       mbsWheelOutfitFavs: g([], function () { return Array.from(_mbsWheelOutfitFavs); }),
+      lscgOutfitFavs:     g([], function () { return Array.from(_osOutfitFavs); }),
       rangDaten:          g(null, function () { return _rankData; }),
       moneyDaten:         g(null, function () { return _money; }),
       botLogs:            g(null, function () { return window._BCBotLog; }),

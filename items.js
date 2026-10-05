@@ -2429,6 +2429,38 @@ function _profilKarteEinfuegen(el, name) {
   return true;
 }
 
+// Eine Karte aus der Liste nehmen, ohne neu zu zeichnen. _profileKeys und die Slot-Nummern der übrigen Karten
+// bleiben absichtlich unverändert. false = letzte Karte weg → Leermeldung per Komplett-Rendern.
+function _profilKarteEntfernen(el, card) {
+  const block = card.closest('.profile-owner-block');
+  card.remove();
+  if (block) {
+    const rest = block.querySelectorAll('.pc').length;
+    if (!rest) block.remove();
+    else { const zaehler = block.querySelector('.profile-owner-count'); if (zaehler) zaehler.textContent = String(rest); }
+  }
+  return !!el.querySelector('.pc');
+}
+
+// Favorit gesetzt/entfernt: nur der Stern DIESER Karte ändert sich. renderProfileList() würde die ganze Liste
+// (jede Karte, jedes Bild, die Duplikat-Prüfung über alle Profile) neu bauen – das war das Warten nach dem Klick.
+// Die Sortierung hängt nicht vom Favoriten ab. Nur im Filter "Favoriten" verschwindet die Karte beim Entfernen.
+// true = erledigt; false = der Aufrufer muss komplett neu zeichnen.
+function _profilFavAktualisieren(name) {
+  const el = document.getElementById('profileListEl');
+  if (!el || !Array.isArray(el._profileKeys) || !el._profileKeys.length) return false;
+  const slot = Object.keys(_profileNameMap).find(k => _profileNameMap[k] === name);
+  const card = slot ? document.getElementById('prow_' + slot.slice(2)) : null;
+  const isFav = PROFILE_FAVS.has(name);
+  if (!card) return _profileFilter !== 'fav'; // nicht sichtbar (Suche/Filter): nichts zu tun; im Favoriten-Filter müsste sie erscheinen
+  if (_profileFilter === 'fav' && !isFav) return _profilKarteEntfernen(el, card);
+  const stern = card.querySelector('.pc-fav');
+  if (stern) { stern.classList.toggle('on', isFav); stern.textContent = isFav ? '⭐' : '☆'; }
+  const knopf = card.querySelector('.pc-btn[title="Favorit"]');
+  if (knopf) knopf.classList.toggle('fav-on', isFav);
+  return true;
+}
+
 // ── Einzelnes Profil-Bild nachziehen ───────────────────────────────────────
 // renderProfileList() baut die ganze Liste per innerHTML neu: jedes Bild wird neu angelegt und neu
 // dekodiert – beim Auto-Screenshot nach JEDEM Bild. Hier wird nur die Vorschau der einen Karte
@@ -2448,15 +2480,7 @@ function _profilBildAktualisieren(name) {
   if (!card) return (sichtbar && filterNachBild) ? _profilKarteEinfuegen(el, name) : true;
   if (!sichtbar) {
     // z. B. Filter "ohne Bild": die Karte hat jetzt ein Bild und gehört nicht mehr in die Liste.
-    // _profileKeys und die Slot-Nummern der übrigen Karten bleiben absichtlich unverändert.
-    const block = card.closest('.profile-owner-block');
-    card.remove();
-    if (block) {
-      const rest = block.querySelectorAll('.pc').length;
-      if (!rest) block.remove();
-      else { const zaehler = block.querySelector('.profile-owner-count'); if (zaehler) zaehler.textContent = String(rest); }
-    }
-    return !!el.querySelector('.pc'); // letzte Karte weg → Leermeldung per Komplett-Rendern
+    return _profilKarteEntfernen(el, card);
   }
   const thumb = card.querySelector('.pc-thumb');
   if (!thumb) return false;
@@ -3579,7 +3603,7 @@ function toggleProfileFav(name) {
   if (PROFILE_FAVS.has(name)) PROFILE_FAVS.delete(name);
   else PROFILE_FAVS.add(name);
   try { localStorage.setItem('BC_PROFILE_FAVS_v1', JSON.stringify([...PROFILE_FAVS])); } catch {}
-  renderProfileList();
+  if (!_profilFavAktualisieren(name)) renderProfileList();
 }
 
 function setProfileFilter(f) {
@@ -6714,6 +6738,98 @@ try {
 } catch (e) {}
 
 
+// ══════════════════════════════════════════════════════
+//  GEFAHRENZONE (Einstellungen): Aktionen am eigenen Charakter
+// ══════════════════════════════════════════════════════
+// Diese Knöpfe liegen im Tool-Fenster, aber Player, InventoryGet, LZString … gibt es nur im BC-TAB. Früher stand
+// der Code (aus dem Userscript kopiert) direkt im Tool-Fenster und meldete immer "Nicht mit BC verbunden". Jetzt
+// läuft er per EXEC im Spiel-Tab und meldet das Ergebnis zurück (GEFAHR_ERGEBNIS).
+const GEFAHR_STATUS = { dogs: 'dogsLockStatus', dts: 'dtsResetStatus' };
+const GEFAHR_KNOPF  = { dogs: 'dogsLockRemoverBtn', dts: 'dtsResetBtn' };
+const _gefahrTimer = {};
+
+// antwort(ok, text, geaendert) im Spiel-Tab → Ergebnis ans Tool-Fenster (Origin als Literal, STAB-05)
+function _gefahrAntwortCode(id) {
+  return 'var antwort=function(ok,text,geaendert){try{window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"GEFAHR_ERGEBNIS",id:'
+    + JSON.stringify(id) + ',ok:ok,text:text,geaendert:!!geaendert},' + JSON.stringify(TOOL_ORIGIN) + ');}catch(e){}};';
+}
+
+// Alle DOGS-Schlösser vom eigenen Charakter entfernen. Erkannt wird, was in DOGS' Liste steht ODER als DOGS-Schloss
+// am Item hängt (ExclusivePadlock mit Name "DeviousPadlock"). Danach DOGS' Liste leeren und das Aussehen einmal senden.
+function _dogsEntfernenCode() {
+  return '(function(){' + _gefahrAntwortCode('dogs')
+    + 'try{'
+    + 'var felder=' + JSON.stringify([..._LOCK_PROP_KEYS, 'Name']) + ';'
+    + 'var dogs=null;'
+    + 'try{dogs=JSON.parse(LZString.decompressFromBase64(Player.ExtensionSettings.DOGS));}catch(e){}'
+    + 'var reg=dogs&&dogs.deviousPadlock&&dogs.deviousPadlock.itemGroups;'
+    + 'var registriert=Object.keys(reg||{});'
+    + 'var ziele=Player.Appearance.filter(function(it){'
+    +   'if(!it||!it.Asset||!it.Asset.Group||!it.Property)return false;'
+    +   'var p=it.Property;'
+    // Nur Exclusive-Schlösser: ein normales Schloss auf einer in DOGS eingetragenen Gruppe gehört nicht DOGS
+    +   'return p.LockedBy==="ExclusivePadlock"&&(p.Name==="DeviousPadlock"||registriert.indexOf(it.Asset.Group.Name)>=0);});'
+    + 'if(!ziele.length&&!registriert.length){antwort(true,"\\u2705 Keine DOGS-Schl\\u00f6sser gefunden",false);return;}'
+    + 'var gruppen=ziele.map(function(it){return it.Asset.Group.Name;});'
+    + 'ziele.forEach(function(it){var p=it.Property;felder.forEach(function(k){delete p[k];});'
+    +   'p.Effect=(p.Effect||[]).filter(function(e){return e!=="Lock";});});'
+    + 'if(reg){dogs.deviousPadlock.itemGroups={};Player.ExtensionSettings.DOGS=LZString.compressToBase64(JSON.stringify(dogs));'
+    +   'ServerPlayerExtensionSettingsSync("DOGS");}'
+    + 'CharacterRefresh(Player);'
+    + 'if(typeof ServerPlayerIsInChatRoom==="function"&&ServerPlayerIsInChatRoom())ChatRoomCharacterUpdate(Player);'
+    + 'antwort(true,"\\u2705 "+(gruppen.length?gruppen.length+" DOGS-Schloss/Schl\\u00f6sser entfernt ("+gruppen.join(", ")+")"'
+    +   ':"DOGS-Liste geleert ("+registriert.length+" Eintr\\u00e4ge ohne Schloss am K\\u00f6rper)")+" \\u2014 bitte BC neu laden",true);'
+    + '}catch(e){antwort(false,"\\u274c Fehler: "+e.message,false);}'
+    + '})();';
+}
+
+function _dtsResetCode() {
+  return '(function(){' + _gefahrAntwortCode('dts')
+    + 'try{'
+    + 'var dts=Player.ExtensionSettings&&Player.ExtensionSettings["DTSbyZajucd"];'
+    + 'if(!dts){antwort(true,"\\u2705 Kein DTS-Status gefunden",false);return;}'
+    // Nur ein Objekt lässt sich so ändern; bei Text würde die Zuweisung stillschweigend ins Leere laufen
+    + 'if(typeof dts!=="object"){antwort(false,"\\u274c DTS-Daten haben ein unbekanntes Format \\u2013 nichts ge\\u00e4ndert",false);return;}'
+    + 'var war=dts.isDrone;'
+    + 'dts.isDrone=false;dts.ownerId=-1;dts.isOwner=false;'
+    + 'ServerPlayerExtensionSettingsSync("DTSbyZajucd");'
+    + 'antwort(true,war?"\\u2705 Drone-Status entfernt \\u2014 bitte BC neu laden":"\\u2705 War bereits keine Drone",!!war);'
+    + '}catch(e){antwort(false,"\\u274c Fehler: "+e.message,false);}'
+    + '})();';
+}
+
+function _gefahrAusfuehren(id, code) {
+  const statusEl = document.getElementById(GEFAHR_STATUS[id]);
+  const setze = (t) => { if (statusEl) statusEl.textContent = t; };
+  if (!_connected) { setze('❌ Nicht mit BC verbunden – Bookmarklet im BC-Tab klicken'); return; }
+  setze('⏳ Wird im BC-Tab ausgeführt …');
+  clearTimeout(_gefahrTimer[id]);
+  _gefahrTimer[id] = setTimeout(() => {
+    if (statusEl && statusEl.textContent.startsWith('⏳')) statusEl.textContent = '⚠️ Keine Antwort vom BC-Tab – ist das Bookmarklet noch aktiv?';
+  }, 8000);
+  if (!bcSend({ type: 'EXEC', code }, true)) {
+    clearTimeout(_gefahrTimer[id]);
+    setze('❌ Senden an BC fehlgeschlagen – 🔄 Verbinden klicken');
+  }
+}
+
+function removeAllDOGSLocks() { _gefahrAusfuehren('dogs', _dogsEntfernenCode()); }
+function dtsResetDrone()      { _gefahrAusfuehren('dts', _dtsResetCode()); }
+
+onBridgeMessage('GEFAHR_ERGEBNIS', function(ev) {
+      const id = ev.data.id;
+      if (!Object.prototype.hasOwnProperty.call(GEFAHR_STATUS, id)) return;
+      clearTimeout(_gefahrTimer[id]);
+      const el = document.getElementById(GEFAHR_STATUS[id]);
+      if (el) el.textContent = String(ev.data.text ?? '').slice(0, 300);
+      // Nur nach einer echten Änderung sperren (bis zum Neuladen); sonst darf man es nochmal versuchen
+      if (ev.data.ok === true && ev.data.geaendert === true) {
+        const knopf = document.getElementById(GEFAHR_KNOPF[id]);
+        if (knopf) knopf.disabled = true;
+      }
+});
+
+
 /* Den lokalen Curse-Bestand in den Loader schieben.
 
    Wichtig fuer mehr als nur "Wear nach Browserwechsel": ein Full-Sync ersetzt
@@ -8074,6 +8190,7 @@ function exportAllData() {
       mbsWheel:           _mbsWheelData,
       mbsWheelFavs:       [..._mbsWheelFavs],
       mbsWheelOutfitFavs: [..._mbsWheelOutfitFavs],
+      lscgOutfitFavs:     [..._osOutfitFavs],
       mbsWheelShots:      _mbsWheelShots,
       defaultOutfit:      CURSE_DEFAULT_OUTFIT_CODE ? { code: CURSE_DEFAULT_OUTFIT_CODE, date: CURSE_DEFAULT_OUTFIT_DATE } : null,
       // v3: Bot, Shop, Rang, Money – lagen vorher in keinem der beiden Backups.
@@ -8663,6 +8780,7 @@ function importAllData() {
         }
         if (d.mbsWheelFavs)       { d.mbsWheelFavs.forEach(k => _mbsWheelFavs.add(_mbsNum(k))); _saveMbsWheelFavs(); }
         if (d.mbsWheelOutfitFavs) { d.mbsWheelOutfitFavs.forEach(k => _mbsWheelOutfitFavs.add(k)); _saveMbsWheelOutfitFavs(); }
+        if (Array.isArray(d.lscgOutfitFavs)) { d.lscgOutfitFavs.forEach(k => _osOutfitFavs.add(k)); idbSet(LSCG_OUTFIT_FAV_KEY, [..._osOutfitFavs]); }
         if (d.defaultOutfit?.code && !CURSE_DEFAULT_OUTFIT_CODE) {
           CURSE_DEFAULT_OUTFIT_CODE = d.defaultOutfit.code;
           CURSE_DEFAULT_OUTFIT_DATE = d.defaultOutfit.date || null;
@@ -9604,7 +9722,8 @@ const LSCG_IDB_KEY      = 'BC_LSCG_OUTFITS_v3';
 const LSCG_LS_KEY       = 'BC_LSCG_OUTFITS_LS_v3';   // localStorage-Backup (Fallback wenn IDB geleert wird)
 const LSCG_IGNORE_KEY   = 'BC_LSCG_IGNORE_v1';
 const LSCG_FAV_KEY      = 'BC_LSCG_FAVS_v1';
-const LSCG_SLOTS_KEY    = 'BC_LSCG_SLOTS_v1';         // Persistierte LSCG-Outfit-Slots (key → code)
+const LSCG_OUTFIT_FAV_KEY = 'BC_LSCG_OUTFIT_FAVS_v1'; // einzelne Outfits (Versionen) als Favorit, Schlüssel siehe _osOutfitFavKey
+const LSCG_SLOTS_KEY   = 'BC_LSCG_SLOTS_v1';         // Persistierte LSCG-Outfit-Slots (key → code)
 // Angehoben von 30: nach der Wiederherstellung aus den Screenshot-Schluesseln
 // haben einzelne Spieler weit mehr Versionen. Mit 30 haette der naechste Scan
 // eines solchen Spielers alles ausser den letzten 30 verworfen.
@@ -9620,7 +9739,9 @@ let _lscgSavePending = false;
 // Synchrones localStorage-Preload entfernt: JSON.parse eines großen LSCG_DB blockiert den UI-Thread.
 // IDB lädt async in der IIFE unten (<50ms) – kein spürbarer Unterschied für den Nutzer.
 const _osOpenSet  = new Set();
-let _osFavs       = new Set();   // member keys die favorisiert sind
+let _osFavs       = new Set();   // member keys die favorisiert sind (ganze Zeile eines Spielers)
+let _osOutfitFavs = new Set();   // einzelne Outfits (Version) als Favorit: mk|fingerprint
+let _osFavFilter  = false;       // true = nur einzeln favorisierte Outfits zeigen
 let _osSearchQuery = '';          // aktueller Suchbegriff
 let _lscgFpMap   = {};            // fingerprint → [slotName,...] – RAM-only, wird aus _lscgSlots rebuilt
 let _lscgSlots   = {};            // slotName → code – PERSISTIERT in IDB
@@ -9702,10 +9823,63 @@ function toggleIgnorePanel() {
 }
 
 // ── Favoriten ────────────────────────────────────────────────
+// Stern in der Spielerzeile: ganze Zeile eines Spielers (rutscht nach oben). Der Stern auf einer Karte
+// (toggleOsOutfitFav) betrifft nur dieses eine Outfit.
 function toggleOsFav(mk) {
   if (_osFavs.has(mk)) _osFavs.delete(mk); else _osFavs.add(mk);
   idbSet(LSCG_FAV_KEY, [..._osFavs]);
   renderOutfitScanTab();
+}
+
+// Schlüssel einer einzelnen Version: Fingerabdruck (bleibt stabil, auch wenn davor Versionen gelöscht werden)
+function _osOutfitFavKey(mk, v, idx) {
+  if (v && v.fingerprint) return mk + '|' + v.fingerprint;
+  if (v && v.ts) return mk + '|ts' + v.ts;
+  return mk + '#' + idx;
+}
+
+// Nur dieses eine Outfit als Favorit setzen/entfernen. Nur diese Karte ändert sich (kein Neuzeichnen aller
+// Bilder); im Favoriten-Filter verschwindet sie beim Entfernen.
+function toggleOsOutfitFav(mk, idx) {
+  const v = LSCG_DB[mk]?.versions?.[idx];
+  if (!v) return;
+  const key = _osOutfitFavKey(mk, v, idx);
+  if (_osOutfitFavs.has(key)) _osOutfitFavs.delete(key); else _osOutfitFavs.add(key);
+  idbSet(LSCG_OUTFIT_FAV_KEY, [..._osOutfitFavs]);
+  if (!_osFavKarteAktualisieren(mk, idx, _osOutfitFavs.has(key))) renderOutfitScanTab();
+}
+
+function _osFavKarteAktualisieren(mk, idx, isFav) {
+  const body = document.getElementById('outfitScanBody');
+  const block = document.getElementById('osm_' + mk);
+  if (!body || !block) return false;
+  const karte = block.querySelector('.os-card[data-vidx="' + idx + '"]');
+  if (!karte) return false;
+  if (_osFavFilter && !isFav) {
+    karte.remove();
+    if (!block.querySelector('.os-card')) block.remove();
+    else { const z = block.querySelector('.os-member-vcnt'); if (z) z.textContent = _osVcntText(mk); }
+    return !!body.querySelector('.os-card');   // letzte Karte weg → Leermeldung per Komplett-Rendern
+  }
+  const stern = karte.querySelector('.os-card-fav');
+  if (stern) { stern.classList.toggle('on', isFav); stern.textContent = isFav ? '⭐' : '☆'; }
+  const knopf = karte.querySelector('.os-card-favbtn');
+  if (knopf) { knopf.classList.toggle('fav-on', isFav); knopf.textContent = isFav ? '⭐' : '☆'; }
+  return true;
+}
+
+function osToggleFavFilter() {
+  _osFavFilter = !_osFavFilter;
+  document.getElementById('osFavFilterBtn')?.classList.toggle('on', _osFavFilter);
+  renderOutfitScanTab();
+}
+
+// Anzahl-Anzeige der Spielerzeile: mit Filter "Treffer/alle"
+function _osVcntText(mk) {
+  const versions = LSCG_DB[mk]?.versions || [];
+  return (_osLockFilter || _osFavFilter)
+    ? versions.filter(function(v, i) { return _osVersionPasst(v, mk, i); }).length + '/' + versions.length + 'x'
+    : versions.length + 'x';
 }
 
 // ── Suche ────────────────────────────────────────────────────
@@ -10668,6 +10842,8 @@ function toggleOsChar(mk, hdrEl) {
   await _loadIgnoreSettings();
   const favSaved = await idbGet(LSCG_FAV_KEY);
   if (Array.isArray(favSaved)) _osFavs = new Set(favSaved);
+  const ofavSaved = await idbGet(LSCG_OUTFIT_FAV_KEY);
+  if (Array.isArray(ofavSaved)) ofavSaved.forEach(k => _osOutfitFavs.add(k)); // add statt ersetzen: ein Klick während des Ladens geht nicht verloren
   await _screenshotStoreReady();
   const ssSaved = await idbScreenshotGetAll('lscg');
   if (ssSaved && typeof ssSaved === 'object') {
@@ -11835,53 +12011,58 @@ function _renderMbsWheelTab() {
     });
   }
 
+  // Eine Karte als HTML. Eigene Funktion, damit ein neues Bild nur die Karten austauscht, die es zeigen
+  // (_wheelBildAktualisieren), statt den ganzen Tab neu zu bauen.
+  function _wheelKarteHtml(mn, o, oi) {
+    const fp     = _mbsOutfitFp(o);
+    const shot   = _mbsWheelShots[fp] || null;
+    const oFav   = _mbsWheelOutfitFavs.has(mn + '|' + o.name);
+    const isNew  = _mbsOutfitIsNew(o);
+    const others = (fpMap[fp] || []).filter(x => x.mn !== mn);
+    const letter = escHtml((o.name[0] || '?').toUpperCase());
+    const seenStr = o.firstSeen
+      ? new Date(o.firstSeen).toLocaleDateString('de-DE', {day:'2-digit',month:'2-digit',year:'2-digit'})
+      : '–';
+
+    const tagHtml = isNew
+      ? '<span class="os-card-tag saved" style="background:var(--green,#4ade80);color:#000">NEU</span>'
+      : (others.length ? '<span class="os-card-tag" title="Identisches Outfit auch bei: ' + escHtml(others.map(x => x.name + ' #' + x.mn).join(', ')) + '">⧉ ' + others.length + '</span>' : '');
+    const thumbContent = shot
+      ? _lazyImg('mw', fp)
+      : '<div class="os-card-placeholder">' + letter + '</div>';
+    const hintIcon = shot ? '<span class="os-card-hint">🔍</span>' : '<span class="os-card-hint">📸</span>';
+    const thumbClick = shot
+      ? 'mbsWheelOpenShot(0,' + mn + ',' + oi + ')'
+      : 'mbsWheelCaptureShot(' + mn + ',' + oi + ')';
+    const delBtn = shot
+      ? '<button class="os-card-del" onclick="event.stopPropagation();mbsWheelDeleteShot(' + mn + ',' + oi + ')" title="Bild löschen">🗑</button>'
+      : '';
+
+    return '<div class="os-card" data-fp="' + escHtml(fp) + '" data-mn="' + mn + '" data-oi="' + oi + '">'
+      + '<div class="os-card-thumb" onclick="' + thumbClick + '">'
+      + thumbContent + tagHtml
+      + '<button class="os-card-fav' + (oFav ? ' on' : '') + '" onclick="event.stopPropagation();mbsWheelToggleOutfitFav(' + mn + ',' + oi + ')">' + (oFav ? '⭐' : '☆') + '</button>'
+      + delBtn + hintIcon
+      + '</div>'
+      + '<div class="os-card-name" title="' + escHtml(o.name) + '">' + escHtml(o.name) + '</div>'
+      + '<div class="os-card-meta">' + o.items.length + ' Items · ' + seenStr + '</div>'
+      + '<div class="os-card-actions">'
+      + '<button class="os-card-btn primary" onclick="mbsWheelApply(' + mn + ',' + oi + ')" title="Auf mich anwenden">▶ Run</button>'
+      + '<button class="os-card-btn' + (oFav ? ' fav-on' : '') + '" onclick="mbsWheelToggleOutfitFav(' + mn + ',' + oi + ')">' + (oFav ? '⭐' : '☆') + '</button>'
+      + '<button class="os-card-btn" onclick="mbsWheelSaveProfile(' + mn + ',' + oi + ')" title="Als Profil speichern">💾</button>'
+      + '<button class="os-card-btn" onclick="mbsWheelExport(' + mn + ',' + oi + ')" title="Als JSON kopieren">📤</button>'
+      + '</div>'
+      + '</div>';
+  }
+  _wheelKartenBauer = _wheelKarteHtml;
+
   // Kartenlayout wie LSCG Outfits (os-member-block / os-strip / os-card)
   function _buildWheelMemberHtml(e) {
     const r     = e.r;
     const mn    = _mbsNum(r.memberNumber);
     const isFav = _mbsWheelFavs.has(mn);
 
-    const cards = e.pairs.map(function([o, oi]) {
-      const fp     = _mbsOutfitFp(o);
-      const shot   = _mbsWheelShots[fp] || null;
-      const oFav   = _mbsWheelOutfitFavs.has(mn + '|' + o.name);
-      const isNew  = _mbsOutfitIsNew(o);
-      const others = (fpMap[fp] || []).filter(x => x.mn !== mn);
-      const letter = escHtml((o.name[0] || '?').toUpperCase());
-      const seenStr = o.firstSeen
-        ? new Date(o.firstSeen).toLocaleDateString('de-DE', {day:'2-digit',month:'2-digit',year:'2-digit'})
-        : '–';
-
-      const tagHtml = isNew
-        ? '<span class="os-card-tag saved" style="background:var(--green,#4ade80);color:#000">NEU</span>'
-        : (others.length ? '<span class="os-card-tag" title="Identisches Outfit auch bei: ' + escHtml(others.map(x => x.name + ' #' + x.mn).join(', ')) + '">⧉ ' + others.length + '</span>' : '');
-      const thumbContent = shot
-        ? _lazyImg('mw', fp)
-        : '<div class="os-card-placeholder">' + letter + '</div>';
-      const hintIcon = shot ? '<span class="os-card-hint">🔍</span>' : '<span class="os-card-hint">📸</span>';
-      const thumbClick = shot
-        ? 'mbsWheelOpenShot(0,' + mn + ',' + oi + ')'
-        : 'mbsWheelCaptureShot(' + mn + ',' + oi + ')';
-      const delBtn = shot
-        ? '<button class="os-card-del" onclick="event.stopPropagation();mbsWheelDeleteShot(' + mn + ',' + oi + ')" title="Bild löschen">🗑</button>'
-        : '';
-
-      return '<div class="os-card">'
-        + '<div class="os-card-thumb" onclick="' + thumbClick + '">'
-        + thumbContent + tagHtml
-        + '<button class="os-card-fav' + (oFav ? ' on' : '') + '" onclick="event.stopPropagation();mbsWheelToggleOutfitFav(' + mn + ',' + oi + ')">' + (oFav ? '⭐' : '☆') + '</button>'
-        + delBtn + hintIcon
-        + '</div>'
-        + '<div class="os-card-name" title="' + escHtml(o.name) + '">' + escHtml(o.name) + '</div>'
-        + '<div class="os-card-meta">' + o.items.length + ' Items · ' + seenStr + '</div>'
-        + '<div class="os-card-actions">'
-        + '<button class="os-card-btn primary" onclick="mbsWheelApply(' + mn + ',' + oi + ')" title="Auf mich anwenden">▶ Run</button>'
-        + '<button class="os-card-btn' + (oFav ? ' fav-on' : '') + '" onclick="mbsWheelToggleOutfitFav(' + mn + ',' + oi + ')">' + (oFav ? '⭐' : '☆') + '</button>'
-        + '<button class="os-card-btn" onclick="mbsWheelSaveProfile(' + mn + ',' + oi + ')" title="Als Profil speichern">💾</button>'
-        + '<button class="os-card-btn" onclick="mbsWheelExport(' + mn + ',' + oi + ')" title="Als JSON kopieren">📤</button>'
-        + '</div>'
-        + '</div>';
-    }).join('');
+    const cards = e.pairs.map(function([o, oi]) { return _wheelKarteHtml(mn, o, oi); }).join('');
 
     const metaStr = (r.room ? '📍 ' + escHtml(r.room) + ' · ' : '')
       + (r.ts ? '🕐 ' + new Date(r.ts).toLocaleString('de-DE', {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '');
@@ -11922,6 +12103,26 @@ function mbsWheelToggleMember(mn) {
   document.getElementById('wm_' + mn)?.classList.toggle('open');
 }
 
+let _wheelKartenBauer = null; // (mn, outfit, oi) → Karten-HTML; wird von _renderMbsWheelTab gesetzt
+
+// Nach einem neuen Bild nur die Karten austauschen, die dieses Bild zeigen (gleicher Fingerabdruck = gleiches
+// Bild, auch bei anderen Spielern). _renderMbsWheelTab() baut ALLE Karten neu: jedes Bild wird neu angelegt und
+// dekodiert – bei einer Serie nach jedem einzelnen Foto. true = erledigt; false = komplett neu zeichnen.
+function _wheelBildAktualisieren(fp) {
+  const body = document.getElementById('wheelOutfitBody');
+  if (!body || !_wheelKartenBauer) return false;
+  const karten = Array.from(body.querySelectorAll('.os-card[data-fp]')).filter(c => c.dataset.fp === fp);
+  for (const karte of karten) {
+    const mn = _mbsNum(karte.dataset.mn);
+    const r = _mbsWheelData.find(x => _mbsNum(x.memberNumber) === mn);
+    const o = r?.outfits[Number(karte.dataset.oi)];
+    if (!o || _mbsOutfitFp(o) !== fp) return false;            // Daten haben sich verschoben → sicher komplett neu
+    karte.outerHTML = _wheelKartenBauer(mn, o, Number(karte.dataset.oi));
+  }
+  if (karten.length) _lazyImgBeobachten(body);
+  return true;                                                  // keine Karte zeigt dieses Bild (Filter/noch nicht gezeichnet): nichts zu tun
+}
+
 function mbsWheelDeleteShot(mn, oi) {
   mn = _mbsNum(mn);
   const r = _mbsWheelData.find(x => _mbsNum(x.memberNumber) === mn);
@@ -11947,10 +12148,14 @@ let _wheelGenPaused  = false;
 let _wheelGenTok     = 0;
 let _wheelGenJob     = null;
 let _wheelGenShotReq = null;
+let _wheelGenTimeout = null;   // Antwort-Wächter des laufenden Fotos
+let _wheelGenT0      = 0;      // Start des laufenden Fotos (Zeitmessung)
+let _wheelGenStat    = { n: 0, ms: 0 };
 
 function mbsWheelGenerateAll() {
   if (_wheelGenRunning) { mbsWheelGenerateStop(); return; }
   if (!_connected) { showStatus('❌ Nicht verbunden', 'error'); return; }
+  if (!_gameOk(false)) { showStatus('❌ ' + _gameWaitReason(false) + ' – Bilderserie nicht gestartet', 'error'); return; }
 
   // Queue: alle Outfits ohne Bild, per Fingerprint dedupliziert
   const seen = new Set();
@@ -11965,20 +12170,22 @@ function mbsWheelGenerateAll() {
   }
   if (!_wheelGenQueue.length) { showStatus('✅ Alle Outfits haben bereits Bilder', 'info'); return; }
   if (!confirm(_wheelGenQueue.length + ' Outfit-Bilder werden erstellt.\n\n'
-    + 'Jedes Outfit wird kurz LOKAL angezogen und fotografiert (andere Spieler sehen davon nichts). '
-    + 'Am Ende wird dein Aussehen wiederhergestellt.\n'
+    + 'Jedes Outfit wird kurz LOKAL angezogen (stehend, ohne Schlösser) und fotografiert – andere Spieler sehen davon nichts. '
+    + 'Nach jedem Bild ist dein Aussehen wieder da.\n'
     + (CURSE_DEFAULT_OUTFIT_CODE
         ? 'Vor jedem Outfit wird das Standard-Outfit als Basis angelegt.\n'
         : '⚠️ Kein Standard-Outfit gesetzt (Craft & Curse) – Items können sich zwischen Outfits stapeln!\n')
-    + '\nDauer: ca. ' + Math.ceil(_wheelGenQueue.length * (CURSE_DEFAULT_OUTFIT_CODE ? 4.5 : 4) / 60) + ' Min. Starten?')) { _wheelGenQueue = []; return; }
+    + '\nDauer: ca. ' + Math.max(1, Math.ceil(_wheelGenQueue.length * 1.2 / 60)) + ' Min. Starten?')) { _wheelGenQueue = []; return; }
 
   _wheelGenTotal   = _wheelGenQueue.length;
   _wheelGenRunning = true;
   _wheelGenPaused  = false;
+  _wheelGenStat    = { n: 0, ms: 0 };
   _dcJobStart('wheelGen');
-  bcSend({ type: 'EXEC', code: _bcuSnapshotCode() }, true); // Aussehen fürs Ende sichern
+  // Ausgangslage merken (nach jedem Bild kommt sie zurück). AFK-Symbol vorher weg, sonst steckt es in der gemerkten Lage.
+  bcSend({ type: 'EXEC', code: '(function(){' + _SHOT_AFK + 'try{window.__BCU_wheelOrig=Player.Appearance.slice();}catch(_e){}})();' }, true);
   _updateWheelGenBtn();
-  setTimeout(_wheelGenStep, 500);
+  setTimeout(_wheelGenStep, 300);
 }
 
 function _wheelGenStep() {
@@ -11996,37 +12203,57 @@ function _wheelGenStep() {
 
   _wheelGenJob = job;
   const tok = _wheelGenTok;
-  const alive = () => _wheelGenRunning && !_wheelGenPaused && tok === _wheelGenTok;
 
   const done = _wheelGenTotal - _wheelGenQueue.length;
   const st = document.getElementById('wheelScanStatus');
-  if (st) st.textContent = '🖼 Erstelle ' + done + '/' + _wheelGenTotal + ': ' + o.name;
+  if (st) st.textContent = '🖼 Erstelle ' + done + '/' + _wheelGenTotal + ': ' + o.name + _wheelGenZeitText();
 
-  // 1. Standard-Outfit lokal anlegen (Reset — sonst bleiben Items vom vorherigen Outfit)
-  // 2. Wheel-Outfit lokal drüber  3. Foto  4. nächstes  — alles ohne Server-Sync
-  const _applyOutfit = function() {
-    if (!alive()) return;
-    bcSend({ type: 'EXEC', code: _mbsBuildApplyCode(o.items, true) }, true);
-    setTimeout(function() {
-      if (!alive()) return;
-      const reqId = 'wss_' + Date.now();
-      _pendingWheelShot[reqId] = fp;
-      _wheelGenShotReq = reqId;
-      bcSend({ type: 'EXEC', code: _buildCanvasShotCode(reqId) }, true);
-      setTimeout(function() { if (alive()) _wheelGenStep(); }, 1200);
-    }, 2500);
-  };
-  if (CURSE_DEFAULT_OUTFIT_CODE) {
-    bcSend({ type: 'EXEC', code: '(function(){' + _wheelSperreAn() + 'try{' + _buildApplyCode(CURSE_DEFAULT_OUTFIT_CODE) + '}catch(e){console.warn("[BCU-WheelGen] Reset:",e.message);}})();' }, true);
-    setTimeout(_applyOutfit, 800);
-  } else {
-    _applyOutfit();
-  }
+  // EIN EXEC pro Outfit: Standard-Outfit als Basis, Wheel-Outfit drüber, Bild, Aussehen zurück – alles lokal
+  // (kein Server-Sync, keine Schlösser, stehend, AFK-Uhr zurück). Die Antwort löst das nächste Outfit aus
+  // (_wheelGenWeiter), es gibt keine festen Wartezeiten mehr.
+  const reqId = 'wss_' + Date.now();
+  _pendingWheelShot[reqId] = fp;
+  _wheelGenShotReq = reqId;
+  _wheelGenT0 = Date.now();
+  clearTimeout(_wheelGenTimeout);
+  _wheelGenTimeout = setTimeout(function() {
+    if (_wheelGenShotReq !== reqId || tok !== _wheelGenTok) return;   // inzwischen beantwortet, pausiert oder beendet
+    // Keine Antwort: das Outfit bleibt in der Queue, der Wächter setzt fort, sobald BC stabil erreichbar ist
+    _dcPauseJob('wheelGen', _gameWaitReason(false) || ('Timeout – "' + o.name + '" wird wiederholt'));
+  }, 12000);
+  bcSend({ type: 'EXEC', code: _wheelShotCode(reqId, o.items, true) }, true);
+}
+
+// Die Antwort auf das Foto des laufenden Outfits ist da → nächstes Outfit. Auch nach einem Fehler: ein einzelnes
+// kaputtes Outfit hält die Serie nicht auf. Verspätete oder fremde Antworten ändern nichts.
+function _wheelGenWeiter(reqId) {
+  if (!_wheelGenRunning || _wheelGenPaused || reqId !== _wheelGenShotReq) return;
+  clearTimeout(_wheelGenTimeout);
+  if (_wheelGenT0) { _wheelGenStat.n++; _wheelGenStat.ms += Date.now() - _wheelGenT0; }
+  _wheelGenShotReq = null;
+  _wheelGenJob = null;
+  setTimeout(_wheelGenStep, SLIDESHOW_GAP_MS);
+}
+
+// Ausgangslage zurück (Aussehen + Pose von vor der Serie) und EIN Sync – das Ende der Serie. Ist BC gerade
+// getrennt, lädt der Relog das Original ohnehin vom Server.
+function _wheelOrigZurueck() {
+  if (!_connected || !_gameOk(false)) return;
+  bcSend({ type: 'EXEC', code: _SHOT_POSE_ZURUECK + '(function(){'
+    + 'if(!window.__BCU_wheelOrig)return;'
+    + 'Player.Appearance.splice(0,Player.Appearance.length);'
+    + 'window.__BCU_wheelOrig.forEach(function(i){Player.Appearance.push(i);});'
+    + 'CharacterRefresh(Player,false,false);'
+    + 'if(typeof ServerPlayerAppearanceSync==="function")ServerPlayerAppearanceSync();'
+    + 'else if(typeof ServerSend==="function")ServerSend("AccountUpdate",{Appearance:Player.Appearance});'
+    + 'window.__BCU_wheelOrig=null;'
+    + '})();' }, true);
 }
 
 function _wheelGenPause() {
   _wheelGenPaused = true;
   _wheelGenTok++;
+  clearTimeout(_wheelGenTimeout);
   if (_wheelGenJob) { _wheelGenQueue.unshift(_wheelGenJob); _wheelGenJob = null; }
   // Foto evtl. mitten im Relog entstanden → verwerfen, wird neu aufgenommen
   if (_wheelGenShotReq) { delete _pendingWheelShot[_wheelGenShotReq]; _wheelGenShotReq = null; }
@@ -12037,12 +12264,11 @@ function _wheelGenPause() {
 
 function _wheelGenResume() {
   _wheelGenPaused = false;
-  // Undo-Stack fehlt nur, wenn der BC-Tab neu geladen wurde – dann ist das
-  // aktuelle Aussehen das vom Server, also das Original.
+  // Die Ausgangslage fehlt nur, wenn der BC-Tab neu geladen wurde – dann ist das aktuelle Aussehen das vom
+  // Server, also das Original. Nach einem Relog bleibt sie gültig (der Durchlauf synchronisiert nie).
   bcSend({ type: 'EXEC', code: '(function(){try{'
-    + 'if(window.__BCU_UNDO&&window.__BCU_UNDO.length)return;'
-    + 'window.__BCU_UNDO=[CharacterAppearanceBundle(Player)];'
-    + '}catch(e){console.warn("[BCU-Undo]",e.message);}})();' }, true);
+    + 'if(!window.__BCU_wheelOrig)window.__BCU_wheelOrig=Player.Appearance.slice();'
+    + '}catch(e){console.warn("[BCU-Wheel]",e.message);}})();' }, true);
   _updateWheelGenBtn();
   setTimeout(_wheelGenStep, 500);
 }
@@ -12054,18 +12280,26 @@ _dcRegisterJob('wheelGen', {
   resume: _wheelGenResume,
 });
 
+// " · Ø 0,9 s/Outfit" – woran man sieht, ob es schnell läuft
+function _wheelGenZeitText() {
+  if (_wheelGenStat.n < 1) return '';
+  return ' · Ø ' + (_wheelGenStat.ms / _wheelGenStat.n / 1000 + SLIDESHOW_GAP_MS / 1000).toFixed(1).replace('.', ',') + ' s/Outfit';
+}
+
 function _wheelGenFinish() {
   const was = _wheelGenTotal - _wheelGenQueue.length;
+  const zeit = _wheelGenZeitText();
   _wheelGenRunning = false;
   _wheelGenPaused  = false;
   _wheelGenTok++;
+  clearTimeout(_wheelGenTimeout);
   _wheelGenJob     = null;
   _wheelGenShotReq = null;
   _wheelGenQueue   = [];
   _updateWheelGenBtn();
-  // Ursprüngliches Aussehen wiederherstellen (einziger Server-Sync des Durchlaufs)
-  bcuUndoAppearance();
-  showStatus('🖼 Fertig: ' + was + ' Outfit-Bilder erstellt', 'success');
+  // Ausgangslage + Pose zurück (einziger Server-Sync des Durchlaufs)
+  _wheelOrigZurueck();
+  showStatus('🖼 Fertig: ' + was + ' Outfit-Bilder erstellt' + zeit, 'success');
   _renderMbsWheelTab();
 }
 
@@ -12230,10 +12464,12 @@ function mbsWheelImport() {
 }
 
 // ── Screenshots ──────────────────────────────────────────────────────────────
-// Nimmt das AKTUELLE Aussehen als Bild für dieses Outfit auf (fp-basiert:
-// identische Outfits bei anderen Spielern teilen sich das Bild automatisch).
+// Zieht das Outfit lokal an und fotografiert es (fp-basiert: identische Outfits bei anderen Spielern teilen
+// sich das Bild automatisch). Wie in der Serie: stehend, ohne Schlösser, AFK-Uhr zurück, danach ist dein
+// Aussehen wieder da – es geht nie etwas an den Server.
 function mbsWheelCaptureShot(mn, oi) {
   if (!_connected) { showStatus('❌ Nicht verbunden', 'error'); return; }
+  if (_wheelGenRunning) { showStatus('⏳ Die Bilderserie läuft – danach einzeln aufnehmen', 'info'); return; }
   mn = _mbsNum(mn);
   const r = _mbsWheelData.find(x => _mbsNum(x.memberNumber) === mn);
   const o = r?.outfits[oi];
@@ -12241,33 +12477,71 @@ function mbsWheelCaptureShot(mn, oi) {
   const fp = _mbsOutfitFp(o);
   const reqId = 'wss_' + Date.now();
   _pendingWheelShot[reqId] = fp;
-  bcSend({ type: 'EXEC', code: _buildCanvasShotCode(reqId) }, true);
+  bcSend({ type: 'EXEC', code: _wheelShotCode(reqId, o.items, false) }, true);
   showStatus('📸 Screenshot wird aufgenommen…', 'info');
 }
 
-// Gemeinsamer Canvas-Capture-Code (wie captureProfileScreenshot, aber wiederverwendbar)
-function _buildCanvasShotCode(reqId) {
-  const J = JSON.stringify(reqId);
-  return '(function(){'
-    // Konnte der vorige Schritt wegen der Sync-Sperre nichts anlegen, wäre dies ein Bild vom falschen Aussehen
-    + 'if(window.__BCU_sperreFehler){window.__BCU_sperreFehler=0;'
-    +   'window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"SCREENSHOT_DATA",reqId:' + J + ',err:"SPERRE_FAIL: Sync-Sperre nicht möglich"},"' + TOOL_ORIGIN + '");return;}'
+// Wheel-Bild: EIN EXEC (wie der Profil-Screenshot), keine festen Wartezeiten.
+//   Sync-Sperre → AFK-Uhr zurück + stehend → Standard-Outfit als Basis → Wheel-Outfit drüber → neu zeichnen, bis das
+//   Bild sich nicht mehr ändert → Bild → Aussehen zurück → Sperre lösen. Beides ohne Schlösser ('bild') und ohne
+//   Server-Sync. serie=true: die Ausgangslage kommt aus window.__BCU_wheelOrig und Pose und Sync folgen am Ende der
+//   Serie (_wheelOrigZurueck); sonst aus dem aktuellen Aussehen, und die Pose kommt gleich zurück.
+// Antwort: SCREENSHOT_DATA mit reqId 'wss_…' (→ _handleWheelShotData)
+function _wheelShotCode(reqId, items, serie) {
+  const antwort = function(felder) {
+    return 'window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"SCREENSHOT_DATA",reqId:' + JSON.stringify(reqId)
+      + ',' + felder + '},"' + TOOL_ORIGIN + '");';
+  };
+  // Die Basis ohne ihr abschließendes Neuzeichnen: gezeichnet wird einmal, nach dem Wheel-Outfit
+  const ENDE = 'CharacterRefresh(Player,false,false);';
+  let basis = '';
+  if (CURSE_DEFAULT_OUTFIT_CODE) {
+    let kern = _buildApplyCode(CURSE_DEFAULT_OUTFIT_CODE, 'bild');
+    if (kern.endsWith(ENDE)) kern = kern.slice(0, -ENDE.length);
+    basis = '(function(){' + kern + '})();';
+  }
+  const poseZurueck = serie ? '' : _SHOT_POSE_ZURUECK;
+  const zurueck = 'Player.Appearance.splice(0,Player.Appearance.length);'
+    + 'origApp.forEach(function(i){Player.Appearance.push(i);});'
     + 'CharacterRefresh(Player,false,false);'
-    + 'CharacterLoadCanvas(Player);'
-    + 'setTimeout(function(){'
+    + poseZurueck
+    + _shotSperreAus('myGen');   // erst jetzt, wo das Aussehen wieder stimmt – ggf. mit einem frischen Sync
+  const applyPart = 'try{' + basis + '(function(){' + _mbsApplyKern(items, 'bild') + '})();}catch(applyErr){'
+    + zurueck + antwort('err:"APPLY_FAIL:"+applyErr.message') + 'return;}';
+
+  return '(function(){'
+    + 'window.__BCU_captureGen=(window.__BCU_captureGen||0)+1;'
+    + 'var myGen=window.__BCU_captureGen;'
+    // Sync-Sperre VOR jeder Änderung am Aussehen; gelöst erst nach dem Zurücksetzen (_restore)
+    + _shotSperreAn('myGen', _SHOT_SPERRE_MS, antwort('err:"SPERRE_FAIL: Sync-Sperre nicht möglich"') + 'return;')
+    + 'var _t0=performance.now();'
+    + _SHOT_VORBEREITEN
+    + 'var origApp=' + (serie ? '(window.__BCU_wheelOrig||Player.Appearance)' : 'Player.Appearance') + '.slice();'
+    + _shotApplyUmhuellen(applyPart)
+    + 'var _tA=performance.now()-_t0;'
+    // Erster Vergleichswert = das Bild direkt nach dem Anlegen; der Prüflauf zeichnet EINMAL neu, gleich → fertig
+    + 'var _prevHash=_canvasHash(Player.Canvas),_checksDone=0,_maxChecks=3;'
+    + 'function _restore(){' + zurueck + '}'
+    + 'function _canvasHash(canvas){'
+    + '  try{'
+    + '    var d=canvas.getContext("2d").getImageData(0,0,canvas.width,canvas.height).data;'
+    + '    var r=0,len=d.length/4,step=Math.max(1,Math.floor(len/200));'
+    + '    for(var i=0;i<len;i+=step){var ix=i*4;r=((r*31)|0)+d[ix]+d[ix+1]+d[ix+2];}'
+    + '    return r;'
+    + '  }catch(_e){return -1;}'
+    + '}'
+    + 'function _sendCapture(){'
+    + '  var _tC0=performance.now();'
     + '  try{'
     + '    var src=Player.Canvas;'
     + '    if(!src||!src.width)throw new Error("Canvas leer");'
     + '    var oc=document.createElement("canvas");oc.width=src.width;oc.height=src.height;'
     + '    oc.getContext("2d").drawImage(src,0,0);'
-    + '    var id=oc.getContext("2d").getImageData(0,0,oc.width,oc.height);'
-    + '    var px=id.data,W=oc.width,H=oc.height;'
+    + '    var px=oc.getContext("2d").getImageData(0,0,oc.width,oc.height).data,W=oc.width,H=oc.height;'
     + '    var x0=W,x1=0,y0=H,y1=0;'
     + '    for(var r=0;r<H;r++){for(var c=0;c<W;c++){'
     + '      var ii=(r*W+c)*4;'
-    + '      if(px[ii]>5||px[ii+1]>5||px[ii+2]>5){'
-    + '        if(c<x0)x0=c;if(c>x1)x1=c;if(r<y0)y0=r;if(r>y1)y1=r;'
-    + '      }'
+    + '      if(px[ii]>5||px[ii+1]>5||px[ii+2]>5){if(c<x0)x0=c;if(c>x1)x1=c;if(r<y0)y0=r;if(r>y1)y1=r;}'
     + '    }}'
     + '    if(x1<x0){x0=0;y0=0;x1=W-1;y1=H-1;}'
     + '    var pad=20;'
@@ -12278,11 +12552,21 @@ function _buildCanvasShotCode(reqId) {
     + '    var ctx2=cc.getContext("2d");'
     + '    ctx2.fillStyle="#000";ctx2.fillRect(0,0,cw,ch);'
     + '    ctx2.drawImage(oc,x0,y0,cw,ch,0,0,cw,ch);'
-    + '    window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"SCREENSHOT_DATA",reqId:' + J + ',data:cc.toDataURL("image/jpeg",0.88)},"' + TOOL_ORIGIN + '");'
+    + '    var _dat=cc.toDataURL("image/jpeg",0.88);'
+    + '    ' + antwort('data:_dat,t:{a:Math.round(_tA),r:Math.round(_tC0-_t0-_tA),c:Math.round(performance.now()-_tC0)}')
     + '  }catch(e){'
-    + '    window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"SCREENSHOT_DATA",reqId:' + J + ',err:e.message},"' + TOOL_ORIGIN + '");'
+    + '    ' + antwort('err:e.message')
+    + '  }finally{'
+    + '    _restore();'
     + '  }'
-    + '},250);'
+    + '}'
+    + 'function _renderCheck(){'
+    + '  CharacterRefresh(Player,false,false);'
+    + '  var h=_canvasHash(Player.Canvas);'
+    + '  if(h===_prevHash||_checksDone>=_maxChecks){_sendCapture();}'
+    + '  else{_prevHash=h;_checksDone++;setTimeout(_renderCheck,60);}'
+    + '}'
+    + 'setTimeout(_renderCheck,40);'
     + '})();';
 }
 
@@ -12294,8 +12578,11 @@ function _handleWheelShotData(data) {
     showStatus('❌ Screenshot: ' + (data.err || 'Keine Daten'), 'error');
     // Ohne Sync-Sperre wird nichts angelegt – dann die Serie beenden statt lauter falscher Bilder zu sammeln
     if (String(data.err || '').startsWith('SPERRE_FAIL') && _wheelGenRunning) mbsWheelGenerateStop();
+    _wheelGenWeiter(data.reqId);
     return;
   }
+  // Das nächste Outfit startet gleich; das Verkleinern und Speichern dieses Bildes läuft nebenher
+  _wheelGenWeiter(data.reqId);
   const imgEl = new Image();
   imgEl.onload = () => {
     const MAX_W = 260, MAX_H = 520;
@@ -12307,7 +12594,8 @@ function _handleWheelShotData(data) {
     canvas.getContext('2d').drawImage(imgEl, 0, 0, w, h);
     _mbsWheelShots[fp] = canvas.toDataURL('image/jpeg', 0.85);
     _saveMbsWheelShots();
-    if (_activeTab === 'lscg-wheel') _debouncedRenderMbsWheelTab();
+    // Nur die Karten mit diesem Bild austauschen – nicht den ganzen Tab (jedes Bild neu) nach jedem Foto
+    if (_activeTab === 'lscg-wheel' && !_wheelBildAktualisieren(fp)) _debouncedRenderMbsWheelTab();
     showStatus('✅ Wheel-Screenshot gespeichert', 'success');
   };
   imgEl.src = data.data;
@@ -12333,23 +12621,11 @@ function mbsWheelOpenShot(_unused, mn, oi) {
   document.getElementById('osLightbox').classList.add('open');
 }
 
-// Sync-Sperre für die Wheel-Serie. Scheitert sie, wird nichts angelegt und der nächste Foto-Schritt meldet es
-// (statt ein falsches Bild zu speichern).
-function _wheelSperreAn() {
-  return _shotSperreAn('"wheel"', _SHOT_SPERRE_MS,
-    'window.__BCU_sperreFehler=1;console.error("[BCU] Sync-Sperre nicht möglich – Outfit nicht angelegt");return;');
-}
-
-// Baut InventoryWear-Code aus MBS-Items (gleiche Methode wie Profil-Ausführung)
-// noSync = true: nur lokal anziehen (für Batch-Screenshots), kein ServerSync
-function _mbsBuildApplyCode(items, noSync) {
-  return '(function(){'
-    // Nur lokal anziehen (Serie): dein Aussehen darf währenddessen NIE zum Server. Die Sperre hält über die ganze Serie
-    // (jeder Schritt erneuert sie) und wird erst beim Zurückstellen des Aussehens gelöst (bcuUndoAppearance).
-    + (noSync ? _wheelSperreAn() : '')
-    + 'try{'
-    + 'var _items=' + JSON.stringify(items) + ';'
-    + _lockFilterPrelude(noSync ? 'bild' : true)
+// Der Anlegen-Kern für MBS-Items (gleiche Methode wie Profil-Ausführung). melden: true = echtes Anlegen
+// (Schloss-Regeln, Meldungen), 'bild' = Screenshot, jedes Schloss wird weggelassen. Kein Wrapper, kein Sync.
+function _mbsApplyKern(items, melden) {
+  return 'var _items=' + JSON.stringify(items) + ';'
+    + _lockFilterPrelude(melden)
     + '_items.forEach(function(it){'
     + '  try{'
     + '    var _a=AssetGet(Player.AssetFamily,it.group,it.asset);'
@@ -12369,12 +12645,19 @@ function _mbsBuildApplyCode(items, noSync) {
     + '    if(it.tr&&Object.keys(it.tr).length)_w.Property.TypeRecord=it.tr;'
     + '  }catch(_e){console.warn("[BCU-MBS]",it.asset,_e.message);}'
     + '});'
-    + 'CharacterRefresh(Player,false,false);'
-    + (noSync ? '' :
-      'setTimeout(function(){'
-      + '  if(typeof ServerPlayerAppearanceSync==="function")ServerPlayerAppearanceSync();'
-      + '  else ServerSend("AccountUpdate",{Appearance:Player.Appearance});'
-      + '},300);')
+    + 'CharacterRefresh(Player,false,false);';
+}
+
+// Baut InventoryWear-Code aus MBS-Items (Run-Button): legt an und synchronisiert danach.
+// Die Bilder (Serie und Einzelaufnahme) laufen über _wheelShotCode und syncen nie.
+function _mbsBuildApplyCode(items) {
+  return '(function(){'
+    + 'try{'
+    + _mbsApplyKern(items, true)
+    + 'setTimeout(function(){'
+    + '  if(typeof ServerPlayerAppearanceSync==="function")ServerPlayerAppearanceSync();'
+    + '  else ServerSend("AccountUpdate",{Appearance:Player.Appearance});'
+    + '},300);'
     + '}catch(e){console.error("[BCU-MBS]",e);}})();';
 }
 
@@ -12391,12 +12674,10 @@ function bcuUndoAppearance() {
   if (!_connected) { showStatus('❌ Nicht verbunden', 'error'); return; }
   bcSend({ type: 'EXEC', code: '(function(){try{'
     + 'var s=window.__BCU_UNDO;'
-    + 'if(!s||!s.length){console.warn("[BCU-Undo] Stack leer");' + _shotSperreAus('"wheel"') + 'return;}'
+    + 'if(!s||!s.length){console.warn("[BCU-Undo] Stack leer");return;}'
     + 'var b=s.pop();'
     + 'ServerAppearanceLoadFromBundle(Player,Player.AssetFamily,b);'
     + 'CharacterRefresh(Player,false,false);'
-    // Aussehen ist wieder da → Sync-Sperre der Wheel-Serie lösen; der Sync unten (und ggf. der frische) darf raus
-    + _shotSperreAus('"wheel"')
     + 'setTimeout(function(){'
     + '  if(typeof ServerPlayerAppearanceSync==="function")ServerPlayerAppearanceSync();'
     + '  else ServerSend("AccountUpdate",{Appearance:Player.Appearance});'
@@ -12599,6 +12880,7 @@ let _osLockFilter = '';
 let _osLockScanToken = 0;
 
 function _osVersionPasst(v, mk, idx) {
+  if (_osFavFilter && !_osOutfitFavs.has(_osOutfitFavKey(mk, v, idx))) return false;
   if (!_osLockFilter) return true;
   const pred = OS_LOCK_FILTER[_osLockFilter];
   if (!pred || !v || !v.code) return false;
@@ -12708,13 +12990,15 @@ function renderOutfitScanTab() {
     }
   }
 
-  // Schloss-Filter: nur Spieler mit mindestens einer passenden Version
-  if (_osLockFilter) {
+  // Schloss- und Favoriten-Filter: nur Spieler mit mindestens einer passenden Version
+  if (_osLockFilter || _osFavFilter) {
     members = members.filter(function(mk) {
       return LSCG_DB[mk].versions.some(function(v, i) { return _osVersionPasst(v, mk, i); });
     });
     if (!members.length) {
-      body.innerHTML = '<div class="os-empty">Keine Outfits mit diesem Schloss gefunden.</div>';
+      body.innerHTML = '<div class="os-empty">' + (_osFavFilter
+        ? 'Keine einzeln favorisierten Outfits' + (_osLockFilter ? ' mit diesem Schloss' : '') + '.<br>Der Stern auf einer Karte merkt nur dieses eine Outfit.'
+        : 'Keine Outfits mit diesem Schloss gefunden.') + '</div>';
       return;
     }
   }
@@ -12731,12 +13015,12 @@ function renderOutfitScanTab() {
   function _buildCardsHtml(mk, nurIdx) {
     const entry = LSCG_DB[mk];
     if (!entry || !Array.isArray(entry.versions)) return '';
-    const isFav = _osFavs.has(mk);
     const letter = escHtml(((entry.name ?? mk)[0] ?? '?').toUpperCase());
     return [...entry.versions].reverse().map(function(v, i) {
       const realIdx  = entry.versions.length - 1 - i;
       if (nurIdx != null && realIdx !== nurIdx) return '';
       if (!_osVersionPasst(v, mk, realIdx)) return '';
+      const isFav    = _osOutfitFavs.has(_osOutfitFavKey(mk, v, realIdx)); // nur DIESES Outfit
       const vNum     = entry.versions.length - i;
       const d        = new Date(v.ts);
       const ts       = d.toLocaleDateString('de-DE', { day:'2-digit', month:'2-digit', year:'2-digit' });
@@ -12784,7 +13068,7 @@ function renderOutfitScanTab() {
       return '<div class="os-card' + (isBroken ? ' os-card-broken' : '') + '" data-mk="' + escHtml(mk) + '" data-vidx="' + realIdx + '">'
         + '<div class="os-card-thumb" onclick="' + thumbClick + '">'
         + thumbContent + tagHtml
-        + '<button class="os-card-fav' + (isFav ? ' on' : '') + '" onclick="event.stopPropagation();toggleOsFav(\'' + mk + '\')">' + (isFav ? '⭐' : '☆') + '</button>'
+        + '<button class="os-card-fav' + (isFav ? ' on' : '') + '" title="Nur dieses Outfit als Favorit" onclick="event.stopPropagation();toggleOsOutfitFav(\'' + mk + '\',' + realIdx + ')">' + (isFav ? '⭐' : '☆') + '</button>'
         + delBtn + hintIcon
         + '</div>'
         + '<div class="os-card-name">v' + vNum + (i === 0 ? ' <span style="font-size:.6875rem;color:var(--green)">neu</span>' : '') + '</div>'
@@ -12793,7 +13077,7 @@ function renderOutfitScanTab() {
         + repairBtn
         + (!isBroken && hasCode ? '<button class="os-card-btn primary" onclick="osApplyOutfit(\'' + mk + '\',' + realIdx + ')">▶ Run</button>' : '')
         + (!isBroken && hasCode ? '<button class="os-card-btn" onclick="osCopyCode(\'' + mk + '\',' + realIdx + ')" title="Code in Zwischenablage">📋</button>' : '')
-        + '<button class="os-card-btn' + (isFav ? ' fav-on' : '') + '" onclick="toggleOsFav(\'' + mk + '\')">' + (isFav ? '⭐' : '☆') + '</button>'
+        + '<button class="os-card-btn os-card-favbtn' + (isFav ? ' fav-on' : '') + '" title="Nur dieses Outfit als Favorit" onclick="toggleOsOutfitFav(\'' + mk + '\',' + realIdx + ')">' + (isFav ? '⭐' : '☆') + '</button>'
         + (!isBroken && hasCode ? '<button class="os-card-btn" onclick="osSaveOutfitAsProfile(\'' + mk + '\',' + realIdx + ')" title="Als Profil speichern">💾</button>' : '')
         + '<button class="os-card-btn danger" onclick="deleteLscgVersion(\'' + mk + '\',' + realIdx + ')" title="Version löschen">🗑</button>'
         + '</div>'
@@ -12811,20 +13095,18 @@ function renderOutfitScanTab() {
 
     const nameHtml = escHtml(entry.name ?? mk)
       + (entry.nickname ? ' <span class="os-member-nick">„' + escHtml(entry.nickname) + '“</span>' : '');
-    // Mit Schloss-Filter: Treffer / alle Versionen
-    const vcnt = _osLockFilter
-      ? entry.versions.filter(function(v, i) { return _osVersionPasst(v, mk, i); }).length + '/' + entry.versions.length + 'x'
-      : entry.versions.length + 'x';
+    // Mit Schloss-/Favoriten-Filter: Treffer / alle Versionen
+    const vcnt = _osVcntText(mk);
 
     return '<div class="os-member-block open' + (isFav ? ' os-fav' : '') + '" id="osm_' + escHtml(mk) + '">'
       + '<div class="os-member-hdr" onclick="toggleOsMember(\'' + mk + '\')">'
       + '<span class="os-member-name">' + nameHtml + '</span>'
       + '<span class="os-member-num">#' + escHtml(mk) + '</span>'
       + '<span class="os-member-vcnt">' + vcnt + '</span>'
-      + '<button class="os-member-fav' + (isFav ? ' on' : '') + '" onclick="event.stopPropagation();toggleOsFav(\'' + mk + '\')">' + (isFav ? '⭐' : '☆') + '</button>'
+      + '<button class="os-member-fav' + (isFav ? ' on' : '') + '" title="Spieler oben anheften (alle Outfits)" onclick="event.stopPropagation();toggleOsFav(\'' + mk + '\')">' + (isFav ? '⭐' : '☆') + '</button>'
       + '<span class="os-member-chevron">▶</span>'
       + '</div>'
-      + '<div class="os-member-rows"><div class="os-strip"' + (lazy ? ' data-os-lazy="' + escHtml(mk) + '"' : '') + '>' + cards + '</div></div>'
+      + '<div class="os-member-rows"><div class="os-strip"'+ (lazy ? ' data-os-lazy="' + escHtml(mk) + '"' : '') + '>' + cards + '</div></div>'
       + '</div>';
   }
 

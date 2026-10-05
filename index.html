@@ -3698,71 +3698,7 @@ document.write('<scr'+'ipt src="bc-autobackup.js?_='+_cbv+'"><\/scr'+'ipt>');
 
   _loadTweaks();
 
-  function dtsResetDrone() {
-    const statusEl = document.getElementById('dtsResetStatus');
-    const btn = document.getElementById('dtsResetBtn');
-    try {
-      if (typeof Player === 'undefined') {
-        statusEl.textContent = '❌ Nicht mit BC verbunden';
-        return;
-      }
-      const dts = Player.ExtensionSettings['DTSbyZajucd'];
-      if (!dts) {
-        statusEl.textContent = '✅ Kein DTS-Status gefunden';
-        return;
-      }
-      const wasDrone = dts.isDrone;
-      // Reset drone status
-      dts.isDrone  = false;
-      dts.ownerId  = -1;
-      dts.isOwner  = false;
-      // Sync to server
-      ServerPlayerExtensionSettingsSync('DTSbyZajucd');
-      statusEl.textContent = wasDrone
-        ? '✅ Drone-Status entfernt — bitte BC neu laden'
-        : '✅ War bereits keine Drone';
-      btn.disabled = true;
-    } catch(e) {
-      statusEl.textContent = '❌ Fehler: ' + e.message;
-    }
-  }
-
-  function removeAllDOGSLocks() {
-    const statusEl = document.getElementById('dogsLockStatus');
-    const btn = document.getElementById('dogsLockRemoverBtn');
-    try {
-      if (typeof Player === 'undefined' || !Player.ExtensionSettings?.DOGS) {
-        statusEl.textContent = '❌ Nicht mit BC verbunden';
-        return;
-      }
-      const data = JSON.parse(LZString.decompressFromBase64(Player.ExtensionSettings.DOGS));
-      const itemGroups = data?.deviousPadlock?.itemGroups;
-      if (!itemGroups || Object.keys(itemGroups).length === 0) {
-        statusEl.textContent = '✅ Keine DOGS Locks gefunden';
-        return;
-      }
-      const groups = Object.keys(itemGroups);
-      groups.forEach(groupName => {
-        const item = InventoryGet(Player, groupName);
-        if (item?.Property) {
-          delete item.Property.LockedBy;
-          delete item.Property.LockMemberNumber;
-          delete item.Property.LockMemberName;
-          delete item.Property.Name;
-          item.Property.Effect = (item.Property.Effect || []).filter(e => e !== 'Lock');
-        }
-      });
-      data.deviousPadlock.itemGroups = {};
-      Player.ExtensionSettings.DOGS = LZString.compressToBase64(JSON.stringify(data));
-      ServerPlayerExtensionSettingsSync('DOGS');
-      CharacterRefresh(Player);
-      ServerPlayerAppearanceSync();
-      statusEl.textContent = `✅ ${groups.length} Lock(s) entfernt — bitte BC neu laden`;
-      btn.disabled = true;
-    } catch (e) {
-      statusEl.textContent = '❌ Fehler: ' + e.message;
-    }
-  }
+  // dtsResetDrone() und removeAllDOGSLocks() stehen in items.js (Gefahrenzone): sie laufen im BC-Tab, nicht hier im Tool-Fenster
 </script>
 
 <!-- ══ TAB: OUTFIT IMPORT ════════════════════════════════════════════ -->
@@ -3820,6 +3756,7 @@ document.write('<scr'+'ipt src="bc-autobackup.js?_='+_cbv+'"><\/scr'+'ipt>');
     <button class="btn btn-primary" onclick="scanOutfits()">▶ Scannen</button>
     <div class="search-wrap" data-icon="search"><input id="osSearchInput" class="os-search" type="text" placeholder="🔍 Name suchen…"
            oninput="osSearch(this.value)" value=""></div>
+    <button id="osFavFilterBtn" class="os-filter-btn" onclick="osToggleFavFilter()" title="Nur die einzeln mit dem Stern auf der Karte markierten Outfits zeigen">⭐ Favoriten</button>
     <select id="osLockFilter" class="os-filter-btn" onchange="osSetLockFilter(this.value)" title="Nur Outfits mit bestimmten Schlössern zeigen – zum Testen der Schloss-Regeln (Einstellungen → Werkzeuge)">
       <option value="">Schloss: alle Outfits</option>
       <option value="schloss">Mit Schloss (jede Art)</option>
@@ -4187,6 +4124,7 @@ document.write('<scr'+'ipt src="bc-autobackup.js?_='+_cbv+'"><\/scr'+'ipt>');
                  background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12);
                  color:var(--text2); transition:background .15s; }
 .os-filter-btn:hover { background:rgba(255,255,255,0.12); }
+.os-filter-btn.on { color:var(--yellow); border-color:rgba(251,191,36,0.4); background:rgba(251,191,36,0.12); }
 .os-ignore-panel { flex-direction:column; gap:8px; padding:10px 14px;
                    background:var(--bg3); border-bottom:1px solid var(--border); }
 .os-ignore-info  { font-size:.75rem; color:var(--text3); line-height:1.6; }
