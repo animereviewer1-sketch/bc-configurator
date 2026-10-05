@@ -229,7 +229,7 @@ describe('Darstellung', () => {
     merge(t, [res(5, voll)], T0, 'Raum A');
     merge(t, [res(5, { ...voll, beschreibung: 'Geändert' })], T0 + 60000, 'Raum B');
     const html = evalIn(t.ctx, `spielerDetailHtml(SPIELER_DB['5'], ${T0 + 120000})`);
-    for (const teil of ['Mitgliedsnummer', 'Kätzchen', 'SheHer', '15.1.2020', 'Hardcore', 'Stufe 3', 'Herrin #9', 'Schatz #7', 'Mods (1)', 'Geteilte Einstellungen', 'Crafts (1)', 'Gesehen in', 'Raum B', 'Beschreibung', 'Änderungen (1)', 'Rohdaten', 'Als Text kopieren'])
+    for (const teil of ['Mitgliedsnummer', 'Kätzchen', 'SheHer', '15.1.2020', 'Hardcore', 'Nur Besitzer, Lover und Whitelist', 'Halsband von Herrin (9)', 'Verheiratet mit Schatz (7)', 'Mods (1)', 'Geteilte Einstellungen', 'Crafts (1)', 'Gesehen in', 'Raum B', 'Beschreibung', 'Änderungen (1)', 'Rohdaten', 'Als Text kopieren'])
       expect(html).toContain(teil);
     const text = evalIn(t.ctx, `spielerDetailText(SPIELER_DB['5'], ${T0 + 120000})`);
     expect(text).toContain('Mia  #5');

@@ -2631,6 +2631,20 @@ window.CurseScanner = (() => {
 
   const _spKurz = function (w, max) { return typeof w === 'string' ? w.slice(0, max) : (typeof w === 'number' && isFinite(w) ? String(w) : null); };
 
+  // BC legt lange Beschreibungen komprimiert ab: Kennzeichen "╬" (U+256C) + LZString.compressToUTF16. Ein Charakter im Raum hat sie
+  // schon entpackt, ein gespeichertes Profil (WCE/FBC) nicht. Entpackt wird wie im Spiel; geht es nicht, bleibt der Text unverändert.
+  const SP_LZ_MAGIC = String.fromCharCode(9580);
+  const _spBeschreibung = function (text) {
+    if (typeof text !== 'string' || text.charAt(0) !== SP_LZ_MAGIC) return text;
+    try {
+      if (typeof LZString !== 'undefined' && LZString && typeof LZString.decompressFromUTF16 === 'function') {
+        const d = LZString.decompressFromUTF16(text.substring(1));
+        if (typeof d === 'string') return d;
+      }
+    } catch (e) {}
+    return text;
+  };
+
   // Ein Spieler: die wichtigsten Felder ausgeschrieben (stabil benannt, deutsch) + alles Übrige als "roh"
   // (ohneRoh: für die vielen Profile aus dem WCE/FBC-Speicher – dort genügen die ausgeschriebenen Felder)
   const _spProfil = function (C, ichNr, ohneRoh) {
@@ -2640,11 +2654,12 @@ window.CurseScanner = (() => {
       name: _spKurz(C.Name, 100),
       nickname: _spKurz(C.Nickname, 100),
       titel: _spKurz(C.Title, 100),
-      beschreibung: typeof C.Description === 'string' ? C.Description.slice(0, SP_STRING_MAX) : null,
+      beschreibung: typeof C.Description === 'string' ? _spBeschreibung(C.Description).slice(0, SP_STRING_MAX) : null,
       istIch: nr === ichNr,
       erstellt: typeof C.Creation === 'number' && isFinite(C.Creation) ? C.Creation : null,
       schwierigkeit: C.Difficulty && typeof C.Difficulty.Level === 'number' ? C.Difficulty.Level : null,
-      itemPermission: typeof C.ItemPermission === 'number' ? C.ItemPermission : null,
+      // Seit einer neueren Spielversion heißt das Feld AllowedInteractions (früher ItemPermission)
+      itemPermission: typeof C.AllowedInteractions === 'number' ? C.AllowedInteractions : (typeof C.ItemPermission === 'number' ? C.ItemPermission : null),
       spielVersion: C.OnlineSharedSettings && typeof C.OnlineSharedSettings === 'object' ? _spKurz(C.OnlineSharedSettings.GameVersion, 40) : null,
       geteilt: [],
       besitzer: null,
@@ -2918,6 +2933,9 @@ window.CurseScanner = (() => {
       if (!img) throw new Error('Der Zeichenpuffer ist leer');
       return { img: img, stabil: stabil };
     } finally {
+      // Wieder aus der Charakterliste nehmen: bevorzugt mit der Funktion des Spiels (räumt auch Animationen und Zwischenspeicher auf),
+      // sonst direkt aus der Liste
+      try { if (C && typeof CharacterDelete === 'function') CharacterDelete(C); } catch (e) {}
       try { const i = C ? Character.indexOf(C) : -1; if (i >= 0) Character.splice(i, 1); } catch (e) {}
     }
   };

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { IDBFactory, IDBKeyRange } from 'fake-indexeddb';
+import LZString from 'lz-string';
 import { makeLoaderSandbox, LOADER_TOOL_ORIGIN } from './helpers/loaderSandbox.js';
 
 // Spielerprofile (Loader im Spiel-Tab), Teil 2: der Profil-Speicher von WCE/FBC ("/profiles", Datenbank "bce-past-profiles") wird
@@ -65,7 +66,7 @@ function boot({ factory = new IDBFactory(), chars = [], character = [], mitChara
   const geladen = [];
   const globals = {
     ServerSocket: { on() {}, off() {}, emit() {} }, Player, ChatRoomCharacter: chars, ChatRoomData: { Name: 'Testraum' },
-    GameVersion: 'R132', indexedDB: factory, IDBKeyRange, Character: character,
+    GameVersion: 'R132', indexedDB: factory, IDBKeyRange, Character: character, LZString,
     setInterval: () => 0, clearInterval() {},
     ...extra,
   };
@@ -208,6 +209,50 @@ describe('Spielerprofile (Loader): WCE/FBC-Profilspeicher lesen', () => {
   });
 });
 
+describe('Spielerprofile (Loader): Beschreibung und erlaubte Interaktionen', () => {
+  const MAGIC = String.fromCharCode(9580);
+  const LANG = 'Hallo, willkommen in meiner Beschreibung!\n' + '-'.repeat(60) + '\nBackstory: ' + 'Schnee '.repeat(40) + ' https://i.imgur.com/abc.png';
+
+  it('eine komprimierte Beschreibung ("╬" + LZString) aus dem WCE/FBC-Speicher wird entpackt', async () => {
+    const factory = new IDBFactory();
+    await wceDatenbank(factory, [zeile(5, 10, {}, bundle(5, { Description: MAGIC + LZString.compressToUTF16(LANG) }))]);
+    const t = boot({ factory });
+    const r = alleErgebnisse(await frageCache(t, 0)).find((x) => x.nr === 5);
+    expect(r.beschreibung).toBe(LANG);
+  });
+
+  it('ein Spieler im Raum: komprimiert oder schon entpackt – beides ergibt den lesbaren Text', () => {
+    const t = boot({ chars: [{ MemberNumber: 5, Name: 'A', Appearance: [], Description: MAGIC + LZString.compressToUTF16(LANG) }, { MemberNumber: 6, Name: 'B', Appearance: [], Description: 'schon lesbar' }] });
+    t.sb.posts.length = 0;
+    t.sb.send({ type: 'GET_SPIELER_PROFILE', reqId: 'r' });
+    const a = t.sb.posts.find((p) => p.msg.type === 'SPIELER_PROFILE_DATA').msg;
+    expect(a.results.find((r) => r.nr === 5).beschreibung).toBe(LANG);
+    expect(a.results.find((r) => r.nr === 6).beschreibung).toBe('schon lesbar');
+  });
+
+  it('lässt sich nichts entpacken (kein LZString), bleibt der Text unverändert', async () => {
+    const t = boot({ chars: [{ MemberNumber: 5, Name: 'A', Appearance: [], Description: MAGIC + 'abc' }], extra: { LZString: undefined } });
+    t.sb.posts.length = 0;
+    t.sb.send({ type: 'GET_SPIELER_PROFILE', reqId: 'r' });
+    expect(t.sb.posts.find((p) => p.msg.type === 'SPIELER_PROFILE_DATA').msg.results.find((r) => r.nr === 5).beschreibung).toBe(MAGIC + 'abc');
+  });
+
+  it('"Erlaubte Interaktionen": das Feld heißt in neueren Spielversionen AllowedInteractions (früher ItemPermission)', async () => {
+    const t = boot({ chars: [{ MemberNumber: 5, Name: 'A', Appearance: [], AllowedInteractions: 1 }, { MemberNumber: 6, Name: 'B', Appearance: [], ItemPermission: 3 }, { MemberNumber: 7, Name: 'C', Appearance: [] }] });
+    t.sb.posts.length = 0;
+    t.sb.send({ type: 'GET_SPIELER_PROFILE', reqId: 'r' });
+    const a = t.sb.posts.find((p) => p.msg.type === 'SPIELER_PROFILE_DATA').msg;
+    expect(a.results.find((r) => r.nr === 5).itemPermission).toBe(1);
+    expect(a.results.find((r) => r.nr === 6).itemPermission).toBe(3);
+    expect(a.results.find((r) => r.nr === 7).itemPermission).toBeNull();
+    // auch im gespeicherten Profil
+    const factory = new IDBFactory();
+    await wceDatenbank(factory, [zeile(8, 10, {}, bundle(8, { AllowedInteractions: 0 }))]);
+    const t2 = boot({ factory });
+    expect(alleErgebnisse(await frageCache(t2, 0)).find((x) => x.nr === 8).itemPermission).toBe(0);
+  });
+});
+
 describe('Spielerprofile (Loader): Bilder im Raum (GET_SPIELER_PROFILE mit "fehlt")', () => {
   const spieler = (nr) => ({ MemberNumber: nr, Name: 'Name' + nr, Appearance: [], Canvas: leinwand() });
 
@@ -280,6 +325,19 @@ describe('Spielerprofile (Loader): GET_SPIELER_BILDER', () => {
     expect(t.geladen[0].data.MemberNumber).toBe(42);
     expect(t.geladen[0].nr).toBe(42);
     expect(character).toEqual([echteFigur]);                  // aufgeräumt
+  });
+
+  it('zum Aufräumen wird bevorzugt CharacterDelete des Spiels benutzt', async () => {
+    const factory = new IDBFactory();
+    await wceDatenbank(factory, [zeile(42, 10)]);
+    const character = [];
+    const geloescht = [];
+    const t = boot({ factory, character, mitCharacterLoadOnline: (data, nr) => ({ MemberNumber: nr, Canvas: leinwand() }),
+      extra: { CharacterDelete: (C) => { geloescht.push(C.MemberNumber); const i = character.indexOf(C); if (i >= 0) character.splice(i, 1); } } });
+    const a = await bilder(t, [42]);
+    expect(a.msg.bilder).toHaveLength(1);
+    expect(geloescht).toEqual([42]);
+    expect(character).toEqual([]);
   });
 
   it('wirft das Zeichnen einen Fehler, wird auch dann aufgeräumt, und der Fehler wird gemeldet', async () => {

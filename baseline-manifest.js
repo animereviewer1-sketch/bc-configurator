@@ -11,8 +11,8 @@ const BASELINE_MANIFEST = {
   ],
   "identifierPattern": "\\b(Inventory|Character|ChatRoom|Server|Asset|Player|Dialog|Common|Item|Lock|Wardrobe|Pose|Skill|Reputation|Online|Chat)[A-Z]\\w+",
   "counts": {
-    "identifiers": 102,
-    "function": 27,
+    "identifiers": 103,
+    "function": 28,
     "assetGroup": 34,
     "unknown": 41
   },
@@ -80,6 +80,13 @@ const BASELINE_MANIFEST = {
       "kind": "function",
       "files": [
         "items.js"
+      ]
+    },
+    {
+      "name": "CharacterDelete",
+      "kind": "function",
+      "files": [
+        "loader.js"
       ]
     },
     {

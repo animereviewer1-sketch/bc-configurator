@@ -43,6 +43,15 @@ const SP_FELD_NAMEN = {
   itemPermission: 'Item-Berechtigung', besitzer: 'Besitzer', lover: 'Lover',
 };
 const SP_SCHWIERIGKEIT = ['Roleplay', 'Normal', 'Hardcore', 'Extrem'];
+// "Erlaubte Interaktionen" (BC: AllowedInteractions 0–5) und Beziehungsstufen (Lovership.Stage 0–2, Ownership.Stage 0 = Probezeit, 1 = Halsband)
+const SP_ERLAUBT = ['Alle, keine Ausnahmen', 'Alle außer Blacklist', 'Besitzer, Lover, Whitelist und Dominante', 'Nur Besitzer, Lover und Whitelist', 'Nur Besitzer und Lover', 'Nur Besitzer'];
+const SP_LOVER_STUFE = ['Dating', 'Verlobt mit', 'Verheiratet mit'];
+// Bilder in Beschreibungen werden nur von diesen Hosts sofort geladen (wie in WCE/FBC); bei allen anderen erst nach Klick – ein Bild von einem
+// fremden Server verrät diesem deine Adresse.
+const SP_BILD_HOSTS = ['cdn.discordapp.com', 'media.discordapp.com', 'i.imgur.com', 'tenor.com', 'c.tenor.com', 'media.tenor.com', 'i.redd.it', 'puu.sh', 'fs.kinkop.eu',
+  'bondageprojects.elementfx.com', 'www.bondageprojects.elementfx.com', 'bondage-europe.com', 'www.bondage-europe.com', 'bondage-asia.com', 'www.bondage-asia.com',
+  'bondageprojects.com', 'www.bondageprojects.com'];
+const SP_LZ_MAGIC = String.fromCharCode(9580);   // "╬": BC legt lange Beschreibungen komprimiert ab (╬ + LZString.compressToUTF16)
 const SP_BILD_PRAEFIX = 'BC_SPIELERBILD_v1:';        // ein Schlüssel je Bild in der Datenbank (so landen sie im Gesamt-Backup)
 const SP_CACHE_META_KEY = 'BC_SPIELERCACHE_META_v1';  // { seit, ts, n }: bis wohin der WCE/FBC-Speicher schon eingelesen ist
 const SP_BILD_STAPEL = 6;                             // so viele Bilder je Anfrage an den Spiel-Tab
@@ -68,6 +77,79 @@ function spielerModName(roh) {
 }
 function spielerModSchluessel(roh) { return spielerModName(roh).toLowerCase(); }
 
+// Beschreibung entpacken wie das Spiel. Geht es nicht, bleibt der Text unverändert (es geht nichts verloren).
+function spielerBeschreibung(text) {
+  if (typeof text !== 'string' || text.charAt(0) !== SP_LZ_MAGIC) return text;
+  try {
+    if (typeof LZString !== 'undefined' && LZString && typeof LZString.decompressFromUTF16 === 'function') {
+      const d = LZString.decompressFromUTF16(text.substring(1));
+      if (typeof d === 'string') return d;
+    }
+  } catch (e) {}
+  return text;
+}
+
+// Gespeicherte Profile von früher können die Beschreibung noch komprimiert enthalten ("╬居…"): entpacken – in der Beschreibung, im Verlauf
+// und in den Rohdaten. Verlustfrei (der Text ist derselbe, nur lesbar). true = es wurde etwas geändert.
+function spielerRecReparieren(rec) {
+  if (!rec || typeof rec !== 'object') return false;
+  let geaendert = false;
+  const neu = spielerBeschreibung(rec.beschreibung);
+  if (neu !== rec.beschreibung) { rec.beschreibung = neu; geaendert = true; }
+  for (const v of (Array.isArray(rec.verlauf) ? rec.verlauf : [])) {
+    if (!v || v.feld !== 'beschreibung') continue;
+    const a = spielerBeschreibung(v.alt), n = spielerBeschreibung(v.neu);
+    if (a !== v.alt) { v.alt = a; geaendert = true; }
+    if (n !== v.neu) { v.neu = n; geaendert = true; }
+  }
+  if (rec.roh && typeof rec.roh === 'object') {
+    const d = spielerBeschreibung(rec.roh.Description);
+    if (d !== rec.roh.Description) { rec.roh.Description = d; geaendert = true; }
+  }
+  return geaendert;
+}
+function spielerDbReparieren(db) {
+  let n = 0;
+  for (const k of Object.keys(db || {})) if (spielerRecReparieren(db[k])) n++;
+  return n;
+}
+
+// Dauer wie im Charakterblatt des Spiels: "3 Jahre, 9 Monate, 29 Tage"
+function spielerDauer(von, bis) {
+  if (!von || !(bis >= von)) return '';
+  const a = new Date(von), b = new Date(bis);
+  let j = b.getFullYear() - a.getFullYear(), m = b.getMonth() - a.getMonth(), t = b.getDate() - a.getDate();
+  if (t < 0) { m--; t += new Date(b.getFullYear(), b.getMonth(), 0).getDate(); }
+  if (m < 0) { j--; m += 12; }
+  const teile = [];
+  if (j) teile.push(j + (j === 1 ? ' Jahr' : ' Jahre'));
+  if (m) teile.push(m + (m === 1 ? ' Monat' : ' Monate'));
+  if (t || !teile.length) teile.push(t + (t === 1 ? ' Tag' : ' Tage'));
+  return teile.join(', ');
+}
+
+// Beschreibung als HTML: Zeilenumbrüche bleiben (die Anzeige bricht um), Links sind klickbar (neuer Tab, ohne Herkunftsangabe), Bild-Adressen
+// (.png/.jpg/.jpeg/.webp/.gif) erscheinen als Bild – sofort nur von den bekannten Hosts, sonst erst nach Klick auf „laden“.
+// Alles Übrige wird als Text maskiert.
+function spielerBeschreibungHtml(text) {
+  if (typeof text !== 'string' || !text) return '';
+  return text.split(/(\s+)/).map(function (teil) {
+    if (!teil || /^\s+$/.test(teil)) return escHtml(teil);
+    const m = /^([("'<\[]*)(https?:\/\/\S+?)([)"'>\].,;:!?]*)$/i.exec(teil);
+    let url = null;
+    if (m) { try { const u = new URL(m[2]); if (u.protocol === 'http:' || u.protocol === 'https:') url = u; } catch (e) {} }
+    if (!url) return escHtml(teil);
+    const link = '<a href="' + escHtml(url.href) + '" target="_blank" rel="noopener noreferrer" title="' + escHtml(url.href) + '">';
+    if (/\/[^/]+\.(png|jpe?g|webp|gif)$/i.test(url.pathname)) {
+      if (SP_BILD_HOSTS.indexOf(url.host) >= 0) {
+        return escHtml(m[1]) + link + '<img class="sp-beschr-bild" src="' + escHtml(url.href) + '" alt="" loading="lazy" referrerpolicy="no-referrer"></a>' + escHtml(m[3]);
+      }
+      return escHtml(m[1]) + link + escHtml(m[2]) + '</a> <button class="btn sp-bild-laden" data-url="' + escHtml(url.href) + '" onclick="spBeschrBildLaden(this)" title="Lädt das Bild von ' + escHtml(url.host) + ' – dieser Server sieht dann deine Adresse">🖼 laden</button>' + escHtml(m[3]);
+    }
+    return escHtml(m[1]) + link + escHtml(m[2]) + '</a>' + escHtml(m[3]);
+  }).join('');
+}
+
 function spielerNeu(nr, ts) {
   return { nr: nr, erstmals: ts, zuletzt: 0, begegnungen: 0, mods: {}, raeume: {}, verlauf: [] };
 }
@@ -85,8 +167,10 @@ function spielerFeldText(feld, quelle) {
 // Einen Scan (Antwort des Loaders) in die Datenbank einarbeiten. Ergänzt nur; löscht und überschreibt nichts, was nicht neu geliefert wurde.
 function spielerMerge(db, results, ts, raum, spielVersion) {
   let neu = 0, geaendert = 0;
-  for (const r of (results || [])) {
-    if (!r || !Number.isInteger(r.nr)) continue;
+  for (const r0 of (results || [])) {
+    if (!r0 || !Number.isInteger(r0.nr)) continue;
+    // Eine noch komprimierte Beschreibung ("╬…") wird zuerst entpackt – sonst stünde Zeichenmüll im Profil und im Verlauf
+    const r = typeof r0.beschreibung === 'string' && r0.beschreibung.charAt(0) === SP_LZ_MAGIC ? Object.assign({}, r0, { beschreibung: spielerBeschreibung(r0.beschreibung) }) : r0;
     const key = String(r.nr);
     const war = !!db[key];
     const rec = db[key] || (db[key] = spielerNeu(r.nr, ts));
@@ -145,8 +229,9 @@ function spielerMerge(db, results, ts, raum, spielVersion) {
 // ergänzt. Nichts wird gelöscht, nichts Neueres überschrieben. Notizen: die neuere Fassung gilt, die ältere bleibt im Verlauf.
 function spielerCacheMerge(db, results) {
   let neu = 0, aktualisiert = 0, maxSeen = 0;
-  for (const r of (results || [])) {
-    if (!r || !Number.isInteger(r.nr)) continue;
+  for (const r0 of (results || [])) {
+    if (!r0 || !Number.isInteger(r0.nr)) continue;
+    const r = typeof r0.beschreibung === 'string' && r0.beschreibung.charAt(0) === SP_LZ_MAGIC ? Object.assign({}, r0, { beschreibung: spielerBeschreibung(r0.beschreibung) }) : r0;
     const gesehen = typeof r.gesehen === 'number' && isFinite(r.gesehen) && r.gesehen > 0 ? r.gesehen : 0;
     if (gesehen > maxSeen) maxSeen = gesehen;
     const key = String(r.nr);
@@ -230,9 +315,11 @@ function spielerDbEinmischen(ziel, quelle) {
     const q = quelle[k];
     if (!q || typeof q !== 'object') continue;
     if (!ziel[k]) { ziel[k] = q; n++; } else spielerRecMerge(ziel[k], q);
+    if (spielerRecReparieren(ziel[k])) _spRepariert++;
   }
   return n;
 }
+let _spRepariert = 0;   // so viele gespeicherte Profile wurden beim Laden entpackt (danach einmal neu speichern)
 
 // Durchsuchbarer Text eines Spielers (klein) – je Eintrag zwischengespeichert, solange er sich nicht ändert
 function spielerText(rec) {
@@ -307,6 +394,17 @@ function _spVor(ts, jetzt) {
   if (s < 86400 * 730) return 'vor ' + Math.floor(s / 86400 / 30) + ' Monaten';
   return 'vor ' + Math.floor(s / 86400 / 365) + ' Jahren';
 }
+// Besitzer wie im Charakterblatt: "Halsband von Herrin (9) seit 5.3.2024 (1 Jahr, 7 Monate)" / "Probezeit bei …" / "keiner"
+function _spBesitzerText(r, jetzt) {
+  const b = r.besitzer;
+  if (!b) return b === null ? 'keiner' : '–';
+  return (b.stufe >= 1 ? 'Halsband von ' : 'Probezeit bei ') + (b.name || '?') + (b.nr != null ? ' (' + b.nr + ')' : '')
+    + (b.seit ? ' · seit ' + _spDatum(b.seit) + ' (' + spielerDauer(b.seit, jetzt || Date.now()) + ')' : '');
+}
+function _spLoverText(l, jetzt) {
+  return (SP_LOVER_STUFE[l.stufe == null ? 0 : l.stufe] || 'Lover') + ' ' + (l.name || '?') + (l.nr != null ? ' (' + l.nr + ')' : '')
+    + (l.seit ? ' · seit ' + _spDatum(l.seit) + ' (' + spielerDauer(l.seit, jetzt || Date.now()) + ')' : '');
+}
 function _spAnzeigeName(r) { return r.nickname && r.nickname !== r.name ? r.nickname + ' (' + (r.name || '?') + ')' : (r.name || '?'); }
 
 // Alles zu einem Spieler als lesbarer Text (zum Kopieren)
@@ -318,11 +416,11 @@ function spielerDetailText(r, jetzt) {
   z.push('Zuerst gesehen: ' + _spDatumZeit(r.erstmals) + ' · Begegnungen: ' + (r.begegnungen || 0));
   if (r.titel) z.push('Titel: ' + r.titel);
   if (r.pronomen) z.push('Pronomen: ' + r.pronomen);
-  if (r.erstellt) z.push('Konto erstellt: ' + _spDatum(r.erstellt) + ' (' + _spVor(r.erstellt, jetzt) + ')');
+  if (r.erstellt) z.push('Mitglied seit: ' + _spDatum(r.erstellt) + ' (' + spielerDauer(r.erstellt, jetzt) + ')');
   if (r.schwierigkeit != null) z.push('Schwierigkeit: ' + (SP_SCHWIERIGKEIT[r.schwierigkeit] || r.schwierigkeit));
-  if (r.itemPermission != null) z.push('Item-Berechtigung: Stufe ' + r.itemPermission);
-  if (r.besitzer) z.push('Besitzer: ' + (r.besitzer.name || '?') + (r.besitzer.nr != null ? ' #' + r.besitzer.nr : '') + (r.besitzer.seit ? ' seit ' + _spDatum(r.besitzer.seit) : ''));
-  (r.lover || []).forEach(function (l) { z.push('Lover: ' + (l.name || '?') + (l.nr != null ? ' #' + l.nr : '') + (l.seit ? ' seit ' + _spDatum(l.seit) : '')); });
+  if (r.itemPermission != null) z.push('Erlaubte Interaktionen: ' + (SP_ERLAUBT[r.itemPermission] || 'Stufe ' + r.itemPermission));
+  z.push('Besitzer: ' + _spBesitzerText(r, jetzt));
+  (r.lover || []).forEach(function (l) { z.push(_spLoverText(l, jetzt)); });
   const mods = Object.values(r.mods || {});
   if (mods.length) z.push('Mods: ' + mods.map(function (m) { return m.name + (m.version ? ' ' + m.version : ''); }).join(', '));
   if (r.spielVersion) z.push('Spielversion: ' + r.spielVersion);
@@ -366,6 +464,7 @@ idbGet(SPIELERPROFILE_KEY).then(function (d) {
   try { if (d && typeof d === 'object') spielerDbEinmischen(SPIELER_DB, d); }
   finally {
     _spLoaded = true;
+    if (_spRepariert) { _spRepariert = 0; _spSavePending = true; }   // entpackte Beschreibungen gleich mit speichern
     if (typeof _ladeMarke === 'function') _ladeMarke('Spielerprofile geladen');
     if (_spSavePending) { _spSavePending = false; spielerSpeichern(500); }
     if (typeof _activeTab !== 'undefined' && _activeTab === 'spielerprofile') renderSpielerProfileTab();
@@ -591,6 +690,7 @@ function _spBilderKandidaten() {
 
 function spBilderAusCache() {
   if (_spBilderLaeuft) { _spBilderStop = true; _spStatus('⏹ Wird nach dem laufenden Stapel angehalten…'); _spKnopfAktualisieren(); return; }
+  _spAutoGesperrt = false;
   if (typeof _connected !== 'undefined' && !_connected) { showStatus('❌ Nicht verbunden mit BC', 'error'); return; }
   if (typeof _gameOk === 'function' && !_gameOk(false)) { showStatus('❌ ' + _gameWaitReason(false) + ' – Bilder nicht gestartet', 'error'); return; }
   const nrn = _spBilderKandidaten();
@@ -603,6 +703,7 @@ function spBilderAusCache() {
     + 'Dafür legt das Tool im Spiel-Tab kurz einen unsichtbaren Charakter aus dem gespeicherten WCE/FBC-Profil an, zeichnet ihn und nimmt ihn wieder heraus. '
     + 'Es wird nichts gesendet, andere Spieler sehen davon nichts, und bestehende Bilder bleiben unverändert.\n\n'
     + 'Dauer: ca. ' + Math.max(1, Math.ceil(nrn.length * 0.5 / 60)) + ' Min. – das Spiel bleibt dabei benutzbar. Starten?')) return;
+  _spBilderAuto = false;
   _spBilderStarten(nrn);
 }
 
@@ -618,6 +719,7 @@ function _spBilderStarten(nrn) {
 function _spBilderWeiter() {
   if (!_spBilderLaeuft || _spBilderPaused) return;
   if (_spBilderStop || !_spBilderQueue.length) { _spBilderEnde(); return; }
+  if (_spBilderAuto && typeof _activeTab !== 'undefined' && _activeTab !== 'spielerprofile') { _spBilderEnde(); return; }   // Tab verlassen: Automatik hört auf
   if (typeof _dcHalt === 'function' && _dcHalt('spielerBilder')) return;
   const stapel = _spBilderQueue.splice(0, SP_BILD_STAPEL);
   const id = 'spb_' + Date.now();
@@ -667,7 +769,7 @@ onBridgeMessage('SPIELER_BILDER_DATA', function (ev) {
     // Scheitert alles, mehrmals hintereinander, hat es keinen Sinn weiterzumachen
     if (!bilder.length && fehler.length) _spBilderStat.ganzFehl++; else _spBilderStat.ganzFehl = 0;
     _spRenderSpaeter();
-    if (_spBilderStat.ganzFehl >= 2) { _spBilderStop = true; showStatus('⚠️ Spielerbilder abgebrochen: ' + (_spBilderStat.letzterGrund || 'alle Versuche schlagen fehl'), 'error'); }
+    if (_spBilderStat.ganzFehl >= 2) { _spBilderStop = true; _spAutoGesperrt = true; showStatus('⚠️ Spielerbilder abgebrochen: ' + (_spBilderStat.letzterGrund || 'alle Versuche schlagen fehl'), 'error'); }
     setTimeout(_spBilderWeiter, 150);
   })();
 });
@@ -676,11 +778,14 @@ function _spBilderEnde() {
   const s = _spBilderStat;
   _spBilderLaeuft = false; _spBilderPaused = false;
   clearTimeout(_spBilderWarte); _spBilderReq = null;
-  const rest = _spBilderQueue.length; _spBilderQueue = [];
+  const rest = _spBilderQueue.length;
+  if (_spBilderAuto) _spBilderQueue.forEach(function (n) { _spAutoVersucht.delete(n); });   // nicht mehr drangekommen: beim nächsten Mal wieder
+  _spBilderQueue = [];
   _spKnopfAktualisieren();
   const text = '🖼 Spielerbilder: ' + s.ok + ' erstellt' + (s.fehler ? ', ' + s.fehler + ' ohne Erfolg' + (s.letzterGrund ? ' (' + s.letzterGrund + ')' : '') : '') + (rest ? ' · ' + rest + ' übrig' : '');
   _spStatus(text, s.fehler && !s.ok ? 'var(--red, #f87171)' : 'var(--accent-text)');
-  showStatus(text, s.ok ? 'success' : 'info');
+  if (!_spBilderAuto || (s.fehler && !s.ok)) showStatus(text, s.ok ? 'success' : 'info');   // automatische Durchgänge melden sich nur bei Problemen
+  _spBilderAuto = false;
   if (typeof _activeTab !== 'undefined' && _activeTab === 'spielerprofile') renderSpielerProfileTab();
 }
 
@@ -704,6 +809,50 @@ if (typeof _dcRegisterJob === 'function') {
   _dcRegisterJob('spielerBilder', { label: 'Spielerbilder', active: function () { return _spBilderLaeuft; }, pause: _spBilderPause, resume: _spBilderResume });
 }
 
+// ── Automatisch für die gezeigten Karten ──
+// Ist der Tab offen, bekommen die Spieler der gezeigten Seite, die einen gespeicherten WCE/FBC-Eintrag, aber noch kein Bild haben, von selbst eins
+// (Stapel wie oben, jeder Spieler höchstens einmal je Sitzung). Verlässt du den Tab, hört es auf; scheitert alles, bleibt es aus, bis du
+// „Bilder erzeugen“ drückst. Abschaltbar im Tab.
+let _spAutoAn = true;
+try { if (localStorage.getItem('BC_SPIELERPROFILE_AUTOBILD_v1') === '0') _spAutoAn = false; } catch (e) {}
+let _spAutoGesperrt = false;       // ein systematischer Fehler: nicht von selbst erneut versuchen
+let _spBilderAuto = false;         // der laufende Durchgang wurde automatisch gestartet
+const _spAutoVersucht = new Set();
+
+function spAutoBilderSetzen(an) {
+  _spAutoAn = !!an;
+  try { localStorage.setItem('BC_SPIELERPROFILE_AUTOBILD_v1', _spAutoAn ? '1' : '0'); } catch (e) {}
+  if (_spAutoAn) { _spAutoGesperrt = false; renderSpielerProfileTab(); }
+}
+
+function _spAutoBilder(gezeigt) {
+  if (!_spAutoAn || _spAutoGesperrt || _spBilderLaeuft) return;
+  if (typeof _activeTab === 'undefined' || _activeTab !== 'spielerprofile') return;
+  if (typeof _connected !== 'undefined' && !_connected) return;
+  if (typeof _gameOk === 'function' && !_gameOk(false)) return;
+  const nrn = gezeigt.filter(function (r) { return r && !r.bild && !r.bildFehler && r.inCache && !_spImRaum.has(String(r.nr)) && !_spAutoVersucht.has(r.nr); })
+    .slice(0, 60).map(function (r) { return r.nr; });
+  if (!nrn.length) return;
+  nrn.forEach(function (n) { _spAutoVersucht.add(n); });
+  _spBilderAuto = true;
+  _spBilderStarten(nrn);
+}
+
+// Ein Bild aus einer Beschreibung von einem nicht bekannten Host laden (nur nach Klick)
+function spBeschrBildLaden(knopf) {
+  try {
+    const url = new URL(knopf.dataset.url);
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return;
+    const img = document.createElement('img');
+    img.className = 'sp-beschr-bild';
+    img.referrerPolicy = 'no-referrer';
+    img.loading = 'lazy';
+    img.alt = '';
+    img.src = url.href;
+    knopf.replaceWith(img);
+  } catch (e) {}
+}
+
 // ── Einzelne Spieler ──
 // Bild für einen Spieler: im Raum aus seinem Zeichenpuffer, sonst aus dem gespeicherten WCE/FBC-Profil.
 // ersetzen: ein vorhandenes Bild durch ein neues ersetzen (nur auf ausdrücklichen Wunsch, mit Rückfrage).
@@ -722,6 +871,7 @@ function spBildErzeugen(nr, ersetzen) {
     showStatus('ℹ️ ' + _spAnzeigeName(rec) + ' ist nicht im Raum und nicht im WCE/FBC-Speicher – kein Bild möglich', 'info');
     return;
   }
+  _spBilderAuto = false;
   _spBilderStarten([nr]);
 }
 
@@ -787,11 +937,11 @@ function spielerDetailHtml(r, jetzt) {
     + _spZeile('Spitzname', escHtml(r.nickname || ''))
     + _spZeile('Titel', escHtml(r.titel || ''))
     + _spZeile('Pronomen', escHtml(r.pronomen || ''))
-    + _spZeile('Konto erstellt', r.erstellt ? escHtml(_spDatum(r.erstellt) + ' (' + _spVor(r.erstellt, jetzt) + ')') : '')
+    + _spZeile('Mitglied seit', r.erstellt ? escHtml(_spDatum(r.erstellt) + ' (' + spielerDauer(r.erstellt, jetzt) + ')') : '')
     + _spZeile('Schwierigkeit', r.schwierigkeit != null ? escHtml(String(SP_SCHWIERIGKEIT[r.schwierigkeit] || r.schwierigkeit)) : '')
-    + _spZeile('Item-Berechtigung', r.itemPermission != null ? 'Stufe ' + r.itemPermission : '')
-    + _spZeile('Besitzer', r.besitzer ? escHtml((r.besitzer.name || '?') + (r.besitzer.nr != null ? ' #' + r.besitzer.nr : '') + (r.besitzer.seit ? ' · seit ' + _spDatum(r.besitzer.seit) : '')) : '')
-    + _spZeile('Lover', (r.lover || []).length ? (r.lover || []).map(function (l) { return escHtml((l.name || '?') + (l.nr != null ? ' #' + l.nr : '') + (l.seit ? ' · seit ' + _spDatum(l.seit) : '')); }).join('<br>') : '')
+    + _spZeile('Erlaubte Interaktionen', r.itemPermission != null ? escHtml(SP_ERLAUBT[r.itemPermission] || 'Stufe ' + r.itemPermission) : '')
+    + _spZeile('Besitzer', r.besitzer !== undefined ? escHtml(_spBesitzerText(r, jetzt)) : '')
+    + _spZeile('Beziehungen', (r.lover || []).length ? (r.lover || []).map(function (l) { return escHtml(_spLoverText(l, jetzt)); }).join('<br>') : '')
     + _spZeile('Spielversion', escHtml(r.spielVersion || ''))
     + _spZeile('Getragene Teile', r.items != null ? String(r.items) : '')
     + _spZeile('Zuletzt gesehen', escHtml(_spDatumZeit(r.zuletzt) + ' (' + _spVor(r.zuletzt, jetzt) + ')'))
@@ -801,7 +951,7 @@ function spielerDetailHtml(r, jetzt) {
     + _spZeile('Bild', r.bild ? escHtml('von ' + _spDatumZeit(r.bild.ts) + ' · ' + (r.bild.quelle === 'raum' ? 'aus dem Raum aufgenommen' : 'aus dem gespeicherten Profil gezeichnet') + (r.bild.stabil === false ? ' · evtl. unvollständig' : ''))
         : (r.bildFehler ? escHtml('nicht möglich: ' + r.bildFehler.grund) : ''))
     + '</table>';
-  if (r.notiz) h += '<h4>Deine Notiz (WCE/FBC)</h4><div class="sp-text-voll">' + escHtml(r.notiz) + '</div>';
+  if (r.notiz) h += '<h4>Deine Notiz (WCE/FBC)</h4><div class="sp-text-voll sp-beschr">' + spielerBeschreibungHtml(r.notiz) + '</div>';
   if (mods.length) {
     h += '<h4>Mods (' + mods.length + ')</h4><table class="sp-tab"><tr><th>Mod</th><th>Version</th><th>Erkannt an</th><th>Erstmals</th><th>Zuletzt</th></tr>'
       + mods.map(function (m) {
@@ -818,7 +968,7 @@ function spielerDetailHtml(r, jetzt) {
     }).join('') + '</div>';
   }
   if (raeume.length) h += '<h4>Gesehen in</h4><div class="sp-mods">' + raeume.map(function (n) { return '<span class="sp-mod" title="' + escHtml(_spDatumZeit(r.raeume[n])) + '">' + escHtml(n) + ' · ' + escHtml(_spDatum(r.raeume[n])) + '</span>'; }).join('') + '</div>';
-  h += '<h4>Beschreibung</h4><div class="sp-text-voll">' + (r.beschreibung ? escHtml(r.beschreibung) : '<span class="sp-leer">(keine / nicht lesbar)</span>') + '</div>';
+  h += '<h4>Beschreibung</h4><div class="sp-text-voll sp-beschr">' + (r.beschreibung ? spielerBeschreibungHtml(r.beschreibung) : '<span class="sp-leer">(keine / nicht lesbar)</span>') + '</div>';
   if (r.verlauf && r.verlauf.length) {
     h += '<h4>Änderungen (' + r.verlauf.length + ')</h4><div class="sp-verlauf">' + r.verlauf.slice().sort(function (a, b) { return b.ts - a.ts; }).map(function (v) {
       return '<div><span class="sp-nr">' + escHtml(_spDatumZeit(v.ts)) + '</span> <b>' + escHtml(SP_FELD_NAMEN[v.feld] || v.feld) + '</b>: '
@@ -871,7 +1021,10 @@ function renderSpielerProfileTab() {
     z.textContent = (liste.length === gesamt ? gesamt + ' Spieler' : liste.length + ' von ' + gesamt + ' Spielern') + (mitBild ? ' · ' + mitBild + ' mit Bild' : '');
   }
   _spKnopfAktualisieren();
+  const chk = document.getElementById('spAutoChk');
+  if (chk) chk.checked = _spAutoAn;
   _spBilderNachladen(zeigen.filter(function (r) { return r.bild; }).map(function (r) { return String(r.nr); }));
+  _spAutoBilder(zeigen);
 }
 
 // ── Bedienung ──
