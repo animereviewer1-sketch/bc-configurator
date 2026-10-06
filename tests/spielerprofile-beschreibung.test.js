@@ -221,17 +221,6 @@ describe('Charakterblatt im Detail', () => {
   });
 });
 
-describe('Liste untereinander', () => {
-  it('die Spielerliste ist einspaltig (Profile stehen untereinander)', async () => {
-    const fs = await import('node:fs');
-    const path = await import('node:path');
-    const html5 = fs.readFileSync(path.join(process.cwd(), 'index.html'), 'utf8');
-    const zeile = html5.split('\n').find((l) => l.startsWith('.sp-body '));
-    expect(zeile).toContain('grid-template-columns:minmax(0, 1fr)');
-    expect(zeile).not.toContain('auto-fill');
-  });
-});
-
 describe('Bilder automatisch für die gezeigten Karten', () => {
   function vorbereiten(t, n = 8) {
     merge(t, Array.from({ length: n }, (_, i) => res(i + 1)), T0);

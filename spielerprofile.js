@@ -8,7 +8,11 @@
 // Liste; neue Scans ergänzen (Mods vereinigen, Räume sammeln) und ändert sich ein Feld (z. B. die Beschreibung), steht die
 // Änderung im Verlauf – die alte Fassung geht nicht verloren.
 //
-// Lädt NACH persistence.js, bridge.js und items.js (docs/LOAD-ORDER.md). Blatt-Modul: kein Eintrag in CORE_SCRIPTS.
+// ⚠ DERZEIT NICHT EINGEBUNDEN: index.html lädt dieses Modul nicht mehr (der Tab führte zu „Out of Memory“ im Tool). Es liegt als Vorlage im Repo
+// für eine Lösung direkt im Spiel (BC); Tests: tests/spielerprofile*.test.js. Gespeicherte Daten (BC_SPIELERPROFILE_v1, BC_SPIELERBILD_v1:*) bleiben
+// unangetastet in der Datenbank.
+//
+// (Früher:) Lädt NACH persistence.js, bridge.js und items.js (docs/LOAD-ORDER.md). Blatt-Modul: kein Eintrag in CORE_SCRIPTS.
 
 // ── Ladereihenfolge-Guard (Muster scan-tab.js, docs/LOAD-ORDER.md) ──────────
 (function () {

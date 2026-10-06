@@ -2644,7 +2644,6 @@ button { cursor: pointer; }
   <button class="tab-btn"        id="tab-outfit-scan-btn"   onclick="switchTab('outfit-scan')">🧬 LSCG Outfits</button>
   <button class="tab-btn"        id="tab-lscg-wheel-btn"    onclick="switchTab('lscg-wheel')">🎡 MBS Wheel</button>
   <button class="tab-btn"        id="tab-outfit-import-btn" onclick="switchTab('outfit-import')">📥 Outfit Import</button>
-  <button class="tab-btn"        id="tab-spielerprofile-btn" onclick="switchTab('spielerprofile')">🪪 Spielerprofile</button>
   <button class="tab-btn"        id="tab-locks-btn"         onclick="switchTab('locks')">🔒 Locks</button>
   <button class="tab-btn"        id="tab-bot-btn"    onclick="switchTab('bot')">🤖 Bot</button>
   <button class="tab-btn"        id="tab-shop-btn"          onclick="switchTab('shop')">🛒 Shop</button>
@@ -3250,7 +3249,7 @@ button { cursor: pointer; }
   </div>
 </div>
 
-<!-- LADEREIHENFOLGE (nicht umstellen): bc-icons.js, bc-icons-ergaenzung.js (head) → persistence.js → bridge.js → items.js → game-scan.js → baseline-manifest.js → scan-tab.js → spielerprofile.js → money.js → rank.js → shop.js → inventar.js → bot-data.js → bot-ui.js → bot-engine.js → outfit-import.js → bc-autobackup.js. Details und Guard: docs/LOAD-ORDER.md -->
+<!-- LADEREIHENFOLGE (nicht umstellen): bc-icons.js, bc-icons-ergaenzung.js (head) → persistence.js → bridge.js → items.js → game-scan.js → baseline-manifest.js → scan-tab.js → money.js → rank.js → shop.js → inventar.js → bot-data.js → bot-ui.js → bot-engine.js → outfit-import.js → bc-autobackup.js. Details und Guard: docs/LOAD-ORDER.md -->
 <script>
 // Cache-Buster: jede Seite lädt immer die aktuelle JS-Version (kein Browser-Cache)
 var _cbv = Date.now();
@@ -3260,7 +3259,6 @@ document.write('<scr'+'ipt src="items.js?_='+_cbv+'"><\/scr'+'ipt>');
 document.write('<scr'+'ipt src="game-scan.js?_='+_cbv+'"><\/scr'+'ipt>');
 document.write('<scr'+'ipt src="baseline-manifest.js?_='+_cbv+'"><\/scr'+'ipt>');
 document.write('<scr'+'ipt src="scan-tab.js?_='+_cbv+'"><\/scr'+'ipt>');
-document.write('<scr'+'ipt src="spielerprofile.js?_='+_cbv+'"><\/scr'+'ipt>');
 </script>
 
 
@@ -3903,32 +3901,6 @@ document.write('<scr'+'ipt src="bc-autobackup.js?_='+_cbv+'"><\/scr'+'ipt>');
 <!-- /tab-lscg-wheel -->
 
 <!-- TAB: LOCKS / TIMER DASHBOARD -->
-<div id="tab-spielerprofile" class="tab-pane">
-  <div class="os-header">
-    <button class="btn btn-primary" onclick="spielerProfileScan('manuell', true)" title="Alle Spieler im Raum jetzt auslesen">🔄 Jetzt auslesen</button>
-    <button class="btn" onclick="spielerCacheLesen(true, true)" title="Liest den Profilspeicher von WCE/FBC (Befehl /profiles im Spiel) komplett ein – ergänzt nur, löscht nichts" style="font-size:.75rem;padding:4px 10px">🗂 Aus WCE-Speicher einlesen</button>
- <label class="sp-auto" title="Zeichnet für die gezeigten Spieler aus dem WCE/FBC-Speicher von selbst ein Bild, solange dieser Tab offen ist. Standard: aus – das Zeichnen vieler Profile belastet den Speicher des Spiel-Tabs."><input id="spAutoChk" type="checkbox" onchange="spAutoBilderSetzen(this.checked)"> Bilder automatisch</label>
-    <button id="spBilderBtn" class="btn" onclick="spBilderAusCache()" title="Zeichnet für Spieler aus dem WCE/FBC-Speicher, die noch kein Bild haben, eins aus ihrem gespeicherten Profil. Bestehende Bilder bleiben unverändert." style="font-size:.75rem;padding:4px 10px">🖼 Bilder erzeugen</button>
-    <div class="search-wrap" data-icon="search"><input id="spSearchInput" class="os-search" type="text" placeholder="🔍 Name, Nummer, Beschreibung, Mod oder Datum suchen…"
-      title="Auch Datum, z. B. 5.10. · 05.10.2026 · 10.2026 – findet Spieler, die du an diesem Tag gesehen hast" oninput="spSuche()" value=""></div>
-    <button id="spFilter_all" class="os-filter-btn on" onclick="spSetFilter('all')">Alle</button>
-    <button id="spFilter_raum" class="os-filter-btn" onclick="spSetFilter('raum')" title="Nur Spieler, die beim letzten Auslesen im Raum waren">🟢 Im Raum</button>
-    <button id="spFilter_neu" class="os-filter-btn" onclick="spSetFilter('neu')" title="Zum ersten Mal in den letzten 48 Stunden gesehen">🆕 Neu</button>
-    <button id="spFilter_heute" class="os-filter-btn" onclick="spSetFilter('heute')" title="Heute gesehen">📅 Heute</button>
-    <button id="spFilter_desc" class="os-filter-btn" onclick="spSetFilter('desc')" title="Nur Spieler mit Beschreibung">📝 Mit Beschreibung</button>
-    <button id="spFilter_mods" class="os-filter-btn" onclick="spSetFilter('mods')" title="Nur Spieler, bei denen ein Mod erkannt wurde">🔌 Mit Mods</button>
-    <button id="spFilter_bild" class="os-filter-btn" onclick="spSetFilter('bild')" title="Nur Spieler mit Bild">🖼 Mit Bild</button>
-    <button id="spFilter_ohnebild" class="os-filter-btn" onclick="spSetFilter('ohnebild')" title="Nur Spieler ohne Bild">Ohne Bild</button>
-    <select id="spModSelect" class="os-filter-btn" onchange="spModFilter(this.value)" title="Nur Spieler mit diesem Mod"><option value="">Mod: alle</option></select>
-    <button id="spSortBtn" class="os-filter-btn" onclick="spSortWechseln()" title="Sortierung umschalten: zuletzt gesehen, Name, Nummer, zuerst gesehen, Begegnungen">🕒 Zuletzt gesehen</button>
-    <button class="btn" onclick="spielerProfileExport()" title="Alle Spielerprofile als JSON-Datei sichern" style="font-size:.75rem;padding:4px 10px">📤 Export</button>
-    <span id="spZaehler" style="font-size:.75rem;color:var(--text3)"></span>
-    <span id="spStatus" style="display:none;font-size:.75rem;color:var(--accent-text);margin-left:4px"></span>
-  </div>
-  <div id="spBody" class="sp-body"></div>
-</div>
-<!-- /tab-spielerprofile -->
-
 <div id="tab-locks" class="tab-pane">
   <div class="lk-header">
     <button class="btn btn-primary" onclick="scanLocks()">⟳ Scannen</button>
@@ -4245,56 +4217,6 @@ document.write('<scr'+'ipt src="bc-autobackup.js?_='+_cbv+'"><\/scr'+'ipt>');
 .os-ignore-actions { display:flex; gap:8px; }
 .os-body  { padding:10px 14px; overflow-y:auto; max-height:calc(100vh - 110px); display:block; }
 .os-empty { text-align:center; color:var(--text3); padding:56px 20px; font-size:.875rem; line-height:1.9; }
-
-/* ── Spielerprofile ── */
-.sp-body { padding:10px 14px 28px; overflow-y:auto; max-height:calc(100vh - 110px); display:grid; grid-template-columns:minmax(0, 1fr); gap:10px; align-content:start; max-width:1100px; }
-.sp-karte { background:var(--bg3); border:1px solid var(--border); border-radius:var(--r-sm, 8px); padding:10px 12px; display:flex; flex-direction:row; align-items:flex-start; gap:10px; min-width:0;
-            content-visibility:auto; contain-intrinsic-size:auto 150px; }
-.sp-karte-main { flex:1; min-width:0; display:flex; flex-direction:column; gap:6px; }
-.sp-bild { flex:0 0 84px; width:84px; min-height:120px; border-radius:6px; background:rgba(0,0,0,0.28); border:1px solid var(--border); display:flex; align-items:center; justify-content:center; overflow:hidden; color:var(--text3); font-size:1.4rem; }
-.sp-bild.da { cursor:zoom-in; background:#14141a; align-items:flex-start; }
-.sp-bild img { width:100%; height:auto; display:block; }
-.sp-auto { display:inline-flex; align-items:center; gap:5px; font-size:.75rem; color:var(--text2); cursor:pointer; }
-.sp-wce { font-size:.625rem; padding:0 6px; border-radius:999px; border:1px solid rgba(255,255,255,0.18); color:var(--text3); letter-spacing:.04em; }
-.sp-beschr a { color:var(--accent-text); text-decoration:underline; overflow-wrap:anywhere; }
-.sp-beschr-bild { max-width:220px; max-height:160px; vertical-align:top; margin:2px 6px 2px 0; border:1px solid var(--border); border-radius:4px; background:#14141a; }
-.sp-bild-laden { font-size:.6875rem; padding:1px 8px; }
-.sp-notiz { font-size:.75rem; color:var(--text3); white-space:pre-wrap; overflow-wrap:anywhere; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
-.sp-gross { position:fixed; inset:0; z-index:9999; background:rgba(0,0,0,0.82); display:flex; align-items:center; justify-content:center; cursor:zoom-out; padding:20px; }
-.sp-gross > div { display:flex; flex-direction:column; align-items:center; gap:8px; max-height:100%; }
-.sp-gross img { height:calc(100vh - 100px); width:auto; max-width:calc(100vw - 40px); object-fit:contain; border-radius:8px; background:#14141a; }
-.sp-gross-name { color:#e5e7eb; font-size:.875rem; }
-.sp-karte.ich { border-color:var(--accent-line); }
-.sp-karte.offen { grid-column:1 / -1; content-visibility:visible; }
-.sp-kopf { display:flex; align-items:baseline; gap:8px; flex-wrap:wrap; cursor:pointer; }
-.sp-name { font-weight:700; color:var(--text1); overflow-wrap:anywhere; }
-.sp-nr { color:var(--text3); font-size:.75rem; }
-.sp-titel { color:var(--text3); font-size:.75rem; font-style:italic; }
-.sp-badge { font-size:.6875rem; padding:0 7px; border-radius:999px; background:var(--accent-soft); border:1px solid var(--accent-line); color:var(--accent-text); }
-.sp-live { font-size:.6875rem; color:var(--green, #4ade80); }
-.sp-zeit { font-size:.75rem; color:var(--text2); }
-.sp-zeit span { color:var(--text3); }
-.sp-mods { display:flex; flex-wrap:wrap; gap:4px; }
-.sp-mod { font-size:.6875rem; padding:1px 8px; border-radius:999px; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12); color:var(--text2); }
-.sp-mod i { color:var(--text3); font-style:normal; }
-.sp-text { font-size:.8125rem; color:var(--text2); white-space:pre-wrap; overflow-wrap:anywhere; display:-webkit-box; -webkit-line-clamp:6; -webkit-box-orient:vertical; overflow:hidden; }
-.sp-karte.offen .sp-text { display:none; }
-.sp-leer { color:var(--text3); font-style:italic; }
-.sp-detail { border-top:1px solid var(--border); padding-top:8px; display:flex; flex-direction:column; gap:8px; font-size:.8125rem; color:var(--text2); }
-.sp-detail h4 { margin:6px 0 0; font-size:.75rem; letter-spacing:.04em; text-transform:uppercase; color:var(--text3); }
-.sp-tab { border-collapse:collapse; width:100%; }
-.sp-tab th { text-align:left; font-weight:600; color:var(--text3); padding:2px 12px 2px 0; white-space:nowrap; vertical-align:top; }
-.sp-tab td { padding:2px 0; overflow-wrap:anywhere; }
-.sp-hinweis { font-size:.6875rem; color:var(--text3); }
-.sp-text-voll { white-space:pre-wrap; overflow-wrap:anywhere; user-select:text; background:rgba(0,0,0,0.25); border-radius:6px; padding:8px 10px; color:var(--text1); }
-.sp-crafts { display:flex; flex-direction:column; gap:4px; }
-.sp-verlauf { display:flex; flex-direction:column; gap:3px; }
-.sp-alt { color:var(--text3); text-decoration:line-through; overflow-wrap:anywhere; }
-.sp-neu { color:var(--text1); overflow-wrap:anywhere; }
-.sp-roh { max-height:320px; overflow:auto; font-family:var(--font-mono); font-size:.6875rem; white-space:pre-wrap; overflow-wrap:anywhere; background:rgba(0,0,0,0.3); border-radius:6px; padding:8px; margin:6px 0 0; }
-.sp-knoepfe { display:flex; gap:8px; flex-wrap:wrap; }
-.sp-mehr { grid-column:1 / -1; justify-self:center; }
-.sp-leerzustand { grid-column:1 / -1; text-align:center; color:var(--text3); padding:56px 20px; font-size:.875rem; line-height:1.9; }
 
 /* ── Member-Block (wie profile-owner-block) ── */
 .os-member-block { border:1px solid rgba(255,255,255,0.07); border-radius:11px; overflow:hidden; margin-bottom:10px; flex-shrink:0; }

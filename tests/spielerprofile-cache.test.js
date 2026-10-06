@@ -542,15 +542,4 @@ describe('Anzeige mit Bild', () => {
     const e = await t.ctx._backupExtras();
     expect(e.idb['BC_SPIELERBILD_v1:5']).toBe(BILD);
   });
-
-  it('der Zähler nennt, wie viele ein Bild haben; die Export-Info auch', async () => {
-    const t = boot();
-    await settle(60);
-    merge(t, [res(5), res(6)], T0);
-    await evalIn(t.ctx, `_spBildSpeichern(5, ${JSON.stringify(BILD)}, 'raum', true, false)`);
-    evalIn(t.ctx, 'renderSpielerProfileTab()');
-    expect(t.els.spZaehler.textContent).toBe('2 Spieler · 1 mit Bild');
-    const info = await t.ctx.exportInfoSammeln();
-    expect(info).toContain('1 mit Bild');
-  });
 });

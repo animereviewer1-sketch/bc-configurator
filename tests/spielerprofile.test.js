@@ -378,46 +378,30 @@ describe('Scan, Speichern, Bridge', () => {
   });
 });
 
-describe('Einbindung in das Tool', () => {
+describe('Nicht im Tool eingebunden (bewusst)', () => {
+  // Der Tab "Spielerprofile" wurde aus dem Tool genommen (der Tab stürzte mit "Out of Memory" ab); gespeicherte Daten bleiben in der Datenbank.
+  // Das Modul spielerprofile.js liegt nur noch als Vorlage für eine Lösung direkt im Spiel (BC) im Repo. Dieser Test sorgt dafür, dass es
+  // nicht versehentlich wieder geladen wird.
   const lies = (f) => fs.readFileSync(path.join(REPO_ROOT, f), 'utf8');
 
-  it('index.html: Tab-Knopf, Tab-Fläche und Skript nach scan-tab.js', () => {
+  it('index.html lädt spielerprofile.js nicht und hat weder Tab-Knopf noch Tab-Fläche', () => {
     const h = lies('index.html');
-    expect(h).toContain('id="tab-spielerprofile-btn"');
-    expect(h).toContain('id="tab-spielerprofile" class="tab-pane"');
-    expect(h.indexOf("src=\"spielerprofile.js?_=")).toBeGreaterThan(h.indexOf("src=\"scan-tab.js?_="));
+    expect(h).not.toContain('spielerprofile.js');
+    expect(h).not.toContain('tab-spielerprofile');
+    expect(h).not.toContain('spielerProfileScan');
   });
 
-  it('items.js und Nova-Seitenleiste kennen den Tab (Gruppe „Items & Outfits“)', () => {
-    expect(lies('items.js')).toMatch(/items: \['items','outfit','curse','outfit-scan','lscg-wheel','outfit-import','spielerprofile','locks'\]/);
-    const n = lies('nova/nova.js');
-    expect(n).toContain("'spielerprofile'");
-    expect(n).toMatch(/'spielerprofile':\s*\{ t: 'Spielerprofile'/);
+  it('weder items.js noch die Nova-Seitenleiste kennen den Tab', () => {
+    expect(lies('items.js')).not.toContain('spielerprofile');
+    expect(lies('items.js')).not.toContain('spielerProfileScan');
+    expect(lies('nova/nova.js')).not.toContain('spielerprofile');
   });
 
-  it('switchTab zeichnet den Tab und liest sofort aus; der Auto-Scan beim Beitritt liest die Spielerprofile mit', () => {
-    const t = boot();
-    evalIn(t.ctx, '_connected = true; _bcOrigin = "https://bc.test";');
-    t.opener.postMessage.mockClear();
-    evalIn(t.ctx, "switchTab('spielerprofile')");
-    expect(t.els.spBody.innerHTML).toContain('Noch keine Spieler');
-    expect(t.opener.postMessage.mock.calls.some((c) => c[0].type === 'GET_SPIELER_PROFILE')).toBe(true);
-    const items = lies('items.js');
-    expect(items).toContain("spielerProfileScan(_autoScanLastReason)");
-    expect(items).toContain("spielerProfileScan('join-retry')");
-  });
-
-  it('Tab-Zähler zeigt die Zahl der Spieler', () => {
-    const t = boot();
-    merge(t, [res(5), res(6)]);
-    const z = JSON.parse(JSON.stringify(evalIn(t.ctx, "_TAB_ZAEHLER.find(x => x.id === 'spielerprofile').anzahl()")));
-    expect(z).toBe(2);
-  });
-
-  it('Export-Info nennt die Spielerprofile', async () => {
-    const t = boot();
-    merge(t, [res(5, { beschreibung: 'x', mods: [{ name: 'DOGS', quelle: 'Nachricht' }] })]);
-    const text = await t.ctx.exportInfoSammeln();
-    expect(text).toMatch(/Spielerprofile: 1 Spieler · 1 mit Beschreibung · 1 mit erkannten Mods/);
+  it('die gespeicherten Daten werden nicht angefasst: kein Löschen, kein Überschreiben des Schlüssels im restlichen Tool', () => {
+    for (const f of ['items.js', 'persistence.js', 'bc-autobackup.js', 'bridge.js', 'scan-tab.js']) {
+      const code = lies(f);
+      expect(code).not.toMatch(/BC_SPIELERPROFILE_v1/);
+      expect(code).not.toMatch(/BC_SPIELERBILD_v1/);
+    }
   });
 });

@@ -39,7 +39,7 @@
 
   // ── Tab-Metadaten ────────────────────────────────────────
   var GROUPS = [
-    { id: 'items', label: 'Items & Outfits', tabs: ['items', 'outfit', 'curse', 'outfit-scan', 'lscg-wheel', 'outfit-import', 'spielerprofile', 'locks'] },
+    { id: 'items', label: 'Items & Outfits', tabs: ['items', 'outfit', 'curse', 'outfit-scan', 'lscg-wheel', 'outfit-import', 'locks'] },
     { id: 'bots',  label: 'Bots & Systeme',  tabs: ['bot', 'shop', 'rank', 'money', 'itemdefs', 'inventar', 'log', 'spieler', 'variablen', 'scan'] }
   ];
   var TABS = {
@@ -49,7 +49,6 @@
     'outfit-scan':   { t: 'LSCG Outfits',     i: 'layers',    d: 'Gescannte LSCG-Outfits durchsuchen und anwenden' },
     'lscg-wheel':    { t: 'MBS Wheel',        i: 'wheel',     d: 'Glücksrad-Outfits aus MBS verwalten' },
     'outfit-import': { t: 'Outfit Import',    i: 'upload',    d: 'Outfit-Codes aus BC einlesen und prüfen' },
-    'spielerprofile': { t: 'Spielerprofile', i: 'user', d: 'Alle gesehenen Spieler: Beschreibung, Mods, zuletzt gesehen' },
     'locks':         { t: 'Locks',            i: 'lock',      d: 'Schlösser, Timer und Restlaufzeiten' },
     'bot':           { t: 'Bot',              i: 'bot',       d: 'Bots aus Triggern, Aktionen und Events bauen' },
     'shop':          { t: 'Shop',             i: 'cart',      d: 'Kaufbare Artikel, Preise und Kaufverlauf' },
