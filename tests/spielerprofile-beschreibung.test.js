@@ -13,7 +13,7 @@ const komprimiert = (text) => MAGIC + LZString.compressToUTF16(text);
 const T0 = new Date(2026, 9, 5, 20, 0, 0).getTime();
 const BILD = 'data:image/jpeg;base64,QUJDREVGRw==';
 
-function boot({ idb = new IDBFactory(), mitLz = true, confirm = () => true, tab = null } = {}) {
+function boot({ idb = new IDBFactory(), mitLz = true, confirm = () => true, tab = null, auto = false } = {}) {
   const opener = { closed: false, postMessage: vi.fn() };
   const els = {};
   const ctx = loadScript(['items.js', 'spielerprofile.js'], { console: quiet, indexedDB: idb, opener, setTimeout, clearTimeout, confirm, URL, ...(mitLz ? { LZString } : {}),
@@ -24,6 +24,7 @@ function boot({ idb = new IDBFactory(), mitLz = true, confirm = () => true, tab 
   evalIn(ctx, 'showStatus = globalThis.showStatus;');
   evalIn(ctx, '_connected = true; _bcOrigin = "https://bc.test";');
   if (tab) evalIn(ctx, `_activeTab = ${JSON.stringify(tab)};`);
+  if (auto) evalIn(ctx, '_spAutoAn = true;');   // die Automatik ist standardmäßig aus
   return { ctx, idb, opener, els };
 }
 const res = (nr, extra = {}) => ({ nr, name: 'Name' + nr, nickname: null, titel: null, beschreibung: null, besitzer: null, lover: [], mods: [], geteilt: [], crafts: [], roh: { a: 1 }, ...extra });
@@ -239,7 +240,7 @@ describe('Bilder automatisch für die gezeigten Karten', () => {
   const anfragen = (t) => senden(t).filter((m) => m.type === 'GET_SPIELER_BILDER');
 
   it('mit offenem Tab fordert das Tool von selbst Bilder für die gezeigten Spieler mit Cache-Profil an – ohne Rückfrage', async () => {
-    const t = boot({ tab: 'spielerprofile', confirm: () => { throw new Error('keine Rückfrage erwartet'); } });
+    const t = boot({ tab: 'spielerprofile', auto: true, confirm: () => { throw new Error('keine Rückfrage erwartet'); } });
     await settle(60);
     vorbereiten(t, 8);
     t.opener.postMessage.mockClear();
@@ -258,7 +259,7 @@ describe('Bilder automatisch für die gezeigten Karten', () => {
     await settle(100);
     expect(anfragen(zu)).toHaveLength(0);
 
-    const aus = boot({ tab: 'spielerprofile' });
+    const aus = boot({ tab: 'spielerprofile', auto: true });
     await settle(60);
     vorbereiten(aus);
     aus.ctx.spAutoBilderSetzen(false);
@@ -268,7 +269,7 @@ describe('Bilder automatisch für die gezeigten Karten', () => {
     expect(anfragen(aus)).toHaveLength(0);
     expect(aus.ctx.localStorage.getItem('BC_SPIELERPROFILE_AUTOBILD_v1')).toBe('0');
 
-    const offline = boot({ tab: 'spielerprofile' });
+    const offline = boot({ tab: 'spielerprofile', auto: true });
     await settle(60);
     vorbereiten(offline);
     evalIn(offline.ctx, '_connected = false;');
@@ -277,7 +278,7 @@ describe('Bilder automatisch für die gezeigten Karten', () => {
     await settle(100);
     expect(anfragen(offline)).toHaveLength(0);
 
-    const ohneCache = boot({ tab: 'spielerprofile' });
+    const ohneCache = boot({ tab: 'spielerprofile', auto: true });
     await settle(60);
     merge(ohneCache, [res(1), res(2)], T0);
     ohneCache.opener.postMessage.mockClear();
@@ -287,7 +288,7 @@ describe('Bilder automatisch für die gezeigten Karten', () => {
   });
 
   it('wer schon ein Bild hat, einen Fehlervermerk trägt oder im Raum ist, wird nicht angefordert', async () => {
-    const t = boot({ tab: 'spielerprofile' });
+    const t = boot({ tab: 'spielerprofile', auto: true });
     await settle(60);
     pongSetzen(t);
     vorbereiten(t, 5);
@@ -301,7 +302,7 @@ describe('Bilder automatisch für die gezeigten Karten', () => {
   function pongSetzen(t) { bridge(t, { type: 'PONG' }); }
 
   it('jeder Spieler wird höchstens einmal je Sitzung automatisch versucht – kein Endlos-Kreis', async () => {
-    const t = boot({ tab: 'spielerprofile' });
+    const t = boot({ tab: 'spielerprofile', auto: true });
     await settle(60);
     pongSetzen(t);
     vorbereiten(t, 3);
@@ -318,7 +319,7 @@ describe('Bilder automatisch für die gezeigten Karten', () => {
   });
 
   it('scheitert alles zweimal hintereinander, schaltet sich die Automatik bis zum nächsten Klick ab', async () => {
-    const t = boot({ tab: 'spielerprofile' });
+    const t = boot({ tab: 'spielerprofile', auto: true });
     await settle(60);
     pongSetzen(t);
     vorbereiten(t, 40);
@@ -338,7 +339,7 @@ describe('Bilder automatisch für die gezeigten Karten', () => {
   });
 
   it('verlässt man den Tab, hört die Automatik auf; nicht Abgearbeitetes darf beim nächsten Besuch wieder drankommen', async () => {
-    const t = boot({ tab: 'spielerprofile' });
+    const t = boot({ tab: 'spielerprofile', auto: true });
     await settle(60);
     pongSetzen(t);
     vorbereiten(t, 20);
@@ -353,7 +354,7 @@ describe('Bilder automatisch für die gezeigten Karten', () => {
   });
 
   it('ein automatischer Durchgang meldet sich ohne Probleme nicht per Meldung, nur in der Statuszeile', async () => {
-    const t = boot({ tab: 'spielerprofile' });
+    const t = boot({ tab: 'spielerprofile', auto: true });
     await settle(60);
     pongSetzen(t);
     vorbereiten(t, 2);
@@ -427,7 +428,7 @@ describe('Kleine Bilder (Version 1) werden durch große (Version 2) ersetzt – 
   });
 
   it('die Serie und die Automatik nehmen kleine Bilder mit, sobald V2 bekannt ist – und ersetzen sie erst, wenn das große ankommt', async () => {
-    const t = boot({ tab: 'spielerprofile' });
+    const t = boot({ tab: 'spielerprofile', auto: true });
     await settle(60);
     bridge(t, { type: 'PONG' });
     merge(t, [res(5), res(6)], T0);
@@ -461,5 +462,88 @@ describe('Kleine Bilder (Version 1) werden durch große (Version 2) ersetzt – 
     t.ctx.LZString = { decompressFromUTF16: () => '' };
     t.ctx.__x = MAGIC + 'abcdef';
     expect(evalIn(t.ctx, 'spielerBeschreibung(__x)')).toBe(MAGIC + 'abcdef');
+  });
+});
+
+describe('Bremsen gegen „Out of Memory“ (Tool-Tab)', () => {
+  const anfragen = (t) => senden(t).filter((m) => m.type === 'GET_SPIELER_BILDER');
+  function vorbereiten(t, n) {
+    merge(t, Array.from({ length: n }, (_, i) => res(i + 1)), T0);
+    evalIn(t.ctx, `Object.values(SPIELER_DB).forEach((r, i) => { r.inCache = true; r.zuletzt = ${T0} + i; });`);
+  }
+
+  it('die Automatik ist ohne ausdrückliches Einschalten aus – auch mit offenem Tab und vielen Spielern ohne Bild', async () => {
+    const t = boot({ tab: 'spielerprofile' });
+    await settle(60);
+    vorbereiten(t, 10);
+    t.opener.postMessage.mockClear();
+    evalIn(t.ctx, 'renderSpielerProfileTab()');
+    await settle(150);
+    expect(anfragen(t)).toHaveLength(0);
+    expect(evalIn(t.ctx, '_spAutoAn')).toBe(false);
+  });
+
+  it('Einschalten merkt sich der Browser ("1"), ausschalten auch; ein früherer Stand "an" (kein Wert) bleibt aus', async () => {
+    const t = boot({ tab: 'spielerprofile' });
+    t.ctx.spAutoBilderSetzen(true);
+    expect(t.ctx.localStorage.getItem('BC_SPIELERPROFILE_AUTOBILD_v1')).toBe('1');
+    t.ctx.spAutoBilderSetzen(false);
+    expect(t.ctx.localStorage.getItem('BC_SPIELERPROFILE_AUTOBILD_v1')).toBe('0');
+  });
+
+  it('ist der Speicher dieses Tabs zu über 70 % voll, startet die Automatik nicht – und eine laufende Serie hält an', async () => {
+    const t = boot({ tab: 'spielerprofile', auto: true });
+    await settle(60);
+    bridge(t, { type: 'PONG' });
+    vorbereiten(t, 14);
+    t.ctx.performance = { memory: { jsHeapSizeLimit: 1000, usedJSHeapSize: 800 } };
+    t.opener.postMessage.mockClear();
+    evalIn(t.ctx, 'renderSpielerProfileTab()');
+    await settle(150);
+    expect(anfragen(t)).toHaveLength(0);
+    // Serie von Hand starten, dann wird der Speicher knapp
+    t.ctx.performance = { memory: { jsHeapSizeLimit: 1000, usedJSHeapSize: 100 } };
+    t.ctx.spBilderAusCache();
+    await bis(() => anfragen(t).length >= 1);
+    t.ctx.performance = { memory: { jsHeapSizeLimit: 1000, usedJSHeapSize: 900 } };
+    const m = anfragen(t)[0];
+    bridge(t, { type: 'SPIELER_BILDER_DATA', reqId: m.reqId, bildV: 2, bilder: m.nrs.map((nr) => ({ nr, img: BILD, stabil: true, quelle: 'cache', v: 2 })), fehler: [] });
+    await bis(() => !evalIn(t.ctx, '_spBilderLaeuft'));
+    expect(anfragen(t)).toHaveLength(1);
+    expect(t.ctx.showStatus).toHaveBeenCalledWith(expect.stringContaining('Speicher dieses Tool-Tabs'), 'error');
+    expect(evalIn(t.ctx, '_spAutoGesperrt')).toBe(true);
+  });
+
+  it('meldet der Spiel-Tab „Stopp“ (Grenze/Speicher), bleiben die nicht bearbeiteten Spieler unvermerkt, die Serie hält an und die Automatik bleibt aus', async () => {
+    const t = boot({ tab: 'spielerprofile', auto: true });
+    await settle(60);
+    bridge(t, { type: 'PONG' });
+    vorbereiten(t, 12);
+    t.ctx.spBilderAusCache();
+    await bis(() => anfragen(t).length >= 1);
+    const m = anfragen(t)[0];
+    const fertig = m.nrs.slice(0, 2);
+    bridge(t, { type: 'SPIELER_BILDER_DATA', reqId: m.reqId, bildV: 2, bilder: fertig.map((nr) => ({ nr, img: BILD, stabil: true, quelle: 'cache', v: 2 })), fehler: [],
+      stopp: 'Der Speicher des Spiel-Tabs ist fast voll – BC-Tab neu laden (F5), dann geht es weiter' });
+    await bis(() => !evalIn(t.ctx, '_spBilderLaeuft'));
+    expect(anfragen(t)).toHaveLength(1);                                   // danach nichts mehr angefordert
+    const d = db(t);
+    expect(fertig.every((nr) => d[nr].bild)).toBe(true);
+    expect(Object.values(d).some((r) => r.bildFehler)).toBe(false);        // niemand als „fehlgeschlagen“ vermerkt
+    expect(t.ctx.showStatus).toHaveBeenCalledWith(expect.stringContaining('Speicher des Spiel-Tabs ist fast voll'), 'error');
+    expect(evalIn(t.ctx, '_spAutoGesperrt')).toBe(true);
+    // beim nächsten manuellen Start kommen die übrigen Spieler wieder dran
+    expect(evalIn(t.ctx, '_spBilderKandidaten().length')).toBe(10);
+  });
+
+  it('der Bild-Zwischenspeicher bleibt klein (nur das Gezeigte), und Karten-Bilder werden asynchron dekodiert', async () => {
+    const t = boot();
+    await settle(60);
+    merge(t, [res(5)], T0);
+    evalIn(t.ctx, "SPIELER_DB['5'].bild = { ts: 1, quelle: 'raum', stabil: true, v: 2 }; for (let i = 0; i < 300; i++) _spBilder['x' + i] = 'data:image/jpeg;base64,AAAA';");
+    await evalIn(t.ctx, "_spBilderNachladen(['5'])");
+    expect(evalIn(t.ctx, 'Object.keys(_spBilder).length')).toBeLessThan(10);
+    evalIn(t.ctx, `_spBilder['5'] = ${JSON.stringify(BILD)}`);
+    expect(evalIn(t.ctx, `spielerKarteHtml(SPIELER_DB['5'], ${T0})`)).toContain('decoding="async"');
   });
 });

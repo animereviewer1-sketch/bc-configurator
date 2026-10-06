@@ -3907,7 +3907,7 @@ document.write('<scr'+'ipt src="bc-autobackup.js?_='+_cbv+'"><\/scr'+'ipt>');
   <div class="os-header">
     <button class="btn btn-primary" onclick="spielerProfileScan('manuell', true)" title="Alle Spieler im Raum jetzt auslesen">🔄 Jetzt auslesen</button>
     <button class="btn" onclick="spielerCacheLesen(true, true)" title="Liest den Profilspeicher von WCE/FBC (Befehl /profiles im Spiel) komplett ein – ergänzt nur, löscht nichts" style="font-size:.75rem;padding:4px 10px">🗂 Aus WCE-Speicher einlesen</button>
- <label class="sp-auto" title="Zeichnet für die gezeigten Spieler aus dem WCE/FBC-Speicher von selbst ein Bild, solange dieser Tab offen ist"><input id="spAutoChk" type="checkbox" checked onchange="spAutoBilderSetzen(this.checked)"> Bilder automatisch</label>
+ <label class="sp-auto" title="Zeichnet für die gezeigten Spieler aus dem WCE/FBC-Speicher von selbst ein Bild, solange dieser Tab offen ist. Standard: aus – das Zeichnen vieler Profile belastet den Speicher des Spiel-Tabs."><input id="spAutoChk" type="checkbox" onchange="spAutoBilderSetzen(this.checked)"> Bilder automatisch</label>
     <button id="spBilderBtn" class="btn" onclick="spBilderAusCache()" title="Zeichnet für Spieler aus dem WCE/FBC-Speicher, die noch kein Bild haben, eins aus ihrem gespeicherten Profil. Bestehende Bilder bleiben unverändert." style="font-size:.75rem;padding:4px 10px">🖼 Bilder erzeugen</button>
     <div class="search-wrap" data-icon="search"><input id="spSearchInput" class="os-search" type="text" placeholder="🔍 Name, Nummer, Beschreibung, Mod oder Datum suchen…"
       title="Auch Datum, z. B. 5.10. · 05.10.2026 · 10.2026 – findet Spieler, die du an diesem Tag gesehen hast" oninput="spSuche()" value=""></div>

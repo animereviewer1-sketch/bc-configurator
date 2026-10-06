@@ -1577,7 +1577,7 @@ window.CurseScanner = (() => {
           if (_spBilderLaeuft) { src.postMessage({ app: APP, type: 'SPIELER_BILDER_DATA', reqId: reqId, err: 'belegt' }, ALLOWED_ORIGIN); break; }
           _spBilderLaeuft = true;
           _spBilderErzeugen(nrs).then(function (r) {
-            src.postMessage({ app: APP, type: 'SPIELER_BILDER_DATA', reqId: reqId, bilder: r.bilder, fehler: r.fehler, bildV: SP_BILD_V }, ALLOWED_ORIGIN);
+            src.postMessage({ app: APP, type: 'SPIELER_BILDER_DATA', reqId: reqId, bilder: r.bilder, fehler: r.fehler, stopp: r.stopp, bildV: SP_BILD_V }, ALLOWED_ORIGIN);
           }, function (ex) {
             src.postMessage({ app: APP, type: 'SPIELER_BILDER_DATA', reqId: reqId, err: String((ex && ex.message) || ex) }, ALLOWED_ORIGIN);
           }).then(function () { _spBilderLaeuft = false; });
@@ -2943,14 +2943,28 @@ window.CurseScanner = (() => {
     }
   };
 
+  // Bremsen gegen "Out of Memory" im Spiel-Tab: BC behält alle geladenen Bilder der Spielteile im Speicher, und Mods halten sich evtl. an Charakteren
+  // fest. Wer hunderte fremde Outfits zeichnet, lädt tausende Teile nach. Darum höchstens SP_RENDER_MAX Profile je Seitenaufruf, und sobald der
+  // JavaScript-Speicher zu über 70 % voll ist (nur Chrome meldet das), wird angehalten – mit klarer Meldung statt Absturz.
+  const SP_RENDER_MAX = 250;
+  const _spSpeicherKnapp = function () {
+    try { const m = performance && performance.memory; return !!(m && m.jsHeapSizeLimit && m.usedJSHeapSize / m.jsHeapSizeLimit > 0.7); } catch (e) { return false; }
+  };
+
   // Bilder für mehrere Spieler nacheinander: im Raum → deren Puffer, sonst aus dem WCE/FBC-Speicher
   let _spBilderLaeuft = false;
   const _spBilderErzeugen = async function (nrs) {
     const bilder = [], fehler = [];
-    let cache = null;
+    let cache = null, stopp = null;
     try {
       for (let k = 0; k < nrs.length; k++) {
         const nr = nrs[k];
+        const raumNr = (window.ChatRoomCharacter || []).concat(window.Player ? [window.Player] : []);
+        if (!raumNr.some(function (c) { return c && c.MemberNumber === nr; })) {
+          // Wird ein Profil gezeichnet (nicht ein Spieler im Raum), gelten die Bremsen
+          if ((window.__BCK_SP_RENDER_N || 0) >= SP_RENDER_MAX) { stopp = 'Grenze von ' + SP_RENDER_MAX + ' gezeichneten Profilen je Seitenaufruf erreicht – BC-Tab neu laden (F5), dann geht es weiter'; break; }
+          if (_spSpeicherKnapp()) { stopp = 'Der Speicher des Spiel-Tabs ist fast voll – BC-Tab neu laden (F5), dann geht es weiter'; break; }
+        }
         try {
           const raum = (window.ChatRoomCharacter || []).concat(window.Player ? [window.Player] : []);
           const live = raum.find(function (c) { return c && c.MemberNumber === nr; });
@@ -2966,6 +2980,7 @@ window.CurseScanner = (() => {
           let b = null;
           try { b = typeof zeile.characterBundle === 'string' ? JSON.parse(zeile.characterBundle) : zeile.characterBundle; } catch (e) {}
           if (!b || typeof b !== 'object') { fehler.push({ nr: nr, grund: 'Gespeichertes Profil nicht lesbar' }); continue; }
+          window.__BCK_SP_RENDER_N = (window.__BCK_SP_RENDER_N || 0) + 1;
           const r = await _spBildAusBundle(b, nr);
           bilder.push({ nr: nr, img: r.img, stabil: r.stabil, quelle: 'cache', v: SP_BILD_V });
         } catch (e) {
@@ -2974,7 +2989,7 @@ window.CurseScanner = (() => {
         await _spSchlafen(20);
       }
     } finally { if (cache && cache.db) { try { cache.db.close(); } catch (e) {} } }
-    return { bilder: bilder, fehler: fehler };
+    return { bilder: bilder, fehler: fehler, stopp: stopp };
   };
 
   // ── Auto-Scan bei Raumwechsel / Member-Join ───────────────────────────

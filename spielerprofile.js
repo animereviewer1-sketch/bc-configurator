@@ -675,13 +675,13 @@ async function _spBildSpeichern(nr, img, quelle, stabil, ersetzen, v) {
 function _spBildEinsetzen(key) {
   const el = document.getElementById('sp_bild_' + key);
   const url = _spBilder[key];
-  if (el && _spBildGueltig(url)) { el.innerHTML = '<img src="' + escHtml(url) + '" alt="">'; el.classList.add('da'); }
+  if (el && _spBildGueltig(url)) { el.innerHTML = '<img src="' + escHtml(url) + '" alt="" decoding="async">'; el.classList.add('da'); }
 }
 
 // Die Bilder der gezeigten Karten aus der Datenbank holen (in kleinen Gruppen, eine neuere Zeichnung bricht die ältere ab)
 async function _spBilderNachladen(nrn) {
   const tok = ++_spBildLadeToken;
-  if (Object.keys(_spBilder).length > 1500) for (const k of Object.keys(_spBilder)) delete _spBilder[k];
+  if (Object.keys(_spBilder).length > 250) for (const k of Object.keys(_spBilder)) delete _spBilder[k];   // jedes Bild belegt als Bitmap mehrere MB: nur das Gezeigte im Speicher halten
   const fehlend = nrn.filter(function (nr) { return !_spBilder[nr]; });
   for (let i = 0; i < fehlend.length; i += 12) {
     if (tok !== _spBildLadeToken) return;
@@ -734,6 +734,11 @@ function _spBilderWeiter() {
   if (!_spBilderLaeuft || _spBilderPaused) return;
   if (_spBilderStop || !_spBilderQueue.length) { _spBilderEnde(); return; }
   if (_spBilderAuto && typeof _activeTab !== 'undefined' && _activeTab !== 'spielerprofile') { _spBilderEnde(); return; }   // Tab verlassen: Automatik hört auf
+  if (_spSpeicherKnapp()) {
+    _spBilderStop = true; _spAutoGesperrt = true;
+    showStatus('⚠️ Der Speicher dieses Tool-Tabs ist fast voll – die Bilder werden angehalten. Tool-Fenster neu laden (F5), dann kannst du weitermachen.', 'error');
+    _spBilderEnde(); return;
+  }
   if (typeof _dcHalt === 'function' && _dcHalt('spielerBilder')) return;
   const stapel = _spBilderQueue.splice(0, SP_BILD_STAPEL);
   const id = 'spb_' + Date.now();
@@ -781,6 +786,17 @@ onBridgeMessage('SPIELER_BILDER_DATA', function (ev) {
       _spBilderStat.fehler++; _spBilderStat.letzterGrund = String(f.grund || '');
     }
     if (fehler.length) spielerSpeichern();
+    // Bremse des Spiel-Tabs (Speicher fast voll / Grenze je Seitenaufruf): nicht Bearbeitetes bleibt unvermerkt in der Warteschlange, es wird angehalten
+    if (d.stopp) {
+      const erledigt = new Set([].concat(bilder.map(function (b) { return b && b.nr; }), fehler.map(function (f) { return f && f.nr; })));
+      _spBilderQueue = req.stapel.filter(function (nr) { return !erledigt.has(nr); }).concat(_spBilderQueue);
+      _spBilderStop = true; _spAutoGesperrt = true;
+      _spBilderStat.letzterGrund = String(d.stopp);
+      showStatus('⏸ Spielerbilder angehalten: ' + d.stopp, 'error');
+      _spRenderSpaeter();
+      setTimeout(_spBilderWeiter, 150);
+      return;
+    }
     // Scheitert alles, mehrmals hintereinander, hat es keinen Sinn weiterzumachen
     if (!bilder.length && fehler.length) _spBilderStat.ganzFehl++; else _spBilderStat.ganzFehl = 0;
     _spRenderSpaeter();
@@ -825,11 +841,11 @@ if (typeof _dcRegisterJob === 'function') {
 }
 
 // ── Automatisch für die gezeigten Karten ──
-// Ist der Tab offen, bekommen die Spieler der gezeigten Seite, die einen gespeicherten WCE/FBC-Eintrag, aber noch kein Bild haben, von selbst eins
-// (Stapel wie oben, jeder Spieler höchstens einmal je Sitzung). Verlässt du den Tab, hört es auf; scheitert alles, bleibt es aus, bis du
-// „Bilder erzeugen“ drückst. Abschaltbar im Tab.
-let _spAutoAn = true;
-try { if (localStorage.getItem('BC_SPIELERPROFILE_AUTOBILD_v1') === '0') _spAutoAn = false; } catch (e) {}
+// Wenn eingeschaltet (Haken im Tab, Standard: aus) und der Tab offen ist, bekommen die Spieler der gezeigten Seite, die einen gespeicherten
+// WCE/FBC-Eintrag, aber noch kein Bild haben, von selbst eins (Stapel wie oben, jeder Spieler höchstens einmal je Sitzung). Verlässt du den Tab,
+// hört es auf; scheitert alles oder wird der Speicher knapp, bleibt es aus, bis du „Bilder erzeugen“ drückst.
+let _spAutoAn = false;   // Standard: aus – das Zeichnen vieler Profile belastet den Speicher des Spiel-Tabs; wer es will, schaltet es ein
+try { if (localStorage.getItem('BC_SPIELERPROFILE_AUTOBILD_v1') === '1') _spAutoAn = true; } catch (e) {}
 let _spAutoGesperrt = false;       // ein systematischer Fehler: nicht von selbst erneut versuchen
 let _spBilderAuto = false;         // der laufende Durchgang wurde automatisch gestartet
 const _spAutoVersucht = new Set();
@@ -837,11 +853,21 @@ const _spAutoVersucht = new Set();
 function spAutoBilderSetzen(an) {
   _spAutoAn = !!an;
   try { localStorage.setItem('BC_SPIELERPROFILE_AUTOBILD_v1', _spAutoAn ? '1' : '0'); } catch (e) {}
+  if (_spAutoAn) _spBildHinweisAuto();
   if (_spAutoAn) { _spAutoGesperrt = false; renderSpielerProfileTab(); }
 }
 
+function _spBildHinweisAuto() {
+  showStatus('ℹ️ Automatische Bilder an: der Spiel-Tab zeichnet dafür Profile aus dem WCE/FBC-Speicher. Wird der Speicher knapp, hält es von selbst an.', 'info');
+}
+
+// Speicher des Tool-Tabs knapp? (Chrome meldet den JavaScript-Speicher; sonst false)
+function _spSpeicherKnapp() {
+  try { const m = performance && performance.memory; return !!(m && m.jsHeapSizeLimit && m.usedJSHeapSize / m.jsHeapSizeLimit > 0.7); } catch (e) { return false; }
+}
+
 function _spAutoBilder(gezeigt) {
-  if (!_spAutoAn || _spAutoGesperrt || _spBilderLaeuft) return;
+  if (!_spAutoAn || _spAutoGesperrt || _spBilderLaeuft || _spSpeicherKnapp()) return;
   if (typeof _activeTab === 'undefined' || _activeTab !== 'spielerprofile') return;
   if (typeof _connected !== 'undefined' && !_connected) return;
   if (typeof _gameOk === 'function' && !_gameOk(false)) return;
@@ -919,7 +945,7 @@ function spielerKarteHtml(r, jetzt) {
   const bildUrl = r.bild ? _spBilder[String(r.nr)] : null;
   return '<div class="sp-karte' + (r.istIch ? ' ich' : '') + (offen ? ' offen' : '') + '" id="sp_k_' + r.nr + '">'
     + '<div class="sp-bild' + (_spBildGueltig(bildUrl) ? ' da' : '') + '" id="sp_bild_' + r.nr + '"' + (r.bild ? ' onclick="spBildGross(' + r.nr + ')" title="Klick vergrößert"' : '') + '>'
-    +   (_spBildGueltig(bildUrl) ? '<img src="' + escHtml(bildUrl) + '" alt="">' : '<span>' + (r.bild ? '⏳' : '👤') + '</span>') + '</div>'
+    +   (_spBildGueltig(bildUrl) ? '<img src="' + escHtml(bildUrl) + '" alt="" decoding="async">' : '<span>' + (r.bild ? '⏳' : '👤') + '</span>') + '</div>'
     + '<div class="sp-karte-main">'
     + '<div class="sp-kopf" onclick="spOeffnen(' + r.nr + ')" title="Klick zeigt alle Daten">'
     +   '<span class="sp-name">' + escHtml(_spAnzeigeName(r)) + '</span>'

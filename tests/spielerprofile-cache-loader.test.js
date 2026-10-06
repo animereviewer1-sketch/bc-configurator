@@ -329,6 +329,66 @@ describe('Spielerprofile (Loader): Bilder im Raum (GET_SPIELER_PROFILE mit "fehl
   });
 });
 
+describe('Spielerprofile (Loader): Bremsen gegen Speichermangel im Spiel-Tab', () => {
+  async function bilderAnfrage(t, nrs, reqId) {
+    t.sb.posts.length = 0;
+    t.sb.send({ type: 'GET_SPIELER_BILDER', reqId, nrs });
+    await t.sb.waitFor(() => t.sb.posts.some((p) => p.msg.type === 'SPIELER_BILDER_DATA' && p.msg.reqId === reqId), 8000);
+    return t.sb.posts.find((p) => p.msg.type === 'SPIELER_BILDER_DATA' && p.msg.reqId === reqId).msg;
+  }
+  const mitProfilen = async (n) => {
+    const factory = new IDBFactory();
+    await wceDatenbank(factory, Array.from({ length: n }, (_, i) => zeile(i + 1, 10)));
+    return factory;
+  };
+
+  it('ist der JavaScript-Speicher zu über 70 % voll, wird VOR dem nächsten Profil angehalten – mit klarer Meldung, ohne Fehler zu erfinden', async () => {
+    const factory = await mitProfilen(3);
+    const t = boot({ factory, mitCharacterLoadOnline: (data, nr) => ({ MemberNumber: nr, Canvas: leinwand() }), extra: { performance: { memory: { jsHeapSizeLimit: 1000, usedJSHeapSize: 800 } } } });
+    const a = await bilderAnfrage(t, [1, 2, 3], 'm1');
+    expect(a.bilder).toEqual([]);
+    expect(a.fehler).toEqual([]);                          // niemand wird als „fehlgeschlagen“ vermerkt
+    expect(a.stopp).toMatch(/Speicher des Spiel-Tabs ist fast voll/);
+    expect(t.geladen).toHaveLength(0);                     // es wurde nichts mehr gezeichnet
+  });
+
+  it('bei genug Speicher läuft alles; Spieler im Raum zählen nicht zur Grenze und werden auch bei vollem Speicher aufgenommen', async () => {
+    const factory = await mitProfilen(2);
+    const t = boot({ factory, chars: [{ MemberNumber: 50, Name: 'Raum', Appearance: [], Canvas: leinwand() }],
+      mitCharacterLoadOnline: (data, nr) => ({ MemberNumber: nr, Canvas: leinwand() }), extra: { performance: { memory: { jsHeapSizeLimit: 1000, usedJSHeapSize: 100 } } } });
+    const a = await bilderAnfrage(t, [1, 2], 'm2');
+    expect(a.bilder.map((b) => b.nr)).toEqual([1, 2]);
+    expect(a.stopp).toBeNull();
+    const voll = boot({ chars: [{ MemberNumber: 50, Name: 'Raum', Appearance: [], Canvas: leinwand() }], extra: { performance: { memory: { jsHeapSizeLimit: 1000, usedJSHeapSize: 990 } } } });
+    const b = await bilderAnfrage(voll, [50], 'm3');
+    expect(b.bilder.map((x) => x.nr)).toEqual([50]);        // ein Spieler im Raum braucht nichts nachzuladen
+    expect(b.stopp).toBeNull();
+  });
+
+  it('je Seitenaufruf werden höchstens 250 Profile gezeichnet; danach Stopp mit Hinweis, dass der BC-Tab neu geladen werden muss', async () => {
+    const factory = await mitProfilen(6);
+    const t = boot({ factory, mitCharacterLoadOnline: (data, nr) => ({ MemberNumber: nr, Canvas: leinwand() }) });
+    t.sb.ctx.__BCK_SP_RENDER_N = 248;
+    const a = await bilderAnfrage(t, [1, 2, 3, 4], 'm4');
+    expect(a.bilder.map((b) => b.nr)).toEqual([1, 2]);      // 249 und 250
+    expect(a.stopp).toMatch(/Grenze von 250/);
+    expect(a.stopp).toMatch(/BC-Tab neu laden/);
+    expect(t.sb.ctx.__BCK_SP_RENDER_N).toBe(250);
+    expect(a.fehler).toEqual([]);
+    const b = await bilderAnfrage(t, [3], 'm5');             // gleich wieder: gleiche Grenze
+    expect(b.bilder).toEqual([]);
+    expect(b.stopp).toMatch(/Grenze/);
+  });
+
+  it('ohne Speicherangabe des Browsers (kein performance.memory) läuft es normal', async () => {
+    const factory = await mitProfilen(1);
+    const t = boot({ factory, mitCharacterLoadOnline: (data, nr) => ({ MemberNumber: nr, Canvas: leinwand() }), extra: { performance: {} } });
+    const a = await bilderAnfrage(t, [1], 'm6');
+    expect(a.bilder).toHaveLength(1);
+    expect(a.stopp).toBeNull();
+  });
+});
+
 describe('Spielerprofile (Loader): GET_SPIELER_BILDER', () => {
   async function bilder(t, nrs, reqId = 'b1') {
     t.sb.posts.length = 0;
