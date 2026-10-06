@@ -4225,22 +4225,13 @@ document.write('<scr'+'ipt src="bc-autobackup.js?_='+_cbv+'"><\/scr'+'ipt>');
 .os-body  { padding:10px 14px; overflow-y:auto; max-height:calc(100vh - 110px); display:block; }
 .os-empty { text-align:center; color:var(--text3); padding:56px 20px; font-size:.875rem; line-height:1.9; }
 
-/* ── Speicher-Wächter (speicher.js) ── */
-.spw-chip { position:fixed; right:14px; bottom:12px; z-index:1500; font-size:.6875rem; padding:3px 10px; border-radius:999px; border:1px solid var(--border); background:var(--bg3); color:var(--text3); cursor:pointer; opacity:.75; }
+/* ── Speicher-Anzeige (speicher.js) ── */
+.spw-chip { position:fixed; right:14px; bottom:12px; z-index:1500; font-size:.6875rem; padding:3px 10px; border-radius:999px; border:1px solid var(--border); background:var(--bg3); color:var(--text3); cursor:pointer; opacity:.8; }
 .spw-chip:hover { opacity:1; }
-.spw-chip.spw-gelb { color:#fde68a; border-color:#7a5d12; background:#2b2209; opacity:1; }
-.spw-chip.spw-rot { color:#fecaca; border-color:#8a1f33; background:#35101a; opacity:1; font-weight:700; }
-.spw-banner { position:fixed; top:10px; left:50%; transform:translateX(-50%); z-index:2000; width:min(920px, calc(100vw - 32px)); display:flex; gap:14px; align-items:center; justify-content:space-between; flex-wrap:wrap;
-              padding:12px 16px; border-radius:12px; border:1px solid; font-size:.8125rem; line-height:1.5; box-shadow:0 8px 28px rgba(0,0,0,.5); }
-.spw-banner.spw-gelb { background:#2b2209; border-color:#7a5d12; color:#fde68a; }
-.spw-banner.spw-rot { background:#35101a; border-color:#8a1f33; color:#fecaca; }
-.spw-sub { font-size:.75rem; opacity:.9; margin-top:2px; }
-.spw-knoepfe { display:flex; gap:8px; flex-wrap:wrap; }
 .spw-liste { display:flex; flex-direction:column; gap:4px; margin-top:6px; }
 .spw-eintrag { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
 .spw-eintrag code { font-size:.75rem; overflow-wrap:anywhere; }
 .spw-inline { display:flex; gap:8px; flex-wrap:wrap; margin-top:6px; }
-.spw-stufe-gelb { color:#fde68a; } .spw-stufe-rot { color:#fecaca; }
 
 /* ── Member-Block (wie profile-owner-block) ── */
 .os-member-block { border:1px solid rgba(255,255,255,0.07); border-radius:11px; overflow:hidden; margin-bottom:10px; flex-shrink:0; }

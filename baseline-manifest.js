@@ -11,10 +11,10 @@ const BASELINE_MANIFEST = {
   ],
   "identifierPattern": "\\b(Inventory|Character|ChatRoom|Server|Asset|Player|Dialog|Common|Item|Lock|Wardrobe|Pose|Skill|Reputation|Online|Chat)[A-Z]\\w+",
   "counts": {
-    "identifiers": 103,
+    "identifiers": 105,
     "function": 28,
     "assetGroup": 34,
-    "unknown": 41
+    "unknown": 43
   },
   "identifiers": [
     {
@@ -203,6 +203,20 @@ const BASELINE_MANIFEST = {
       "kind": "unknown",
       "files": [
         "bot-engine.js",
+        "loader.js"
+      ]
+    },
+    {
+      "name": "ChatRoomJoin",
+      "kind": "unknown",
+      "files": [
+        "loader.js"
+      ]
+    },
+    {
+      "name": "ChatRoomLeave",
+      "kind": "unknown",
+      "files": [
         "loader.js"
       ]
     },

@@ -254,10 +254,11 @@ describe('Serie: ein EXEC pro Outfit, die Antwort löst das nächste aus', () =>
     expect(execs()[0]).toContain('Armbinder');
     expect(evalIn(ctx, '_wheelGenShotReq')).toMatch(/^wss_/);
     expect(evalIn(ctx, 'Object.keys(_pendingWheelShot).length')).toBe(1);
-    // keine festen Wartezeiten mehr (früher 800 / 2500 / 1200 ms vor dem nächsten Outfit): nur der Antwort-Wächter mit 12 s.
+    // keine festen Wartezeiten mehr (früher 800 / 2500 / 1200 ms vor dem nächsten Outfit): nur der Antwort-Wächter mit 12 s + bis zu 15 s Ruhe-Wartezeit
+    // im Spiel-Tab (_shotMitRuhe: bei viel Sendelast wartet die Aufnahme dort kurz, das zählt nicht zur Antwortzeit).
     // (Der 1200-ms-Timer hier ist das Speichern des EXEC-Protokolls, nicht die Serie.)
     const ms = timers.map((t) => t.ms);
-    expect(ms).toContain(12000);
+    expect(ms).toContain(27000);
     expect(ms).not.toContain(800);
     expect(ms).not.toContain(2500);
     expect(timers.some((t) => t.fn === ctx._wheelGenStep)).toBe(false);
@@ -297,12 +298,12 @@ describe('Serie: ein EXEC pro Outfit, die Antwort löst das nächste aus', () =>
     expect(evalIn(ctx, '_wheelGenShotReq')).toMatch(/^wss_\d/);
   });
 
-  it('keine Antwort nach 12 s: die Serie pausiert, das Outfit kommt zurück in die Queue (nichts wird übersprungen)', () => {
+  it('keine Antwort nach 27 s (12 s Antwortzeit + 15 s Ruhe-Wartezeit): die Serie pausiert, das Outfit kommt zurück in die Queue (nichts wird übersprungen)', () => {
     const { ctx, timers } = tool({ withTimers: true });
     serieLaeuft(ctx);
     timers.length = 0;
     ctx._wheelGenStep();
-    const wachter = timers.find((t) => t.ms === 12000);
+    const wachter = timers.find((t) => t.ms === 27000);
     wachter.fn();
     expect(evalIn(ctx, '_wheelGenPaused')).toBe(true);
     expect(evalIn(ctx, '_wheelGenQueue.map(j => j.oi)')).toEqual([0, 1]);

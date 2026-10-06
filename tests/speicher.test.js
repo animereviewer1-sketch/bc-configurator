@@ -24,37 +24,23 @@ function boot({ idb = new IDBFactory(), confirm = vi.fn(() => true), memory = nu
 const kvSetzen = async (t, daten) => { for (const [k, v] of Object.entries(daten)) await t.ctx.idbSet(k, v); };
 const kvSchluessel = async (t) => (await t.ctx.idbKvSchluessel()).sort();
 
-describe('Schwellen und Stufen (reine Logik)', () => {
+describe('Anzeige (reine Logik)', () => {
   const t = boot();
   const f = (code) => evalIn(t.ctx, code);
 
-  it('Standard: gelb ab 1.100 MB, rot ab 1.400 MB; ein Limit-Anteil über 70 % ist immer rot', () => {
-    expect(f('speicherSchwellen([])')).toEqual({ gelb: 1100, rot: 1400 });
-    expect(f('speicherStufe(800, 4000, [])')).toBe('ok');
-    expect(f('speicherStufe(1100, 4000, [])')).toBe('gelb');
-    expect(f('speicherStufe(1399, 4000, [])')).toBe('gelb');
-    expect(f('speicherStufe(1400, 4000, [])')).toBe('rot');
-    expect(f('speicherStufe(700, 900, [])')).toBe('rot');      // 78 % des Limits
-    expect(f('speicherStufe(700, 0, [])')).toBe('ok');         // Limit unbekannt
-  });
-
-  it('nach einem Absturz bei 1.700 MB liegen die Schwellen bei 60 % / 80 % davon, aber nie über den Standardwerten', () => {
-    expect(f('speicherSchwellen([{ ts: 1, spitzeMB: 1700 }])')).toEqual({ gelb: 1020, rot: 1360 });
-    expect(f('speicherSchwellen([{ ts: 1, spitzeMB: 3000 }])')).toEqual({ gelb: 1100, rot: 1400 });
-    expect(f('speicherSchwellen([{ ts: 1, spitzeMB: 1700 }, { ts: 2, spitzeMB: 900 }])')).toEqual({ gelb: 540, rot: 720 });   // der niedrigste zählt
-  });
-
-  it('nie unter 400 MB; rot immer mindestens 100 MB über gelb', () => {
-    const s = f('speicherSchwellen([{ ts: 1, spitzeMB: 300 }])');
-    expect(s.gelb).toBe(400);
-    expect(s.rot).toBe(500);
-  });
-
-  it('Formatierung', () => {
-    expect(f('speicherMBText(850)')).toBe('850 MB');
-    expect(f('speicherMBText(1536)')).toBe('1,5 GB');
+  it('Formatierung: immer GB mit einer Nachkommastelle (Anzeige) bzw. passende Einheit (Größen)', () => {
+    expect(f('speicherGBText(1400)')).toBe('1,4 GB');
+    expect(f('speicherGBText(850)')).toBe('0,8 GB');
+    expect(f('speicherGBText(4200)')).toBe('4,1 GB');
     expect(f('speicherBytesText(5 * 1048576)')).toBe('5,0 MB');
     expect(f('speicherBytesText(2048)')).toBe('2 KB');
+  });
+
+  it('es gibt keine Schwellen, Stufen oder Meldungstexte mehr (keine Warnfenster)', () => {
+    const code = fs.readFileSync(path.join(REPO_ROOT, 'speicher.js'), 'utf8');
+    for (const wort of ['speicherSchwellen', 'speicherStufe', 'speicherBannerHtml', 'Absturzgefahr', 'speicherBannerAus']) expect(code).not.toContain(wort);
+    const html = fs.readFileSync(path.join(REPO_ROOT, 'index.html'), 'utf8');
+    expect(html).not.toContain('.spw-banner');
   });
 });
 
@@ -251,8 +237,9 @@ describe('Seite „Speicher“', () => {
     await kvSetzen(t, { BC_Bots_v2: [1], BC_PROFILE_SCREENSHOTS_v1: { A: 'x' }, BC_GANZ_ALT_v3: { x: 1 } });
     await evalIn(t.ctx, 'speicherSeiteAktualisieren()');
     const h = t.els.speicherSeite.innerHTML;
-    expect(h).toContain('900 MB');
-    expect(h).toContain('✅ in Ordnung');
+    expect(h).toContain('0,9 GB');
+    expect(h).toContain('von 3,9 GB');
+    expect(h).not.toContain('Absturzgefahr');
     expect(h).toContain('BC_PROFILE_SCREENSHOTS_v1');
     expect(h).toContain('speicherAltKopienEntfernen()');
     expect(h).toContain('BC_GANZ_ALT_v3');
@@ -266,14 +253,13 @@ describe('Absturz-Erkennung', () => {
   const SIT = 'BC_SPEICHER_SITZUNGEN_v1', AB = 'BC_SPEICHER_ABSTUERZE_v1';
   const jetzt = 1_800_000_000_000;
 
-  it('eine nicht sauber beendete Sitzung dieses Fensters gilt als Absturz bei ihrem höchsten Stand – und senkt die Schwellen', () => {
+  it('eine nicht sauber beendete Sitzung dieses Fensters gilt als Absturz bei ihrem höchsten Stand (nur vermerkt)', () => {
     const t = boot();
     const id = evalIn(t.ctx, '_spchId');
     t.ctx.localStorage.setItem(SIT, JSON.stringify({ [id]: { start: 1, ts: jetzt - 20000, laeuft: true, spitzeMB: 1712 } }));
     evalIn(t.ctx, '_spchAbstuerze = [];');
     expect(evalIn(t.ctx, `speicherAbstuerzeErkennen(${jetzt})`)).toBe(1);
     expect(JSON.parse(t.ctx.localStorage.getItem(AB))).toEqual([{ ts: jetzt - 20000, spitzeMB: 1712 }]);
-    expect(evalIn(t.ctx, 'speicherSchwellen(_spchAbstuerze)')).toEqual({ gelb: 1027, rot: 1370 });
   });
 
   it('eine sauber beendete Sitzung ist kein Absturz', () => {
@@ -309,7 +295,7 @@ describe('Absturz-Erkennung', () => {
   });
 });
 
-describe('Wächter und Meldung', () => {
+describe('Anzeige unten rechts – ohne Meldungen', () => {
   const MB = 1048576;
   it('ohne Speicherangabe des Browsers startet kein Zeitgeber und es passiert nichts', () => {
     const t = boot();
@@ -317,20 +303,28 @@ describe('Wächter und Meldung', () => {
     expect(evalIn(t.ctx, 'speicherTick()')).toBeNull();
   });
 
-  it('steigt der Speicher, kommt genau eine Meldung je Stufe (gelb, dann rot) – kein Dauerfeuer', () => {
+  it('der Chip zeigt Verbrauch und Limit in GB', () => {
+    const mem = { usedJSHeapSize: 1400 * MB, jsHeapSizeLimit: 4200 * MB };
+    const t = boot({ memory: mem });
+    evalIn(t.ctx, 'speicherTick()');
+    expect(t.ctx.document.body.appendChild).toBeDefined();
+    expect(evalIn(t.ctx, "document.getElementById('speicherChip') && 1")).toBeTruthy();
+    expect(t.els.speicherChip.textContent).toBe('🧠 1,4 GB / 4,1 GB');
+    mem.usedJSHeapSize = 800 * MB; evalIn(t.ctx, 'speicherTick()');
+    expect(t.els.speicherChip.textContent).toBe('🧠 0,8 GB / 4,1 GB');
+  });
+
+  it('auch bei sehr hohem Speicher gibt es KEINE Meldung, kein Fenster, keinen Banner', () => {
     const mem = { usedJSHeapSize: 800 * MB, jsHeapSizeLimit: 4000 * MB };
     const t = boot({ memory: mem });
     t.ctx.showStatus.mockClear();
-    mem.usedJSHeapSize = 1150 * MB; evalIn(t.ctx, 'speicherTick()');
-    mem.usedJSHeapSize = 1200 * MB; evalIn(t.ctx, 'speicherTick()');
-    expect(t.ctx.showStatus.mock.calls.filter((c) => String(c[0]).includes('Speicher wird knapp'))).toHaveLength(1);
-    mem.usedJSHeapSize = 1450 * MB; evalIn(t.ctx, 'speicherTick()');
-    mem.usedJSHeapSize = 1500 * MB; evalIn(t.ctx, 'speicherTick()');
-    expect(t.ctx.showStatus.mock.calls.filter((c) => String(c[0]).includes('Absturzgefahr'))).toHaveLength(1);
-    expect(evalIn(t.ctx, '_spchSpitze')).toBeCloseTo(1500, 0);
+    for (const mb of [1150, 1500, 2500, 3900]) { mem.usedJSHeapSize = mb * MB; evalIn(t.ctx, 'speicherTick()'); }
+    expect(t.ctx.showStatus).not.toHaveBeenCalled();
+    expect(t.els.speicherBanner).toBeUndefined();
+    expect(evalIn(t.ctx, '_spchSpitze')).toBeCloseTo(3900, 0);
   });
 
-  it('der Stand wird für die Absturz-Erkennung festgehalten', () => {
+  it('der Stand wird für die Absturz-Vermerkung festgehalten', () => {
     const mem = { usedJSHeapSize: 1300 * MB, jsHeapSizeLimit: 4000 * MB };
     const t = boot({ memory: mem });
     evalIn(t.ctx, '_spchLetzterSchreib = 0;');     // „vor längerer Zeit zuletzt geschrieben“
@@ -341,24 +335,13 @@ describe('Wächter und Meldung', () => {
     expect(sit[id].spitzeMB).toBeGreaterThanOrEqual(1299);
   });
 
-  it('der Banner nennt Stand, Limit und den letzten Absturz; Text wird maskiert', () => {
-    const t = boot();
-    t.ctx.__a = [{ ts: 1, spitzeMB: 1700 }];
-    const h = evalIn(t.ctx, 'speicherBannerHtml("rot", 1500, 4000, __a)');
-    expect(h).toContain('Absturzgefahr');
-    expect(h).toContain('1,5 GB');
-    expect(h).toContain('abgestürzt');
-    expect(h).toContain('speicherSeiteOeffnen()');
-    expect(evalIn(t.ctx, 'speicherBannerHtml("gelb", 1200, 0, [])')).toContain('Speicher wird knapp');
-  });
-
-  it('beim Start nach einem Absturz kommt eine Meldung mit dem Stand', () => {
+  it('nach einem Absturz wird der Stand nur vermerkt – es erscheint keine Meldung', () => {
     const t = boot();
     t.ctx.localStorage.setItem('BC_SPEICHER_SITZUNGEN_v1', JSON.stringify({ altesFenster: { start: 1, ts: Date.now() - 300000, laeuft: true, spitzeMB: 1650 } }));
     evalIn(t.ctx, '_spchAbstuerze = [];');
     t.ctx.showStatus.mockClear();
     evalIn(t.ctx, 'speicherWaechterStarten()');
-    expect(t.ctx.showStatus).toHaveBeenCalledWith(expect.stringContaining('abgestürzt'), 'error');
-    expect(t.ctx.showStatus.mock.calls[0][0]).toContain('1,6 GB');
+    expect(t.ctx.showStatus).not.toHaveBeenCalled();
+    expect(JSON.parse(t.ctx.localStorage.getItem('BC_SPEICHER_ABSTUERZE_v1'))[0].spitzeMB).toBe(1650);
   });
 });

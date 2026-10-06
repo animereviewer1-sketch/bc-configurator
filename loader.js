@@ -2504,6 +2504,25 @@ window.CurseScanner = (() => {
     })();
   }
 
+  // ── Sende-Last für die Aufnahmen des Tools ──────────────────────────────────────────────────────────────────────────
+  // Das Tool prüft vor jedem Bild (EXEC, items.js _shotMitRuhe), ob gerade viel gesendet wird, und wartet dann kurz, damit der BC-Server nicht mit
+  // ErrorRateLimited trennt. Zählt alle ServerSend-Aufrufe der letzten ms Millisekunden (auch die der Mods) aus dem Ringpuffer des Sende-Monitors und
+  // liefert die Zeit seit dem letzten Beitritt/Verlassen eines Raums. Wird bei jedem Laden des Loaders neu gesetzt. Nur lesen.
+  window.__BCK_SendeLast = function (ms) {
+    const sm = window.__BCK_SENDLOG2;
+    if (!sm || !Array.isArray(sm.ring)) return null;
+    const jetzt = Date.now(), von = jetzt - (ms || 3000);
+    let n = 0, raumwechsel = null;
+    for (let i = sm.ring.length - 1; i >= 0; i--) {
+      const e = sm.ring[i];
+      if (!e || e.k !== 'send') continue;
+      if (raumwechsel === null && (e.typ === 'ChatRoomJoin' || e.typ === 'ChatRoomLeave')) raumwechsel = jetzt - e.t;
+      if (e.t > von) n++;
+      else if (raumwechsel !== null) break;     // älter als das Fenster und der Raumwechsel ist schon gefunden: fertig
+    }
+    return { aufrufe: n, raumwechsel: raumwechsel };
+  };
+
   // ── Spielerprofile: alles, was von den Spielern im Raum auslesbar ist ───────────────────────────────────────────
   // Das Tool (Tab "Spielerprofile") fragt mit GET_SPIELER_PROFILE; hier wird gelesen, was BC im Speicher hält: Beschreibung, Titel,
   // Besitzer/Lover, Konto-Alter, geteilte Mod-Einstellungen, Crafts … und – so gut es geht – welche Mods ein Spieler hat.

@@ -1,6 +1,6 @@
-// ── speicher.js — Speicher-Wächter (Warnung vor „Out of Memory“) und Aufräumen ────────────────────────────────────────
-// A) Warnung: alle paar Sekunden wird der Speicher dieses Tabs gelesen (nur Chrome meldet ihn). Ab einer gelben/roten Schwelle erscheint eine Meldung
-//    mit Handlungsvorschlägen. Stürzt der Tab ab, merkt sich das Tool beim nächsten Start, bei welchem Stand – und warnt danach früher.
+// ── speicher.js — Speicher-Anzeige (GB / Limit) und Aufräumen ────────────────────────────────────────
+// A) Anzeige: alle paar Sekunden wird der Speicher dieses Tabs gelesen (nur Chrome meldet ihn) und unten rechts als „X GB / Limit GB“ gezeigt – ohne Meldungen
+//    oder Fenster. Stürzt der Tab ab, merkt sich das Tool beim nächsten Start den letzten Stand (Einstellungen → Speicher, „Erkannte Abstürze“).
 // B) Aufräumen (Einstellungen → Speicher): zeigt gespeicherte Daten, die die aktuelle Version nicht mehr benutzt, und entfernt sie – nur nach
 //    ausdrücklicher Bestätigung, nie von selbst. Bilder, Outfits, Bots und alles Benutzte werden hier nicht angeboten.
 //
@@ -29,11 +29,7 @@
 
 const SPEICHER_SITZUNG_KEY = 'BC_SPEICHER_SITZUNGEN_v1';    // localStorage: je Fenster { start, ts, laeuft, spitzeMB }
 const SPEICHER_ABSTUERZE_KEY = 'BC_SPEICHER_ABSTUERZE_v1';  // localStorage: die letzten erkannten Abstürze [{ ts, spitzeMB }]
-const SPEICHER_GELB_MB = 1100;          // ab hier „wird knapp“
-const SPEICHER_ROT_MB = 1400;           // ab hier „Absturzgefahr“ (bei dir ist der Tab um 1.700 MB abgestürzt)
-const SPEICHER_UNTERGRENZE_MB = 400;    // so tief rutschen die Schwellen nach einem Absturz höchstens
 const SPEICHER_INTERVALL_MS = 5000;
-const SPEICHER_AUSBLENDEN_MS = 10 * 60 * 1000;
 
 // ═══════════════════════════ Liste der Schlüssel (Datenbank und localStorage) ═══════════════════════════
 // Alles, was die AKTUELLE Version benutzt. tests/speicher.test.js prüft, dass jeder im Code vorkommende Schlüssel hier (oder in einer der
@@ -61,38 +57,14 @@ const SPEICHER_VERALTET = ['BC_CURSE_DEFAULT_OUTFIT_v1', 'BC_CURSE_DEFAULT_OUTFI
 
 // ═══════════════════════════ Reine Logik (ohne DOM, testbar) ═══════════════════════════
 
-function speicherMBText(mb) {
-  mb = Number(mb) || 0;
-  return mb >= 1024 ? (mb / 1024).toFixed(1).replace('.', ',') + ' GB' : Math.round(mb) + ' MB';
-}
+// Immer in GB mit einer Nachkommastelle: "1,4 GB" (für die Anzeige unten rechts)
+function speicherGBText(mb) { return ((Number(mb) || 0) / 1024).toFixed(1).replace('.', ',') + ' GB'; }
 function speicherBytesText(b) {
   b = Number(b) || 0;
   if (b >= 1073741824) return (b / 1073741824).toFixed(2).replace('.', ',') + ' GB';
   if (b >= 1048576) return (b / 1048576).toFixed(1).replace('.', ',') + ' MB';
   if (b >= 1024) return Math.round(b / 1024) + ' KB';
   return b + ' B';
-}
-
-// Schwellen: Standard, nach einem erkannten Absturz früher (60 % bzw. 80 % des niedrigsten Absturzstandes)
-function speicherSchwellen(abstuerze) {
-  let gelb = SPEICHER_GELB_MB, rot = SPEICHER_ROT_MB;
-  const spitzen = (abstuerze || []).map(function (a) { return a && a.spitzeMB; }).filter(function (n) { return n > 0; });
-  if (spitzen.length) {
-    const m = Math.min.apply(null, spitzen);
-    gelb = Math.min(gelb, Math.round(m * 0.6));
-    rot = Math.min(rot, Math.round(m * 0.8));
-  }
-  gelb = Math.max(SPEICHER_UNTERGRENZE_MB, gelb);
-  rot = Math.max(gelb + 100, rot);
-  return { gelb: gelb, rot: rot };
-}
-// 'ok' | 'gelb' | 'rot'. Zusätzlich rot, wenn mehr als 70 % des vom Browser gemeldeten Limits belegt sind.
-function speicherStufe(genutztMB, limitMB, abstuerze) {
-  const s = speicherSchwellen(abstuerze);
-  if (limitMB > 0 && genutztMB / limitMB > 0.7) return 'rot';
-  if (genutztMB >= s.rot) return 'rot';
-  if (genutztMB >= s.gelb) return 'gelb';
-  return 'ok';
 }
 
 function _speicherPraefixPasst(key, praefix) { return key.slice(0, praefix.length) === praefix; }
@@ -133,7 +105,7 @@ function _speicherSchreibe(key, wert) { try { localStorage.setItem(key, JSON.str
 let _spchId = null;
 try { _spchId = sessionStorage.getItem('BC_SPEICHER_ID') || null; } catch (e) {}
 if (!_spchId) { _spchId = 'w' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); try { sessionStorage.setItem('BC_SPEICHER_ID', _spchId); } catch (e) {} }
-let _spchSpitze = 0, _spchLetzterSchreib = 0, _spchGeschrieben = 0, _spchStufe = 'ok', _spchAusgeblendetBis = 0, _spchAusgeblendetStufe = null, _spchTimer = null;
+let _spchSpitze = 0, _spchLetzterSchreib = 0, _spchGeschrieben = 0, _spchTimer = null;
 let _spchAbstuerze = _speicherJson(SPEICHER_ABSTUERZE_KEY, []);
 
 // Beim Start: War eine frühere Sitzung dieses Fensters (oder ein anderes Fenster, das sich nicht mehr meldet) NICHT sauber beendet, ist der Tab vermutlich
@@ -161,21 +133,6 @@ function _speicherSitzungSchreiben(laeuft, jetzt) {
   _spchGeschrieben = _spchSpitze;
 }
 
-function speicherBannerHtml(stufe, genutztMB, limitMB, abstuerze) {
-  const s = speicherSchwellen(abstuerze);
-  const letzter = (abstuerze || []).length ? abstuerze[abstuerze.length - 1] : null;
-  const rot = stufe === 'rot';
-  return '<div class="spw-text"><b>' + (rot ? '🛑 Absturzgefahr' : '⚠️ Speicher wird knapp') + ': dieses Fenster belegt ' + escHtml(speicherMBText(genutztMB)) + '</b>'
-    + (limitMB ? ' <span>(Limit ' + escHtml(speicherMBText(limitMB)) + ')</span>' : '')
-    + '<div class="spw-sub">' + (rot ? 'Der Tab kann jeden Moment mit „Out of Memory“ abstürzen. ' : 'Wenn das weiter steigt, stürzt der Tab ab. ')
-    + 'Starte jetzt keine Bilder-Serien oder Importe, lade das Tool neu (F5) und räume unter Einstellungen → Speicher Ungenutztes auf.'
-    + (letzter ? ' <i>Zuletzt ist der Tab bei etwa ' + escHtml(speicherMBText(letzter.spitzeMB)) + ' abgestürzt – die Warnung kommt deshalb ab ' + escHtml(speicherMBText(s.gelb)) + ' (gelb) / ' + escHtml(speicherMBText(s.rot)) + ' (rot).</i>' : '')
-    + '</div></div>'
-    + '<div class="spw-knoepfe"><button class="btn" onclick="speicherSeiteOeffnen()">🧹 Aufräumen</button>'
-    + '<button class="btn" onclick="location.reload()">↻ Neu laden</button>'
-    + '<button class="btn" onclick="speicherBannerAus()" title="Blendet die Meldung 10 Minuten aus (kommt früher wieder, wenn es noch schlimmer wird)">✕ 10 Min.</button></div>';
-}
-
 function _speicherUiEnsure() {
   if (typeof document === 'undefined' || !document.body) return null;
   let chip = document.getElementById('speicherChip');
@@ -183,27 +140,11 @@ function _speicherUiEnsure() {
     chip = document.createElement('button');
     chip.id = 'speicherChip';
     chip.className = 'spw-chip';
-    chip.title = 'Speicher dieses Fensters (Chrome). Klick öffnet Einstellungen → Speicher';
+    chip.title = 'Arbeitsspeicher dieses Fensters / Limit des Browsers (Chrome). Klick öffnet Einstellungen → Speicher';
     chip.onclick = function () { speicherSeiteOeffnen(); };
     document.body.appendChild(chip);
   }
-  let banner = document.getElementById('speicherBanner');
-  if (!banner) {
-    banner = document.createElement('div');
-    banner.id = 'speicherBanner';
-    banner.className = 'spw-banner';
-    banner.setAttribute('role', 'alert');
-    banner.style.display = 'none';
-    document.body.appendChild(banner);
-  }
-  return { chip: chip, banner: banner };
-}
-
-function speicherBannerAus() {
-  _spchAusgeblendetBis = Date.now() + SPEICHER_AUSBLENDEN_MS;
-  _spchAusgeblendetStufe = _spchStufe;
-  const b = document.getElementById('speicherBanner');
-  if (b) b.style.display = 'none';
+  return { chip: chip };
 }
 
 function speicherTick() {
@@ -211,38 +152,18 @@ function speicherTick() {
   if (!m) return null;
   const jetzt = Date.now();
   if (m.genutzt > _spchSpitze) _spchSpitze = m.genutzt;
-  const stufe = speicherStufe(m.genutzt, m.limit, _spchAbstuerze);
-  const eskaliert = (stufe === 'rot' && _spchStufe !== 'rot') || (stufe === 'gelb' && _spchStufe === 'ok');
-  _spchStufe = stufe;
   // Den Stand für die Absturz-Erkennung festhalten: bei einem Anstieg um 50 MB und mehr gleich (so geht der Höchststand vor einem plötzlichen Absturz
   // nicht verloren), sonst alle 15 s (nur ein kleiner Eintrag im localStorage)
   if (jetzt - _spchLetzterSchreib > 15000 || (_spchSpitze - _spchGeschrieben >= 50 && jetzt - _spchLetzterSchreib > 1500)) _speicherSitzungSchreiben(true, jetzt);
   const ui = _speicherUiEnsure();
-  if (ui) {
-    ui.chip.textContent = '🧠 ' + speicherMBText(m.genutzt);
-    ui.chip.className = 'spw-chip' + (stufe === 'ok' ? '' : ' spw-' + stufe);
-    const verborgen = jetzt < _spchAusgeblendetBis && !(_spchAusgeblendetStufe === 'gelb' && stufe === 'rot');
-    if (stufe === 'ok' || verborgen) ui.banner.style.display = 'none';
-    else {
-      ui.banner.className = 'spw-banner spw-' + stufe;
-      ui.banner.innerHTML = speicherBannerHtml(stufe, m.genutzt, m.limit, _spchAbstuerze);
-      ui.banner.style.display = '';
-    }
-  }
-  if (eskaliert && typeof showStatus === 'function') {
-    showStatus((stufe === 'rot' ? '🛑 Absturzgefahr: ' : '⚠️ Speicher wird knapp: ') + 'dieses Fenster belegt ' + speicherMBText(m.genutzt) + ' – Tool neu laden (F5) und unter Einstellungen → Speicher aufräumen', stufe === 'rot' ? 'error' : 'info');
-  }
-  return { stufe: stufe, genutzt: m.genutzt, limit: m.limit };
+  if (ui) ui.chip.textContent = '🧠 ' + speicherGBText(m.genutzt) + (m.limit ? ' / ' + speicherGBText(m.limit) : '');
+  return { genutzt: m.genutzt, limit: m.limit };
 }
 
 function speicherWaechterStarten() {
   const jetzt = Date.now();
-  const neu = speicherAbstuerzeErkennen(jetzt);
+  speicherAbstuerzeErkennen(jetzt);      // nur vermerkt (Einstellungen → Speicher), keine Meldung
   _speicherSitzungSchreiben(true, jetzt);
-  if (neu && typeof showStatus === 'function') {
-    const l = _spchAbstuerze[_spchAbstuerze.length - 1];
-    showStatus('⚠️ Der Tool-Tab ist beim letzten Mal vermutlich abgestürzt (Speicher bei ca. ' + speicherMBText(l.spitzeMB) + '). Die Speicher-Warnung kommt jetzt früher – siehe Einstellungen → Speicher.', 'error');
-  }
   try { addEventListener('pagehide', function () { _speicherSitzungSchreiben(false, Date.now()); }); } catch (e) {}
   if (!speicherLesen()) return false;      // ohne Speicherangabe (kein Chrome) gibt es nichts zu überwachen
   speicherTick();
@@ -374,17 +295,13 @@ async function speicherSeiteAktualisieren() {
   _speicherSeiteLaeuft = true;
   try {
     const m = speicherLesen();
-    const s = speicherSchwellen(_spchAbstuerze);
-    const stufe = m ? speicherStufe(m.genutzt, m.limit, _spchAbstuerze) : 'ok';
     let h = '<div class="set-card"><div class="set-card-h"><span class="tweaks-section-title">🧠 Speicher dieses Fensters</span>'
       + '<div class="tweaks-btn-group set-r"><button class="tweaks-btn" onclick="speicherSeiteAktualisieren()">🔄 Aktualisieren</button></div></div><div class="set-card-b">';
     if (m) {
-      h += '<div class="set-info spw-stufe-' + stufe + '"><b>' + escHtml(speicherMBText(m.genutzt)) + '</b> von ' + escHtml(speicherMBText(m.limit)) + ' (Spitze dieser Sitzung: ' + escHtml(speicherMBText(_spchSpitze)) + ') · '
-        + (stufe === 'ok' ? '✅ in Ordnung' : stufe === 'gelb' ? '⚠️ wird knapp' : '🛑 Absturzgefahr') + '</div>';
-      h += '<div class="set-hint">Warnung gelb ab ' + escHtml(speicherMBText(s.gelb)) + ', rot ab ' + escHtml(speicherMBText(s.rot)) + (_spchAbstuerze.length ? ' (nach einem Absturz bei ca. ' + escHtml(speicherMBText(Math.min.apply(null, _spchAbstuerze.map(function (a) { return a.spitzeMB; })))) + ' vorverlegt)' : '') + '. '
-        + 'Die Bilder aller Tabs liegen im Speicher dieses Fensters – je mehr Bilder, desto höher der Stand.</div>';
-    } else h += '<div class="set-info">Dein Browser meldet den Speicher nicht (nur Chrome/Edge tun das) – die Warnung ist deshalb nicht möglich.</div>';
-    if (_spchAbstuerze.length) h += '<div class="set-hint">Erkannte Abstürze: ' + _spchAbstuerze.map(function (a) { return new Date(a.ts).toLocaleString('de-DE') + ' bei ' + speicherMBText(a.spitzeMB); }).map(escHtml).join(' · ') + '</div>';
+      h += '<div class="set-info"><b>' + escHtml(speicherGBText(m.genutzt)) + '</b> von ' + escHtml(speicherGBText(m.limit)) + ' (Spitze dieser Sitzung: ' + escHtml(speicherGBText(_spchSpitze)) + ')</div>';
+      h += '<div class="set-hint">Die Bilder aller Tabs liegen im Speicher dieses Fensters – je mehr Bilder, desto höher der Stand. Stürzt der Tab ab („Out of Memory“), wird der letzte Stand unten vermerkt.</div>';
+    } else h += '<div class="set-info">Dein Browser meldet den Speicher nicht (nur Chrome/Edge tun das).</div>';
+    if (_spchAbstuerze.length) h += '<div class="set-hint">Erkannte Abstürze: ' + _spchAbstuerze.map(function (a) { return new Date(a.ts).toLocaleString('de-DE') + ' bei ' + speicherGBText(a.spitzeMB); }).map(escHtml).join(' · ') + '</div>';
     try {
       const est = navigator.storage && navigator.storage.estimate ? await navigator.storage.estimate() : null;
       if (est) h += '<div class="set-hint">Plattenplatz des Browsers für dieses Tool: ' + escHtml(speicherBytesText(est.usage)) + ' belegt von ' + escHtml(speicherBytesText(est.quota)) + '.</div>';

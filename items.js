@@ -10506,7 +10506,7 @@ function captureOsScreenshot(mk, vIdx) {
     + 'setTimeout(_renderCheck,100);'
     + '})();';
 
-  bcSend({ type: 'EXEC', code }, true);
+  bcSend({ type: 'EXEC', code: _shotMitRuhe(code) }, true);
 }
 
 // ── Screenshot-Durchläufe: nichts zum Server, nichts im Bild, was nicht zum Outfit gehört ──────────
@@ -10555,6 +10555,26 @@ const _SHOT_VORBEREITEN = '(function(){'
 // der Aufrufer-Kette weg. Sonst stünde dieser Code (eingespielt per EXEC → "eval@loader.js") bei JEDER Sendung im Stack und der
 // Monitor würde alles dem Tool zuschreiben.
 const _SHOT_SPERRE_MS = 30000;
+
+// ── Ruhe vor dem Bild ────────────────────────────────────────────────────────────────────────────────────────────────
+// Der BC-Server trennt (ErrorRateLimited), wenn zu viel gesendet wird. Besonders knapp wird es direkt nach einem Raumwechsel: dann melden sich alle
+// Mods (KIKILINK, DOGS, LikoAEE, BCE, BCX, LSCG …) gleichzeitig mit versteckten Nachrichten. Läuft dabei eine Bilder-Serie, kommen ihre Sendungen
+// obendrauf. Darum prüft jede Aufnahme VOR dem Start (im Spiel-Tab), ob gerade viel gesendet wird, und wartet dann kurz – sonst fotografiert sie sofort.
+// Gemessen wird mit dem Sende-Monitor des Loaders (window.__BCK_SendeLast): alle ServerSend-Aufrufe der letzten 3 s (auch die der Mods) und die Zeit seit
+// dem letzten Raumwechsel. Fehlt der Monitor (alter Loader), gibt es kein Warten.
+const SHOT_RUHE_MAX_MS = 15000;       // so lange wartet eine Aufnahme höchstens (danach fotografiert sie trotzdem)
+const SHOT_RUHE_FENSTER_MS = 3000;    // betrachteter Zeitraum
+const SHOT_RUHE_MAX_SENDUNGEN = 12;   // ab so vielen Sendungen im Zeitraum gilt es als "zu laut"
+const SHOT_RUHE_RAUMWECHSEL_MS = 3500; // nach einem Beitritt/Verlassen so lange Ruhe (die Beitrittswelle der Mods)
+function _shotMitRuhe(code) {
+  return '(function(){'
+    + 'var _run=function(){' + code + '};'
+    + 'var _dl=Date.now()+' + SHOT_RUHE_MAX_MS + ';'
+    + 'var _laut=function(){try{var s=window.__BCK_SendeLast&&window.__BCK_SendeLast(' + SHOT_RUHE_FENSTER_MS + ');'
+    +   'return !!s&&(s.aufrufe>=' + SHOT_RUHE_MAX_SENDUNGEN + '||(s.raumwechsel!==null&&s.raumwechsel<' + SHOT_RUHE_RAUMWECHSEL_MS + '));}catch(e){return false;}};'
+    + '(function _w(){if(!_laut()||Date.now()>_dl){_run();return;}setTimeout(_w,200);})();'
+    + '})();';
+}
 const _SHOT_SPERRE_INSTALL = '(function(){'
   + 'if(window.__BCU_SPERRE_HOOK__)return;'
   + 'var pruefen=function(args){'
@@ -10681,7 +10701,7 @@ function captureProfileViaCanvas(name, outfitCode, rawApplyCode) {
       const why = _gameWaitReason(false);
       _dcPauseJob('slideshow', why || ('Timeout – "' + name + '" wird wiederholt'));
     }
-  }, 12000);
+  }, 12000 + SHOT_RUHE_MAX_MS);   // die Ruhe-Wartezeit vor dem Bild (_shotMitRuhe) zählt nicht zur Antwortzeit
 
   _pendingProfileCapture[reqId] = { name, timeoutId, t0: Date.now() };
 
@@ -10815,7 +10835,7 @@ function captureProfileViaCanvas(name, outfitCode, rawApplyCode) {
     + '})();';
 
   console.log('[BCU] captureProfileViaCanvas: EXEC len:', code.length);
-  bcSend({ type: 'EXEC', code }, true);
+  bcSend({ type: 'EXEC', code: _shotMitRuhe(code) }, true);
 }
 
 // ── Screenshot-Debug: Aufruf aus Popup-Konsole ────────
@@ -13711,7 +13731,7 @@ function _wheelGenStep() {
     if (_wheelGenShotReq !== reqId || tok !== _wheelGenTok) return;   // inzwischen beantwortet, pausiert oder beendet
     // Keine Antwort: das Outfit bleibt in der Queue, der Wächter setzt fort, sobald BC stabil erreichbar ist
     _dcPauseJob('wheelGen', _gameWaitReason(false) || ('Timeout – "' + o.name + '" wird wiederholt'));
-  }, 12000);
+  }, 12000 + SHOT_RUHE_MAX_MS);   // die Ruhe-Wartezeit vor dem Bild (_shotMitRuhe) zählt nicht zur Antwortzeit
   bcSend({ type: 'EXEC', code: _wheelShotCode(reqId, o.items, true) }, true);
 }
 
@@ -14027,7 +14047,7 @@ function _wheelShotCode(reqId, items, serie) {
   const applyPart = 'try{' + basis + '(function(){' + _mbsApplyKern(items, 'bild') + '})();}catch(applyErr){'
     + zurueck + antwort('err:"APPLY_FAIL:"+applyErr.message') + 'return;}';
 
-  return '(function(){'
+  return _shotMitRuhe('(function(){'
     + 'window.__BCU_captureGen=(window.__BCU_captureGen||0)+1;'
     + 'var myGen=window.__BCU_captureGen;'
     // Sync-Sperre VOR jeder Änderung am Aussehen; gelöst erst nach dem Zurücksetzen (_restore)
@@ -14085,7 +14105,7 @@ function _wheelShotCode(reqId, items, serie) {
     + '  else{_prevHash=h;_checksDone++;setTimeout(_renderCheck,60);}'
     + '}'
     + 'setTimeout(_renderCheck,40);'
-    + '})();';
+    + '})();');
 }
 
 // Größe der Wheel-Bilder (wie Profil und LSCG). Die alten Bilder waren höchstens 260×520.
