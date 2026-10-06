@@ -17,7 +17,8 @@ let   _IDB_OPENING = null;
 // Screenshot-Store (SPLIT-05/06): ein Datensatz je Bild, id = '<kind>|<key>'.
 const _IDB_SCREENSHOTS = 'screenshots';
 const SCREENSHOT_KINDS = ['profile', 'lscg', 'wheel'];
-// Alt-Blobs: nur lesen, nie schreiben oder löschen — eingefrorener Rollback-Stand, Kernwert.
+// Alt-Blobs: nie geschrieben, nie von selbst gelöscht — eingefrorener Rollback-Stand, Kernwert. Entfernt wird er nur auf ausdrücklichen Wunsch mit Rückfrage
+// (speicher.js, nach Prüfung, dass die Bilder im Screenshot-Store liegen).
 const SCREENSHOT_LEGACY_KEYS = {
   profile: 'BC_PROFILE_SCREENSHOTS_v1',
   lscg:    'BC_LSCG_SCREENSHOTS_v1',
@@ -77,21 +78,56 @@ async function idbGet(key) {
   } catch (err) { console.warn('[IDB] get:', err); return null; }
 }
 
-// Alle Schlüssel und Werte des Haupt-Speichers (kv) – für das Gesamt-Backup. Liest nur.
-async function idbKvAlle() {
+// Alle Schlüssel des Haupt-Speichers (kv) – ohne die Werte zu lesen (schnell, kaum Speicher)
+async function idbKvSchluessel() {
   try {
     const db = await _idbOpen();
     return await new Promise((resolve, reject) => {
+      const req = db.transaction(_IDB_STORE, 'readonly').objectStore(_IDB_STORE).getAllKeys();
+      req.onsuccess = () => resolve((req.result || []).map(String));
+      req.onerror   = e => reject(e.target.error);
+    });
+  } catch (err) { console.warn('[IDB] kvSchluessel:', err); return []; }
+}
+
+// Alle Schlüssel und Werte des Haupt-Speichers (kv) – für das Gesamt-Backup. Liest nur.
+// Die eingefrorenen Alt-Kopien der Bilder (SCREENSHOT_LEGACY_KEYS, zusammen leicht über 400 MB) werden NICHT gelesen: sie sind ohnehin nie Teil
+// einer Sicherung, und sie vollständig in den Speicher zu holen, ließ den Tab abstürzen ("Out of Memory"). Mit { mitAltKopien: true } werden sie doch gelesen.
+async function idbKvAlle(opt) {
+  const mitAlt = !!(opt && opt.mitAltKopien);
+  const alt = new Set(Object.values(SCREENSHOT_LEGACY_KEYS));
+  try {
+    const db = await _idbOpen();
+    const keys = (await idbKvSchluessel()).filter(k => mitAlt || !alt.has(k));
+    return await new Promise((resolve, reject) => {
       const out = {};
-      const tx  = db.transaction(_IDB_STORE, 'readonly');
-      const req = tx.objectStore(_IDB_STORE).openCursor();
-      req.onsuccess = e => {
-        const c = e.target.result;
-        if (c) { out[c.key] = c.value; c.continue(); } else resolve(out);
-      };
-      req.onerror = e => reject(e.target.error);
+      const tx = db.transaction(_IDB_STORE, 'readonly');
+      const st = tx.objectStore(_IDB_STORE);
+      let offen = keys.length;
+      if (!offen) { resolve(out); return; }
+      for (const k of keys) {
+        const req = st.get(k);
+        req.onsuccess = () => { if (req.result !== undefined) out[k] = req.result; if (--offen === 0) resolve(out); };
+        req.onerror   = e => reject(e.target.error);
+      }
+      tx.onabort = e => reject(tx.error || e.target.error);
     });
   } catch (err) { console.warn('[IDB] kvAlle:', err); return {}; }
+}
+
+// Einen Schlüssel des Haupt-Speichers (kv) entfernen. NUR für das bestätigte Aufräumen (speicher.js) – nichts löscht von selbst.
+async function idbKvLoeschen(key) {
+  try {
+    const db = await _idbOpen();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(_IDB_STORE, 'readwrite');
+      tx.objectStore(_IDB_STORE).delete(key);
+      tx.oncomplete = () => resolve();
+      tx.onerror    = e => reject(e.target.error);
+      tx.onabort    = e => reject(tx.error || e.target.error);
+    });
+    return true;
+  } catch (err) { console.warn('[IDB] kvLoeschen:', key, err); return false; }
 }
 
 /* Gibt true zurueck, wenn wirklich geschrieben wurde. Wirft nicht – die
@@ -485,7 +521,7 @@ function _debounce(fn, delay) {
 // Dual-Export für Vitest (CJS-Require); im Browser ist `module` undefined.
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
-    idbGet, idbSet, idbKvAlle, _idbOpen, _debounce,
+    idbGet, idbSet, idbKvAlle, idbKvSchluessel, idbKvLoeschen, _idbOpen, _debounce,
     idbScreenshotBatch, idbScreenshotPut, idbScreenshotDelete, idbScreenshotGetAll, idbScreenshotKeys, idbScreenshotKeysOf, idbScreenshotGetMany,
     idbSnapshotPut, idbSnapshotGetAll, idbSnapshotGet, idbSnapshotKeys, idbSnapshotDelete,
     _screenshotStoreReady, _migrateScreenshotsToStore,

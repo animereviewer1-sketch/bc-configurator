@@ -7911,7 +7911,12 @@ async function exportInfoSammeln() {
       if (l > kvMax) { kvMax = l; kvGroesster = k; }
     }
   } catch (e) {}
-  z.push('Datenbank: ' + zahl(kvAnzahl) + ' Schlüssel · ca. ' + MB(kvZeichen) + (kvGroesster ? ' · größter: ' + kvGroesster + ' (' + MB(kvMax) + ')' : ''));
+  z.push('Datenbank: ' + zahl(kvAnzahl) + ' Schlüssel · ca. ' + MB(kvZeichen) + (kvGroesster ? ' · größter: ' + kvGroesster + ' (' + MB(kvMax) + ')' : '') + ' (ohne die Alt-Kopien der Bilder: sie werden nie in den Speicher gelesen)');
+  try {
+    const altKopien = (await idbKvSchluessel()).filter(k => Object.values(SCREENSHOT_LEGACY_KEYS).includes(k));
+    if (altKopien.length) z.push('Alt-Kopien der Bilder (eingefroren, nicht gelesen): ' + altKopien.join(', ') + ' – entfernbar unter Einstellungen → Speicher');
+  } catch (e) {}
+  try { const sm = (typeof speicherLesen === 'function') ? speicherLesen() : null; if (sm) z.push('Arbeitsspeicher dieses Fensters: ' + zahl(Math.round(sm.genutzt)) + ' MB von ' + zahl(Math.round(sm.limit)) + ' MB'); } catch (e) {}
   let lsAnzahl = 0, lsZeichen = 0;
   const lsGroesse = [];
   try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); const l = String(localStorage.getItem(k) || '').length + k.length; lsAnzahl++; lsZeichen += l; lsGroesse.push([k, l]); } } catch (e) {}

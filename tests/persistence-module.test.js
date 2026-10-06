@@ -42,7 +42,7 @@ describe('persistence.js per CJS-Require (Dual-Export, Pattern B)', () => {
     expect(Object.keys(mod).sort()).toEqual([
       'SCREENSHOT_KINDS', 'SCREENSHOT_LEGACY_KEYS', 'SCREENSHOT_MIGRATION_KEY',
       '_debounce', '_idbOpen', '_migrateScreenshotsToStore', '_screenshotStoreReady',
-      'idbGet', 'idbKvAlle', 'idbScreenshotBatch', 'idbScreenshotDelete', 'idbScreenshotGetAll', 'idbScreenshotGetMany', 'idbScreenshotKeys', 'idbScreenshotKeysOf', 'idbScreenshotPut',
+      'idbGet', 'idbKvAlle', 'idbKvLoeschen', 'idbKvSchluessel', 'idbScreenshotBatch', 'idbScreenshotDelete', 'idbScreenshotGetAll', 'idbScreenshotGetMany', 'idbScreenshotKeys', 'idbScreenshotKeysOf', 'idbScreenshotPut',
       'idbSet', 'idbSnapshotDelete', 'idbSnapshotGet', 'idbSnapshotGetAll', 'idbSnapshotKeys', 'idbSnapshotPut',
     ]);
   });
@@ -82,7 +82,7 @@ describe('persistence.js als klassisches Skript in der vm-Sandbox', () => {
     expect(Object.keys(module.exports).sort()).toEqual([
       'SCREENSHOT_KINDS', 'SCREENSHOT_LEGACY_KEYS', 'SCREENSHOT_MIGRATION_KEY',
       '_debounce', '_idbOpen', '_migrateScreenshotsToStore', '_screenshotStoreReady',
-      'idbGet', 'idbKvAlle', 'idbScreenshotBatch', 'idbScreenshotDelete', 'idbScreenshotGetAll', 'idbScreenshotGetMany', 'idbScreenshotKeys', 'idbScreenshotKeysOf', 'idbScreenshotPut',
+      'idbGet', 'idbKvAlle', 'idbKvLoeschen', 'idbKvSchluessel', 'idbScreenshotBatch', 'idbScreenshotDelete', 'idbScreenshotGetAll', 'idbScreenshotGetMany', 'idbScreenshotKeys', 'idbScreenshotKeysOf', 'idbScreenshotPut',
       'idbSet', 'idbSnapshotDelete', 'idbSnapshotGet', 'idbSnapshotGetAll', 'idbSnapshotKeys', 'idbSnapshotPut',
     ]);
   });

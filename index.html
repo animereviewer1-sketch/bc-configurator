@@ -2395,6 +2395,7 @@ button { cursor: pointer; }
   <div class="set-tabs" role="tablist">
     <button class="set-tab on" data-set-tab="darstellung" role="tab">Darstellung</button>
     <button class="set-tab" data-set-tab="daten" role="tab">Daten &amp; Backup</button>
+    <button class="set-tab" data-set-tab="speicher" role="tab" onclick="speicherSeiteAktualisieren()">Speicher</button>
     <button class="set-tab" data-set-tab="werkzeuge" role="tab">Werkzeuge</button>
     <button class="set-tab set-tab-gefahr" data-set-tab="gefahr" role="tab">Gefahrenzone</button>
   </div>
@@ -2573,6 +2574,11 @@ button { cursor: pointer; }
       <div class="set-card-h"><span class="tweaks-section-title">Spiel-Scan ist umgezogen</span></div>
       <div class="set-card-b set-hint">Liegt jetzt im Tab <b>Scan</b> (Seitenleiste → Spieler → Spiel-Scan).</div>
     </div>
+  </section>
+
+  <!-- ── Speicher: Warnung vor „Out of Memory“ und Aufräumen (speicher.js) ── -->
+  <section class="set-page" data-set-page="speicher">
+    <div id="speicherSeite"><div class="set-card"><div class="set-card-b"><div class="set-info">Wird geladen…</div></div></div></div>
   </section>
 
   <!-- ── Gefahrenzone ── -->
@@ -3249,7 +3255,7 @@ button { cursor: pointer; }
   </div>
 </div>
 
-<!-- LADEREIHENFOLGE (nicht umstellen): bc-icons.js, bc-icons-ergaenzung.js (head) → persistence.js → bridge.js → items.js → game-scan.js → baseline-manifest.js → scan-tab.js → money.js → rank.js → shop.js → inventar.js → bot-data.js → bot-ui.js → bot-engine.js → outfit-import.js → bc-autobackup.js. Details und Guard: docs/LOAD-ORDER.md -->
+<!-- LADEREIHENFOLGE (nicht umstellen): bc-icons.js, bc-icons-ergaenzung.js (head) → persistence.js → bridge.js → items.js → game-scan.js → baseline-manifest.js → scan-tab.js → speicher.js → money.js → rank.js → shop.js → inventar.js → bot-data.js → bot-ui.js → bot-engine.js → outfit-import.js → bc-autobackup.js. Details und Guard: docs/LOAD-ORDER.md -->
 <script>
 // Cache-Buster: jede Seite lädt immer die aktuelle JS-Version (kein Browser-Cache)
 var _cbv = Date.now();
@@ -3259,6 +3265,7 @@ document.write('<scr'+'ipt src="items.js?_='+_cbv+'"><\/scr'+'ipt>');
 document.write('<scr'+'ipt src="game-scan.js?_='+_cbv+'"><\/scr'+'ipt>');
 document.write('<scr'+'ipt src="baseline-manifest.js?_='+_cbv+'"><\/scr'+'ipt>');
 document.write('<scr'+'ipt src="scan-tab.js?_='+_cbv+'"><\/scr'+'ipt>');
+document.write('<scr'+'ipt src="speicher.js?_='+_cbv+'"><\/scr'+'ipt>');
 </script>
 
 
@@ -4217,6 +4224,23 @@ document.write('<scr'+'ipt src="bc-autobackup.js?_='+_cbv+'"><\/scr'+'ipt>');
 .os-ignore-actions { display:flex; gap:8px; }
 .os-body  { padding:10px 14px; overflow-y:auto; max-height:calc(100vh - 110px); display:block; }
 .os-empty { text-align:center; color:var(--text3); padding:56px 20px; font-size:.875rem; line-height:1.9; }
+
+/* ── Speicher-Wächter (speicher.js) ── */
+.spw-chip { position:fixed; right:14px; bottom:12px; z-index:1500; font-size:.6875rem; padding:3px 10px; border-radius:999px; border:1px solid var(--border); background:var(--bg3); color:var(--text3); cursor:pointer; opacity:.75; }
+.spw-chip:hover { opacity:1; }
+.spw-chip.spw-gelb { color:#fde68a; border-color:#7a5d12; background:#2b2209; opacity:1; }
+.spw-chip.spw-rot { color:#fecaca; border-color:#8a1f33; background:#35101a; opacity:1; font-weight:700; }
+.spw-banner { position:fixed; top:10px; left:50%; transform:translateX(-50%); z-index:2000; width:min(920px, calc(100vw - 32px)); display:flex; gap:14px; align-items:center; justify-content:space-between; flex-wrap:wrap;
+              padding:12px 16px; border-radius:12px; border:1px solid; font-size:.8125rem; line-height:1.5; box-shadow:0 8px 28px rgba(0,0,0,.5); }
+.spw-banner.spw-gelb { background:#2b2209; border-color:#7a5d12; color:#fde68a; }
+.spw-banner.spw-rot { background:#35101a; border-color:#8a1f33; color:#fecaca; }
+.spw-sub { font-size:.75rem; opacity:.9; margin-top:2px; }
+.spw-knoepfe { display:flex; gap:8px; flex-wrap:wrap; }
+.spw-liste { display:flex; flex-direction:column; gap:4px; margin-top:6px; }
+.spw-eintrag { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+.spw-eintrag code { font-size:.75rem; overflow-wrap:anywhere; }
+.spw-inline { display:flex; gap:8px; flex-wrap:wrap; margin-top:6px; }
+.spw-stufe-gelb { color:#fde68a; } .spw-stufe-rot { color:#fecaca; }
 
 /* ── Member-Block (wie profile-owner-block) ── */
 .os-member-block { border:1px solid rgba(255,255,255,0.07); border-radius:11px; overflow:hidden; margin-bottom:10px; flex-shrink:0; }

@@ -248,7 +248,8 @@ describe('Screenshot-Migration (SPLIT-06) — additiv, verifiziert, idempotent, 
     expect(count(src, "'BC_LSCG_SCREENSHOTS_v1'")).toBe(1);
     expect(count(src, "'BC_MBS_WHEEL_SS_v1'")).toBe(1);
     expect(count(src, "'BC_SCREENSHOT_MIGRATION_v1'")).toBe(1);
-    expect(count(src, 'objectStore(_IDB_STORE).delete(')).toBe(0);
+    // Genau EIN Löschen im Haupt-Speicher: idbKvLoeschen – nur vom bestätigten Aufräumen (speicher.js) aufgerufen (tests/speicher.test.js prüft das)
+    expect(count(src, 'objectStore(_IDB_STORE).delete(')).toBe(1);
     expect(count(src, 'deleteDatabase')).toBe(0);
     expect(count(src, 'req.onblocked')).toBe(1);
     expect(count(src, 'db.onversionchange')).toBe(1);
