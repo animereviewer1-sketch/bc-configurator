@@ -93,6 +93,10 @@
     return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
   }
 
+  /* Flache Kopie eines kurzen Teilstuecks. Ein slice() eines langen Strings haelt in V8 den GANZEN Ursprungsstring fest – das Manifest
+     (stand.manifest) bliebe sonst den ganzen Lauf ueber an jedem Bild haengen und der Speicher wuerde nach der Sicherung nicht frei. */
+  function abloesen(s) { return Array.from(s).join(''); }
+
   /* Signatur eines Eintrags. Bilder (lange Strings) werden nicht komplett
      gehasht – das waeren pro Lauf hunderte MB Zeichenarbeit. Laenge plus
      Anfang und Ende genuegt: ein Screenshot aendert sich nur, wenn er neu
@@ -100,7 +104,7 @@
   function sig(v) {
     if (typeof v === 'string') {
       return v.length > 512
-        ? 's' + v.length + '~' + v.slice(0, 64) + v.slice(-32)
+        ? 's' + v.length + '~' + abloesen(v.slice(0, 64)) + abloesen(v.slice(-32))
         : 's' + hash(v);
     }
     var s;
@@ -309,11 +313,23 @@
 
     laeuft = true;
     var t0 = Date.now();
+    var leihe = null;   // das geliehene Bild-Archiv – im finally zurueckgeben, dann nimmt das Tool die Bilder wieder aus dem Speicher
     try {
       // Erst sichern, wenn ALLE Bilder gelesen sind: sonst fehlen sie in der Datei, und das Aufräumen ersetzt dabei vollständige ältere
       // Generationen. Nicht geschafft = kein Tagesvermerk, der nächste Versuch kommt automatisch (stündlich / nächster Start).
-      if (typeof bcBilderGeladen === 'function') {
-        var bereit = await Promise.race([bcBilderGeladen(), new Promise(function (r) { setTimeout(function () { r(false); }, 300000); })]);
+      // Die Bilder werden beim Start nicht mehr geladen, sondern erst hier (bilderAusleihen) – und danach wieder freigegeben.
+      var warten = new Promise(function (r) { setTimeout(function () { r(null); }, 300000); });
+      if (typeof bilderAusleihen === 'function') {
+        var leihen = bilderAusleihen();
+        var l = await Promise.race([leihen, warten]);
+        if (!l || !l.ok) {
+          if (l) l.zurueck();                                                  // Lesefehler: sofort zurueck
+          else leihen.then(function (x) { x.zurueck(); }, function () {});     // Zeit um: zurueckgeben, sobald es doch fertig wird
+          return { uebersprungen: 'Bilder noch nicht vollstaendig geladen' };
+        }
+        leihe = l;
+      } else if (typeof bcBilderGeladen === 'function') {
+        var bereit = await Promise.race([bcBilderGeladen(), warten.then(function () { return false; })]);
         if (!bereit) return { uebersprungen: 'Bilder noch nicht vollstaendig geladen' };
       }
       var daten = await ergaenzeDaten(baueDaten());
@@ -361,6 +377,7 @@
       console.error('[Backup] fehlgeschlagen:', e);
       return { fehler: e.message };
     } finally {
+      if (leihe) leihe.zurueck();
       laeuft = false;
     }
   }

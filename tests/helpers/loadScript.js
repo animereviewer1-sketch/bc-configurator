@@ -197,17 +197,25 @@ export function loadScript(files, extraGlobals = {}) {
   if (!Array.isArray(files)) {
     throw new TypeError('loadScript: files must be an array of repo-relative paths');
   }
-  const sandbox = makeSandbox(extraGlobals);
+  // Sonderschalter (kein Teil der Umgebung): bilderEcht = true lässt die Bilder so laden wie im Tool (beim Start nur die Schlüssel,
+  // das ganze Archiv erst bei Bedarf). Ohne ihn gilt das Archiv als vollständig geladen – siehe unten.
+  const { bilderEcht, ...globals } = extraGlobals;
+  const sandbox = makeSandbox(globals);
   for (const file of expandLoadOrder(files)) {
     loadInto(sandbox, file);
   }
-  // items.js lädt die Bilder im Hintergrund; bis das fertig ist, verweigern "alle löschen", Sicherungen und "fehlende Bilder erzeugen"
-  // ihren Dienst. Tests laufen synchron nach dem Laden – darum gilt das Archiv hier als geladen. Tests, die das Warten prüfen,
-  // setzen die Flags selbst zurück (_bildFertig.profile = false …).
+  // items.js lädt die Bilder erst bei Bedarf; bis das fertig ist, verweigern "alle löschen" (bzw. laden zuerst) und "fehlende Bilder
+  // erzeugen" ihren Dienst. Tests laufen synchron nach dem Laden – darum gilt das Archiv hier als geladen (die Maps sind das Archiv). Tests,
+  // die das Laden oder Warten prüfen, nutzen bilderEcht oder setzen die Flags selbst zurück (_bildFertig.profile = false …).
+  if (!bilderEcht) try {
+    vm.runInContext("if (typeof _bildVoll !== 'undefined') { for (const k of _BILD_ARTEN) { _bildVoll[k] = Promise.resolve(true); _bilderGeladen[k].fertig(true); _bildFest[k] = true; } }", sandbox);
+  } catch (e) { /* items.js nicht geladen */ }
+  if (!bilderEcht) try {
+    vm.runInContext("if (typeof _bildFertig !== 'undefined') { _bildFertig.profile = true; _bildFertig.lscg = true; _bildFertig.wheel = true; }", sandbox);
+  } catch (e) { /* items.js nicht geladen */ }
   try {
-    vm.runInContext("if (typeof _bildFertig !== 'undefined') { _bildFertig.profile = true; _bildFertig.lscg = true; _bildFertig.wheel = true; }"
-      // Die Liste der Wheel-Bilder in aktueller Größe kommt aus der Datenbank – im Test gilt sie als geladen
-      + "; if (typeof _kleinStatus !== 'undefined' && _kleinStatus['BC_WHEEL_HOCH_v1']) _kleinStatus['BC_WHEEL_HOCH_v1'].geladen = true;", sandbox);
+    // Die Liste der Wheel-Bilder in aktueller Größe kommt aus der Datenbank – im Test gilt sie als geladen
+    vm.runInContext("if (typeof _kleinStatus !== 'undefined' && _kleinStatus['BC_WHEEL_HOCH_v1']) _kleinStatus['BC_WHEEL_HOCH_v1'].geladen = true;", sandbox);
   } catch (e) { /* items.js nicht geladen */ }
   return sandbox;
 }

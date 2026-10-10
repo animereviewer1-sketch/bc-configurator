@@ -9,7 +9,7 @@ import { loadScript, evalIn, settle, makeElementStub, REPO_ROOT } from './helper
 const quiet = { log() {}, warn() {}, error() {}, info() {}, debug() {} };
 
 async function boot({ confirm = () => true } = {}) {
-  const ctx = loadScript(['items.js'], { console: quiet, confirm });
+  const ctx = loadScript(['items.js'], { console: quiet, confirm, bilderEcht: true });
   ctx.showStatus = vi.fn();
   evalIn(ctx, 'showStatus = globalThis.showStatus;');
   await ctx._screenshotStoreReady();
@@ -55,14 +55,14 @@ describe('Datenbank-Schicht: Häppchen, Schlüssel, Einzelabruf', () => {
   });
 });
 
-describe('Beim Start: alle Bilder landen im Speicher, Flags und Versprechen stimmen', () => {
-  it('nach dem Laden: bcBilderGeladen() = true, _bildFertig, Schlüsselmenge verworfen', async () => {
+describe('Das ganze Archiv (bcBilderGeladen): alle Bilder landen im Speicher, Flags und Versprechen stimmen', () => {
+  it('bcBilderGeladen() stößt das Laden an und liefert true: _bildFertig, Schlüsselmenge verworfen', async () => {
     const vorher = await boot();
     const n = id('start');
     await vorher.idbScreenshotBatch('profile', [[n + 'A', 'data:A']], []);
     await vorher.idbScreenshotBatch('wheel', [[n + 'W', 'data:W']], []);
     await vorher.idbScreenshotBatch('lscg', [[n + 'L|F', 'data:L']], []);
-    const ctx = loadScript(['items.js'], { console: quiet });
+    const ctx = loadScript(['items.js'], { console: quiet, bilderEcht: true });
     expect(await ctx.bcBilderGeladen()).toBe(true);
     expect(evalIn(ctx, 'PROFILE_SCREENSHOTS')[n + 'A']).toBe('data:A');
     expect(evalIn(ctx, '_mbsWheelShots')[n + 'W']).toBe('data:W');
@@ -72,7 +72,7 @@ describe('Beim Start: alle Bilder landen im Speicher, Flags und Versprechen stim
   });
 
   it('ein Lesefehler lässt das Archiv NICHT als vollständig gelten (Sicherung würde sonst Bilder auslassen)', async () => {
-    const ctx = loadScript(['items.js'], { console: quiet });
+    const ctx = loadScript(['items.js'], { console: quiet, bilderEcht: true });
     await ctx.bcBilderGeladen();
     evalIn(ctx, '_bilderGeladen.lscg = _verzoegert(); _bilderGeladen.lscg.fertig(false);');
     expect(await ctx.bcBilderGeladen()).toBe(false);
@@ -172,14 +172,32 @@ describe('Umbenennen und Löschen, wenn das Bild noch nicht im Speicher liegt', 
 });
 
 describe('Alles, was ein vollständiges Archiv braucht, wartet auf die Bilder', () => {
-  it('"Alle Bilder löschen" lehnt ab, solange geladen wird – ohne Rückfrage, ohne etwas zu löschen', async () => {
-    const confirm = vi.fn(() => true);
+  it('"Alle Bilder löschen" lädt zuerst das ganze Archiv und fragt erst danach – mit der vollen Anzahl; bei "Nein" bleibt alles', async () => {
+    const vorher = await boot();
+    const pre = id('alle');
+    await vorher.idbScreenshotBatch('profile', [[pre + 'a', 'data:a'], [pre + 'b', 'data:b']], []);
+    const confirm = vi.fn(() => false);
     const ctx = await boot({ confirm });
-    evalIn(ctx, "PROFILE_SCREENSHOTS['X'] = 'data:x'; _bildFertig.profile = false;");
-    ctx.clearAllProfileScreenshots();
-    expect(confirm).not.toHaveBeenCalled();
-    expect(evalIn(ctx, 'PROFILE_SCREENSHOTS')['X']).toBe('data:x');
-    expect(ctx.showStatus.mock.calls.some((c) => String(c[0]).includes('noch geladen'))).toBe(true);
+    expect(evalIn(ctx, 'PROFILE_SCREENSHOTS')[pre + 'a']).toBeUndefined();     // beim Start nur die Schlüssel
+    const lauf = ctx.clearAllProfileScreenshots();
+    expect(confirm).not.toHaveBeenCalled();                                    // erst laden, dann fragen
+    expect(ctx.showStatus.mock.calls.some((c) => String(c[0]).includes('zuerst vollständig geladen'))).toBe(true);
+    await lauf;
+    expect(confirm).toHaveBeenCalledTimes(1);
+    expect(Number(/Alle (\d+) Profil-Screenshots/.exec(String(confirm.mock.calls[0][0]))[1])).toBeGreaterThanOrEqual(2);
+    expect(evalIn(ctx, 'PROFILE_SCREENSHOTS')[pre + 'a']).toBe('data:a');       // "Nein": nichts gelöscht
+    expect((await ctx.idbScreenshotGetAll('profile'))[pre + 'b']).toBe('data:b');
+  });
+
+  it('"Alle Bilder löschen" bei "Ja": löscht wirklich ALLE, auch die, die noch nicht geladen waren', async () => {
+    const vorher = await boot();
+    const pre = id('weg');
+    await vorher.idbScreenshotBatch('profile', [[pre + 'a', 'data:a'], [pre + 'b', 'data:b']], []);
+    const ctx = await boot({ confirm: () => true });
+    await ctx.clearAllProfileScreenshots();
+    await ctx._saveProfileScreenshotsJetzt();
+    const rest = await ctx.idbScreenshotGetAll('profile');
+    expect(Object.keys(rest).filter((k) => k.startsWith(pre))).toEqual([]);
   });
 
   it('Auto-Screenshot-Start und "alle fehlenden LSCG-Bilder" warten, solange nicht bekannt ist, welche Bilder es gibt', async () => {
@@ -192,34 +210,61 @@ describe('Alles, was ein vollständiges Archiv braucht, wartet auf die Bilder', 
     expect(ctx.showStatus.mock.calls.filter((c) => String(c[0]).includes('noch geladen')).length).toBeGreaterThanOrEqual(2);
   });
 
-  it('Wheel-Serie wartet auf die Bilddaten (die Auflösung wird geprüft)', async () => {
-    const ctx = await boot();
-    evalIn(ctx, '_connected = true; _bildFertig.wheel = false;');
-    ctx.mbsWheelGenerateAll();
-    expect(evalIn(ctx, '_wheelGenRunning')).toBe(false);
-    expect(ctx.showStatus.mock.calls.some((c) => String(c[0]).includes('Wheel-Bilder werden noch geladen'))).toBe(true);
-  });
-
-  it('Gesamt-Backup: sind die Bilder da, geht es sofort los; schlug das Lesen fehl, wird gefragt', async () => {
+  it('Wheel-Serie lädt zuerst das ganze Wheel-Archiv – ein gutes Bild, das nur noch nicht geladen war, wird NICHT neu gemacht', async () => {
+    const vorher = await boot();
+    const asset = id('Serie');
+    const fp = 'Cloth:' + asset;
+    await vorher.idbScreenshotBatch('wheel', [[fp, 'data:gut']], []);
     const frage = vi.fn(() => false);
     const ctx = await boot({ confirm: frage });
-    evalIn(ctx, '_bildFertig.profile = _bildFertig.lscg = _bildFertig.wheel = true;');
-    expect(await evalIn(ctx, '_bilderFuerSicherung()')).toBe(true);
-    evalIn(ctx, '_bildFertig.lscg = false; _bilderGeladen.lscg = _verzoegert(); _bilderGeladen.lscg.fertig(false);');
-    expect(await evalIn(ctx, '_bilderFuerSicherung()')).toBe(false);   // "Trotzdem erstellen?" → Nein
-    expect(frage).toHaveBeenCalledTimes(1);
-    expect(String(frage.mock.calls[0][0])).toContain('unvollständig');
+    evalIn(ctx, `_connected = true; _gameOk = () => true; _wheelHoch.add(${JSON.stringify(fp)});
+      _mbsWheelData = [{ memberNumber: 5, name: 'Mia', ts: 1, outfits: [{ name: 'A', items: [{ group: 'Cloth', asset: ${JSON.stringify(asset)} }] }] }];`);
+    expect(evalIn(ctx, '_mbsWheelShots')[fp]).toBeUndefined();                  // noch nicht im Speicher
+    const lauf = ctx.mbsWheelGenerateAll();
+    expect(evalIn(ctx, '_wheelGenRunning')).toBe(false);
+    await lauf;
+    expect(frage).not.toHaveBeenCalled();                                      // nichts zu tun – das Bild existiert
+    expect(evalIn(ctx, '_wheelGenRunning')).toBe(false);
+    expect(evalIn(ctx, '_mbsWheelShots')[fp]).toBe('data:gut');                 // jetzt geladen, nicht ersetzt
+    expect(ctx.showStatus.mock.calls.some((c) => String(c[0]).includes('guter Auflösung'))).toBe(true);
   });
 
-  it('die automatische Tagessicherung wartet auf bcBilderGeladen() und setzt bei Misserfolg keinen Tagesvermerk', () => {
+  it('Wheel-Serie: ein zweiter Klick während des Ladens startet nicht noch einmal', async () => {
+    const ctx = await boot({ confirm: () => false });
+    evalIn(ctx, '_connected = true; _gameOk = () => true; _bildFertig.wheel = false; _bildVoll.wheel = null;');
+    const a = ctx.mbsWheelGenerateAll();
+    const b = ctx.mbsWheelGenerateAll();
+    await Promise.all([a, b]);
+    expect(ctx.showStatus.mock.calls.filter((c) => String(c[0]).includes('zuerst vollständig geladen')).length).toBe(1);
+  });
+
+  it('Gesamt-Backup: leiht das ganze Archiv; schlug das Lesen fehl, wird gefragt – bei "Nein" ist die Leihe zurückgegeben', async () => {
+    const frage = vi.fn(() => false);
+    const ctx = await boot({ confirm: frage });
+    const leihe = await evalIn(ctx, '_bilderFuerSicherung()');
+    expect(leihe && leihe.ok).toBe(true);
+    expect(evalIn(ctx, '_bildAusgeliehen')).toBe(1);
+    leihe.zurueck();
+    expect(evalIn(ctx, '_bildAusgeliehen')).toBe(0);
+    // Lesefehler einer Art simulieren: die Vollladung gilt als fehlgeschlagen
+    evalIn(ctx, '_bildFertig.lscg = false; _bildVoll.lscg = Promise.resolve(false);');
+    expect(await evalIn(ctx, '_bilderFuerSicherung()')).toBeNull();   // "Trotzdem erstellen?" → Nein
+    expect(frage).toHaveBeenCalledTimes(1);
+    expect(String(frage.mock.calls[0][0])).toContain('unvollständig');
+    expect(evalIn(ctx, '_bildAusgeliehen')).toBe(0);                    // bei Abbruch ist die Leihe zurück
+  });
+
+  it('die automatische Tagessicherung leiht das Bild-Archiv (bilderAusleihen), gibt es im finally zurück und setzt bei Misserfolg keinen Tagesvermerk', () => {
     const src = fs.readFileSync(path.join(REPO_ROOT, 'bc-autobackup.js'), 'utf8');
-    const iGate = src.indexOf('bcBilderGeladen');
+    const iGate = src.indexOf('bilderAusleihen()');
     const iDaten = src.indexOf('var daten = await ergaenzeDaten(baueDaten())');
     const iTag = src.indexOf('cfg.letzterTag = heute()');
     expect(iGate).toBeGreaterThan(-1);
     expect(iGate).toBeLessThan(iDaten);      // erst warten, dann die Daten sammeln
     expect(iDaten).toBeLessThan(iTag);       // Tagesvermerk erst nach erfolgreichem Schreiben
     expect(src).toContain("uebersprungen: 'Bilder noch nicht vollstaendig geladen'");
+    expect(src).toMatch(/finally \{\s*if \(leihe\) leihe\.zurueck\(\);/);   // die Leihe wird immer zurückgegeben
+    expect(src).toContain('bcBilderGeladen');                             // Rückfall für einen älteren items.js
   });
 });
 
@@ -247,7 +292,7 @@ describe('Löschen während des Ladens: ein verspätetes Häppchen setzt das Bil
   });
 
   it('ist alles geladen, werden die Grabsteine verworfen', async () => {
-    const ctx = loadScript(['items.js'], { console: quiet });
+    const ctx = loadScript(['items.js'], { console: quiet, bilderEcht: true });
     await ctx.bcBilderGeladen();
     expect(evalIn(ctx, '[_bildGeloescht.profile.size, _bildGeloescht.lscg.size, _bildGeloescht.wheel.size]')).toEqual([0, 0, 0]);
   });

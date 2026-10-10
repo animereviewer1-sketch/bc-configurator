@@ -172,9 +172,13 @@
     } catch (e) {}
     try {
       var n = 0;
-      if (typeof LSCG_SCREENSHOTS !== 'undefined') n += Object.keys(LSCG_SCREENSHOTS).length;
-      if (typeof PROFILE_SCREENSHOTS !== 'undefined') n += Object.keys(PROFILE_SCREENSHOTS).length;
-      if (typeof _mbsWheelShots !== 'undefined') n += Object.keys(_mbsWheelShots).length;
+      // _bildAnzahl zählt geladene und noch nicht geladene Bilder (die Bilder werden erst bei Bedarf in den Speicher geholt)
+      if (typeof _bildAnzahl === 'function') n = _bildAnzahl('lscg') + _bildAnzahl('profile') + _bildAnzahl('wheel');
+      else {
+        if (typeof LSCG_SCREENSHOTS !== 'undefined') n += Object.keys(LSCG_SCREENSHOTS).length;
+        if (typeof PROFILE_SCREENSHOTS !== 'undefined') n += Object.keys(PROFILE_SCREENSHOTS).length;
+        if (typeof _mbsWheelShots !== 'undefined') n += Object.keys(_mbsWheelShots).length;
+      }
       if (bi) bi.textContent = n.toLocaleString('de-DE');
     } catch (e) {}
     ['_speicherZeigeStatus', '_bcBackupZeigeStatus', '_renderScreenshotStoreInfo'].forEach(function (f) {

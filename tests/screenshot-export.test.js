@@ -66,7 +66,7 @@ describe('exportScreenshotsOnly(): Payload und Download (SPLIT-07)', () => {
   it('exportiert alle drei Maps unter den Feldnamen von exportAllData', async () => {
     const { ctx, urls } = await boot();
     seed(ctx);
-    ctx.exportScreenshotsOnly();
+    await ctx.exportScreenshotsOnly();
     expect(urls.createObjectURL).toHaveBeenCalledTimes(1);
     expect(lastBlob(urls).type).toBe('application/json');
     const p = payloadOf(urls);
@@ -79,7 +79,7 @@ describe('exportScreenshotsOnly(): Payload und Download (SPLIT-07)', () => {
   it('_meta: exportedAt (ISO), version 1, tool nennt Screenshot, counts je Map', async () => {
     const { ctx, urls } = await boot();
     seed(ctx);
-    ctx.exportScreenshotsOnly();
+    await ctx.exportScreenshotsOnly();
     const p = payloadOf(urls);
     expect(p._meta.version).toBe(1);
     expect(p._meta.tool).toMatch(/Screenshot/);
@@ -91,7 +91,7 @@ describe('exportScreenshotsOnly(): Payload und Download (SPLIT-07)', () => {
   it('Download-Anker: Dateiname BC_Screenshots_YYYY-MM-DD.json, click 1×, href aus createObjectURL', async () => {
     const { ctx, urls, created } = await boot();
     seed(ctx);
-    ctx.exportScreenshotsOnly();
+    await ctx.exportScreenshotsOnly();
     const a = anchor(created);
     expect(a).toBeTruthy();
     expect(a.download).toMatch(/^BC_Screenshots_\d{4}-\d{2}-\d{2}\.json$/);
@@ -110,7 +110,7 @@ describe('exportScreenshotsOnly(): Payload und Download (SPLIT-07)', () => {
     evalIn(ctx, "PROFILE_SCREENSHOTS.Neu = 'data:n'");
     ctx._saveProfileScreenshots();
     expect(evalIn(ctx, '_sammelSpeicher.offen()')).toBe(1);
-    ctx.exportScreenshotsOnly();
+    await ctx.exportScreenshotsOnly();
     expect(evalIn(ctx, '_sammelSpeicher.offen()')).toBe(0);
     expect(payloadOf(urls).profileScreenshots.Neu).toBe('data:n');
   });
@@ -119,7 +119,7 @@ describe('exportScreenshotsOnly(): Payload und Download (SPLIT-07)', () => {
     const { ctx } = await boot();
     seed(ctx);
     const before = evalIn(ctx, 'JSON.stringify([PROFILE_SCREENSHOTS, LSCG_SCREENSHOTS, _mbsWheelShots])');
-    ctx.exportScreenshotsOnly();
+    await ctx.exportScreenshotsOnly();
     const after = evalIn(ctx, 'JSON.stringify([PROFILE_SCREENSHOTS, LSCG_SCREENSHOTS, _mbsWheelShots])');
     expect(after).toBe(before);
   });
@@ -127,7 +127,7 @@ describe('exportScreenshotsOnly(): Payload und Download (SPLIT-07)', () => {
   it('leer: Hinweis per showStatus(info), kein Download', async () => {
     const { ctx, urls, created } = await boot();
     evalIn(ctx, 'PROFILE_SCREENSHOTS = {}; LSCG_SCREENSHOTS = {}; _mbsWheelShots = {};');
-    ctx.exportScreenshotsOnly();
+    await ctx.exportScreenshotsOnly();
     expect(urls.createObjectURL).not.toHaveBeenCalled();
     expect(anchor(created)).toBeUndefined();
     expect(ctx.showStatus).toHaveBeenLastCalledWith('⚠️ Keine Screenshots zum Exportieren', 'info');
@@ -137,7 +137,7 @@ describe('exportScreenshotsOnly(): Payload und Download (SPLIT-07)', () => {
     const { ctx, urls } = await boot();
     seed(ctx);
     urls.createObjectURL = vi.fn(() => { throw new Error('boom'); });
-    expect(() => ctx.exportScreenshotsOnly()).not.toThrow();
+    await expect(ctx.exportScreenshotsOnly()).resolves.toBeUndefined();   // wirft nicht, sondern meldet den Fehler
     const lastCall = ctx.showStatus.mock.calls.at(-1);
     expect(lastCall[1]).toBe('error');
     expect(lastCall[0]).toContain('Screenshot-Export fehlgeschlagen');

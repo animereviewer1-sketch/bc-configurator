@@ -677,19 +677,24 @@ function _bilderEinfuegen(kind, teil) {
   for (const k of Object.keys(teil)) if (!(k in m) && !weg.has(k)) m[k] = teil[k];
   _screenshotShadowMerge(kind, teil);   // der Schatten kennt den gespeicherten Stand – so wird ein inzwischen gelöschtes Bild beim nächsten Speichern auch aus der Datenbank entfernt
 }
-// true nur, wenn alle drei Arten vollständig und ohne Fehler gelesen wurden
-function bcBilderGeladen() { return Promise.all([_bilderGeladen.profile, _bilderGeladen.lscg, _bilderGeladen.wheel]).then(r => r.every(Boolean)); }
+// true nur, wenn alle drei Arten vollständig und ohne Fehler gelesen wurden. Stößt das Laden an, falls es noch nicht läuft (sonst käme die
+// Antwort nie) – und lässt die Bilder dann im Speicher. Für Sicherungen lieber bilderAusleihen() (gibt sie danach wieder frei).
+function bcBilderGeladen() {
+  _bilderVoll(null, true);
+  return Promise.all([_bilderGeladen.profile, _bilderGeladen.lscg, _bilderGeladen.wheel]).then(r => r.every(Boolean));
+}
 function _bilderAbwarten(maxMs) {
   return Promise.race([bcBilderGeladen(), new Promise(r => setTimeout(() => r(false), maxMs || 300000))]);
 }
-// Eine Art laden: erst die Schlüssel, dann die Bilder in Häppchen (jedes sofort in den Speicher). onFertig(ok) am Ende.
+// Eine Art laden: erst die Schlüssel (falls noch nicht bekannt), dann die Bilder in Häppchen (jedes sofort in den Speicher).
+// onFertig(ok) am Ende.
 async function _bilderLaden(kind, onFertig, nachSchluessel) {
   let ok = false;
   try {
     await _screenshotStoreReady();
-    const keys = await idbScreenshotKeysOf(kind);
+    const keys = _bildKeys[kind] ? null : await idbScreenshotKeysOf(kind);
     if (keys) {
-      _bildKeys[kind] = new Set(keys);
+      _bildKeys[kind] = new Set(keys.filter(k => !_bildGeloescht[kind].has(k)));
       _ladeMarke('Bilder-Schlüssel: ' + kind);
       try { if (nachSchluessel) nachSchluessel(); } catch (e) {}
     }
@@ -704,11 +709,111 @@ async function _bilderLaden(kind, onFertig, nachSchluessel) {
   return ok;
 }
 
+// ── Bilder nur bei Bedarf ────────────────────────────────────────────────────
+// Beim Start werden nur die Schlüssel gelesen (Millisekunden). Die Bilder selbst kommen
+//  - einzeln, wenn sie sichtbar werden (_bildNachfordern) oder eine Funktion genau dieses Bild braucht (_bildHolen),
+//  - gesammelt, wenn etwas das GANZE Archiv braucht: Sicherung/Export (bilderAusleihen), Serien und "Alle löschen" (bilderVollLaden).
+// Nichts in der Datenbank ändert sich dadurch. Wichtig für jede Stelle im Code: "nicht im Speicher" heißt NICHT "kein Bild" – die Frage
+// "gibt es schon ein Bild?" stellt _hatBild(), nie ein Blick in die Map (sonst würde ein vorhandenes Bild überschrieben).
+const _BILD_ARTEN = ['profile', 'lscg', 'wheel'];
+const _bildVoll = { profile: null, lscg: null, wheel: null };        // Vollladung je Art: null = nicht gestartet, sonst das Versprechen
+const _bildNachVoll = { profile: null, lscg: null, wheel: null };    // Rückruf nach der Vollladung (ok)
+const _bildFest = { profile: false, lscg: false, wheel: false };     // true = jemand verlässt sich auf das volle Archiv ohne Leihe → nie freigeben
+let _bildAusgeliehen = 0;
+const _hat = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
+
+function _bildVollLaden(kind) {
+  if (!_bildVoll[kind]) _bildVoll[kind] = _bilderLaden(kind, _bildNachVoll[kind], null);
+  return _bildVoll[kind];
+}
+function _bilderVoll(kinds, fest) {
+  const arten = (kinds && kinds.length ? kinds : _BILD_ARTEN).filter(k => _BILD_ARTEN.includes(k));
+  if (fest) for (const k of arten) _bildFest[k] = true;
+  return Promise.all(arten.map(_bildVollLaden)).then(r => r.every(Boolean));
+}
+// Das ganze Archiv der Arten in den Speicher holen und dort lassen (Serien, "Alle löschen"). true = vollständig und fehlerfrei gelesen.
+function bilderVollLaden(kinds) { return _bilderVoll(kinds, true); }
+// Das ganze Archiv nur für die Dauer einer Sicherung/eines Exports: { ok, zurueck() }. Nach dem Zurückgeben werden die Bilder, die
+// unverändert in der Datenbank stehen, wieder aus dem Speicher genommen (die Datenbank bleibt unberührt).
+async function bilderAusleihen(kinds) {
+  _bildAusgeliehen++;
+  let ok = false;
+  try { ok = await _bilderVoll(kinds, false); } catch (e) { ok = false; }
+  let zurueck = false;
+  return {
+    ok,
+    zurueck() {
+      if (zurueck) return;
+      zurueck = true;
+      if (--_bildAusgeliehen <= 0) { _bildAusgeliehen = 0; _bilderFreigeben(); }
+    },
+  };
+}
+// Gelesene Bilder wieder aus dem Speicher nehmen – NUR die, die genau so in der Datenbank stehen (Schatten gleich Wert). Neu aufgenommene
+// oder noch nicht gespeicherte Bilder bleiben. Aus Schatten und Map zugleich, damit der nächste Speichervorgang nichts löscht.
+function _bilderFreigeben() {
+  if (_bildAusgeliehen > 0) return;
+  for (const kind of _BILD_ARTEN) {
+    if (_bildFest[kind] || !_bildFertig[kind]) continue;
+    const m = _bildMap(kind), schatten = _screenshotShadow[kind];
+    if (!m || !schatten) continue;
+    const frei = Object.keys(m).filter(k => schatten.get(k) === m[k]);
+    for (const k of frei) { delete m[k]; schatten.delete(k); }
+    _bildKeys[kind] = new Set(frei);
+    _bildGeloescht[kind].clear();
+    _bildFertig[kind] = false;
+    _bildVoll[kind] = null;
+    _bilderGeladen[kind] = _verzoegert();
+  }
+}
+// Beim Start: nur die Schlüssel. Ließen sie sich nicht lesen, wird wie früher alles geladen – sonst wüsste das Tool nie, welche Bilder es gibt.
+async function _bildStart(kind, nachSchluessel, nachVoll) {
+  _bildNachVoll[kind] = nachVoll || null;
+  let ok = false;
+  try {
+    await _screenshotStoreReady();
+    const keys = await idbScreenshotKeysOf(kind);
+    if (keys) {
+      _bildKeys[kind] = new Set(keys.filter(k => !_bildGeloescht[kind].has(k)));
+      _ladeMarke('Bilder-Schlüssel: ' + kind);
+      try { if (nachSchluessel) nachSchluessel(); } catch (e) {}
+      ok = true;
+    }
+  } catch (e) { console.warn('[Bilder] Schlüssel lesen fehlgeschlagen:', kind, e); }
+  if (!ok) _bildVollLaden(kind);
+}
+// Bestimmte Bilder einzeln aus der Datenbank in den Speicher holen (nur die, die bekannt, aber noch nicht geladen sind)
+async function _bildHolen(kind, keys) {
+  const m = _bildMap(kind), ks = _bildKeys[kind];
+  const fehlt = (keys || []).filter(k => !_hat(m, k) && ks && ks.has(k));
+  if (!fehlt.length) return;
+  _bilderEinfuegen(kind, await idbScreenshotGetMany(kind, fehlt));
+}
+// Für Funktionen, die das GANZE Archiv der Art brauchen (z. B. "Alle löschen", Serien). Ist es schon vollständig geladen: true (sofort, ohne
+// zu warten). Sonst ein Versprechen: lädt es und lässt es im Speicher; false = nicht vollständig lesbar → die Funktion bricht ab, ohne etwas
+// zu tun. Aufruf:  const v = _bilderVollstaendig(…);  if (v !== true && !(await v)) return;
+function _bilderVollstaendig(kinds, wer) {
+  const arten = [].concat(kinds);
+  if (arten.every(k => _bildFertig[k])) return true;
+  showStatus('⏳ ' + wer + ' werden zuerst vollständig geladen…', 'info');
+  return bilderVollLaden(arten).then(ok => {
+    if (!ok) showStatus('❌ Die Bilder konnten nicht vollständig gelesen werden – es wurde nichts verändert', 'error');
+    return ok;
+  });
+}
+// Wie viele Bilder gibt es? Geladene und noch nicht geladene (Schlüssel) zusammen
+function _bildAnzahl(kind) {
+  const m = _bildMap(kind), ks = _bildKeys[kind];
+  let n = Object.keys(m).length;
+  if (ks) for (const k of ks) if (!_hat(m, k)) n++;
+  return n;
+}
+
 let PROFILE_SCREENSHOTS = {};
-_bilderLaden('profile',
-  ok => { if (ok) _ladeMarke('Profil-Bilder geladen'); },
+_bildStart('profile',
   // Schlüssel da: war die Profil-Liste vorher schon gezeichnet (ohne zu wissen, wer ein Bild hat), jetzt einmal neu zeichnen
-  () => { if (_activeTab === 'outfit') _debouncedRenderProfileList(); });
+  () => { if (_activeTab === 'outfit') _debouncedRenderProfileList(); },
+  ok => { if (ok) _ladeMarke('Profil-Bilder geladen'); });
 function _saveProfileScreenshotsJetzt() { return _screenshotFlush('profile', PROFILE_SCREENSHOTS); }
 function _saveProfileScreenshots() {
   _sammelSpeicher.plane('profilScreenshots', _saveProfileScreenshotsJetzt);
@@ -3988,8 +4093,9 @@ function profileExecuteBySlot(slot) {
     if (!code) { showStatus('❌ Kein Code generiert – Cache geladen?', 'error'); return; }
     bcSend({ type: 'EXEC', code: '(function(){\n' + code + '\n})();' });
     showStatus('▶ Profil "' + name + '" ausgeführt (' + OUTFIT.length + ' Items)', 'success');
-    // Auto-Screenshot falls noch keiner vorhanden – warten bis BC den Outfit gerendert hat
-    if (!PROFILE_SCREENSHOTS[name]) {
+    // Auto-Screenshot falls noch keiner vorhanden – warten bis BC den Outfit gerendert hat. "Vorhanden" fragt die Schlüssel mit
+    // (ein Bild, das nur noch nicht geladen ist, darf nicht durch ein neues ersetzt werden); ist unbekannt, welche es gibt: nichts tun.
+    if (_bildExistenzSicher('profile') && !_hatBild('profile', name)) {
       setTimeout(() => captureProfileScreenshot(name), 2800);
     }
   }, 60);
@@ -4510,7 +4616,7 @@ function profilItemUebernehmen() {
   renderProfileList();
   const mod = document.getElementById('profileModal');
   if (mod?.classList.contains('open') && _profileModalName === k.name) _renderProfileModal(k.name);
-  showStatus('✅ „' + alt.asset + '" in „' + k.name + '" aktualisiert' + (PROFILE_SCREENSHOTS[k.name] ? ' – Bild ggf. neu aufnehmen' : ''), 'success');
+  showStatus('✅ „' + alt.asset + '" in „' + k.name + '" aktualisiert' + (_hatBild('profile', k.name) ? ' – Bild ggf. neu aufnehmen' : ''), 'success');
 }
 
 // ── Kopie unter Yuuki 998 ────────────────────────────────────────────────
@@ -7858,7 +7964,7 @@ async function exportInfoSammeln() {
   const pKeys = Object.keys(PROFILES);
   const pItems = pKeys.reduce((s, k) => s + ((PROFILES[k].items || []).length), 0);
   const pMax = pKeys.reduce((m, k) => Math.max(m, (PROFILES[k].items || []).length), 0);
-  const pBild = pKeys.filter(k => PROFILE_SCREENSHOTS[k]).length;
+  const pBild = pKeys.filter(k => _hatBild('profile', k)).length;
   const dupGruppen = sicher(() => _getProfileDuplicates().size, 0);
   z.push('Outfit & Profile: ' + zahl(pKeys.length) + ' Profile (' + zahl(pBild) + ' mit Bild) · ' + zahl(pItems) + ' Items gesamt · größtes Profil ' + pMax
     + ' Items · ' + zahl(Object.keys(PROFILE_TAGS || {}).length) + ' mit Tags · ' + zahl(PROFILE_FAVS.size) + ' Favoriten · ' + zahl(dupGruppen) + ' Duplikat-Gruppen');
@@ -7868,15 +7974,15 @@ async function exportInfoSammeln() {
   let lCodeZeichen = 0, lMitBild = 0;
   for (const k of lKeys) for (const v of (LSCG_DB[k].versions || [])) {
     lCodeZeichen += String(v.code || '').length;
-    if (LSCG_SCREENSHOTS[v.fingerprint ? k + '|' + v.fingerprint : k]) lMitBild++;
+    if (_hatBild('lscg', v.fingerprint ? k + '|' + v.fingerprint : k)) lMitBild++;
   }
   z.push('LSCG Outfits: ' + zahl(lKeys.length) + ' Spieler · ' + zahl(lVers) + ' Versionen (' + zahl(lMitBild) + ' mit Bild) · meiste Versionen bei einem Spieler ' + zahl(lMax)
     + ' · Codes ' + MB(lCodeZeichen) + ' · Favoriten: ' + zahl(_osFavs.size) + ' Spieler, ' + zahl(_osOutfitFavs.size) + ' Outfits');
   const wOutfits = _mbsWheelData.reduce((s, r) => s + (r.outfits || []).length, 0);
   const wShots = bilder(_mbsWheelShots);
   const wNiedrig = sicher(() => Object.keys(_mbsWheelShots).filter(k => _wheelBildNiedrig(_mbsWheelShots[k], k)).length, 0);
-  z.push('MBS Wheel: ' + zahl(_mbsWheelData.length) + ' Spieler · ' + zahl(wOutfits) + ' Outfits · ' + zahl(wShots.n) + ' Bilder (' + zahl(wNiedrig)
-    + ' in niedriger Auflösung) · Favoriten: ' + zahl(_mbsWheelFavs.size) + ' Spieler, ' + zahl(_mbsWheelOutfitFavs.size) + ' Outfits');
+  z.push('MBS Wheel: ' + zahl(_mbsWheelData.length) + ' Spieler · ' + zahl(wOutfits) + ' Outfits · ' + zahl(_bildAnzahl('wheel')) + ' Bilder ('
+    + (_bildFertig.wheel ? zahl(wNiedrig) + ' in niedriger Auflösung' : 'Auflösung nur der ' + zahl(wShots.n) + ' geladenen geprüft') + ') · Favoriten: ' + zahl(_mbsWheelFavs.size) + ' Spieler, ' + zahl(_mbsWheelOutfitFavs.size) + ' Outfits');
   const cKeys = Object.keys(CURSE_DB);
   const cOwner = new Set(cKeys.map(k => CURSE_DB[k]?.Besitzer?.Nummer));
   const cUnbekannt = cKeys.filter(k => _getEffectiveGruppe(CURSE_DB[k], k) === 'UNBEKANNT').length;
@@ -7891,12 +7997,13 @@ async function exportInfoSammeln() {
   z.push('');
   z.push('BILDER');
   const bp = bilder(PROFILE_SCREENSHOTS), bl = bilder(LSCG_SCREENSHOTS);
-  z.push('Profil-Bilder: ' + zahl(bp.n) + ' · ' + MB(bp.summe) + ' · größtes ' + KB(bp.max));
-  z.push('LSCG-Bilder: ' + zahl(bl.n) + ' · ' + MB(bl.summe) + ' · größtes ' + KB(bl.max));
-  z.push('Wheel-Bilder: ' + zahl(wShots.n) + ' · ' + MB(wShots.summe) + ' · größtes ' + KB(wShots.max));
-  z.push('Alle Bilder zusammen: ' + MB(bp.summe + bl.summe + wShots.summe));
-  z.push('Bilder-Laden (im Hintergrund, in Häppchen): ' + [['Profil', 'profile'], ['LSCG', 'lscg'], ['Wheel', 'wheel']]
-    .map(([n, k]) => n + (_bildFertig[k] ? ' ✓ fertig' : ' … läuft noch (Zahlen oben unvollständig)')).join(' · '));
+  // Anzahl = alle gespeicherten Bilder; Größe/größtes nur von denen, die gerade im Arbeitsspeicher liegen (der Rest wird erst bei Bedarf geladen)
+  z.push('Profil-Bilder: ' + zahl(_bildAnzahl('profile')) + ' · im Speicher ' + zahl(bp.n) + ' (' + MB(bp.summe) + ') · größtes geladenes ' + KB(bp.max));
+  z.push('LSCG-Bilder: ' + zahl(_bildAnzahl('lscg')) + ' · im Speicher ' + zahl(bl.n) + ' (' + MB(bl.summe) + ') · größtes geladenes ' + KB(bl.max));
+  z.push('Wheel-Bilder: ' + zahl(_bildAnzahl('wheel')) + ' · im Speicher ' + zahl(wShots.n) + ' (' + MB(wShots.summe) + ') · größtes geladenes ' + KB(wShots.max));
+  z.push('Bilder im Arbeitsspeicher zusammen: ' + MB(bp.summe + bl.summe + wShots.summe));
+  z.push('Bilder-Laden (nur bei Bedarf: sichtbare einzeln, ganze Archive für Sicherung/Export/Serien): ' + [['Profil', 'profile'], ['LSCG', 'lscg'], ['Wheel', 'wheel']]
+    .map(([n, k]) => n + (_bildFertig[k] ? ' ✓ komplett im Speicher' : _bildKeys[k] ? ' · nur Schlüssel + angesehene Bilder' : ' … Schlüssel werden gelesen')).join(' · '));
 
   // ── Speicher im Browser ──
   z.push('');
@@ -9518,17 +9625,22 @@ async function _backupScansImport(scans) {
   return neu;
 }
 
-// Vor einer Sicherung: alle Bilder müssen gelesen sein, sonst fehlen sie in der Datei. Wartet (bis 5 Min.); bei einem Lesefehler Rückfrage.
+// Vor einer Sicherung: alle Bilder müssen gelesen sein, sonst fehlen sie in der Datei. Leiht das ganze Archiv (lädt es, falls nötig) und gibt die
+// Leihe zurück – diese MUSS der Aufrufer nach dem Schreiben zurückgeben (leihe.zurueck()). Bei einem Lesefehler Rückfrage; null = abgebrochen.
 async function _bilderFuerSicherung() {
-  if (_bildFertig.profile && _bildFertig.lscg && _bildFertig.wheel) return true;
-  showStatus('⏳ Die Bilder werden noch geladen – die Sicherung wartet darauf…', 'info');
-  if (await _bilderAbwarten(300000)) return true;
-  return confirm('Nicht alle Bilder konnten gelesen werden – die Sicherung wäre unvollständig.\n\nTrotzdem erstellen?');
+  if (!(_bildFertig.profile && _bildFertig.lscg && _bildFertig.wheel)) showStatus('⏳ Die Bilder werden geladen – die Sicherung wartet darauf…', 'info');
+  const leihe = await bilderAusleihen();
+  if (leihe.ok) return leihe;
+  if (confirm('Nicht alle Bilder konnten gelesen werden – die Sicherung wäre unvollständig.\n\nTrotzdem erstellen?')) return leihe;
+  leihe.zurueck();
+  return null;
 }
 
 async function exportAllData() {
+  let leihe = null;   // das geliehene Bild-Archiv – im finally zurückgeben (danach werden die Bilder wieder aus dem Speicher genommen)
   try {
-    if (!(await _bilderFuerSicherung())) { showStatus('ℹ️ Backup abgebrochen', 'info'); return; }
+    leihe = await _bilderFuerSicherung();
+    if (!leihe) { showStatus('ℹ️ Backup abgebrochen', 'info'); return; }
     // Nichts Ausstehendes im Puffer lassen - der Export liest zwar aus dem
     // Arbeitsspeicher, aber danach soll die Datenbank denselben Stand haben.
     bcSpeichernJetzt();
@@ -9604,12 +9716,18 @@ async function exportAllData() {
   } catch(err) {
     showStatus('❌ Export fehlgeschlagen: ' + err.message, 'error');
     console.error('[exportAllData]', err);
+  } finally {
+    if (leihe) leihe.zurueck();
   }
 }
 
 // Nur die drei Screenshot-Sammlungen sichern (SPLIT-07, Sicherung vor der Migration in Plan 04-04). Gleiche Feldnamen wie exportAllData() -> importAllData() liest die Datei unveraendert. Liest nur; mutiert weder Maps noch IDB.
-function exportScreenshotsOnly() {
+async function exportScreenshotsOnly() {
+  let leihe = null;
   try {
+    // Ohne das ganze Archiv im Speicher fehlten Bilder in der Datei (früher still, wenn sie noch luden)
+    leihe = await _bilderFuerSicherung();
+    if (!leihe) { showStatus('ℹ️ Screenshot-Export abgebrochen', 'info'); return; }
     bcSpeichernJetzt();
     const profileCount = Object.keys(PROFILE_SCREENSHOTS).length;
     const lscgCount    = Object.keys(LSCG_SCREENSHOTS).length;
@@ -9648,6 +9766,8 @@ function exportScreenshotsOnly() {
   } catch (err) {
     showStatus('❌ Screenshot-Export fehlgeschlagen: ' + (err && err.message ? err.message : err), 'error');
     console.error('[exportScreenshotsOnly]', err);
+  } finally {
+    if (leihe) leihe.zurueck();
   }
 }
 
@@ -9914,7 +10034,8 @@ function _bildEinspieler() {
       const kind = _BILD_SAMMLUNGEN[sammlung];
       if (!kind || typeof wert !== 'string' || !wert) return;
       const map = _bildMap(kind);
-      if (Object.prototype.hasOwnProperty.call(map, key)) return;   // nie ueberschreiben
+      // nie ueberschreiben – auch ein Bild nicht, das nur noch nicht im Speicher liegt (steht in den Schluesseln)
+      if (Object.prototype.hasOwnProperty.call(map, key) || _hatBild(kind, key)) return;
       map[key] = wert;
       neu[kind]++;
       offen += wert.length;
@@ -10060,7 +10181,7 @@ function importLscgOutfits() {
         for (const v of (e?.versions || [])) {
           versionen++;
           if (!bekannt.has(v.fingerprint ?? v.code)) neu++;
-          if (v.fingerprint && !((mk + '|' + v.fingerprint) in LSCG_SCREENSHOTS)) ohneBild++;
+          if (v.fingerprint && !_hatBild('lscg', mk + '|' + v.fingerprint)) ohneBild++;
         }
       }
       if (!versionen) {
@@ -10260,6 +10381,25 @@ function _saveLscgScreenshots() {
   _sammelSpeicher.plane('lscgScreenshots', _saveLscgScreenshotsJetzt);
 }
 
+// Welche Kandidaten von _getLscgScreenshot(mk, fp) liegen noch in der Datenbank (bekannt, aber nicht im Speicher)? [[art, schlüssel], …]
+// Ohne sie zu holen, fände _getLscgScreenshot ein schlechteres Bild (Profil-Kopie) oder gar keins, obwohl das richtige existiert.
+function _lscgBildAusstehend(mk, fp) {
+  const aus = [];
+  const pruefe = (art, k) => { const ks = _bildKeys[art]; if (ks && ks.has(k) && !_hat(_bildMap(art), k)) aus.push([art, k]); };
+  if (fp) pruefe('lscg', mk + '|' + fp);
+  pruefe('lscg', mk);
+  if (fp) for (const k of (_lscgFpMap[fp] ?? [])) pruefe('profile', k);
+  return aus;
+}
+// Holt diese Kandidaten und ruft danach fn() auf – sofort, wenn nichts aussteht. Ein Lesefehler ruft fn() trotzdem auf (mit dem, was da ist).
+function _lscgBildDann(mk, fp, fn) {
+  const aus = _lscgBildAusstehend(mk, fp);
+  if (!aus.length) { fn(); return; }
+  const je = {};
+  for (const [art, k] of aus) (je[art] = je[art] || []).push(k);
+  Promise.all(Object.keys(je).map(art => _bildHolen(art, je[art]))).then(fn, fn);
+}
+
 // Gibt das beste verfügbare Bild für mk zurück:
 // 1. Direkt gespeichert  2. Vom passenden Profil (gleicher Fingerprint)
 // Screenshot für eine bestimmte Version holen (Schlüssel: mk|fp)
@@ -10312,7 +10452,8 @@ function _syncLscgScreenshotToProfiles(mk, fp) {
     if (!fp) continue;
     const keys = _lscgFpMap[fp] ?? [];
     for (const k of keys) {
-      if (!PROFILE_SCREENSHOTS[k]) {
+      // Nur Profile OHNE Bild bekommen die Kopie – ein Bild, das nur noch nicht geladen ist, zählt als vorhanden und bleibt
+      if (!_hatBild('profile', k)) {
         PROFILE_SCREENSHOTS[k] = img;
         changed = true;
       }
@@ -10337,6 +10478,29 @@ function _removeLscgScreenshotFromProfiles(fp, img) {
   if (n) _saveProfileScreenshots();
   return n;
 }
+
+// Vor dem Löschen eines LSCG-Bildes: das Bild selbst und die Profil-Bilder mit gleichem Fingerprint müssen im Speicher liegen, damit die
+// byte-gleichen Kopien erkannt werden. Was davon noch in der Datenbank liegt: { lscg: [...], profile: [...] }.
+function _lscgKopienAusstehend(key) {
+  const sep = key.indexOf('|');
+  const mk = sep === -1 ? key : key.slice(0, sep);
+  const fps = new Set();
+  if (sep !== -1) fps.add(key.slice(sep + 1));
+  for (const v of LSCG_DB[mk]?.versions ?? []) if (v.fingerprint) fps.add(v.fingerprint);
+  const je = { lscg: [], profile: [] };
+  const lk = _bildKeys.lscg, pk = _bildKeys.profile;
+  if (lk && lk.has(key) && !_hat(LSCG_SCREENSHOTS, key)) je.lscg.push(key);
+  if (pk) for (const fp of fps) for (const k of (_lscgFpMap[fp] ?? [])) if (pk.has(k) && !_hat(PROFILE_SCREENSHOTS, k)) je.profile.push(k);
+  return je;
+}
+async function _lscgKopienLaden(key) {
+  const je = _lscgKopienAusstehend(key);
+  const jobs = [];
+  if (je.lscg.length) jobs.push(_bildHolen('lscg', je.lscg));
+  if (je.profile.length) jobs.push(_bildHolen('profile', je.profile));
+  try { await Promise.all(jobs); } catch (e) {}   // ein Lesefehler: mit dem weitermachen, was da ist (Kopien bleiben dann stehen)
+}
+function _lscgKopienOffen(key) { const je = _lscgKopienAusstehend(key); return je.lscg.length + je.profile.length > 0; }
 
 // MUSS vor dem Löschen aus LSCG_SCREENSHOTS laufen (braucht das Bild).
 function _removeLscgScreenshotKeyFromProfiles(key) {
@@ -10946,6 +11110,9 @@ window.repairOsOutfitCode = function(mk, vIdx, newCode) {
     delete LSCG_SCREENSHOTS[vKey];
     _bildKeyWeg('lscg', vKey);
     _saveLscgScreenshots();
+  } else if (_hatBild('lscg', vKey)) {   // Bild war noch nicht im Speicher
+    _bildKeyWeg('lscg', vKey);
+    idbScreenshotDelete('lscg', vKey);
   }
 
   showStatus('✅ Code ersetzt – Screenshot wird aufgenommen…', 'success');
@@ -12258,15 +12425,18 @@ function osSaveOutfitAsProfile(mk, vIdx) {
   if (PROFILES[trimmed] && !confirm('Profil "' + trimmed + '" existiert bereits. Überschreiben?')) return;
   PROFILES[trimmed] = { name: trimmed, date: d.toLocaleDateString('de-DE'), _outfitCode: v.code, items: [] };
   _saveProfiles();
-  // Screenshot vom LSCG-Eintrag ins Profil übernehmen (falls vorhanden und Profil noch keins hat)
-  const lscgImg = _getLscgScreenshot(mk);
-  if (lscgImg && !PROFILE_SCREENSHOTS[trimmed]) {
-    PROFILE_SCREENSHOTS[trimmed] = lscgImg;
-    _saveProfileScreenshots();
-    showStatus('✅ Als Profil "' + trimmed + '" gespeichert (inkl. Bild)', 'success');
-  } else {
-    showStatus('✅ Als Profil "' + trimmed + '" gespeichert', 'success');
-  }
+  // Screenshot vom LSCG-Eintrag ins Profil übernehmen (falls vorhanden und Profil noch keins hat). Das LSCG-Bild liegt evtl. noch in
+  // der Datenbank → erst holen; ein Profil-Bild, das nur noch nicht geladen ist, zählt als vorhanden und bleibt.
+  _lscgBildDann(mk, null, () => {
+    const lscgImg = _getLscgScreenshot(mk);
+    if (lscgImg && !_hatBild('profile', trimmed)) {
+      PROFILE_SCREENSHOTS[trimmed] = lscgImg;
+      _saveProfileScreenshots();
+      showStatus('✅ Als Profil "' + trimmed + '" gespeichert (inkl. Bild)', 'success');
+    } else {
+      showStatus('✅ Als Profil "' + trimmed + '" gespeichert', 'success');
+    }
+  });
 }
 
 function toggleOsChar(mk, hdrEl) {
@@ -12353,8 +12523,9 @@ function toggleOsChar(mk, hdrEl) {
   }
   if (_activeTab === 'outfit-scan') renderOutfitScanTab();
 })();
-// LSCG-Bilder: Schlüssel sofort, Bilder in Häppchen im Hintergrund. Neu aufgenommene Bilder behalten Vorrang (nur auffüllen).
-_bilderLaden('lscg', function (ok) {
+// LSCG-Bilder: beim Start nur die Schlüssel; die Bilder einzeln auf Abruf oder gesammelt, wenn das ganze Archiv gebraucht wird
+// (bilderVollLaden / bilderAusleihen). Neu aufgenommene Bilder behalten Vorrang (nur auffüllen).
+_bildStart('lscg', null, function (ok) {
   if (ok) { console.log('[BCU] LSCG Screenshots geladen:', Object.keys(LSCG_SCREENSHOTS).length); _ladeMarke('LSCG-Bilder geladen'); }
 });
 
@@ -13283,7 +13454,7 @@ function _mbsOutfitFp(o) {
 // Screenshots pro Outfit-Fingerprint (identische Outfits teilen sich das Bild)
 let _mbsWheelShots = {};   // fp → dataUrl
 const _pendingWheelShot = {}; // reqId → fp
-_bilderLaden('wheel', function (ok) {
+_bildStart('wheel', null, function (ok) {
   if (ok) _ladeMarke('Wheel-Bilder geladen');
   // Karten zeigen die Bilder schon beim Laden (Schlüssel + Einzelabruf); der Abschluss zeichnet nur die "niedrige Auflösung"-Hinweise nach
   if (ok && _activeTab === 'lscg-wheel') _renderMbsWheelTab();
@@ -13632,9 +13803,9 @@ function mbsWheelDeleteShot(mn, oi) {
   const o = r?.outfits[oi];
   if (!o) return;
   const fp = _mbsOutfitFp(o);
-  if (!_mbsWheelShots[fp]) return;
+  if (!_hatBild('wheel', fp)) return;
   if (!confirm('Wheel-Bild von "' + (o.name || '?') + '" löschen?')) return;
-  delete _mbsWheelShots[fp];
+  if (_mbsWheelShots[fp]) delete _mbsWheelShots[fp]; else idbScreenshotDelete('wheel', fp);   // ggf. noch nicht im Speicher
   _bildKeyWeg('wheel', fp);
   if (_wheelHoch.delete(fp)) _kleinSpeichern(WHEEL_HOCH_KEY, _wheelHoch);
   _saveMbsWheelShots();
@@ -13657,11 +13828,24 @@ let _wheelGenTimeout = null;   // Antwort-Wächter des laufenden Fotos
 let _wheelGenT0      = 0;      // Start des laufenden Fotos (Zeitmessung)
 let _wheelGenStat    = { n: 0, ms: 0 };
 
-function mbsWheelGenerateAll() {
+let _wheelGenLadeLauf = false;   // das Laden vor dem Start läuft (zweiter Klick startet nicht noch einmal)
+async function mbsWheelGenerateAll() {
   if (_wheelGenRunning) { mbsWheelGenerateStop(); return; }
+  if (_wheelGenLadeLauf) return;
   if (!_connected) { showStatus('❌ Nicht verbunden', 'error'); return; }
   if (!_gameOk(false)) { showStatus('❌ ' + _gameWaitReason(false) + ' – Bilderserie nicht gestartet', 'error'); return; }
-  if (!_bildFertig.wheel || !_kleinStatus[WHEEL_HOCH_KEY]?.geladen) { showStatus('⏳ Die Wheel-Bilder werden noch geladen (die Auflösung wird geprüft) – gleich nochmal versuchen', 'info'); return; }
+  // Die Serie vergleicht jedes Outfit mit seinem vorhandenen Bild (Auflösung) und ersetzt nur zu niedrige – dafür muss das ganze Wheel-Archiv im
+  // Speicher liegen. Sonst würde ein Bild, das nur noch nicht geladen ist, als "fehlt" gelten und neu gemacht.
+  const voll = _bilderVollstaendig('wheel', 'Alle Wheel-Bilder (die Auflösung wird geprüft)');
+  if (voll !== true) {
+    _wheelGenLadeLauf = true;
+    let ok = false;
+    try { ok = await voll; } finally { _wheelGenLadeLauf = false; }
+    if (!ok || _wheelGenRunning) return;
+    if (!_connected) { showStatus('❌ Nicht verbunden', 'error'); return; }
+    if (!_gameOk(false)) { showStatus('❌ ' + _gameWaitReason(false) + ' – Bilderserie nicht gestartet', 'error'); return; }
+  }
+  if (!_kleinStatus[WHEEL_HOCH_KEY]?.geladen) { showStatus('⏳ Die Auflösungs-Markierungen werden noch geladen – gleich nochmal versuchen', 'info'); return; }
 
   // Queue: alle Outfits ohne Bild UND alle mit einem Bild in niedriger Auflösung (die werden neu gemacht), per
   // Fingerprint dedupliziert. Ein vorhandenes Bild wird erst ersetzt, wenn das neue fertig ist.
@@ -13826,8 +14010,9 @@ function _updateWheelGenBtn() {
 }
 
 // ── Alle Bilder löschen (Outfits bleiben erhalten) ────────────────────────────
-function mbsWheelClearAllShots() {
-  if (!_bildFertig.wheel) { showStatus('⏳ Die Bilder werden noch geladen – bitte einen Moment warten, dann erneut versuchen', 'info'); return; }
+async function mbsWheelClearAllShots() {
+  const voll = _bilderVollstaendig('wheel', 'Alle Wheel-Bilder');
+  if (voll !== true && !(await voll)) return;
   const n = Object.keys(_mbsWheelShots).length;
   if (!n) { showStatus('Keine Wheel-Bilder vorhanden', 'info'); return; }
   if (!confirm(n + ' Wheel-Bilder löschen?\n(Die Outfits selbst bleiben erhalten)')) return;
@@ -13839,9 +14024,13 @@ function mbsWheelClearAllShots() {
 }
 
 // ── Komplette Wheel-DB als Datei exportieren / importieren (wie LSCG) ─────────
-function mbsWheelExportDB() {
+async function mbsWheelExportDB() {
   if (!_mbsWheelData.length) { showStatus('❌ Nichts zum Exportieren', 'error'); return; }
+  // Die Datei enthält alle Wheel-Bilder → das ganze Archiv für die Dauer des Exports leihen (danach wieder frei)
+  if (!_bildFertig.wheel) showStatus('⏳ Die Wheel-Bilder werden geladen – der Export wartet darauf…', 'info');
+  const leihe = await bilderAusleihen(['wheel']);
   try {
+    if (!leihe.ok && !confirm('Nicht alle Wheel-Bilder konnten gelesen werden – der Export wäre unvollständig.\n\nTrotzdem exportieren?')) return;
     const payload = {
       type: 'BCU_WHEEL_DB', v: 1,
       exportedAt: new Date().toISOString(),
@@ -13850,7 +14039,8 @@ function mbsWheelExportDB() {
       outfitFavs: [..._mbsWheelOutfitFavs],
       shots:      _mbsWheelShots,
     };
-    const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
+    // Stückweise statt ein Riesen-String (V8-Grenze ~512 MB, die Bilder allein liegen darüber)
+    const blob = new Blob(_jsonParts(payload), { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
     a.download = 'MBS_Wheel_' + new Date().toISOString().slice(0, 10) + '.json';
@@ -13861,6 +14051,7 @@ function mbsWheelExportDB() {
     const outfits = _mbsWheelData.reduce((s,r)=>s+r.outfits.length,0);
     showStatus('📤 Export: ' + _mbsWheelData.length + ' Spieler, ' + outfits + ' Outfits, ' + Object.keys(_mbsWheelShots).length + ' Bilder', 'success');
   } catch(e) { showStatus('❌ Export fehlgeschlagen: ' + e.message, 'error'); }
+  finally { leihe.zurueck(); }
 }
 
 function mbsWheelImportDB() {
@@ -13885,7 +14076,8 @@ function mbsWheelImportDB() {
         if (d.outfitFavs) d.outfitFavs.forEach(k => _mbsWheelOutfitFavs.add(k));
         if (d.shots) {
           for (const [fp, img] of Object.entries(d.shots)) {
-            if (!_mbsWheelShots[fp]) _mbsWheelShots[fp] = img;
+            // Nur ergänzen: ein vorhandenes Bild – auch eines, das nur noch nicht geladen ist – wird nie ersetzt
+            if (!_hatBild('wheel', fp)) _mbsWheelShots[fp] = img;
           }
         }
         _saveMbsWheelData();
@@ -14185,12 +14377,17 @@ function _handleWheelShotData(data) {
 }
 
 // Lightbox (nutzt die LSCG-Lightbox-Elemente)
-function mbsWheelOpenShot(_unused, mn, oi) {
+function mbsWheelOpenShot(_unused, mn, oi, geladen) {
   mn = _mbsNum(mn);
   const r = _mbsWheelData.find(x => _mbsNum(x.memberNumber) === mn);
   const o = r?.outfits[oi];
   if (!o) return;
   const fp  = _mbsOutfitFp(o);
+  // Liegt das Bild noch in der Datenbank: erst holen, dann öffnen (einmal; "geladen" verhindert eine Schleife, falls die Zeile fehlt)
+  if (!geladen && !_hat(_mbsWheelShots, fp) && _bildKeys.wheel && _bildKeys.wheel.has(fp)) {
+    _bildHolen('wheel', [fp]).then(() => mbsWheelOpenShot(_unused, mn, oi, true), () => {});
+    return;
+  }
   const img = _mbsWheelShots[fp];
   if (!img) return;
   // Die Lightbox wird mit LSCG geteilt. Ohne eigene Herkunft fand
@@ -14311,13 +14508,19 @@ function mbsWheelSaveProfile(mn, oi) {
     items: o.items,
   };
   _saveProfiles();
-  // Das Wheel-Bild dieses Outfits geht mit ins Profil (ein überschriebenes Profil bekommt das passende Bild)
-  const bild = _mbsWheelShots[_mbsOutfitFp(o)];
-  if (bild) {
-    PROFILE_SCREENSHOTS[trimmed] = bild;
-    _saveProfileScreenshots();
-  }
-  showStatus('✅ Profil "' + trimmed + '" gespeichert (' + o.items.length + ' Items' + (bild ? ', inkl. Bild' : '') + ')', 'success');
+  // Das Wheel-Bild dieses Outfits geht mit ins Profil (ein überschriebenes Profil bekommt das passende Bild). Liegt es noch in der
+  // Datenbank, wird es erst geholt.
+  const fp = _mbsOutfitFp(o);
+  const weiter = () => {
+    const bild = _mbsWheelShots[fp];
+    if (bild) {
+      PROFILE_SCREENSHOTS[trimmed] = bild;
+      _saveProfileScreenshots();
+    }
+    showStatus('✅ Profil "' + trimmed + '" gespeichert (' + o.items.length + ' Items' + (bild ? ', inkl. Bild' : '') + ')', 'success');
+  };
+  if (!_hat(_mbsWheelShots, fp) && _bildKeys.wheel && _bildKeys.wheel.has(fp)) _bildHolen('wheel', [fp]).then(weiter, weiter);
+  else weiter();
 }
 
 function _handleOutfitScanData(data) {
@@ -14859,7 +15062,9 @@ document.addEventListener('keydown', (e) => {
   else if (e.key === 'ArrowRight') osLightboxBlaettern(1);
 });
 
-function openOsLightbox(mk) {
+function openOsLightbox(mk, geladen) {
+  // Liegt das Bild noch in der Datenbank: erst holen, dann öffnen (einmal; "geladen" verhindert eine Schleife, falls die Zeile fehlt)
+  if (!geladen && _lscgBildAusstehend(mk, null).length) { _lscgBildDann(mk, null, () => openOsLightbox(mk, true)); return; }
   const img = _getLscgScreenshot(mk);
   if (!img) return;
   const entry = LSCG_DB[mk];
@@ -14874,10 +15079,11 @@ function openOsLightbox(mk) {
   document.getElementById('osLightbox').classList.add('open');
 }
 
-function openOsLightboxVersion(mk, vIdx) {
+function openOsLightboxVersion(mk, vIdx, geladen) {
   const v   = LSCG_DB[mk]?.versions?.[vIdx];
   const fp  = v?.fingerprint ?? null;
   const key = fp ? (mk + '|' + fp) : mk;
+  if (!geladen && _lscgBildAusstehend(mk, fp).length) { _lscgBildDann(mk, fp, () => openOsLightboxVersion(mk, vIdx, true)); return; }
   const img = LSCG_SCREENSHOTS[key] || _getLscgScreenshot(mk, fp);
   if (!img) return;
   const entry = LSCG_DB[mk];
@@ -14910,7 +15116,8 @@ function deleteOsScreenshotFromLb() {
   // Wheel zuerst: der Fingerprint darf '' sein, daher explizit auf null pruefen
   if (_osLightboxWheelFp !== null) {
     if (!confirm('Wheel-Bild löschen?')) return;
-    delete _mbsWheelShots[_osLightboxWheelFp];
+    if (_mbsWheelShots[_osLightboxWheelFp]) delete _mbsWheelShots[_osLightboxWheelFp]; else if (_hatBild('wheel', _osLightboxWheelFp)) idbScreenshotDelete('wheel', _osLightboxWheelFp);
+    _bildKeyWeg('wheel', _osLightboxWheelFp);
     _saveMbsWheelShots();
     if (_activeTab === 'lscg-wheel') _renderMbsWheelTab();
   } else if (_osLightboxKey) {
@@ -14922,11 +15129,12 @@ function deleteOsScreenshotFromLb() {
 }
 
 // Screenshot löschen (legacy per-member)
-function deleteOsScreenshot(mk) {
-  if (!LSCG_SCREENSHOTS[mk]) return;
+async function deleteOsScreenshot(mk) {
+  if (!_hatBild('lscg', mk)) return;
   if (!confirm('Bild für #' + mk + ' löschen?\n\n' + _LSCG_PROFIL_KOPIEN_HINWEIS)) return;
+  if (_lscgKopienOffen(mk)) await _lscgKopienLaden(mk);
   const n = _removeLscgScreenshotKeyFromProfiles(mk);
-  delete LSCG_SCREENSHOTS[mk];
+  if (LSCG_SCREENSHOTS[mk]) delete LSCG_SCREENSHOTS[mk]; else idbScreenshotDelete('lscg', mk);   // ggf. noch nicht im Speicher
   _bildKeyWeg('lscg', mk);
   _saveLscgScreenshots();
   if (_activeTab === 'outfit-scan') renderOutfitScanTab();
@@ -14934,11 +15142,12 @@ function deleteOsScreenshot(mk) {
 }
 
 // Screenshot löschen (version-specific key)
-function deleteOsScreenshotKey(key) {
-  if (!LSCG_SCREENSHOTS[key]) return;
+async function deleteOsScreenshotKey(key) {
+  if (!_hatBild('lscg', key)) return;
   if (!confirm('Dieses Bild löschen?\n\n' + _LSCG_PROFIL_KOPIEN_HINWEIS)) return;
+  if (_lscgKopienOffen(key)) await _lscgKopienLaden(key);
   const n = _removeLscgScreenshotKeyFromProfiles(key);
-  delete LSCG_SCREENSHOTS[key];
+  if (LSCG_SCREENSHOTS[key]) delete LSCG_SCREENSHOTS[key]; else idbScreenshotDelete('lscg', key);   // ggf. noch nicht im Speicher
   _bildKeyWeg('lscg', key);
   _saveLscgScreenshots();
   if (_activeTab === 'outfit-scan') renderOutfitScanTab();
@@ -14970,7 +15179,7 @@ function copyLscgOutfitCode(mk, vIdx) {
 }
 
 // Einzelne Version löschen (Code + Screenshot)
-function deleteLscgVersion(mk, vIdx) {
+async function deleteLscgVersion(mk, vIdx) {
   const entry = LSCG_DB[mk];
   if (!entry?.versions?.[vIdx]) return;
   const vNum = entry.versions.length - vIdx;
@@ -14979,9 +15188,14 @@ function deleteLscgVersion(mk, vIdx) {
   // Screenshot für diese Version löschen
   const fp  = entry.versions[vIdx]?.fingerprint ?? null;
   const key = fp ? (mk + '|' + fp) : null;
-  if (key && LSCG_SCREENSHOTS[key]) {
+  if (key && _hatBild('lscg', key)) {
+    if (_lscgKopienOffen(key)) {
+      const version = entry.versions[vIdx];
+      await _lscgKopienLaden(key);
+      if (LSCG_DB[mk] !== entry || entry.versions[vIdx] !== version) return;   // währenddessen geändert: nichts mehr anfassen, die Version bleibt
+    }
     _removeLscgScreenshotKeyFromProfiles(key);
-    delete LSCG_SCREENSHOTS[key];
+    if (LSCG_SCREENSHOTS[key]) delete LSCG_SCREENSHOTS[key]; else idbScreenshotDelete('lscg', key);   // ggf. noch nicht im Speicher
     _bildKeyWeg('lscg', key);
     _saveLscgScreenshots();
   }
@@ -15001,8 +15215,9 @@ function deleteLscgVersion(mk, vIdx) {
   showStatus('🗑️ Version v' + vNum + ' gelöscht', 'info');
 }
 
-function clearAllProfileScreenshots() {
-  if (!_bildFertig.profile) { showStatus('⏳ Die Bilder werden noch geladen – bitte einen Moment warten, dann erneut versuchen', 'info'); return; }
+async function clearAllProfileScreenshots() {
+  const voll = _bilderVollstaendig('profile', 'Alle Profil-Bilder');
+  if (voll !== true && !(await voll)) return;
   const count = Object.keys(PROFILE_SCREENSHOTS).length;
   if (!count) { showStatus('ℹ️ Keine Profil-Bilder vorhanden', 'info'); return; }
   if (!confirm('Alle ' + count + ' Profil-Screenshots löschen?\n\nDie Profile selbst bleiben erhalten.')) return;
@@ -15012,8 +15227,10 @@ function clearAllProfileScreenshots() {
   showStatus('🗑️ Alle Profil-Screenshots gelöscht', 'info');
 }
 
-function clearAllLscgScreenshots() {
-  if (!_bildFertig.lscg) { showStatus('⏳ Die Bilder werden noch geladen – bitte einen Moment warten, dann erneut versuchen', 'info'); return; }
+async function clearAllLscgScreenshots() {
+  // Auch die Profil-Bilder: die byte-gleichen Kopien dort werden mit entfernt und müssen dafür im Speicher liegen
+  const voll = _bilderVollstaendig(['lscg', 'profile'], 'Alle Bilder');
+  if (voll !== true && !(await voll)) return;
   const count = Object.keys(LSCG_SCREENSHOTS).length;
   if (!count) { showStatus('ℹ️ Keine Bilder vorhanden', 'info'); return; }
   if (!confirm('Alle ' + count + ' gespeicherten Bilder löschen?\n\nDie Outfit-Codes bleiben erhalten.\n' + _LSCG_PROFIL_KOPIEN_HINWEIS)) return;

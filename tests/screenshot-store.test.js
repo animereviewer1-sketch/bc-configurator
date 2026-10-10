@@ -50,9 +50,9 @@ function kvPutsFor(key) {
   return ops.filter((o) => o.op === 'put' && o.store === 'kv' && o.key === key);
 }
 
-async function boot() {
+async function boot({ echt = false } = {}) {
   const infoEl = makeElementStub();
-  const ctx = loadScript(['items.js'], { confirm: () => true, setTimeout: () => 0, clearTimeout: () => {} });
+  const ctx = loadScript(['items.js'], { confirm: () => true, setTimeout: () => 0, clearTimeout: () => {}, bilderEcht: echt });
   // document.getElementById im Sandbox-Default liefert bei jedem Aufruf einen
   // frischen Stub; der Init-Hook feuert _renderScreenshotStoreInfo() bereits
   // synchron beim Laden, bevor wir hier ueberschreiben (01-REVIEW WR-02,
@@ -153,8 +153,12 @@ describe('Screenshot-Store (SPLIT-05) — ein Datensatz je Bild, Alt-Blob frozen
     await ctx.idbScreenshotPut('lscg', '9|FP', 'data:ls');
     await ctx.idbScreenshotPut('wheel', 'fpw', 'data:ws');
 
-    ({ ctx: ctx2 } = await boot());
+    ({ ctx: ctx2 } = await boot({ echt: true }));
     await settle(150);
+    // Bilder werden nicht mehr beim Start geladen (nur die Schlüssel) – erst wenn das ganze Archiv gebraucht wird
+    expect(evalIn(ctx2, 'PROFILE_SCREENSHOTS.Seed')).toBeUndefined();
+    expect(evalIn(ctx2, "_hatBild('profile', 'Seed')")).toBe(true);
+    expect(await ctx2.bcBilderGeladen()).toBe(true);
     expect(evalIn(ctx2, 'PROFILE_SCREENSHOTS.Seed')).toBe('data:s');
     expect(evalIn(ctx2, "LSCG_SCREENSHOTS['9|FP']")).toBe('data:ls');
     expect(evalIn(ctx2, "_mbsWheelShots['fpw']")).toBe('data:ws');
@@ -219,8 +223,8 @@ describe('Screenshot-Store (SPLIT-05) — ein Datensatz je Bild, Alt-Blob frozen
     // das Bild wird erst beim Sichtkontakt aus der Map gelesen statt ins HTML kopiert
     // +1: reine Lesestelle in _profilBildAktualisieren (nur die eine Karte nach einem Screenshot nachziehen,
     // statt die ganze Liste neu zu bauen) – schreibt nichts
-    expect(count(src, 'PROFILE_SCREENSHOTS[')).toBe(29); // Bilder-Umbau: "hat ein Bild?"-Prüfungen laufen jetzt über _hatBild (Schlüssel + Speicher), daher 38 → 29; davor:  34 + 4 reine Lesestellen: Auto-Bild (_autoBildPlanen, _autoBildSchritt: nie ein vorhandenes Bild ersetzen), Meldung beim Übernehmen eines Profil-Items, Bild-Zähler der Export-Info; davor: 35 + 1; davon +1 Ladeschleife (Review CR-01); -2: der entfernte renderProfileList-Wrapper hatte die Bild-Filter ein zweites Mal; +1: mbsWheelSaveProfile nimmt das Wheel-Bild mit ins Profil; -1: uploadProfileScreenshot entfernt
-    expect(count(src, 'LSCG_SCREENSHOTS[')).toBe(22); // Bilder-Umbau: Existenz-Prüfungen über _hatBild (27 → 22); davor:  +1: Export-Info zählt LSCG-Bilder (liest nur); davor 26, +1: Filter "Mit/Ohne Bild" in _osVersionPasst liest nur
+    expect(count(src, 'PROFILE_SCREENSHOTS[')).toBe(24); // Bilder nur bei Bedarf: weitere Existenz-Prüfungen laufen über _hatBild (29 → 24); davor: Bilder-Umbau: "hat ein Bild?"-Prüfungen laufen jetzt über _hatBild (Schlüssel + Speicher), daher 38 → 29; davor:  34 + 4 reine Lesestellen: Auto-Bild (_autoBildPlanen, _autoBildSchritt: nie ein vorhandenes Bild ersetzen), Meldung beim Übernehmen eines Profil-Items, Bild-Zähler der Export-Info; davor: 35 + 1; davon +1 Ladeschleife (Review CR-01); -2: der entfernte renderProfileList-Wrapper hatte die Bild-Filter ein zweites Mal; +1: mbsWheelSaveProfile nimmt das Wheel-Bild mit ins Profil; -1: uploadProfileScreenshot entfernt
+    expect(count(src, 'LSCG_SCREENSHOTS[')).toBe(21); // Bilder nur bei Bedarf: Löschen/Ersetzen prüft über _hatBild (22 → 21); davor: Bilder-Umbau: Existenz-Prüfungen über _hatBild (27 → 22); davor:  +1: Export-Info zählt LSCG-Bilder (liest nur); davor 26, +1: Filter "Mit/Ohne Bild" in _osVersionPasst liest nur
     expect(count(src, '_mbsWheelShots[')).toBe(13); // Bilder-Umbau: Existenz-Prüfungen über _hatBild (16 → 13); davor:  +1: Export-Info zählt niedrig aufgelöste Wheel-Bilder (liest nur); davor 15, +2 Filter "Mit/Ohne Bild" im Wheel; +2: Bilder-Serie liest vorhandene Bilder (niedrige Auflösung neu machen) und Als-Profil-speichern holt das Bild
   });
 });
