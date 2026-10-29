@@ -210,32 +210,92 @@ describe('Alles, was ein vollständiges Archiv braucht, wartet auf die Bilder', 
     expect(ctx.showStatus.mock.calls.filter((c) => String(c[0]).includes('noch geladen')).length).toBeGreaterThanOrEqual(2);
   });
 
-  it('Wheel-Serie lädt zuerst das ganze Wheel-Archiv – ein gutes Bild, das nur noch nicht geladen war, wird NICHT neu gemacht', async () => {
+  // Kopf eines JPEG mit Breite × Höhe – genug für die Auflösungsprüfung (_jpegGroesse liest nur den Kopf)
+  const jpeg = (w, h) => 'data:image/jpeg;base64,' + Buffer.from([
+    0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46, 0x49, 0x46, 0x00, 1, 1, 0, 0, 1, 0, 1, 0, 0,
+    0xFF, 0xC0, 0x00, 0x11, 0x08, (h >> 8) & 255, h & 255, (w >> 8) & 255, w & 255, 3, 1, 0x22, 0, 2, 0x11, 1, 3, 0x11, 1,
+    0xFF, 0xD9,
+  ]).toString('base64');
+  const wheelDaten = (asset) => `_mbsWheelData = [{ memberNumber: 5, name: 'Mia', ts: 1, outfits: [{ name: 'A', items: [{ group: 'Cloth', asset: ${JSON.stringify(asset)} }] }] }];`;
+  const meldung = (ctx, text) => ctx.showStatus.mock.calls.filter((c) => String(c[0]).includes(text)).length;
+
+  it('Wheel-Serie lädt das Archiv NICHT: ein schon bestätigtes Bild (_wheelHoch) wird weder geladen noch ersetzt – keine Lade-Meldung', async () => {
     const vorher = await boot();
     const asset = id('Serie');
     const fp = 'Cloth:' + asset;
     await vorher.idbScreenshotBatch('wheel', [[fp, 'data:gut']], []);
     const frage = vi.fn(() => false);
     const ctx = await boot({ confirm: frage });
-    evalIn(ctx, `_connected = true; _gameOk = () => true; _wheelHoch.add(${JSON.stringify(fp)});
-      _mbsWheelData = [{ memberNumber: 5, name: 'Mia', ts: 1, outfits: [{ name: 'A', items: [{ group: 'Cloth', asset: ${JSON.stringify(asset)} }] }] }];`);
+    evalIn(ctx, `_connected = true; _gameOk = () => true; _wheelHoch.add(${JSON.stringify(fp)}); ${wheelDaten(asset)}`);
     expect(evalIn(ctx, '_mbsWheelShots')[fp]).toBeUndefined();                  // noch nicht im Speicher
-    const lauf = ctx.mbsWheelGenerateAll();
-    expect(evalIn(ctx, '_wheelGenRunning')).toBe(false);
-    await lauf;
+    await ctx.mbsWheelGenerateAll();
     expect(frage).not.toHaveBeenCalled();                                      // nichts zu tun – das Bild existiert
     expect(evalIn(ctx, '_wheelGenRunning')).toBe(false);
-    expect(evalIn(ctx, '_mbsWheelShots')[fp]).toBe('data:gut');                 // jetzt geladen, nicht ersetzt
-    expect(ctx.showStatus.mock.calls.some((c) => String(c[0]).includes('guter Auflösung'))).toBe(true);
+    expect(evalIn(ctx, '_mbsWheelShots')[fp]).toBeUndefined();                  // nichts geladen: bestätigt heißt "muss nicht mehr geprüft werden"
+    expect(meldung(ctx, 'vollständig geladen') + meldung(ctx, 'geprüft')).toBe(0);
+    expect(meldung(ctx, 'guter Auflösung')).toBe(1);
   });
 
-  it('Wheel-Serie: ein zweiter Klick während des Ladens startet nicht noch einmal', async () => {
+  it('Wheel-Serie: ein noch nicht bestätigtes Bild wird einmalig einzeln geholt und geprüft, dann vermerkt – beim nächsten Klick wird nichts mehr geladen', async () => {
+    const vorher = await boot();
+    const asset = id('Serie');
+    const fp = 'Cloth:' + asset;
+    await vorher.idbScreenshotBatch('wheel', [[fp, jpeg(520, 1000)]], []);
+    const frage = vi.fn(() => false);
+    const ctx = await boot({ confirm: frage });
+    evalIn(ctx, `_connected = true; _gameOk = () => true; ${wheelDaten(asset)}`);
+    await ctx.mbsWheelGenerateAll();
+    expect(meldung(ctx, 'einmalig geprüft')).toBe(1);
+    expect(frage).not.toHaveBeenCalled();                                      // gutes Bild: nichts zu tun
+    expect(evalIn(ctx, '_mbsWheelShots')[fp]).toBe(jpeg(520, 1000));            // geholt, nicht ersetzt
+    expect(evalIn(ctx, `_wheelHoch.has(${JSON.stringify(fp)})`)).toBe(true);    // vermerkt
+    // zweiter Klick – auch nach dem Freigeben des Bildes aus dem Speicher: keine Prüfung, keine Lade-Meldung mehr
+    evalIn(ctx, `delete _mbsWheelShots[${JSON.stringify(fp)}]`);
+    await ctx.mbsWheelGenerateAll();
+    expect(meldung(ctx, 'einmalig geprüft')).toBe(1);
+    expect(evalIn(ctx, '_mbsWheelShots')[fp]).toBeUndefined();
+  });
+
+  it('Wheel-Serie: ein nur in der Datenbank liegendes Bild in niedriger Auflösung kommt in die Queue (das Bild bleibt, bis das neue fertig ist)', async () => {
+    const vorher = await boot();
+    const asset = id('Serie');
+    const fp = 'Cloth:' + asset;
+    await vorher.idbScreenshotBatch('wheel', [[fp, jpeg(260, 520)]], []);
+    const frage = vi.fn(() => false);
+    const ctx = await boot({ confirm: frage });
+    evalIn(ctx, `_connected = true; _gameOk = () => true; ${wheelDaten(asset)}`);
+    await ctx.mbsWheelGenerateAll();
+    expect(frage).toHaveBeenCalledTimes(1);
+    expect(String(frage.mock.calls[0][0])).toContain('1 in niedriger Auflösung');
+    expect(evalIn(ctx, `_wheelHoch.has(${JSON.stringify(fp)})`)).toBe(false);   // niedrig → nicht als "in Ordnung" vermerkt
+    expect(evalIn(ctx, '_mbsWheelShots')[fp]).toBe(jpeg(260, 520));              // nicht ersetzt
+  });
+
+  it('Wheel-Serie: ein Bild, das nicht gelesen werden kann, wird NIE neu gemacht (es könnte ein gutes sein)', async () => {
+    const vorher = await boot();
+    const asset = id('Serie');
+    const fp = 'Cloth:' + asset;
+    await vorher.idbScreenshotBatch('wheel', [[fp, jpeg(260, 520)]], []);
+    const frage = vi.fn(() => true);
+    const ctx = await boot({ confirm: frage });
+    evalIn(ctx, `_connected = true; _gameOk = () => true; ${wheelDaten(asset)}; idbScreenshotGetMany = async () => ({});`);
+    await ctx.mbsWheelGenerateAll();
+    expect(frage).not.toHaveBeenCalled();
+    expect(evalIn(ctx, '_wheelGenQueue.length')).toBe(0);
+    expect(evalIn(ctx, '_wheelGenRunning')).toBe(false);
+    expect(evalIn(ctx, `_wheelHoch.has(${JSON.stringify(fp)})`)).toBe(false);   // nichts bestätigt, was nicht geprüft wurde
+  });
+
+  it('Wheel-Serie: ein zweiter Klick während des Prüf-Ladens startet nicht noch einmal', async () => {
+    const vorher = await boot();
+    const asset = id('Serie');
+    await vorher.idbScreenshotBatch('wheel', [['Cloth:' + asset, 'data:x']], []);
     const ctx = await boot({ confirm: () => false });
-    evalIn(ctx, '_connected = true; _gameOk = () => true; _bildFertig.wheel = false; _bildVoll.wheel = null;');
+    evalIn(ctx, `_connected = true; _gameOk = () => true; ${wheelDaten(asset)}`);
     const a = ctx.mbsWheelGenerateAll();
     const b = ctx.mbsWheelGenerateAll();
     await Promise.all([a, b]);
-    expect(ctx.showStatus.mock.calls.filter((c) => String(c[0]).includes('zuerst vollständig geladen')).length).toBe(1);
+    expect(meldung(ctx, 'einmalig geprüft')).toBe(1);
   });
 
   it('Gesamt-Backup: leiht das ganze Archiv; schlug das Lesen fehl, wird gefragt – bei "Nein" ist die Leihe zurückgegeben', async () => {

@@ -759,3 +759,47 @@ html[data-ui="nova"] {
   & .scan-badge-unbekannt { color: var(--text3); border: 1px solid #2a2f40; }
   & #scanList > .scan-btn { margin: 10px 12px; }
 }
+
+/* ══════════════════════════════════════════════════════════
+   SCHMALE FENSTER – Zwei-Spalten-Layouts klappen untereinander
+   Die Seitenleiste ist unter 1100px 76px breit, darüber 248px. Darüber haben alle Layouts
+   mindestens ~820px Platz; die Schwellen unten sind je Layout aus Mindestbreite + 76px Leiste +
+   Rand berechnet, damit nichts überlappt oder abgeschnitten wird.
+   ══════════════════════════════════════════════════════════ */
+@media (max-width: 920px) {
+  html[data-ui="nova"] .outfit-tab-layout { grid-template-columns: minmax(0, 1fr); }
+  html[data-ui="nova"] .outfit-left,
+  html[data-ui="nova"] .outfit-right { max-height: none; overflow: visible; }
+  html[data-ui="nova"] .outfit-right { border-left: 0; border-top: 1px solid var(--nv-line); }
+}
+@media (max-width: 760px) {
+  html[data-ui="nova"] .scan-layout { grid-template-columns: minmax(0, 1fr); height: auto; }
+  html[data-ui="nova"] .scan-side { border-right: 0; border-bottom: 1px solid var(--nv-line); max-height: 340px; }
+  html[data-ui="nova"] .scan-main { overflow: visible; }
+  html[data-ui="nova"] .scan-toolbar { flex-wrap: wrap; }
+}
+@media (max-width: 700px) {
+  html[data-ui="nova"] .bot-wrap,
+  html[data-ui="nova"] .rank-wrap,
+  html[data-ui="nova"] .shop-wrap { grid-template-columns: minmax(0, 1fr); height: auto; }
+  html[data-ui="nova"] .bot-sidebar { max-height: 260px; border-right: 0; border-bottom: 1px solid var(--nv-line); }
+  html[data-ui="nova"] .rank-cfg,
+  html[data-ui="nova"] .shop-cfg { border-right: 0; border-bottom: 1px solid var(--nv-line); overflow: visible; }
+  html[data-ui="nova"] .layout { grid-template-columns: minmax(0, 1fr); }
+  html[data-ui="nova"] .layout .sidebar { position: static; max-height: 340px; border-right: 0; border-bottom: 1px solid var(--nv-line); }
+  html[data-ui="nova"] .main { max-height: none; }
+}
+
+/* KOPFLEISTE SCHMAL: Die rechte Chip-Gruppe braucht verbunden ~750px. Darunter werden Laden/Verbinden zu
+   reinen Icons (Beschriftung steht im Tooltip), die Info-Chips entfallen, ab 560px auch die Suche. */
+@media (max-width: 820px) {
+  html[data-ui="nova"] #playerInfo,
+  html[data-ui="nova"] #cacheInfo { display: none !important; }
+  html[data-ui="nova"] #loadCacheBtn,
+  html[data-ui="nova"] #reconnectBtn { font-size: 0; gap: 0; padding-inline: 10px; }
+  html[data-ui="nova"] #loadCacheBtn svg.bci,
+  html[data-ui="nova"] #reconnectBtn svg.bci { width: 16px; height: 16px; margin: 0; }
+}
+@media (max-width: 560px) {
+  html[data-ui="nova"] .nv-top-search { display: none; }
+}

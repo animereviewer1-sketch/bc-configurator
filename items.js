@@ -11554,6 +11554,7 @@ const LOCK_RULES_KEY     = 'BC_LOCK_RULES_v1';
 const LOCK_FILTER_KEY    = 'BC_LOCK_FILTER_v1';     // alter Ein/Aus-Schalter, nur noch zur Übernahme
 const LOCK_MODS_SEEN_KEY = 'BC_LOCK_MODS_SEEN_v1';  // entdeckte, unbekannte Mod-Schlösser
 const LOCK_SETZER_KEY    = 'BC_LOCK_SETZER_v1';     // {modus, nummer, name}
+const LOCK_SETZER_ZEILE_KEY = 'BC_LOCK_SETZER_ZEILE_v1';  // je Art mit "Neuer Setzer": eigener Setzer 'ich' | 'lover' (fehlt = Setzer von oben)
 const LOCK_ZIEL_KEY      = 'BC_LOCK_ZIEL_v1';       // je Art: Umwandeln-Ziel {typ, minuten, itemWeg}
 const LOCK_ZEIT_KEY      = 'BC_LOCK_ZEIT_v1';       // je Art: Timer neu (Minuten, 0 = unverändert)
 const LOCK_CODE_KEY      = 'BC_LOCK_CODE_v1';       // {passwort, hinweis, kombination}
@@ -11598,13 +11599,19 @@ const LOCK_REGELN = { weg: 'Entfernen', behalten: 'Übernehmen', setzer: 'Neuer 
 const LOCK_REGEL_INFO = {
   weg:       'Das Schloss fällt weg, das Item bleibt an.',
   behalten:  'Das Schloss bleibt genau wie im Outfit – mit fremdem Setzer bzw. fremden Schlüsselhaltern.',
-  setzer:    'Die Schloss-Art bleibt, nur der Setzer wird die Person aus „Setzer“ oben. BC lässt bei Owner/Lover nur dich, deine Lover bzw. Owner zu – sonst nimmt das Tool einen gültigen, notfalls High Security.',
+  setzer:    'Die Schloss-Art bleibt, nur der Setzer wird die Person aus „Setzer“ oben (je Zeile überschreibbar). BC lässt bei Owner/Lover nur dich, deine Lover bzw. Owner zu – sonst nimmt das Tool einen gültigen, notfalls High Security. High Security: auch die Schlüsselhalter werden ersetzt. Exklusiv mit dir als Setzer geht nicht (du könntest es nie öffnen) → High Security. Passwort-/Code-Schlösser behalten ihren Code aus dem Outfit: die ID schützt dort nichts, wer den Code kennt, kann öffnen.',
   meins:     'Wird ein High-Security-Schloss mit dir als einziger Schlüsselhalterin – öffnen kannst du es mit freien Händen.',
   umwandeln: 'Wird ein Schloss deiner Wahl, mit Timer, Passwort oder Kombination aus den Einstellungen oben.',
 };
-// "Neuer Setzer" nur dort, wo der Setzer das Öffnen nicht heimlich verschiebt:
+// "Neuer Setzer": gleiche Schloss-Art, nur die ID im Schloss wird getauscht.
 // Owner/Lover prüft BC gegen die Beziehungen der Trägerin; AFC-Besitzer = Setzer.
-const LOCK_SETZER_KATEGORIEN = ['owner', 'lover', 'mod:AFCHeart'];
+const LOCK_SETZER_KATEGORIEN = ['owner', 'lover', 'exklusiv', 'schluessel', 'timer', 'code', 'mod', 'mod:AFCHeart'];
+// Konsolentest (BC R132/133, ValidationSanitizeProperties): den Setzer prüft BC nur bei Owner-/Lover-Schlössern. Bei allen anderen Arten
+// und bei den Mod-Schlössern bleibt das Schloss mit jeder ID. Ausnahme DOGS Devious: DOGS trägt den Besitzer selbst ein und legt das
+// Schloss immer wieder an – dort gibt es kein "Neuer Setzer" (wer dem Rückfall "alle anderen" folgt, bekommt "Mir gehört").
+function _lockSetzerErlaubt(k) {
+  return LOCK_SETZER_KATEGORIEN.includes(k) || (typeof k === 'string' && k.startsWith('mod:') && k !== 'mod:DeviousPadlock');
+}
 const _LOCK_SETZER_NAME_MAX = 40;
 // Die 18 Schlösser, die BC R132 selbst mitbringt (Female3DCG.js, IsLock) – alles andere zählt als Mod-Schloss
 const _BC_LOCKS = ['CombinationPadlock','ExclusivePadlock','FamilyPadlock','HighSecurityPadlock','IntricatePadlock',
@@ -11665,7 +11672,7 @@ function _lockRulesAlle(wert) {
 
 // Regel w für Schlüssel k erlaubt? ("Neuer Setzer" nur bei Owner/Lover/AFC)
 function _lockRegelErlaubt(k, w) {
-  return !!LOCK_REGELN[w] && (w !== 'setzer' || LOCK_SETZER_KATEGORIEN.includes(k));
+  return !!LOCK_REGELN[w] && (w !== 'setzer' || _lockSetzerErlaubt(k));
 }
 
 // Wer bei "Neuer Setzer"/"Umwandeln" eingetragen wird: 'ich' | 'lover' (erste Lover-Beziehung aus BC) | 'nummer'
@@ -11696,6 +11703,8 @@ function _lockZielNormal(z) {
 
 let _lockRules = _lockRulesAlle('weg');
 let _lockSetzer = _lockSetzerNormal(null);
+const _LOCK_SETZER_ZEILE_MODI = ['ich', 'lover'];
+let _lockSetzerZeile = {};    // Art → 'ich' | 'lover': überschreibt für diese Art den Setzer von oben (z. B. AFC → Lover, Rest → ich)
 let _lockCode = _lockCodeNormal(null);
 let _lockZiel = {};           // Art → {typ, minuten, itemWeg} für "Umwandeln"
 let _lockZeit = {};           // Art → Minuten: Timer bei "Übernehmen"/"Neuer Setzer" ab jetzt neu setzen
@@ -11704,6 +11713,10 @@ let _lockModCounts = {};      // 'mod:<id>' → in wie vielen gespeicherten Outf
 const _lockKeyFormGueltig = k => LOCK_KATEGORIEN.some(x => x.id === k) || (typeof k === 'string' && k.startsWith('mod:') && k.length <= _LOCK_MOD_NAME_MAX + 4);
 try {
   _lockSetzer = _lockSetzerNormal(JSON.parse(localStorage.getItem(LOCK_SETZER_KEY) || 'null'));
+  const szZeile = JSON.parse(localStorage.getItem(LOCK_SETZER_ZEILE_KEY) || 'null');
+  if (szZeile && typeof szZeile === 'object') Object.keys(szZeile).forEach(k => {
+    if (_lockKeyFormGueltig(k) && _lockSetzerErlaubt(k) && _LOCK_SETZER_ZEILE_MODI.includes(szZeile[k])) _lockSetzerZeile[k] = szZeile[k];
+  });
   _lockCode = _lockCodeNormal(JSON.parse(localStorage.getItem(LOCK_CODE_KEY) || 'null'));
   const ziele = JSON.parse(localStorage.getItem(LOCK_ZIEL_KEY) || 'null');
   if (ziele && typeof ziele === 'object') Object.keys(ziele).forEach(k => { if (_lockKeyFormGueltig(k)) _lockZiel[k] = _lockZielNormal(ziele[k]); });
@@ -11791,7 +11804,7 @@ function _lockModSeenAdd(name, ohneSpeichern) {
 // nichts aus dem Tool-Fenster benutzen. Liefert __bcuLockFix(gruppe, assetName, property):
 // die Property unverändert oder als bearbeitete Kopie (Eingabe = gespeicherte Daten, nie ändern).
 function _lockSpielLogik(cfg) {
-  var R = cfg.R, U = cfg.U, Z = cfg.Z, C = cfg.C, S = cfg.S, BC = cfg.BC, K = cfg.K, M = cfg.M, T = cfg.T;
+  var R = cfg.R, U = cfg.U, Z = cfg.Z, C = cfg.C, S = cfg.S, SZ = cfg.SZ || {}, BC = cfg.BC, K = cfg.K, M = cfg.M, T = cfg.T;
   var ECHT = cfg.ECHT, dogsGeplant = false;
 
   function post(msg) {
@@ -11835,11 +11848,21 @@ function _lockSpielLogik(cfg) {
     post({ type: 'LOCK_STRIPPED', group: String(g), lock: modName(p),
       by: (p.LockMemberNumber == null ? null : p.LockMemberNumber), aktion: regel, info: (info || null) });
   }
-  function setzerNummer() {
+  function ersteLover() {
+    var l = (Player.Lovership || []).find(function (x) { return x && x.MemberNumber > 0; });
+    return l ? l.MemberNumber : null;
+  }
+  // k = Art des Schlosses: hat sie einen eigenen Setzer (SZ), gilt der; sonst der Setzer aus den Einstellungen
+  function setzerNummer(k) {
+    var z = k ? SZ[k] : null;
+    // Mod-Schloss ohne eigene Regel folgt "alle anderen" – dann gilt auch deren Zeilen-Setzer
+    if (!z && k && k.indexOf('mod:') === 0 && !R[k]) z = SZ.mod;
+    if (z === 'ich') return Player.MemberNumber;
+    if (z === 'lover') return ersteLover() || Player.MemberNumber;
     if (S.modus === 'nummer' && S.nummer > 0) return S.nummer;
     if (S.modus === 'lover') {
-      var l = (Player.Lovership || []).find(function (x) { return x && x.MemberNumber > 0; });
-      if (l) return l.MemberNumber;
+      var l = ersteLover();
+      if (l) return l;
     }
     return Player.MemberNumber;
   }
@@ -11857,8 +11880,8 @@ function _lockSpielLogik(cfg) {
     return true;
   }
   // Gewählter Setzer, sonst Owner (Owner-Schloss) bzw. erste Lover (Lover-Schloss), sonst du; null = keiner gültig
-  function gueltigerSetzer(lb) {
-    var kand = [setzerNummer()], own = Player.Ownership && Player.Ownership.MemberNumber;
+  function gueltigerSetzer(lb, k) {
+    var kand = [setzerNummer(k)], own = Player.Ownership && Player.Ownership.MemberNumber;
     if (/^Owner/.test(lb) && typeof own === 'number') kand.push(own);
     if (/^Lovers/.test(lb)) {
       var l = (Player.Lovership || []).find(function (x) { return x && x.MemberNumber > 0; });
@@ -12007,7 +12030,9 @@ function _lockSpielLogik(cfg) {
     // Screenshots (nur lokal, danach zurückgesetzt): DOGS und AFC registrieren Schlösser selbst
     // (AFC schon bei jedem CharacterRefresh) und legen sie danach immer wieder an → nie mitnehmen
     if (!ECHT && (k === 'mod:DeviousPadlock' || k === 'mod:AFCHeart')) regel = 'weg';
-    if (regel === 'setzer' && k !== 'owner' && k !== 'lover' && k !== 'mod:AFCHeart') regel = 'behalten';
+    // DOGS trägt den Besitzer selbst ein und legt das Schloss immer wieder an: kein eigener Setzer, sondern "Mir gehört"
+    // (so landet auch ein DOGS-Schloss, das dem Rückfall "alle anderen" = Neuer Setzer folgt, bei dir)
+    if (regel === 'setzer' && k === 'mod:DeviousPadlock') regel = 'meins';
     if (regel === 'behalten') {
       var zk = kopie(p), zs = zeitNeu(zk, k);
       if (zs) { melde(g, p, 'zeit', Math.round(zs / 60) + ' Min ab jetzt'); return zk; }
@@ -12016,19 +12041,29 @@ function _lockSpielLogik(cfg) {
     // AFC-Herzschloss: bleibt Herzschloss, Setzer = Besitzer, neue ID (sonst überspringt
     // AFC es, falls diese ID früher schon einmal entfernt wurde)
     if (k === 'mod:AFCHeart' && (regel === 'setzer' || regel === 'meins')) {
-      var hn = (regel === 'meins') ? Player.MemberNumber : setzerNummer();
+      var hn = (regel === 'meins') ? Player.MemberNumber : setzerNummer(k);
       melde(g, p, 'afc', wer(hn));
       return afcHerz(p, hn);
     }
     var grund = null;
     if (regel === 'setzer') {
-      var nr = gueltigerSetzer(String(p.LockedBy));
+      var nr = gueltigerSetzer(String(p.LockedBy), k);
       if (nr == null) {
         regel = 'meins';
         grund = /^Owner/.test(String(p.LockedBy)) ? 'BC: Owner-Schloss geht nur mit Owner' : 'BC: kein gültiger Setzer (keine Lover?)';
+      } else if (String(p.LockedBy) === 'ExclusivePadlock' && nr === Player.MemberNumber) {
+        // Exklusiv öffnet nur der Setzer – mit dir als Setzer könntest du es nie selbst öffnen
+        regel = 'meins';
+        grund = 'Exklusiv könntest du nie selbst öffnen';
       } else {
         var t = kopie(p);
         t.LockMemberNumber = nr; t.LockMemberName = nameFuer(nr);
+        // Nur die neue Person soll öffnen können: Schlüsselhalter (High Security) bzw. Zeit-Berechtigte (Timer) ersetzen.
+        // Owner/Lover-Schlösser bleiben wie bisher unangetastet (dort prüft BC die Beziehung).
+        if (k !== 'owner' && k !== 'lover') {
+          if (String(t.LockedBy) === 'HighSecurityPadlock') t.MemberNumberListKeys = String(nr);
+          if (T[String(t.LockedBy)] && Array.isArray(t.MemberNumberList)) t.MemberNumberList = [];
+        }
         var ts = zeitNeu(t, k);
         melde(g, p, 'setzer', wer(nr) + (ts ? ' · Timer ' + Math.round(ts / 60) + ' Min ab jetzt' : ''));
         return t;
@@ -12064,7 +12099,7 @@ function _lockFilterPrelude(melden) {
   const nurUebernehmen = !bild && Object.keys(_lockRules).every(k => _lockRules[k] === 'behalten')
     && !Object.keys(_lockZeit).some(k => _lockZeit[k] > 0);
   if (nurUebernehmen) return 'var __bcuLockFix=function(g,n,p){return p;};';
-  const cfg = { R: _lockRules, U: _lockZiel, Z: _lockZeit, C: _lockCode, S: _lockSetzer, BC: _BC_LOCKS,
+  const cfg = { R: _lockRules, U: _lockZiel, Z: _lockZeit, C: _lockCode, S: _lockSetzer, SZ: _lockSetzerZeile, BC: _BC_LOCKS,
     K: _LOCK_PROP_KEYS, M: _MOD_LOCK_MAP, T: _LOCK_TIMER_MAX, ECHT: !!melden, MELDEN: !!melden, BILD: bild, ORIGIN: TOOL_ORIGIN };
   return 'var __bcuLockFix=(' + _lockSpielLogik.toString() + ')(' + JSON.stringify(cfg) + ');';
 }
@@ -12096,7 +12131,7 @@ function lockRuleSet(kat, wert) {
   if (wert === 'umwandeln' && !_lockZiel[kat]) _lockZiel[kat] = _lockZielNormal(_lockZiel.mod && kat.startsWith('mod:') ? _lockZiel.mod : null);
   _lockRulesSpeichern();
   showStatus(_lockRuleLabel(kat) + ' → ' + LOCK_REGELN[wert]
-    + (wert === 'setzer' ? ' (' + _lockSetzerText() + ')' : '')
+    + (wert === 'setzer' ? ' (' + _lockSetzerText(kat) + ')' : '')
     + (wert === 'umwandeln' ? ' ' + _lockZielLabel(_lockZiel[kat].typ) : ''), 'info');
 }
 
@@ -12160,7 +12195,21 @@ function lockSetzerSet(modus, nummer, name) {
   showStatus('👤 Setzer: ' + _lockSetzerText(), 'info');
 }
 
-function _lockSetzerText() {
+// Eigener Setzer einer Art (nur Arten mit "Neuer Setzer"): 'ich' | 'lover'; '' = der Setzer von oben gilt
+function lockSetzerZeileSet(kat, modus) {
+  if (!_lockRuleKeyGueltig(kat) || !_lockSetzerErlaubt(kat)) return;
+  if (modus === '') delete _lockSetzerZeile[kat];
+  else if (_LOCK_SETZER_ZEILE_MODI.includes(modus)) _lockSetzerZeile[kat] = modus;
+  else return;
+  try { localStorage.setItem(LOCK_SETZER_ZEILE_KEY, JSON.stringify(_lockSetzerZeile)); } catch (e) {}
+  _lockRulesRender();
+  showStatus('👤 ' + _lockRuleLabel(kat) + ' → Setzer: ' + _lockSetzerText(kat), 'info');
+}
+
+function _lockSetzerText(kat) {
+  const z = kat && _lockSetzerZeile[kat];
+  if (z === 'ich') return 'du selbst';
+  if (z === 'lover') return 'deine Lover-Partnerin';
   if (_lockSetzer.modus === 'lover') return 'deine Lover-Partnerin';
   if (_lockSetzer.modus === 'nummer') return (_lockSetzer.name ? _lockSetzer.name + ' ' : '') + '#' + _lockSetzer.nummer;
   return 'du selbst';
@@ -12202,6 +12251,15 @@ function _lockRuleZeile(key, label, hint, original, eigen, wert, opt = {}) {
     + (opt.folgt !== undefined ? '<option value=""' + (!eigen ? ' selected' : '') + '>wie „alle anderen“ (' + escHtml(LOCK_REGELN[opt.folgt] || '') + ')</option>' : '')
     + aktionen.map(w => '<option value="' + w + '"' + (eigen && wert === w ? ' selected' : '') + '>' + escHtml(LOCK_REGELN[w]) + '</option>').join('')
     + '</select>';
+  // Neuer Setzer: für diese Art ein eigener Setzer (z. B. AFC → Lover, die übrigen → du selbst)
+  if (eigen && wert === 'setzer') {
+    const sz = _lockSetzerZeile[key] || '';
+    html += '<select class="os-filter-btn" title="Wer in diesem Schloss als Setzer/Besitzer steht – nur für diese Art" onchange="lockSetzerZeileSet(\'' + k + '\',this.value)">'
+      + '<option value=""' + (!sz ? ' selected' : '') + '>Setzer wie oben (' + escHtml(_lockSetzerText()) + ')</option>'
+      + '<option value="ich"' + (sz === 'ich' ? ' selected' : '') + '>Setzer: ich selbst</option>'
+      + '<option value="lover"' + (sz === 'lover' ? ' selected' : '') + '>Setzer: meine Lover-Partnerin</option>'
+      + '</select>';
+  }
   // Umwandeln: Ziel, ggf. Timer und "Item fällt mit ab"
   if (eigen && wert === 'umwandeln') {
     const z = _lockZiel[key] || (key.startsWith('mod:') && _lockZiel.mod) || _LOCK_ZIEL_STANDARD;
@@ -12244,7 +12302,7 @@ function _lockEinstellungenHtml() {
   const opt = (v, t) => '<option value="' + v + '"' + (s.modus === v ? ' selected' : '') + '>' + t + '</option>';
   return '<div class="lr-gruppe">Einstellungen für „Neuer Setzer“ und „Umwandeln“</div>'
     + '<div class="set-li"><div class="lr-text"><b>👤 Setzer</b>'
-    + '<div class="set-hint">Wer im Schloss als Setzer/Besitzer steht. „Mir gehört“ nimmt immer dich. Bei Owner-/Lover-Schlössern lässt BC nur dich, deine Lover bzw. deine Owner zu – passt es nicht, nimmt das Tool einen gültigen.</div></div>'
+    + '<div class="set-hint">Wer im Schloss als Setzer/Besitzer steht. „Mir gehört“ nimmt immer dich. Bei Owner-/Lover-Schlössern lässt BC nur dich, deine Lover bzw. deine Owner zu – passt es nicht, nimmt das Tool einen gültigen. Bei „Neuer Setzer“ lässt sich der Setzer je Zeile überschreiben (z. B. AFC → Lover, alles andere → du).</div></div>'
     + '<div class="set-r lr-ctrl">'
     + '<select id="lockSetzerModus" class="os-filter-btn" onchange="lockSetzerAus()">'
     + opt('ich', 'Ich selbst') + opt('lover', 'Meine Lover-Partnerin') + opt('nummer', 'Feste Nummer') + '</select>'
@@ -13838,34 +13896,49 @@ async function mbsWheelGenerateAll() {
   if (_wheelGenLadeLauf) return;
   if (!_connected) { showStatus('❌ Nicht verbunden', 'error'); return; }
   if (!_gameOk(false)) { showStatus('❌ ' + _gameWaitReason(false) + ' – Bilderserie nicht gestartet', 'error'); return; }
-  // Die Serie vergleicht jedes Outfit mit seinem vorhandenen Bild (Auflösung) und ersetzt nur zu niedrige – dafür muss das ganze Wheel-Archiv im
-  // Speicher liegen. Sonst würde ein Bild, das nur noch nicht geladen ist, als "fehlt" gelten und neu gemacht.
-  const voll = _bilderVollstaendig('wheel', 'Alle Wheel-Bilder (die Auflösung wird geprüft)');
-  if (voll !== true) {
+  // Die Serie vergleicht jedes Outfit mit seinem vorhandenen Bild (Auflösung) und ersetzt nur zu niedrige. Dafür muss NICHT das ganze Archiv im
+  // Speicher liegen: Ein Bild, das schon einmal als "in Ordnung" bestätigt wurde (_wheelHoch, bleibt in der Datenbank und im Backup), braucht keine
+  // Prüfung und kein Laden mehr. Nur Bilder ohne diesen Vermerk werden – einmalig, einzeln – geholt und geprüft; danach sind auch sie vermerkt.
+  if (!_bildExistenzSicher('wheel')) { showStatus('⏳ Die Bilder-Liste wird noch geladen – gleich nochmal versuchen', 'info'); return; }
+  if (!_kleinStatus[WHEEL_HOCH_KEY]?.geladen) { showStatus('⏳ Die Auflösungs-Markierungen werden noch geladen – gleich nochmal versuchen', 'info'); return; }
+  const alleFp = new Set();
+  for (const r of _mbsWheelData) for (const o of r.outfits) alleFp.add(_mbsOutfitFp(o));
+  // Hat ein Bild, liegt aber nicht im Speicher und ist noch nicht bestätigt → genau diese holen (nicht das ganze Archiv)
+  const nachladen = [...alleFp].filter(fp => !_wheelHoch.has(fp) && !_hat(_mbsWheelShots, fp) && _hatBild('wheel', fp));
+  if (nachladen.length) {
     _wheelGenLadeLauf = true;
-    let ok = false;
-    try { ok = await voll; } finally { _wheelGenLadeLauf = false; }
-    if (!ok || _wheelGenRunning) return;
+    showStatus('⏳ Die Auflösung von ' + nachladen.length + ' Wheel-Bildern wird einmalig geprüft…', 'info');
+    try { await _bildHolen('wheel', nachladen); }
+    catch (e) { showStatus('❌ Die Bilder konnten nicht gelesen werden – es wurde nichts verändert', 'error'); return; }
+    finally { _wheelGenLadeLauf = false; }
+    if (_wheelGenRunning) return;
     if (!_connected) { showStatus('❌ Nicht verbunden', 'error'); return; }
     if (!_gameOk(false)) { showStatus('❌ ' + _gameWaitReason(false) + ' – Bilderserie nicht gestartet', 'error'); return; }
   }
-  if (!_kleinStatus[WHEEL_HOCH_KEY]?.geladen) { showStatus('⏳ Die Auflösungs-Markierungen werden noch geladen – gleich nochmal versuchen', 'info'); return; }
 
   // Queue: alle Outfits ohne Bild UND alle mit einem Bild in niedriger Auflösung (die werden neu gemacht), per
   // Fingerprint dedupliziert. Ein vorhandenes Bild wird erst ersetzt, wenn das neue fertig ist.
   const seen = new Set();
-  let fehlend = 0, niedrig = 0;
+  let fehlend = 0, niedrig = 0, neuBestaetigt = false;
   _wheelGenQueue = [];
   for (const r of _mbsWheelData) {
     r.outfits.forEach(function(o, oi) {
       const fp = _mbsOutfitFp(o);
       const vorh = _mbsWheelShots[fp];
-      if ((vorh && !_wheelBildNiedrig(vorh, fp)) || seen.has(fp)) return;
+      // Vorhanden, aber nicht lesbar/geladen: nie neu machen – das würde ein womöglich gutes Bild ersetzen
+      if (!vorh && _hatBild('wheel', fp)) return;
+      if (vorh && !_wheelBildNiedrig(vorh, fp)) {
+        // Geprüft und in Ordnung: vermerken, damit dieses Bild nie wieder geprüft (und dafür geladen) werden muss
+        if (!_wheelHoch.has(fp)) { _wheelHoch.add(fp); neuBestaetigt = true; }
+        return;
+      }
+      if (seen.has(fp)) return;
       seen.add(fp);
       if (vorh) niedrig++; else fehlend++;
       _wheelGenQueue.push({ mn: r.memberNumber, oi });
     });
   }
+  if (neuBestaetigt) _kleinSpeichern(WHEEL_HOCH_KEY, _wheelHoch);
   if (!_wheelGenQueue.length) { showStatus('✅ Alle Outfits haben bereits Bilder in guter Auflösung', 'info'); return; }
   if (!confirm(_wheelGenQueue.length + ' Outfit-Bilder werden erstellt ('
     + [fehlend ? fehlend + ' fehlende' : '', niedrig ? niedrig + ' in niedriger Auflösung, die durch neue ersetzt werden' : ''].filter(Boolean).join(', ') + ').\n\n'

@@ -630,24 +630,28 @@ describe('"Neuer Setzer": AFC-/Lover-Schloss behalten, aber mit bekannter Person
     expect(g2.plain(t.fix(g2)('ItemNeck', 'Collar', { LockedBy: 'OwnerPadlock', LockMemberNumber: FREMD, Effect: ['Lock'] }))).toMatchObject({ LockedBy: 'OwnerPadlock', LockMemberNumber: OWNER, LockMemberName: 'Herrin' });
   });
 
-  it('"Neuer Setzer" gibt es nur bei Owner, Lover und AFC – nicht bei Exklusiv, Schlüssel, Code, anderen Mods oder "Alle"', () => {
+  it('"Neuer Setzer" gibt es bei allen Arten, deren Setzer BC nicht prüft – nicht bei DOGS Devious und nicht als Sammelschalter "Alle"', () => {
     const t = frisch();
-    for (const k of ['exklusiv', 'schluessel', 'code', 'mod', 'mod:DeviousPadlock']) evalIn(t.c, `lockRuleSet('${k}','setzer')`);
-    evalIn(t.c, "lockRuleSetAll('setzer')");
+    const erlaubt = ['owner', 'lover', 'exklusiv', 'schluessel', 'timer', 'code', 'mod', 'mod:BestFriend', 'mod:LewdCrest', 'mod:FiveMinutesPadlock', 'mod:AFCHeart'];
+    for (const k of erlaubt) evalIn(t.c, `lockRuleSet('${k}','setzer')`);
+    evalIn(t.c, "lockRuleSet('mod:DeviousPadlock','setzer')");
     const regeln = JSON.parse(JSON.stringify(evalIn(t.c, '_lockRules')));
-    expect(Object.values(regeln).includes('setzer')).toBe(false);
+    for (const k of erlaubt) expect(regeln[k], k).toBe('setzer');
+    expect(regeln['mod:DeviousPadlock']).toBeUndefined();            // DOGS legt den Besitzer selbst fest
+    evalIn(t.c, "lockRuleSetAll('behalten'); lockRuleSetAll('setzer')");
+    expect(Object.values(JSON.parse(JSON.stringify(evalIn(t.c, '_lockRules')))).includes('setzer')).toBe(false);   // "Alle" kennt kein "Neuer Setzer"
     evalIn(t.c, "lockRuleSet('lover','setzer'); _lockRulesRender()");
-    const html = t.els.lockRulesBox.innerHTML;
-    expect((html.match(/>Neuer Setzer</g) || []).length).toBe(3);   // Owner-, Lover- und AFC-Zeile
-    expect(html).toContain('id="lockSetzerModus"');                  // Setzer-Auswahl sichtbar
+    expect(t.els.lockRulesBox.innerHTML).toContain('id="lockSetzerModus"');                  // Setzer-Auswahl sichtbar
   });
 
-  it('gespeicherte "setzer"-Regel für andere Arten wird beim Laden verworfen', () => {
-    const store = new Map([['BC_LOCK_RULES_v1', JSON.stringify({ lover: 'setzer', exklusiv: 'setzer' })]]);
+  it('gespeicherte "setzer"-Regel bleibt für erlaubte Arten, wird für DOGS Devious beim Laden verworfen', () => {
+    const store = new Map([['BC_LOCK_RULES_v1', JSON.stringify({ lover: 'setzer', exklusiv: 'setzer', 'mod:BestFriend': 'setzer', 'mod:DeviousPadlock': 'setzer' })]]);
     const localStorage = { getItem: (k) => (store.has(k) ? store.get(k) : null), setItem: (k, v) => store.set(k, String(v)), removeItem: (k) => store.delete(k) };
     const c = loadScript(['items.js'], { localStorage });
     expect(evalIn(c, '_lockRules.lover')).toBe('setzer');
-    expect(evalIn(c, '_lockRules.exklusiv')).toBe('weg');
+    expect(evalIn(c, '_lockRules.exklusiv')).toBe('setzer');
+    expect(evalIn(c, "_lockRules['mod:BestFriend']")).toBe('setzer');
+    expect(evalIn(c, "'mod:DeviousPadlock' in _lockRules")).toBe(false);
   });
 
   it('ungültige Setzer-Eingaben werden bereinigt (Nummer, Länge, Typ)', () => {
@@ -673,6 +677,172 @@ describe('"Neuer Setzer": AFC-/Lover-Schloss behalten, aber mit bekannter Person
     dispatchMessage(t.c, { app: APP, type: 'PONG' }, { origin: BC, source: t.opener });
     dispatchMessage(t.c, { app: APP, type: 'LOCK_STRIPPED', group: 'ItemPelvis', lock: 'LoversPadlock', by: FREMD, aktion: 'setzer', info: 'Mia (#321)' }, { origin: BC, source: t.opener });
     expect(t.els.statusMsg.textContent).toBe('🔓 Fremdes Schloss: LoversPadlock an ItemPelvis (von #555) → behalten, Setzer: Mia (#321)');
+  });
+});
+
+describe('Setzer je Zeile: z. B. AFC → deine Lover, alle anderen "Neuer Setzer" → du selbst', () => {
+  function frisch(vorab = []) {
+    const store = new Map(vorab);
+    const localStorage = { getItem: (k) => (store.has(k) ? store.get(k) : null), setItem: (k, v) => store.set(k, String(v)), removeItem: (k) => store.delete(k) };
+    const els = {};
+    const c = loadScript(['items.js'], { localStorage, setTimeout: () => 0, clearTimeout: () => {} });
+    c.document.getElementById = (id) => (els[id] ||= makeElementStub());
+    const fix = (g) => {
+      vm.runInContext(evalIn(c, '_lockFilterPrelude(true)') + ';this.__fix=__bcuLockFix;', g.game);
+      return g.game.__fix;
+    };
+    return { c, els, store, fix };
+  }
+  const AFC = () => ({ LockedBy: 'HighSecurityPadlock', LockMemberNumber: 249474, LockMemberName: 'thanh', MemberNumberListKeys: '249474',
+    Name: 'Heart Padlock', HeartLockId: 'alt-id', Effect: ['Lock'] });
+  const MIA = { MemberNumber: 321, Name: 'Mia' };
+
+  it('AFC-Schloss bekommt deine Lover als Besitzerin, das Lover-Schloss daneben dich selbst (Setzer oben: ich)', () => {
+    const t = frisch();
+    evalIn(t.c, "lockRuleSet('mod:AFCHeart','setzer'); lockRuleSet('lover','setzer'); lockSetzerZeileSet('mod:AFCHeart','lover')");
+    const g = makeGame({ lovership: [MIA] });
+    const afc = g.plain(t.fix(g)('ItemNeckAccessories', 'CollarButterfly', AFC()));
+    expect(afc).toMatchObject({ Name: 'Heart Padlock', LockMemberNumber: 321, LockMemberName: 'Mia', MemberNumberListKeys: '321' });
+    expect(afc.HeartLockId).not.toBe('alt-id');
+    const lover = g.plain(t.fix(g)('ItemPelvis', 'Belt', LOVER_LOCK(FREMD)));
+    expect(lover).toMatchObject({ LockedBy: 'LoversPadlock', LockMemberNumber: ME });
+  });
+
+  it('ohne eigene Lover fällt der Zeilen-Setzer "Lover" auf dich zurück', () => {
+    const t = frisch();
+    evalIn(t.c, "lockRuleSet('mod:AFCHeart','setzer'); lockSetzerZeileSet('mod:AFCHeart','lover')");
+    const g = makeGame();
+    expect(g.plain(t.fix(g)('ItemNeckAccessories', 'CollarButterfly', AFC()))).toMatchObject({ LockMemberNumber: ME, MemberNumberListKeys: String(ME) });
+  });
+
+  it('der Zeilen-Setzer geht dem Setzer oben vor – auch in die andere Richtung (oben Lover, Zeile ich)', () => {
+    const t = frisch();
+    evalIn(t.c, "lockRuleSet('lover','setzer'); lockRuleSet('mod:AFCHeart','setzer'); lockSetzerSet('lover'); lockSetzerZeileSet('lover','ich')");
+    const g = makeGame({ lovership: [MIA] });
+    expect(g.plain(t.fix(g)('ItemPelvis', 'Belt', LOVER_LOCK(FREMD)))).toMatchObject({ LockMemberNumber: ME });           // Zeile: ich
+    expect(g.plain(t.fix(g)('ItemNeckAccessories', 'CollarButterfly', AFC()))).toMatchObject({ LockMemberNumber: 321 });  // ohne Zeile: Setzer oben = Lover
+  });
+
+  it('ohne eigene Auswahl bleibt alles wie bisher: der Setzer von oben gilt', () => {
+    const t = frisch();
+    evalIn(t.c, "lockRuleSet('mod:AFCHeart','setzer'); lockSetzerSet('nummer', '4711', 'Mia')");
+    const g = makeGame({ lovership: [MIA] });
+    expect(g.plain(t.fix(g)('ItemNeckAccessories', 'CollarButterfly', AFC()))).toMatchObject({ LockMemberNumber: 4711 });
+  });
+
+  it('wird gespeichert, "wie oben" löscht die Auswahl, ungültige Werte und Arten werden ignoriert', () => {
+    const t = frisch();
+    evalIn(t.c, "lockSetzerZeileSet('mod:AFCHeart','lover')");
+    expect(JSON.parse(t.store.get('BC_LOCK_SETZER_ZEILE_v1'))).toEqual({ 'mod:AFCHeart': 'lover' });
+    evalIn(t.c, "lockSetzerZeileSet('mod:AFCHeart','quatsch'); lockSetzerZeileSet('mod:DeviousPadlock','ich'); lockSetzerZeileSet('gibtsnicht','ich')");
+    expect(JSON.parse(t.store.get('BC_LOCK_SETZER_ZEILE_v1'))).toEqual({ 'mod:AFCHeart': 'lover' });
+    evalIn(t.c, "lockSetzerZeileSet('mod:AFCHeart','')");
+    expect(JSON.parse(t.store.get('BC_LOCK_SETZER_ZEILE_v1'))).toEqual({});
+  });
+
+  it('gespeicherte Auswahl wird beim Start geladen; Unbrauchbares wird verworfen', () => {
+    const t = frisch([['BC_LOCK_SETZER_ZEILE_v1', JSON.stringify({ 'mod:AFCHeart': 'lover', lover: 'ich', 'mod:DeviousPadlock': 'lover', owner: 'quatsch', '__proto__': 'ich' })]]);
+    expect(JSON.parse(JSON.stringify(evalIn(t.c, '_lockSetzerZeile')))).toEqual({ 'mod:AFCHeart': 'lover', lover: 'ich' });
+  });
+
+  it('die Zeilen-Auswahl erscheint nur, wenn die Zeile auf "Neuer Setzer" steht', () => {
+    const t = frisch();
+    evalIn(t.c, '_lockRulesRender()');
+    expect(t.els.lockRulesBox.innerHTML).not.toContain('lockSetzerZeileSet(');
+    evalIn(t.c, "lockRuleSet('mod:AFCHeart','setzer'); lockSetzerZeileSet('mod:AFCHeart','lover')");
+    const html = t.els.lockRulesBox.innerHTML;
+    expect((html.match(/lockSetzerZeileSet\(/g) || []).length).toBe(1);
+    expect(html).toContain("lockSetzerZeileSet('mod:AFCHeart',this.value)");
+    expect(html).toContain('<option value="lover" selected>Setzer: meine Lover-Partnerin</option>');
+  });
+
+  it('Meldung beim Setzen der Regel nennt den Setzer dieser Zeile', () => {
+    const t = frisch();
+    const meldungen = [];
+    evalIn(t.c, 'showStatus = function (m) { __m.push(m); }');
+    t.c.__m = meldungen;
+    evalIn(t.c, "lockSetzerZeileSet('mod:AFCHeart','lover'); lockRuleSet('mod:AFCHeart','setzer')");
+    expect(meldungen.some((m) => String(m).includes('Setzer: deine Lover-Partnerin'))).toBe(true);
+    expect(meldungen.at(-1)).toContain('(deine Lover-Partnerin)');
+  });
+
+  // ── "Neuer Setzer" bei allen Arten, deren Setzer BC nicht prüft ──
+  const fremd = (typ, extra = {}) => Object.assign({ LockedBy: typ, LockMemberNumber: FREMD, LockMemberName: 'Fremde', Effect: ['Lock'] }, extra);
+  const mitRegel = (regeln, vorab = '') => {
+    const t = frisch();
+    for (const [k, w] of Object.entries(regeln)) evalIn(t.c, `lockRuleSet(${JSON.stringify(k)}, ${JSON.stringify(w)})`);
+    if (vorab) evalIn(t.c, vorab);
+    return t;
+  };
+
+  it('Schlüssel-Arten (Metall, Intricate …): gleiche Art, du als Setzer', () => {
+    const t = mitRegel({ schluessel: 'setzer' });
+    const g = makeGame();
+    const out = g.plain(t.fix(g)('ItemMouth', 'HarnessBallGag', fremd('MetalPadlock')));
+    expect(out).toMatchObject({ LockedBy: 'MetalPadlock', LockMemberNumber: ME, LockMemberName: 'Ich' });
+    expect(g.plain(g.posts[0].m)).toMatchObject({ aktion: 'setzer', info: 'Ich (#100)' });
+  });
+
+  it('High Security: auch die Schlüsselhalter werden ersetzt – nur die neue Person bleibt', () => {
+    const t = mitRegel({ schluessel: 'setzer' });
+    const g = makeGame();
+    const out = g.plain(t.fix(g)('ItemMouth', 'HarnessBallGag', fremd('HighSecurityPadlock', { MemberNumberListKeys: '555,666,777' })));
+    expect(out).toMatchObject({ LockedBy: 'HighSecurityPadlock', LockMemberNumber: ME, MemberNumberListKeys: String(ME) });
+  });
+
+  it('Timer-Schloss: Art und Zeit bleiben, Setzer neu, fremde Zeit-Berechtigte fallen weg', () => {
+    const t = mitRegel({ timer: 'setzer' });
+    const g = makeGame();
+    const out = g.plain(t.fix(g)('ItemMouth', 'HarnessBallGag', fremd('MistressTimerPadlock', { RemoveTimer: 123, MemberNumberList: [555, 666] })));
+    expect(out).toMatchObject({ LockedBy: 'MistressTimerPadlock', LockMemberNumber: ME, RemoveTimer: 123, MemberNumberList: [] });
+  });
+
+  it('Lover-Timer: die Liste bleibt unangetastet (dort prüft BC die Beziehung, nicht die Liste)', () => {
+    const t = mitRegel({ lover: 'setzer' });
+    const g = makeGame({ lovership: [MIA] });
+    const out = g.plain(t.fix(g)('ItemMouth', 'HarnessBallGag', fremd('LoversTimerPadlock', { MemberNumberList: [555] })));
+    expect(out).toMatchObject({ LockedBy: 'LoversTimerPadlock', LockMemberNumber: ME, MemberNumberList: [555] });
+  });
+
+  it('Passwort-/Code-Schloss: Setzer neu, der Code aus dem Outfit bleibt', () => {
+    const t = mitRegel({ code: 'setzer' });
+    const g = makeGame();
+    const out = g.plain(t.fix(g)('ItemMouth', 'HarnessBallGag', fremd('PasswordPadlock', { Password: 'ABC', Hint: 'hm', LockSet: true })));
+    expect(out).toMatchObject({ LockedBy: 'PasswordPadlock', LockMemberNumber: ME, Password: 'ABC', Hint: 'hm', LockSet: true });
+  });
+
+  it('Exklusiv mit Setzer Lover: bleibt Exklusiv-Schloss für deine Lover', () => {
+    const t = mitRegel({ exklusiv: 'setzer' }, "lockSetzerZeileSet('exklusiv','lover')");
+    const g = makeGame({ lovership: [MIA] });
+    expect(g.plain(t.fix(g)('ItemMouth', 'HarnessBallGag', fremd('ExclusivePadlock')))).toMatchObject({ LockedBy: 'ExclusivePadlock', LockMemberNumber: 321, LockMemberName: 'Mia' });
+  });
+
+  it('Exklusiv mit dir als Setzer geht nicht (du könntest es nie öffnen) → High Security mit dir, mit Begründung', () => {
+    const t = mitRegel({ exklusiv: 'setzer' });
+    const g = makeGame();
+    const out = g.plain(t.fix(g)('ItemMouth', 'HarnessBallGag', fremd('ExclusivePadlock')));
+    expect(out).toMatchObject({ LockedBy: 'HighSecurityPadlock', LockMemberNumber: ME, MemberNumberListKeys: String(ME) });
+    expect(g.plain(g.posts[0].m)).toMatchObject({ aktion: 'meins', info: 'Exklusiv könntest du nie selbst öffnen' });
+  });
+
+  it('Mod-Schloss (Best Friend): gleiche Art, deine ID – eine eigene Zeilen-Auswahl gilt', () => {
+    const t = mitRegel({ 'mod:BestFriend': 'setzer' }, "lockSetzerZeileSet('mod:BestFriend','lover')");
+    const g = makeGame({ lovership: [MIA] });
+    expect(g.plain(t.fix(g)('ItemMouth', 'HarnessBallGag', fremd('Best Friend Padlock')))).toMatchObject({ LockedBy: 'Best Friend Padlock', LockMemberNumber: 321, LockMemberName: 'Mia' });
+  });
+
+  it('Mod-Schloss ohne eigene Regel folgt "alle anderen" – samt dessen Zeilen-Setzer', () => {
+    const t = mitRegel({ mod: 'setzer' }, "lockSetzerZeileSet('mod','lover')");
+    const g = makeGame({ lovership: [MIA] });
+    expect(g.plain(t.fix(g)('ItemMouth', 'HarnessBallGag', fremd('Best Friend Padlock')))).toMatchObject({ LockMemberNumber: 321 });
+  });
+
+  it('DOGS Devious folgt "alle anderen" = Neuer Setzer nie unverändert: es wird "Mir gehört" (ohne DOGS: High Security mit dir)', () => {
+    const t = mitRegel({ mod: 'setzer' });
+    const g = makeGame();
+    const out = g.plain(t.fix(g)('ItemMouth', 'HarnessBallGag', fremd('ExclusivePadlock', { Name: 'DeviousPadlock' })));
+    expect(out).toMatchObject({ LockedBy: 'HighSecurityPadlock', LockMemberNumber: ME });
+    expect(g.plain(g.posts[0].m).aktion).toBe('meins');
   });
 });
 
@@ -940,8 +1110,12 @@ describe('Menü "Fremde Schlösser"', () => {
     expect(evalIn(c, "'mod:LewdCrest' in _lockRules")).toBe(false);
   });
 
-  it('"Neuer Setzer" ist nur bei Owner, Lover und AFC auswählbar', () => {
+  it('"Neuer Setzer" ist bei allen Arten auswählbar, außer bei DOGS Devious', () => {
     const { html } = menue();
-    expect((html().match(/<option value="setzer"/g) || []).length).toBe(3);
+    // 6 BC-Arten + Lewd Crest, Best Friend, AFC, 5 Minuten + "alle anderen" = 11; DOGS Devious hat keine Zeile mit dieser Option
+    expect((html().match(/<option value="setzer"/g) || []).length).toBe(11);
+    const dogs = html().split('lr-zeile').find((z) => z.includes('DOGS Devious'));
+    expect(dogs).toBeTruthy();
+    expect(dogs).not.toContain('value="setzer"');
   });
 });

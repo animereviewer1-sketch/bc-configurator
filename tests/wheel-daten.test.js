@@ -308,6 +308,8 @@ describe('"Alle erstellen": fehlende und niedrig aufgelöste Bilder', () => {
     t.ctx.mbsWheelGenerateAll();
     expect(gefragt).toBe(false);
     expect(t.meldungen.at(-1)).toMatch(/guter Auflösung/);
+    // Die Prüfung wird vermerkt – beim nächsten Mal muss dieses Bild nicht mehr geladen und geprüft werden
+    expect(lies(t.ctx, '_wheelHoch.has("Cloth:C")')).toBe(true);
   });
 
   it('ein Schritt überspringt ein Outfit, dessen Bild inzwischen gut ist – ein niedriges wird neu gemacht', () => {

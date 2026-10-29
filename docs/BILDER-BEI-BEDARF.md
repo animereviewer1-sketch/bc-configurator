@@ -16,6 +16,7 @@ fragt `_hatBild(art, key)` (prüft Speicher **und** Schlüssel). Wer ein Bild br
 | ein bestimmtes Bild (Großansicht, Kopieren, …) | `await _bildHolen(art, [keys])`, danach aus der Map lesen |
 | ein Bild löschen, das evtl. nicht geladen ist | `if (MAP[k]) delete MAP[k]; else idbScreenshotDelete(art, k);` und `_bildKeyWeg(art, k)` |
 | das **ganze** Archiv (Serien, „Alle löschen“, Vergleiche) | `bilderVollLaden([arten])` – das Archiv bleibt dann im Speicher (`_bilderVollstaendig` für Funktionen mit Rückfrage) |
+| die Auflösung der Wheel-Bilder („🖼 Alle erstellen“) | **kein** Vollladen: Bilder in `_wheelHoch` (bestätigt, bleibt in DB/Backup) werden nicht geladen. Nur unbestätigte werden einmalig per `_bildHolen` geholt, geprüft und danach in `_wheelHoch` vermerkt. Ein Bild, das sich nicht lesen lässt, wird nie neu gemacht. |
 | das ganze Archiv **nur kurz** (Sicherung, Export) | `const leihe = await bilderAusleihen(); try { … } finally { leihe.zurueck(); }` – danach nimmt das Tool die unveränderten Bilder wieder aus dem Speicher |
 
 ## Was nie passieren darf
