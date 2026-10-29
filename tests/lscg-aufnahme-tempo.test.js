@@ -23,8 +23,10 @@ function tool() {
 }
 
 // Nachgebautes BC-Fenster: Timer mit Wartezeit, Canvas mit veränderbarem Inhalt, Zähler für Neuzeichnen
-function spiel({ aendernBis = 0 } = {}) {
-  const z = { refresh: 0, loadCanvas: 0, antworten: [], timers: [] };
+// bilder: Einträge des BC-Bildcaches (DrawImageCache), z. B. { state: 'loading', fertigNach: 300 } (ms Spielzeit bis "loaded")
+function spiel({ aendernBis = 0, bilder = null } = {}) {
+  const z = { refresh: 0, loadCanvas: 0, antworten: [], timers: [], t: 0, bilder: bilder || [], refreshMitOffenen: 0, offenBeiAntwort: null };
+  const offen = () => z.bilder.filter((b) => b.state === 'loading').length;
   const px = new Uint8ClampedArray(4 * 8 * 8).fill(10);
   const canvas = () => ({
     width: 8, height: 8,
@@ -33,15 +35,21 @@ function spiel({ aendernBis = 0 } = {}) {
   });
   const Player = { OnlineID: 7, MemberNumber: 100, AssetFamily: 'Female3DCG', Appearance: [], Canvas: canvas() };
   const g = {
-    Player, JSON, Array, Object, Math, Date, Error, Uint8ClampedArray, performance: { now: () => 0 },
+    Player, JSON, Array, Object, Math, Error, Uint8ClampedArray, performance: { now: () => 0 },
+    Date: { now: () => z.t },
     setTimeout: (fn, ms) => { z.timers.push({ fn, ms }); return z.timers.length; },
     clearTimeout() {},
     document: { createElement: () => canvas() },
-    CharacterRefresh() { z.refresh++; if (z.refresh <= aendernBis) px[0] += 1; },   // Bild ändert sich noch (Bilder laden nach)
+    CharacterRefresh() {
+      z.refresh++;
+      if (offen() > 0) z.refreshMitOffenen++;
+      if (z.refresh <= aendernBis) px[0] += 1;   // Bild ändert sich noch (Bilder laden nach)
+    },
     CharacterLoadCanvas() { z.loadCanvas++; },
     ServerSend() {}, ServerPlayerAppearanceSync() {}, InventoryExpressionTriggerApply() {},
-    __BCK_popupRef: { postMessage: (m) => z.antworten.push(m) },
+    __BCK_popupRef: { postMessage: (m) => { z.offenBeiAntwort = offen(); z.antworten.push(m); } },
   };
+  if (bilder) g.DrawImageCache = { forEach: (fn) => z.bilder.forEach((b) => fn(b)) };
   g.window = g;
   const ctx = vm.createContext(g);
   return {
@@ -49,7 +57,12 @@ function spiel({ aendernBis = 0 } = {}) {
     // Timer der Reihe nach ablaufen lassen, bis die Antwort da ist; Rückgabe = Summe der Wartezeiten bis dahin
     bisAntwort: () => {
       let summe = 0, n = 0;
-      while (!z.antworten.length && z.timers.length && n++ < 50) { const t = z.timers.shift(); summe += t.ms || 0; t.fn(); }
+      while (!z.antworten.length && z.timers.length && n++ < 500) {
+        const t = z.timers.shift();
+        summe += t.ms || 0; z.t += t.ms || 0;
+        z.bilder.forEach((b) => { if (b.state === 'loading' && b.fertigNach != null && z.t >= b.fertigNach) b.state = 'loaded'; });   // BC lädt nebenher
+        t.fn();
+      }
       return summe;
     },
   };
@@ -108,5 +121,60 @@ describe('LSCG-Aufnahme: Prüflauf wie bei Profil und Wheel', () => {
     s.lauf(aufnahmeCode());
     s.bisAntwort();
     expect(s.z.antworten[0]).toMatchObject({ app: 'BCKonfigurator', type: 'CANVAS_PREVIEW_DATA' });
+  });
+});
+
+// BC R133 lädt die Teile der Figur asynchron (DrawImageCache, Zustand "loading"). Ein noch nicht geladenes Bild fehlt beim Zeichnen
+// einfach – und sieht beim nächsten Neuaufbau genauso leer aus. Ein Hash-Vergleich allein fotografiert dann Glatze, nackte Figur oder
+// ein Gesicht ohne Augen. Der Prüflauf wartet darum, bis kein Bild mehr lädt.
+describe('Aufnahme wartet auf ladende Bilder', () => {
+  it('Bilder laden noch: erst nach dem Laden wird neu gezeichnet und fotografiert', () => {
+    const s = spiel({ bilder: [{ state: 'loading', fertigNach: 300 }, { state: 'loading', fertigNach: 500 }, { state: 'loaded' }] });
+    s.lauf(aufnahmeCode());
+    const warten = s.bisAntwort();
+    expect(s.z.antworten).toHaveLength(1);
+    expect(s.z.antworten[0].data).toBeTruthy();
+    expect(s.z.offenBeiAntwort).toBe(0);             // beim Foto ist nichts mehr offen
+    expect(warten).toBeGreaterThanOrEqual(500);       // mindestens bis das letzte Bild da ist
+    expect(s.z.refreshMitOffenen).toBe(1);            // nur der erste Aufbau beim Anlegen lief mit offenen Bildern, der Prüflauf nicht
+  });
+
+  it('ein Bild lädt nie fertig: nach SHOT_BILDER_MAX_MS wird trotzdem fotografiert', () => {
+    const s = spiel({ bilder: [{ state: 'loading' }] });
+    s.lauf(aufnahmeCode());
+    const warten = s.bisAntwort();
+    expect(s.z.antworten).toHaveLength(1);
+    expect(s.z.antworten[0].data).toBeTruthy();
+    expect(warten).toBeGreaterThanOrEqual(6000);
+    expect(warten).toBeLessThan(6000 + 500);
+  });
+
+  it('fehlgeschlagene und geladene Bilder zählen nicht als offen: keine Verzögerung', () => {
+    const s = spiel({ bilder: [{ state: 'failed' }, { state: 'loaded' }, { state: 'uncached' }] });
+    s.lauf(aufnahmeCode());
+    expect(s.bisAntwort()).toBe(40);
+    expect(s.z.antworten).toHaveLength(1);
+  });
+
+  it('ein Cache, der beim Durchgehen wirft, blockiert die Aufnahme nicht', () => {
+    const s = spiel({ bilder: [] });
+    s.lauf('window.DrawImageCache={forEach:function(){throw new Error("kaputt");}};' + aufnahmeCode());
+    expect(s.bisAntwort()).toBe(40);
+    expect(s.z.antworten).toHaveLength(1);
+  });
+
+  it('Profil- und Wheel-Aufnahme warten ebenfalls (vor und nach dem Neuzeichnen)', () => {
+    const t = tool();
+    t.ctx.captureProfileViaCanvas('A - B', 'BUNDLE', null);
+    t.ctx.__i = [{ group: 'ItemArms', asset: 'X', colors: ['#fff'] }];
+    const wheel = evalIn(t.ctx, "_wheelShotCode('wss_1', __i, true)");
+    for (const code of [t.execs()[0], wheel]) {
+      expect(() => new Function(code)).not.toThrow();
+      const lauf = code.slice(code.indexOf('function _renderCheck(){'), code.indexOf('setTimeout(_renderCheck,40);'));
+      expect(lauf.match(/_bilderWarten\(\)/g)).toHaveLength(2);
+      expect(lauf.indexOf('_bilderWarten()')).toBeLessThan(lauf.indexOf('CharacterRefresh(Player,false,false)'));
+      expect(lauf.lastIndexOf('_bilderWarten()')).toBeGreaterThan(lauf.indexOf('CharacterRefresh(Player,false,false)'));
+      expect(code).toContain('window.DrawImageCache');
+    }
   });
 });

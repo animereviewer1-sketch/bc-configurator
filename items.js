@@ -10660,8 +10660,12 @@ function captureOsScreenshot(mk, vIdx) {
 
     // Prüflauf: EINMAL neu zeichnen (CharacterRefresh ruft CharacterLoadCanvas selbst auf), Bild mit dem letzten
     // vergleichen. Gleich → fertig. Anders → es wurden noch Bilder nachgeladen, nochmal (höchstens _maxChecks).
+    // Vorher und nachher: warten, solange BC noch Bilder lädt (siehe _SHOT_BILDER) – sonst fehlen Haare, Kleidung, Gesicht.
+    + _SHOT_BILDER
     + 'function _renderCheck(){'
+    + '  if(_bilderWarten()){setTimeout(_renderCheck,50);return;}'
     + '  CharacterRefresh(Player,false,false);'
+    + '  if(_bilderWarten()){setTimeout(_renderCheck,50);return;}'
     + '  var h=_canvasHash(Player.Canvas);'
     + '  if(h===_prevHash||_checksDone>=_maxChecks){'
     + '    _sendCapture();'
@@ -10735,6 +10739,18 @@ const SHOT_RUHE_MAX_MS = 15000;       // so lange wartet eine Aufnahme höchsten
 const SHOT_RUHE_FENSTER_MS = 3000;    // betrachteter Zeitraum
 const SHOT_RUHE_MAX_SENDUNGEN = 12;   // ab so vielen Sendungen im Zeitraum gilt es als "zu laut"
 const SHOT_RUHE_RAUMWECHSEL_MS = 3500; // nach einem Beitritt/Verlassen so lange Ruhe (die Beitrittswelle der Mods)
+
+// ── Warten, bis BC die Bilder geladen hat ─────────────────────────────────────────────────────────────────────────
+// BC lädt die Teile der Figur (Haare, Kleidung, Gesicht …) asynchron über DrawImageCache; ein Bild im Zustand "loading" fehlt
+// beim Zeichnen einfach. Ein Vergleich "sieht gleich aus wie eben" reicht dafür nicht: ohne Antwort der Bilder sieht auch der
+// nächste Neuaufbau gleich (leer) aus – die Aufnahme hatte dann Glatze, keine Kleidung oder kein Gesicht. Darum wartet der Prüflauf,
+// bis kein Bild mehr lädt, und zeichnet erst danach neu und vergleicht. Wirft BC einen Fehler oder gibt es den Cache nicht
+// (alte Version), zählt "nichts offen" – dann gilt weiter nur der Vergleich. Nach SHOT_BILDER_MAX_MS wird trotzdem fotografiert.
+const SHOT_BILDER_MAX_MS = 6000;
+const _SHOT_BILDER = 'var _bildDl=Date.now()+' + SHOT_BILDER_MAX_MS + ';'
+  + 'function _bilderOffen(){try{var c=window.DrawImageCache;if(!c||typeof c.forEach!=="function")return 0;'
+  +   'var n=0;c.forEach(function(im){if(im&&im.state==="loading")n++;});return n;}catch(_e){return 0;}}'
+  + 'function _bilderWarten(){return _bilderOffen()>0&&Date.now()<_bildDl;}';
 function _shotMitRuhe(code) {
   return '(function(){'
     + 'var _run=function(){' + code + '};'
@@ -10990,8 +11006,12 @@ function captureProfileViaCanvas(name, outfitCode, rawApplyCode) {
     // Prüflauf: EINMAL neu zeichnen (CharacterRefresh ruft CharacterLoadCanvas selbst auf – der frühere
     // zweite Aufruf direkt dahinter zeichnete jedes Mal doppelt), Bild mit dem letzten vergleichen.
     // Gleich → fertig. Anders → es wurden noch Bilder nachgeladen, nochmal (höchstens _maxChecks).
+    // Vorher und nachher: warten, solange BC noch Bilder lädt (siehe _SHOT_BILDER).
+    + _SHOT_BILDER
     + 'function _renderCheck(){'
+    + '  if(_bilderWarten()){setTimeout(_renderCheck,50);return;}'
     + '  CharacterRefresh(Player,false,false);'
+    + '  if(_bilderWarten()){setTimeout(_renderCheck,50);return;}'
     + '  var h=_canvasHash(Player.Canvas);'
     + '  if(h===_prevHash||_checksDone>=_maxChecks){'
     + '    _sendCapture();'
@@ -14373,8 +14393,11 @@ function _wheelShotCode(reqId, items, serie) {
     + '    _restore();'
     + '  }'
     + '}'
+    + _SHOT_BILDER
     + 'function _renderCheck(){'
+    + '  if(_bilderWarten()){setTimeout(_renderCheck,50);return;}'
     + '  CharacterRefresh(Player,false,false);'
+    + '  if(_bilderWarten()){setTimeout(_renderCheck,50);return;}'
     + '  var h=_canvasHash(Player.Canvas);'
     + '  if(h===_prevHash||_checksDone>=_maxChecks){_sendCapture();}'
     + '  else{_prevHash=h;_checksDone++;setTimeout(_renderCheck,60);}'
