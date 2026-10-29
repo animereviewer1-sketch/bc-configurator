@@ -6257,6 +6257,7 @@ function renderCurseTab() {
       ? '<div style="font-size:1.5rem;margin-bottom:8px">🔍</div>Keine Treffer für die gewählten Filter.'
       : '<div style="font-size:2rem;margin-bottom:8px">🔮</div>Noch kein Scan. Klicke <strong>Scannen</strong>.') : null;
     body.querySelectorAll('.curse-owner-block').forEach(b => b.remove());
+    if (colHdrEl) colHdrEl.innerHTML = '';   // Spaltenkopf ohne Zeilen darunter wäre verwaist
     return;
   }
   empty.style.display = 'none';

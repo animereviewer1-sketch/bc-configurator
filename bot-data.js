@@ -367,7 +367,7 @@ function renderLogTab() {
       ${trigPart}
       <span class="log-player">👤 ${escHtml(e.player||'')}</span>
       ${pos ? `<span class="log-pos">📍 ${pos}</span>` : ''}
-      ${e.msg ? `<span style="font-size:.6875rem;color:var(--text3);font-style:italic">${escHtml(e.msg)}</span>` : ''}
+      ${e.msg ? `<span style="font-size:.6875rem;color:var(--text3);font-style:italic;min-width:0;overflow-wrap:anywhere">${escHtml(e.msg)}</span>` : ''}
       <button onclick="logDeleteEntry(${realIdx})" style="margin-left:auto;background:none;border:none;color:var(--text3);cursor:pointer;font-size:.75rem;padding:1px 5px;opacity:.5" onmouseover="this.style.opacity=1;this.style.color='var(--red)'" onmouseout="this.style.opacity=.5;this.style.color='var(--text3)'">✕</button>
     </div>`;
   }).join('');

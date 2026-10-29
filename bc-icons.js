@@ -166,6 +166,20 @@
     return null;
   }
 
+  // Hat der Container schon einen flex/grid-gap, braucht das Icon keinen eigenen
+  // Abstand. Ergebnis je Tag+Klasse+Inline-Style merken – so wird der computed
+  // Style nur einmal pro Variante gelesen, nicht pro Button.
+  var GAP_CACHE = {};
+  function hasFlexGap(el) {
+    var key = el.tagName + '|' + el.className + '|' + (el.getAttribute('style') || '');
+    var hit = GAP_CACHE[key];
+    if (hit === undefined) {
+      var cs = getComputedStyle(el);
+      hit = GAP_CACHE[key] = /flex|grid/.test(cs.display) && parseFloat(cs.columnGap) > 0;
+    }
+    return hit;
+  }
+
   /**
    * Ersetzt in allen Buttons Emojis durch Icons.
    * - <button data-icon="zap">   -> Icon wird vorangestellt
@@ -190,9 +204,15 @@
       if (el.dataset.bciDone && el.querySelector(':scope > svg.bci')) continue;
       var name = el.dataset.icon || stripLeadingEmoji(el);
       if (!name || !P[name]) continue;
-      el.insertBefore(iconNode(name), el.firstChild);
+      var ic = iconNode(name);
+      el.insertBefore(ic, el.firstChild);
       el.dataset.bciDone = '1';
-      if (el.tagName === 'BUTTON' && !el.textContent.trim()) el.classList.add('btn-icon-only');
+      if (!el.textContent.trim()) {
+        if (el.tagName === 'BUTTON') el.classList.add('btn-icon-only');
+      } else if (!hasFlexGap(el)) {
+        // Das Leerzeichen hinter dem Emoji ist weg → Abstand zum Text per CSS (.bci-lead)
+        ic.classList.add('bci-lead');
+      }
     }
   }
 

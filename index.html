@@ -298,6 +298,8 @@ select option:hover {
 
 /* ── Stroke-Icons (bc-icons.js) ── */
 svg.bci { width: 1.15em; height: 1.15em; flex-shrink: 0; }
+/* Standardabstand Icon → Text; spezifischere Regeln darunter/in nova.css überschreiben ihn */
+:where(svg.bci.bci-lead) { margin-right: .4em; }
 .btn svg.bci { margin-right: 1px; }
 .btn.btn-icon-only { padding: 7px 9px; }
 /* Icons in Fließtext-Elementen (Titel, Info-Boxen, Badges) mittig zur Zeile */
@@ -1297,7 +1299,7 @@ textarea.outfit-code { width: 100%; min-height: 210px; background: rgba(0,0,0,0.
 .curse-stat span { font-weight: 700; color: var(--accent-text, oklch(82% 0.1 62)); }
 
 /* ── Body ───────────────────────────────────── */
-.curse-body { display: flex; flex-direction: column; max-height: calc(100vh - 130px); overflow: hidden; overflow-x: auto; padding: 0 18px 18px; }
+.curse-body { display: flex; flex-direction: column; max-height: calc(100vh - 130px); overflow: hidden; padding: 0 18px 18px; }
 
 /* ── Filter bar ─────────────────────────────── */
 .curse-filter-bar {
@@ -1409,10 +1411,10 @@ textarea.outfit-code { width: 100%; min-height: 210px; background: rgba(0,0,0,0.
 
 /* ── Grid Layout — header (outside scroll) and body share identical columns ── */
 
-/* Column header wrapper: sits above .curse-v-scroll, never scrolls vertically */
+/* Column header wrapper: liegt im selben Scroll-Container wie #curseBody (sticky oben),
+   gleiche Mindestbreite wie die Zeilen → Spalten fluchten, nur ein horizontaler Scrollbalken */
 #curseColHdr {
   flex-shrink: 0;
-  min-width: 1100px;
   width: 100%;
   background: var(--bg2, #111115);
   border-bottom: 1px solid rgba(255,255,255,0.10);
@@ -1421,28 +1423,31 @@ textarea.outfit-code { width: 100%; min-height: 210px; background: rgba(0,0,0,0.
   z-index: 10;
 }
 
-/* Scrollable row body — only vertical scroll here */
+/* Scroll-Container für Spaltenkopf + Zeilen (beide Achsen) */
 .curse-v-scroll {
   flex: 1;
-  overflow-y: auto;
-  overflow-x: visible;
+  overflow: auto;
   min-height: 0;
 }
 
+/* Letzte Spalte fix (240px) statt auto: mit min-width:0 an den Zellen bekam "auto" nur den Rest
+   (~16px) und die Aktions-Buttons lagen über dem Notiz-Feld. Kopf und Zeilen teilen dieselben Maße. */
 #curseBody {
   display: grid;
-  grid-template-columns: 28px 88px 190px 170px 130px 90px 60px 1fr 230px auto;
+  grid-template-columns: 28px 88px 190px 170px 130px 90px 60px minmax(0,1fr) 230px 240px;
   align-content: start;
-  min-width: 1000px;
   width: 100%;
   padding-top: 8px;
 }
+/* Mindestbreite nur, wenn Spalten da sind – der Leerzustand soll mittig im sichtbaren Bereich stehen */
+#curseColHdr:has(.curse-col-headers), #curseBody:has(.curse-owner-block) { min-width: 1230px; }
+#curseBody:not(:has(.curse-owner-block)) { grid-template-columns: minmax(0, 1fr); }
 
 /* Column header row — child of #curseColHdr (outside scroll) */
 .curse-col-headers {
   display: grid;
-  grid-template-columns: 28px 88px 190px 170px 130px 90px 60px 1fr 230px auto;
-  min-width: 1000px;
+  grid-template-columns: 28px 88px 190px 170px 130px 90px 60px minmax(0,1fr) 230px 240px;
+  min-width: 1230px;
   width: 100%;
   padding: 6px 0 5px;
 }
@@ -1556,7 +1561,7 @@ textarea.outfit-code { width: 100%; min-height: 210px; background: rgba(0,0,0,0.
 }
 .cg-spacer { white-space: normal; }
 .cg-comment { white-space: normal !important; overflow: visible !important; padding: 8px 8px !important; }
-.cg-actions { white-space: nowrap !important; overflow: visible !important; justify-self: end; padding-right: 12px !important; }
+.cg-actions { white-space: nowrap !important; overflow: visible !important; display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 4px 2px; padding-right: 12px !important; }
 
 /* Fav button */
 .cg-fav .curse-fav-btn {
@@ -1694,6 +1699,8 @@ textarea.outfit-code { width: 100%; min-height: 210px; background: rgba(0,0,0,0.
 /* ── Misc ───────────────────────────────────── */
 .cursor-detail-toggle { cursor: pointer; color: var(--text3); font-size: .75rem; margin-right: 6px; transition: transform 0.15s; display: inline-block; }
 .curse-empty { text-align: center; padding: 56px; color: var(--text3); font-size: .875rem; }
+/* #curseBody ist ein Spalten-Grid: ohne Spaltenspanne landet die Meldung in der 28px-Spalte */
+#curseBody > .curse-empty { grid-column: 1 / -1; }
 
 /* ═══════════════════════════════════════════════
    BOT TAB
@@ -1744,7 +1751,7 @@ textarea.outfit-code { width: 100%; min-height: 210px; background: rgba(0,0,0,0.
 .bg-body { display: none; padding: 4px 0 6px 10px; background: rgba(0,0,0,0.2); }
 .bg-body.open { display: block; }
 .bg-add-row { display: flex; gap: 5px; padding: 5px 14px 4px; }
-.bg-add-row select { flex: 1; background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; color: var(--text2); padding: 4px 8px; font-size: .75rem; font-family: var(--font-ui); }
+.bg-add-row select { flex: 1; min-width: 0; background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; color: var(--text2); padding: 4px 8px; font-size: .75rem; font-family: var(--font-ui); }
 .bg-add-row button { font-size: .75rem; padding: 3px 10px; background: oklch(72% 0.13 58 / 0.2); border: 1px solid oklch(72% 0.13 58 / 0.35); color: oklch(82% 0.1 62); border-radius: 6px; cursor: pointer; font-weight: 700; font-family: var(--font-ui); transition: all 0.15s; white-space:nowrap; }
 .bg-add-row button:hover { background: oklch(72% 0.13 58 / 0.35); }
 .bg-bot-row { display: flex; align-items: center; gap: 6px; padding: 5px 14px 5px 10px; border-radius: 6px; margin: 1px 4px; transition: background 0.12s; cursor: pointer; }
@@ -1758,7 +1765,7 @@ textarea.outfit-code { width: 100%; min-height: 210px; background: rgba(0,0,0,0.
 .bg-bot-row:hover .bg-rm-btn { opacity: 1; }
 .bg-bot-row .bg-rm-btn:hover { color: var(--red); }
 .bg-new-row { display: flex; gap: 6px; padding: 6px 14px; border-top: 1px solid rgba(255,255,255,0.06); margin-top: 2px; }
-.bg-new-row input { flex: 1; background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; color: var(--text); padding: 4px 9px; font-size: .75rem; font-family: var(--font-ui); }
+.bg-new-row input { flex: 1; min-width: 0; background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; color: var(--text); padding: 4px 9px; font-size: .75rem; font-family: var(--font-ui); }
 .bg-new-row button { font-size: .75rem; padding: 3px 10px; background: rgba(52,211,153,0.15); border: 1px solid rgba(52,211,153,0.3); color: #34d399; border-radius: 6px; cursor: pointer; font-weight: 700; font-family: var(--font-ui); transition: all 0.15s; white-space:nowrap; }
 .bg-new-row button:hover { background: rgba(52,211,153,0.3); }
 .bg-status-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: rgba(255,255,255,0.15); flex-shrink:0; }
@@ -1823,7 +1830,7 @@ textarea.outfit-code { width: 100%; min-height: 210px; background: rgba(0,0,0,0.
 }
 .ifelse-if-add-btn:hover { border-color: var(--purple); color: oklch(82% 0.1 62); background: oklch(72% 0.13 58 / 0.07); }
 
-.be-topbar { padding: 12px 20px; border-bottom: 1px solid rgba(255,255,255,0.07); display: flex; align-items: center; gap: 9px; background: rgba(255,255,255,0.01); }
+.be-topbar { padding: 12px 20px; border-bottom: 1px solid rgba(255,255,255,0.07); display: flex; flex-wrap: wrap; align-items: center; gap: 8px 9px; background: rgba(255,255,255,0.01); }
 .be-topbar input { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: var(--text); padding: 6px 12px; font-size: .875rem; font-weight: 800; font-family: var(--font-mono); transition: border-color 0.18s; }
 .be-body { padding: 20px 22px; }
 
@@ -1833,7 +1840,7 @@ textarea.outfit-code { width: 100%; min-height: 210px; background: rgba(0,0,0,0.
 .be-empty { padding: 70px 22px; text-align: center; color: var(--text3); font-size: .875rem; }
 .be-empty .be-empty-icon { font-size: 3rem; margin-bottom: 14px; }
 .bot-cfg-panel { background: rgba(255,255,255,0.01); border-bottom: 1px solid rgba(255,255,255,0.07); padding: 10px 20px; display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
-.bot-cfg-label { font-size: .75rem; color: var(--text3); font-weight: 600; }
+.bot-cfg-label { font-size: .75rem; color: var(--text3); font-weight: 600; white-space: nowrap; }
 .bot-cfg-panel input[type=checkbox] { accent-color: var(--purple); }
 
 .trig-card { background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.07); border-radius: 13px; margin-bottom: 10px; overflow: hidden; transition: border-color 0.18s; }
@@ -1847,8 +1854,8 @@ textarea.outfit-code { width: 100%; min-height: 210px; background: rgba(0,0,0,0.
 .trig-body.open { display: block; }
 
 .te-section { margin-bottom: 14px; }
-.te-section-title { font-size: .6875rem; text-transform: uppercase; letter-spacing: 0.09em; color: var(--text3); font-weight: 800; margin-bottom: 8px; display: flex; align-items: center; gap: 10px; }
-.te-section-title button { font-size: .6875rem; padding: 3px 11px; border-radius: 99px; border: 1px dashed rgba(255,255,255,0.1); background: none; color: var(--text3); cursor: pointer; transition: all 0.18s; font-family: var(--font-ui); font-weight: 600; }
+.te-section-title { font-size: .6875rem; text-transform: uppercase; letter-spacing: 0.09em; color: var(--text3); font-weight: 800; margin-bottom: 8px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.te-section-title button { white-space: nowrap; font-size: .6875rem; padding: 3px 11px; border-radius: 99px; border: 1px dashed rgba(255,255,255,0.1); background: none; color: var(--text3); cursor: pointer; transition: all 0.18s; font-family: var(--font-ui); font-weight: 600; }
 .te-section-title button:hover { border-color: oklch(72% 0.13 58 / 0.5); color: oklch(82% 0.1 62); }
 
 .cond-card, .act-card { background: rgba(255,255,255,0.025); border: 1px solid rgba(255,255,255,0.08); border-radius: 9px; padding: 8px 12px; margin-bottom: 6px; display: grid; grid-template-columns: 1fr auto; gap: 7px; align-items: start; }
@@ -1901,7 +1908,7 @@ textarea.outfit-code { width: 100%; min-height: 210px; background: rgba(0,0,0,0.
 /* ═══════════════════════════════════════════════
    LOGS
 ═══════════════════════════════════════════════ */
-.log-entry { display:flex; align-items:center; gap:9px; padding:8px 12px; border-radius:9px; border:1px solid rgba(255,255,255,0.08); background:rgba(255,255,255,0.015); font-size:.8125rem; transition:border-color 0.13s; }
+.log-entry { display:flex; flex-wrap:wrap; align-items:center; gap:4px 9px; padding:8px 12px; border-radius:9px; border:1px solid rgba(255,255,255,0.08); background:rgba(255,255,255,0.015); font-size:.8125rem; transition:border-color 0.13s; }
 .log-entry.log-ok { border-color:rgba(52,211,153,0.2); background:rgba(52,211,153,0.04); }
 .log-entry.log-ungueltig { border-color:rgba(251,113,133,0.2); background:rgba(251,113,133,0.04); }
 .log-entry.log-skip { border-color:rgba(251,191,36,0.1); background:rgba(251,191,36,0.02); opacity:.7; }
@@ -1911,8 +1918,8 @@ textarea.outfit-code { width: 100%; min-height: 210px; background: rgba(0,0,0,0.
 .log-badge.ungueltig { background:rgba(220,38,38,0.1); color:#e55; border-color:rgba(220,38,38,0.2); }
 .log-badge.skip { background:rgba(251,191,36,0.07); color:#aa9; border-color:rgba(251,191,36,0.14); }
 .log-bot { color:oklch(82% 0.1 62); font-weight:800; flex-shrink:0; font-family:var(--font-mono); }
-.log-trig { color:var(--text2); flex-shrink:0; }
-.log-player { color:#34d399; flex:1; }
+.log-trig { color:var(--text2); min-width:0; overflow-wrap:anywhere; }
+.log-player { color:#34d399; flex:1 1 auto; min-width:0; overflow-wrap:anywhere; }
 .log-pos { color:var(--text3); font-size:.6875rem; white-space:nowrap; }
 .log-filter-btn { font-size:.75rem; padding:4px 12px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.1); color:var(--text3); border-radius:99px; cursor:pointer; transition:all 0.18s; font-family:var(--font-ui); font-weight:600; }
 .log-filter-btn.active { background:oklch(72% 0.13 58 / 0.15); border-color:oklch(72% 0.13 58 / 0.4); color:oklch(82% 0.1 62); }
@@ -2034,6 +2041,8 @@ button { cursor: pointer; }
 .rank-wrap { display: grid; grid-template-columns: 320px 1fr; height: calc(100vh - 112px); overflow: hidden; }
 .rank-cfg { border-right: 1px solid rgba(255,255,255,0.07); overflow-y: auto; background: rgba(10,10,24,0.8); padding: 14px; }
 .rank-cfg-title { font-size: .75rem; font-weight: 800; color: var(--text3); text-transform: uppercase; letter-spacing: .08em; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
+/* Kopf-Buttons (Export/Import/JSON) nie umbrechen oder quetschen – sonst wird "{ }" zweizeilig */
+.rank-cfg-title > button, .shop-cfg-title > button { white-space: nowrap; flex-shrink: 0; }
 .rank-def-card { background: rgba(255,255,255,0.025); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 8px 11px; margin-bottom: 7px; display: flex; align-items: center; gap: 8px; transition: border-color .18s; cursor: default; }
 .rank-def-card:hover { border-color: rgba(255,255,255,0.14); }
 .rank-def-badge { font-size: .75rem; padding: 3px 11px; border-radius: 99px; font-weight: 800; border: 1px solid; white-space: nowrap; flex-shrink: 0; }
@@ -2073,6 +2082,8 @@ button { cursor: pointer; }
 .shop-modal h3 { font-size: .875rem; font-weight: 800; color: #6ee7b7; margin-bottom: 16px; }
 .shop-modal label { display: block; font-size: .75rem; color: var(--text3); font-weight: 700; text-transform: uppercase; letter-spacing: .06em; margin-bottom: 4px; margin-top: 11px; }
 .shop-modal input, .shop-modal select, .shop-modal textarea { width: 100%; }
+/* Checkbox/Radio nicht auf volle Breite ziehen – sonst quetschen sie den Labeltext in eine schmale Spalte */
+.shop-modal input[type=checkbox], .shop-modal input[type=radio] { width: auto; flex-shrink: 0; }
 .shop-modal-btns { display: flex; gap: 8px; margin-top: 18px; justify-content: flex-end; }
 /* Inline-Editor: kein Vollbild-Overlay, sondern Panel direkt im Shop-Tab */
 .shop-modal-overlay.inline { position: static; inset: auto; background: none; backdrop-filter: none; display: block; z-index: auto; }
@@ -2089,6 +2100,7 @@ button { cursor: pointer; }
 .rank-modal h3 { font-size: .875rem; font-weight: 800; color: oklch(82% 0.1 62); margin-bottom: 16px; }
 .rank-modal label { display: block; font-size: .75rem; color: var(--text3); font-weight: 700; text-transform: uppercase; letter-spacing: .06em; margin-bottom: 4px; margin-top: 11px; }
 .rank-modal input, .rank-modal select { width: 100%; }
+.rank-modal input[type=checkbox], .rank-modal input[type=radio] { width: auto; flex-shrink: 0; }
 .rank-modal-btns { display: flex; gap: 8px; margin-top: 18px; justify-content: flex-end; }
 
 /* UND NICHT Logik */
@@ -2159,8 +2171,10 @@ button { cursor: pointer; }
 }
 .oi-list { padding:6px 8px; display:flex; flex-direction:column; gap:4px; }
 
+/* Im normalen Fluss am Listenende – absolut am Boden lag der Hinweis über dem Leerzustand
+   bzw. über den letzten Zeilen der scrollenden Dropzone */
 .oi-drop-hint {
-  position:absolute; bottom:14px; left:50%; transform:translateX(-50%);
+  position:static; padding:14px 0 16px;
   font-size:.75rem; color:var(--text3);
   text-align:center; white-space:nowrap;
   display:flex; flex-direction:column; align-items:center; gap:4px;
@@ -2966,7 +2980,7 @@ button { cursor: pointer; }
       </div>
 
       <div class="section-hdr2">
-        <span>👗 Outfit Items</span>
+        <span class="pane-title">👗 Outfit Items</span>
         <div style="display:flex;gap:6px">
           <button class="btn btn-primary" style="font-size:.6875rem;padding:3px 8px" onclick="scanOutfitAndSave()" title="Aktuelles BC-Outfit scannen und als Profil speichern">📷 Scan Outfit</button>
           <button class="btn btn-red" style="font-size:.6875rem;padding:3px 8px" onclick="clearOutfit()">🗑️ Leeren</button>
@@ -2988,10 +3002,10 @@ button { cursor: pointer; }
 
       <!-- PROFILES -->
       <div style="margin-top:20px">
-        <div class="section-hdr2">
-          <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
-            <span>📁 Profile</span>
-            <div class="search-wrap" data-icon="search"><input class="outfit-search" id="profileSearch" placeholder="🔍 Name, Item, Tag oder Datum…" title="Datum z. B. 5.10. · 05.10.2026 · 10.2026 – auch zusammen mit einem Namen" oninput="_debouncedRenderProfileList()" style="width:190px;font-size:.75rem;padding:3px 8px"></div>
+        <div class="section-hdr2" style="flex-wrap:wrap;gap:8px 12px">
+          <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;min-width:0">
+            <span class="pane-title">📁 Profile</span>
+            <div class="search-wrap" data-icon="search"><input class="outfit-search" id="profileSearch" placeholder="🔍 Name, Item, Tag oder Datum…" title="Datum z. B. 5.10. · 05.10.2026 · 10.2026 – auch zusammen mit einem Namen" oninput="_debouncedRenderProfileList()" style="width:190px;font-size:.75rem;padding:3px 8px 3px 31px"></div>
             <span class="filter-chip profile-fc on" data-filter="all" onclick="setProfileFilter('all')" style="font-size:.6875rem;padding:3px 9px">Alle</span>
             <span class="filter-chip profile-fc" data-filter="fav" onclick="setProfileFilter('fav')" title="Nur Favoriten" style="font-size:.6875rem;padding:3px 9px">⭐ Favs</span>
             <span class="filter-chip profile-fc" data-filter="new" onclick="setProfileFilter('new')" title="Nur Profile der letzten 48 Stunden (das Profil speichert nur das Datum, nicht die Uhrzeit)" style="font-size:.6875rem;padding:3px 9px">🆕 Neu</span>
@@ -3006,7 +3020,7 @@ button { cursor: pointer; }
             <button class="btn btn-red" onclick="markAllProfilesOld()" title="Alle Profile umbenennen: Owner bekommt '(old)' im Namen – neue Profile werden danach als eigene Einträge gespeichert" style="font-size:.6875rem;padding:3px 9px">🗂️ Alle → (old)</button>
             <button class="btn btn-primary" onclick="openStatsModal()" title="Item- und Farbstatistiken über alle Profile" style="font-size:.6875rem;padding:3px 9px">📊 Statistiken</button>
           </div>
-          <div style="display:flex;gap:6px;align-items:center">
+          <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;min-width:0;max-width:100%">
             <input class="profile-name-input" id="profileNameInput" placeholder="Profilname..." maxlength="40" style="font-size:.75rem;padding:3px 7px">
             <button class="btn btn-green" style="font-size:.75rem;padding:4px 9px" onclick="saveProfile()">💾 Speichern</button>
           </div>
@@ -3039,7 +3053,7 @@ button { cursor: pointer; }
     <!-- RIGHT: Live code -->
     <div class="outfit-right">
       <div class="section-hdr2" style="margin-bottom:8px">
-        <span>💻 Generierter Code</span>
+        <span class="pane-title">💻 Generierter Code</span>
         <span id="outfitAutoStatus" style="font-size:.6875rem;color:var(--text3)">– kein Outfit –</span>
       </div>
       <textarea class="outfit-code-live" id="outfitCode" readonly
@@ -3325,8 +3339,8 @@ document.write('<scr'+'ipt src="speicher.js?_='+_cbv+'"><\/scr'+'ipt>');
     </div>
   </div>
   <div class="curse-body">
-    <div id="curseColHdr"></div>
     <div class="curse-v-scroll">
+      <div id="curseColHdr"></div>
       <div id="curseBody">
         <div class="curse-empty" id="curseEmpty">
           <div style="font-size:2rem;margin-bottom:8px">🔮</div>
@@ -3377,18 +3391,16 @@ document.write('<scr'+'ipt src="speicher.js?_='+_cbv+'"><\/scr'+'ipt>');
 </div>
 
 <div id="tab-log" class="tab-pane">
-  <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px 10px;border-bottom:1px solid var(--border)">
-    <span class="pane-title" style="font-weight:600;font-size:.875rem;color:var(--text1)">📋 Bot-Logs</span>
-    <div style="display:flex;gap:8px;align-items:center">
-      <span id="log-count" style="font-size:.75rem;color:var(--text3)"></span>
+  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px 14px;padding:14px 18px 10px;border-bottom:1px solid var(--border)">
+    <span class="pane-title" style="font-weight:600;font-size:.875rem;color:var(--text1);white-space:nowrap">📋 Bot-Logs</span>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;min-width:0">
+      <span id="log-count" style="font-size:.75rem;color:var(--text3);white-space:nowrap"></span>
       <button onclick="logFilter('')"             id="logf-all"    class="log-filter-btn active">Alle</button>
       <button onclick="logFilter('ok')"           id="logf-ok"    class="log-filter-btn">✅ Ausgelöst</button>
       <button onclick="logFilter('ungueltig')"    id="logf-ug"    class="log-filter-btn">❌ Ungültig</button>
       <button onclick="logFilter('skip')"         id="logf-skip"  class="log-filter-btn">⏭ Übersprungen</button>
       <button onclick="logFilter('join')"         id="logf-join"  class="log-filter-btn">👋 Joins</button>
       <button onclick="logFilter('leave')"        id="logf-leave" class="log-filter-btn">🚪 Verlassen</button>
-      <button onclick="logFilter('join')"       id="logf-join"  class="log-filter-btn">👋 Joins/Leaves</button>
-      <button onclick="logFilter('join')"       id="logf-join"  class="log-filter-btn">👋 Beitritte</button>
       <button onclick="logClearFiltered()" style="font-size:.75rem;padding:3px 10px;background:#2a0a0a;border:1px solid var(--red);color:var(--red);border-radius:5px;cursor:pointer">🗑 Sichtbare löschen</button>
       <button onclick="logClearAll()" style="font-size:.75rem;padding:3px 10px;background:var(--bg3);border:1px solid var(--border);color:var(--text3);border-radius:5px;cursor:pointer">Alle löschen</button>
     </div>
@@ -3494,8 +3506,8 @@ document.write('<scr'+'ipt src="speicher.js?_='+_cbv+'"><\/scr'+'ipt>');
     <input class="cf" id="rank-modal-icon" placeholder="🏆" style="width:80px">
     <label>Farbe</label>
     <div style="display:flex;gap:8px;align-items:center;margin-top:4px">
-      <input type="color" id="rank-modal-color" value="oklch(82% 0.1 62)" style="width:40px;height:28px;padding:1px;border:none;background:none;cursor:pointer">
-      <input class="cf" id="rank-modal-color-hex" placeholder="oklch(82% 0.1 62)" style="width:90px" oninput="document.getElementById('rank-modal-color').value=this.value">
+      <input type="color" id="rank-modal-color" value="#c4b5fd" style="width:40px;height:28px;padding:1px;border:none;background:none;cursor:pointer">
+      <input class="cf" id="rank-modal-color-hex" placeholder="#c4b5fd" style="width:90px" oninput="document.getElementById('rank-modal-color').value=this.value">
     </div>
     <label>Level (Reihenfolge / Stufe in der Gruppe)</label>
     <input class="cf" id="rank-modal-level" type="number" min="1" value="1" placeholder="1">
@@ -3628,7 +3640,7 @@ document.write('<scr'+'ipt src="speicher.js?_='+_cbv+'"><\/scr'+'ipt>');
     <select class="cf" id="shop-modal-reqrank"><option value="">– keiner (für alle) –</option></select>
     <label>🔒 Freischaltung – Ranggruppe (optional)</label>
     <select class="cf" id="shop-modal-reqgroup"><option value="">– alle Gruppen –</option></select>
-    <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:400;margin-top:4px"><input type="checkbox" id="shop-modal-hidelocked"> 🙈 <b>unsichtbar</b>, solange nicht freigeschaltet (Rang/Gruppe/Variable). Aus = sichtbar mit Hinweis „… benötigt".</label>
+    <label style="display:flex;align-items:flex-start;gap:6px;cursor:pointer;font-weight:400;margin-top:4px;text-transform:none;letter-spacing:0"><input type="checkbox" id="shop-modal-hidelocked" style="margin-top:2px"><span style="min-width:0">🙈 <b>unsichtbar</b>, solange nicht freigeschaltet (Rang/Gruppe/Variable). Aus = sichtbar mit Hinweis „… benötigt".</span></label>
     <label>🔢 Freischaltung/Bezahlung per Variable (optional)</label>
     <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
       <input class="cf" id="shop-modal-varname" placeholder="Variable (z.B. gehorsamkeit)" style="flex:1;min-width:150px">

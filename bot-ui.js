@@ -445,7 +445,7 @@ function renderStep(sid, s, st, idx){
   } else if(st.typ==='variable'){
     body=`<span style="font-size:.6875rem;color:var(--text3)">Variable</span>
       <input class="cf" style="width:130px" value="${escHtml(st.varName||'')}" placeholder="Name (z.B. gehorsam)" oninput="stepField('${sid}','${st.id}','varName',this.value)">
-      <select class="cf" style="width:104px" onchange="stepField('${sid}','${st.id}','varOp',this.value)">
+      <select class="cf" style="width:120px" onchange="stepField('${sid}','${st.id}','varOp',this.value)">
         <option value="set" ${(!st.varOp||st.varOp==='set')?'selected':''}>= Setzen</option>
         <option value="add" ${st.varOp==='add'?'selected':''}>➕ Plus</option>
         <option value="sub" ${st.varOp==='sub'?'selected':''}>➖ Minus</option>
@@ -1184,7 +1184,7 @@ function renderTrigCard(bot, t, i) {
         <label style="font-size:.6875rem;color:var(--text3)">Delay:</label>
         <input class="cf cf-w80" type="number" value="${t.delay??0}" oninput="trigField('${t.id}','delay',+this.value)"> ms
         <label style="font-size:.6875rem;color:var(--text3)">🔁 Wie oft?</label>
-        <select class="cf" style="width:190px" onchange="trigField('${t.id}','wiederholung',this.value);trigRerender('${t.id}')">
+        <select class="cf" style="width:215px" onchange="trigField('${t.id}','wiederholung',this.value);trigRerender('${t.id}')">
           <option value="immer"      ${wdh==='immer'?'selected':''}>∞ So oft wie es passt</option>
           <option value="einmalig"   ${wdh==='einmalig'?'selected':''}>1× Nur ein einziges Mal</option>
           <option value="n_mal"      ${wdh==='n_mal'?'selected':''}>N× Höchstens N-mal</option>
@@ -1205,7 +1205,7 @@ function renderTrigCard(bot, t, i) {
           <span>🛑 danach keine weiteren</span>
         </label>
         <label style="font-size:.6875rem;color:var(--text3);margin-left:8px">🔑 Als Vorbedingung:</label>
-        <select class="cf" style="width:170px" title="Wie zählt dieser Trigger als Vorbedingung für andere Trigger?" onchange="trigField('${t.id}','charSpec',this.value==='true');trigRerender('${t.id}')">
+        <select class="cf" style="width:auto;min-width:170px;max-width:100%" title="Wie zählt dieser Trigger als Vorbedingung für andere Trigger?" onchange="trigField('${t.id}','charSpec',this.value==='true');trigRerender('${t.id}')">
           <option value="false" ${!t.charSpec?'selected':''}>🌐 Global – einmal gilt für alle</option>
           <option value="true"  ${t.charSpec?'selected':''}>👤 Pro Spieler – jeder selbst</option>
         </select>
@@ -1273,7 +1273,7 @@ function renderTrigCard(bot, t, i) {
       <div class="te-section">
         <div class="te-section-title">🔙 Fallback <small style="font-weight:normal;text-transform:none;letter-spacing:0">(läuft wenn eine Aktion ❌ Trigger ungültig auslöst – Trigger zählt dann nicht)</small></div>
         <div style="display:flex;gap:6px;align-items:center">
-          <select class="cf" style="width:140px" onchange="trigField('${t.id}','fallbackTyp',this.value);trigRerender('${t.id}')">
+          <select class="cf" style="width:165px" onchange="trigField('${t.id}','fallbackTyp',this.value);trigRerender('${t.id}')">
             <option value="nichts" ${(!t.fallbackTyp||t.fallbackTyp==='nichts')?'selected':''}>Nichts (still)</option>
             <option value="chat"   ${t.fallbackTyp==='chat'?'selected':''}>💬 Chat-Nachricht</option>
             <option value="emote"  ${t.fallbackTyp==='emote'?'selected':''}>✨ Emote</option>
@@ -1797,7 +1797,7 @@ const COND_DEFS = {
   geknebelt: { gruppe:'Zustand', label:'Geknebelt', icon:'\ud83e\udd10',
     vorgabe:{modus:'ist',stufe:'egal'},
     felder:[{key:'modus',typ:'select',breite:96,werte:[['ist','ist'],['nicht','ist NICHT']]},
-            {key:'stufe',typ:'select',breite:132,werte:[['egal','egal wie stark'],['leicht','mind. leicht'],
+            {key:'stufe',typ:'select',breite:160,werte:[['egal','egal wie stark'],['leicht','mind. leicht'],
               ['mittel','mind. mittel'],['schwer','mind. schwer']]}],
     klartext:c=>(c.modus==='nicht'?'ist nicht geknebelt':'ist geknebelt')
       +(c.stufe&&c.stufe!=='egal'?' ('+c.stufe+')':'') },
@@ -1851,13 +1851,13 @@ const COND_DEFS = {
 
   anzahl_im_raum: { gruppe:'Raum', label:'Personen im Raum', icon:'\ud83d\udc65',
     vorgabe:{op:'min',wert:2},
-    felder:[{key:'op',typ:'select',breite:110,werte:[['min','mindestens'],['max','h\u00f6chstens'],['=','genau']]},
+    felder:[{key:'op',typ:'select',breite:135,werte:[['min','mindestens'],['max','h\u00f6chstens'],['=','genau']]},
             {key:'wert',typ:'zahl',breite:56}],
     klartext:c=>({min:'mindestens',max:'h\u00f6chstens','=':'genau'}[c.op||'min'])+' '+(c.wert??0)+' Personen im Raum' },
 
   raumname: { gruppe:'Raum', label:'Raumname', icon:'\ud83c\udff7',
     vorgabe:{modus:'ist',wert:''}, hinweis:'Leer lassen = jeder Raum',
-    felder:[{key:'modus',typ:'select',breite:100,werte:[['ist','ist genau'],['enthaelt','enth\u00e4lt']]},
+    felder:[{key:'modus',typ:'select',breite:120,werte:[['ist','ist genau'],['enthaelt','enth\u00e4lt']]},
             {key:'wert',typ:'auswahl',breite:180,quelle:_quelleRaeume,platzhalter:'– Raum wählen –',
              leerHinweis:'Noch keine Räume gesehen – einmal scannen'}],
     klartext:c=>'Raumname '+(c.modus==='enthaelt'?'enth\u00e4lt ':'ist ')+'\u201e'+(c.wert||'')+'"' },
@@ -1873,10 +1873,10 @@ const COND_DEFS = {
   inventar_hat: { gruppe:'Fortschritt', label:'Gegenstand im Inventar', icon:'\u{1F392}',
     vorgabe:{itemDefId:'',op:'>=',anzahl:1},
     hinweis:'Prueft, wie viele Stueck jemand im Inventar hat. Unbegrenzte Gegenstaende gelten immer als vorhanden.',
-    felder:[{key:'itemDefId',typ:'auswahl',breite:170,quelle:_quelleItemDefs,
+    felder:[{key:'itemDefId',typ:'auswahl',breite:200,quelle:_quelleItemDefs,
              platzhalter:'\u2013 Gegenstand \u2013',
              leerHinweis:'Noch keine Gegenstaende \u2013 lege sie im Items-Tab an'},
-            {key:'op',typ:'select',breite:110,werte:[['>=','mindestens'],['==','genau'],['<','weniger als']]},
+            {key:'op',typ:'select',breite:135,werte:[['>=','mindestens'],['==','genau'],['<','weniger als']]},
             {key:'anzahl',typ:'zahl',breite:60}],
     klartext:c=>{
       const d=(typeof _itemDefById==='function')?_itemDefById(c.itemDefId):null;
@@ -2114,7 +2114,7 @@ function _condInner(bot, tid, ci, c, ziel) {
         : `<span style="font-size:.6875rem;background:#0a1a0a;border:1px solid var(--green);color:var(--green);padding:1px 5px;border-radius:3px">🌐 Global</span>`
       : '';
     inner = `
-      <select class="cf cf-w160" onchange="${SF}'trigId',this.value);${RR}">
+      <select class="cf cf-w160" style="width:200px" onchange="${SF}'trigId',this.value);${RR}">
         <option value="">– Trigger wählen –</option>${opts}
       </select>
       ${modeBadge}
@@ -2122,7 +2122,7 @@ function _condInner(bot, tid, ci, c, ziel) {
   } else if (c.typ === 'player_betritt') {
     const bt = c.betritt_typ ?? 'alle';
     inner = `
-      <select class="cf" style="width:200px" onchange="${SF}'betritt_typ',this.value)">
+      <select class="cf" style="width:250px" onchange="${SF}'betritt_typ',this.value)">
         <option value="alle"   ${bt==='alle'?'selected':''}>👋 Jedes Mal (auch Erstbesuch)</option>
         <option value="neu"    ${bt==='neu'?'selected':''}>🆕 Erstes Mal in dieser Session</option>
         <option value="rejoin" ${bt==='rejoin'?'selected':''}>🔄 Nur Rejoin (war schon da)</option>
@@ -2131,7 +2131,7 @@ function _condInner(bot, tid, ci, c, ziel) {
     const rop = c.rang_op ?? '=';
     const ranks = _rankSorted();
     inner = `
-      <select class="cf" style="width:80px" onchange="${SF}'rang_op',this.value);${RR}">
+      <select class="cf" style="width:115px" onchange="${SF}'rang_op',this.value);${RR}">
         <option value="="   ${rop==='='  ?'selected':''}>= Genau</option>
         <option value="min" ${rop==='min'?'selected':''}>≥ Min.</option>
         <option value="max" ${rop==='max'?'selected':''}>≤ Max.</option>
@@ -2315,7 +2315,7 @@ function _renderAktGruppe(bot, tid, a, ai, branch, lok, tot) {
 
       <div style="display:flex;gap:6px;align-items:center;margin-top:6px;padding:5px 8px;background:rgba(96,165,250,0.05);border:1px solid rgba(96,165,250,0.12);border-radius:6px;flex-wrap:wrap">
         <span style="font-size:.6875rem;font-weight:700;color:#60a5fa;white-space:nowrap">🎯 Ziel für alles darin</span>
-        <select class="cf" style="width:230px;font-size:.75rem" onchange="aktGruppeFeld('${tid}',${AI},'aktZiel',this.value${bArg});_aktListeNeu('${tid}','${branch || ''}')">
+        <select class="cf" style="width:260px;font-size:.75rem" onchange="aktGruppeFeld('${tid}',${AI},'aktZiel',this.value${bArg});_aktListeNeu('${tid}','${branch || ''}')">
           <option value="erben"            ${(!a.aktZiel || a.aktZiel === 'erben') ? 'selected' : ''}>↳ jede Aktion behält ihr eigenes Ziel</option>
           <option value="ausloeser"        ${a.aktZiel === 'ausloeser' ? 'selected' : ''}>👤 Die Person, die ausgelöst hat</option>
           <option value="ausser_ausloeser" ${a.aktZiel === 'ausser_ausloeser' ? 'selected' : ''}>👥 Alle außer der auslösenden Person</option>
@@ -2500,7 +2500,7 @@ function renderAct(tid, a, ai, branch) {
     const tpMode = a.tpMode || 'punkte';
     const modeSel = `<div style="display:flex;gap:8px;align-items:center;margin-top:5px;flex-wrap:wrap">
       <span style="font-size:.6875rem;color:var(--text3)">Modus:</span>
-      <select class="cf" style="width:200px" onchange="actField('${tid}',${AI},'tpMode',this.value${branchArg});actRerender('${tid}',${AI}${branchArg})">
+      <select class="cf" style="width:250px" onchange="actField('${tid}',${AI},'tpMode',this.value${branchArg});actRerender('${tid}',${AI}${branchArg})">
         <option value="punkte" ${tpMode==='punkte'?'selected':''}>📍 Punkte (Primär + Fallbacks)</option>
         <option value="bereich" ${tpMode==='bereich'?'selected':''}>⬛ Bereich (zufälliger freier Punkt)</option>
       </select>
@@ -2569,7 +2569,7 @@ function renderAct(tid, a, ai, branch) {
   } else if (a.typ === 'variable') {
     extra = `<div style="display:flex;gap:6px;align-items:center;margin-top:5px;flex-wrap:wrap">
       <input class="cf" style="width:130px" value="${escHtml(a.varName||'')}" placeholder="Variablen-Name" oninput="actField('${tid}',${AI},'varName',this.value${branchArg})">
-      <select class="cf" style="width:104px" onchange="actField('${tid}',${AI},'varOp',this.value${branchArg})">
+      <select class="cf" style="width:120px" onchange="actField('${tid}',${AI},'varOp',this.value${branchArg})">
         <option value="set" ${(!a.varOp||a.varOp==='set')?'selected':''}>= Setzen</option>
         <option value="add" ${a.varOp==='add'?'selected':''}>➕ Plus</option>
         <option value="sub" ${a.varOp==='sub'?'selected':''}>➖ Minus</option>
@@ -2584,7 +2584,7 @@ function renderAct(tid, a, ai, branch) {
     const _fehlt = (a.itemDefId && !_defs.some(x=>x[0]===a.itemDefId))
       ? `<option value="${escHtml(a.itemDefId)}" selected>\u26A0 nicht mehr im Katalog</option>` : '';
     extra = `<div style="display:flex;gap:6px;align-items:center;margin-top:5px;flex-wrap:wrap">
-      <select class="cf" style="width:180px" onchange="actField('${tid}',${AI},'itemDefId',this.value${branchArg})">
+      <select class="cf" style="width:210px" onchange="actField('${tid}',${AI},'itemDefId',this.value${branchArg})">
         <option value="">\u2013 Gegenstand w\u00e4hlen \u2013</option>${_fehlt}${_liste}
       </select>
       <select class="cf" style="width:104px" onchange="actField('${tid}',${AI},'invOp',this.value${branchArg})">
@@ -2684,7 +2684,7 @@ function renderAct(tid, a, ai, branch) {
       </div>
       <div style="display:flex;gap:6px;align-items:center;margin-top:5px;padding:5px 8px;background:rgba(96,165,250,0.05);border:1px solid rgba(96,165,250,0.12);border-radius:6px;flex-wrap:wrap">
         <span style="font-size:.6875rem;font-weight:700;color:#60a5fa;white-space:nowrap">🎯 Ziel</span>
-        <select class="cf" style="width:230px;font-size:.75rem" onchange="actField('${tid}',${AI},'aktZiel',this.value${branchArg});actRerender('${tid}',${AI}${branchArg})">
+        <select class="cf" style="width:260px;font-size:.75rem" onchange="actField('${tid}',${AI},'aktZiel',this.value${branchArg});actRerender('${tid}',${AI}${branchArg})">
           <option value="ausloeser" ${(!a.aktZiel||a.aktZiel==='ausloeser')?'selected':''}>👤 Die Person, die ausgelöst hat</option>
           <option value="ausser_ausloeser" ${a.aktZiel==='ausser_ausloeser'?'selected':''}>👥 Alle außer der auslösenden Person</option>
           <option value="alle"      ${a.aktZiel==='alle'?'selected':''}>👥 Alle im Raum</option>

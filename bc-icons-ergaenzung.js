@@ -84,7 +84,10 @@
     '.sec-hdr h3', '.tweaks-section-title', '.te-section-title', '.filter-chip',
     '.arch-badge', '.info-box', '.warn', '.hint', '.room-label', '.fav-hdr',
     '.log-badge', '.cond-when-lbl', '.trig-label', '.be-empty-icon', '.outfit-target-label',
-    '.section-hdr2', '.oi-title', '.search-wrap',
+    /* .section-hdr2 bewusst nicht: der Container würde das Icon als eigenes
+       Flex-Kind vor den Titel setzen (space-between schiebt es dann weg).
+       Die Titel-Spans tragen stattdessen .pane-title. */
+    '.oi-title', '.search-wrap',
     /* Einstellungen: Zeilentitel in „Einzelne Bereiche“ und „Gefahrenzone“ */
     '.set-li b',
     /* zusätzlich aus der Bestandsaufnahme im laufenden Tool: Statistik-Kacheln,

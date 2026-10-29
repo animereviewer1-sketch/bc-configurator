@@ -732,7 +732,8 @@ html[data-ui="nova"] {
   & .scan-chip.on { background: var(--text); color: var(--bg); border-color: var(--text); }
   & .scan-chip.on em { color: var(--bg); opacity: .7; }
   & .scan-chip-sep { width: 1px; background: #23283a; margin: 2px 4px; }
-  & .scan-head, & .scan-row { display: grid; grid-template-columns: 110px 90px minmax(0,1.3fr) minmax(0,1fr) 120px; gap: 10px; align-items: center; }
+  /* Feste Spalten elastisch (min…max): in schmalen Fenstern sprengte der Kopf sonst seinen Container */
+  & .scan-head, & .scan-row { display: grid; grid-template-columns: minmax(70px,110px) minmax(56px,90px) minmax(0,1.3fr) minmax(0,1fr) minmax(70px,120px); gap: 10px; align-items: center; }
   & .scan-head { padding: 8px 12px; border: 1px solid #1d2130; border-bottom: 0; border-radius: 12px 12px 0 0; background: #0d1018;
     font-size: .64rem; font-weight: 650; letter-spacing: .1em; text-transform: uppercase; color: var(--text3); }
   & #scanList { flex: 1; overflow-y: auto; border: 1px solid #1d2130; border-radius: 0 0 12px 12px; background: var(--nv-card); }
