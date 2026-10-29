@@ -100,6 +100,23 @@ describe('Diagnose im Spiel-Tab (_diag)', () => {
     const d2 = lauf([], { DrawImageCache: { forEach: (fn) => bilder.forEach((b) => fn(b)) }, Date: { now: (() => { let n = 0; return () => (n += 7000); })() } });
     expect(d2.abgelaufen).toBe(true);
   });
+  it('zählt auch den WebGL-Bildspeicher (GLDrawImageCache): BC lädt die Teile der Figur dort, nicht im normalen', () => {
+    const normal = [{ state: 'loaded' }];
+    const gl = [{ state: 'loading' }, { state: 'loading' }, { state: 'loaded' }];
+    const d = lauf([], { DrawImageCache: { forEach: (fn) => normal.forEach((b) => fn(b)) }, GLDrawImageCache: { forEach: (fn) => gl.forEach((b) => fn(b)) }, GLVersion: 'webgl2' });
+    expect(d.offen).toBe(2);
+    expect(d.offenGl).toBe(2);
+    expect(d.zeichnen).toBe('webgl2');
+    // beide Speicher laden: Summe
+    const d2 = lauf([], { DrawImageCache: { forEach: (fn) => [{ state: 'loading' }].forEach((b) => fn(b)) }, GLDrawImageCache: { forEach: (fn) => gl.forEach((b) => fn(b)) } });
+    expect(d2.offen).toBe(3);
+    expect(d2.zeichnen).toBe('?');
+  });
+  it('Emoticons gelten nie als nicht angelegt (sie werden vor dem Foto absichtlich entfernt)', () => {
+    const d = lauf(['Suit', 'Emoticon'], { Player: { Appearance: [item('Suit', 'X')] } });
+    expect(d.fehlt).toEqual([]);
+    expect(d.erwartet).toBe(1);
+  });
   it('nennt erweiterte Items ohne TypeRecord und von BC nicht gezeichnete Items', () => {
     const d = lauf([], {
       Player: { Appearance: [
@@ -209,16 +226,84 @@ describe('LSCG: Wiederholen, Markieren, nichts überschreiben', () => {
 
   it('die Markierung wird in der Datenbank gespeichert und steht im Gesamt-Backup', () => {
     const speicher = fs.readFileSync(path.join(REPO_ROOT, 'speicher.js'), 'utf8');
-    expect(speicher).toContain("'BC_BILD_UNVOLLSTAENDIG_v1'");
+    expect(speicher).toContain("'BC_BILD_UNVOLLSTAENDIG_v2'");
+    expect(speicher).toContain("'BC_BILD_UNVOLLSTAENDIG_v1'");   // die alten Markierungen bleiben im Backup, werden aber nicht mehr gelesen
     const { antwort, lies } = bereit();
     antwort(FEHLT); antwort(FEHLT); antwort(FEHLT);
-    expect(lies('_kleinStatus["BC_BILD_UNVOLLSTAENDIG_v1"].satz.has("lscg:1001|fpA")')).toBe(true);
+    expect(lies('_kleinStatus["BC_BILD_UNVOLLSTAENDIG_v2"].satz.has("lscg:1001|fpA")')).toBe(true);
+    expect(lies('_kleinStatus["BC_BILD_UNVOLLSTAENDIG_v1"]')).toBeUndefined();   // v1 wird nicht mehr geladen
   });
 
   it('die Karte zeigt ⚠ unvollständig, wenn das Bild markiert ist', () => {
     const q = fs.readFileSync(path.join(REPO_ROOT, 'items.js'), 'utf8');
     expect(q).toContain("const unvollBild = vThumb && _bildUnvoll.has('lscg:' + vKey);");
     expect(q).toContain('⚠ unvollständig</span>');
+  });
+});
+
+describe('LSCG-Serie: Stopp', () => {
+  function laufendeSerie() {
+    const t = tool();
+    evalIn(t.ctx, "_osCaptureRunning = true; _osCaptureNeedSync = true; _osCaptureQueue = [{ mk: '1', vIdx: 0 }, { mk: '1', vIdx: 1 }];"
+      + " _pendingOsCapture['os_x'] = { mk: '1', fp: 'f', vIdx: 0 }; _shotVersuche['lscg:1|f'] = 1;");
+    return t;
+  }
+
+  it('der Knopf "Fehlende Bilder" stoppt eine laufende Serie: Warteschlange leer, Lauf beendet, Pose und Aussehen zurück', () => {
+    const t = laufendeSerie();
+    t.ctx.captureAllMissingOsScreenshots();
+    expect(evalIn(t.ctx, '_osCaptureQueue')).toEqual([]);
+    expect(evalIn(t.ctx, '_osCaptureRunning')).toBe(false);
+    expect(evalIn(t.ctx, '_osCaptureNeedSync')).toBe(false);
+    const exec = t.execs().at(-1);                                  // Abschluss der Serie: Pose und Aussehen zurück
+    expect(exec).toContain('__BCU_poseOrig');
+    expect(exec).toContain('ServerPlayerAppearanceSync');
+    expect(evalIn(t.ctx, 'Object.keys(_pendingOsCapture).length')).toBe(0);
+    expect(evalIn(t.ctx, "_shotVersuche['lscg:1|f']")).toBeUndefined();   // Wiederholungszähler zurückgesetzt
+  });
+
+  it('eine noch ausstehende Aufnahme wird nach dem Stopp ignoriert: nichts gespeichert, nichts neu gestartet', () => {
+    const t = laufendeSerie();
+    evalIn(t.ctx, "LSCG_DB['1'] = { name: 'A', versions: [{ code: 'C', fingerprint: 'f' }, { code: 'D', fingerprint: 'g' }] }");
+    t.ctx.osCaptureStop();
+    t.ctx.__m = { reqId: 'os_x', data: 'data:image/jpeg;base64,X', diag: FEHLT };
+    evalIn(t.ctx, '_handleCanvasPreviewData(__m)');
+    t.laufen();
+    expect(evalIn(t.ctx, "LSCG_SCREENSHOTS['1|f']")).toBeUndefined();
+    expect(t.ctx.__aufnahmen).toEqual([]);
+    expect(evalIn(t.ctx, '_shotProtokoll.length')).toBe(0);
+  });
+
+  it('der Knopf zeigt während der Serie Stop mit der Zahl der offenen Bilder und danach wieder "Fehlende Bilder"', () => {
+    const t = laufendeSerie();
+    evalIn(t.ctx, '_updateOsCaptureBtn()');
+    expect(t.els.osCaptureAllBtn.textContent).toBe('⏹ Stop (2 übrig)');
+    t.ctx.osCaptureStop();
+    expect(t.els.osCaptureAllBtn.textContent).toBe('📸 Fehlende Bilder');
+  });
+
+  it('ohne laufende Serie tut der Stopp nichts', () => {
+    const t = tool();
+    expect(() => t.ctx.osCaptureStop()).not.toThrow();
+    expect(t.execs()).toEqual([]);
+  });
+
+  it('ohne laufende Serie startet der Knopf die Serie (nur Versionen ohne Bild) und zeigt dann Stop', () => {
+    const t = tool();
+    evalIn(t.ctx, "_connected = true; _bildExistenzSicher = () => true;"
+      + " LSCG_DB['1'] = { name: 'A', versions: [{ code: 'C', fingerprint: 'f' }, { code: 'D', fingerprint: 'g' }, { code: 'E', fingerprint: 'h' }] };"
+      + " LSCG_SCREENSHOTS['1|g'] = 'data:image/jpeg;base64,ALT';");
+    t.ctx.captureAllMissingOsScreenshots();
+    expect(evalIn(t.ctx, '_osCaptureRunning')).toBe(true);
+    expect(evalIn(t.ctx, '_osCaptureQueue')).toEqual([{ mk: '1', vIdx: 2 }]);          // Version 2 hat schon ein Bild; Version 1 läuft schon
+    expect(t.els.osCaptureAllBtn.textContent).toBe('⏹ Stop (1 übrig)');
+    t.laufen();
+    expect(t.ctx.__aufnahmen).toEqual([['1', 0]]);
+  });
+
+  it('index.html: der Knopf hat die Kennung osCaptureAllBtn', () => {
+    const html = fs.readFileSync(path.join(REPO_ROOT, 'index.html'), 'utf8');
+    expect(html).toMatch(/id="osCaptureAllBtn"[^>]*onclick="captureAllMissingOsScreenshots\(\)"/);
   });
 });
 

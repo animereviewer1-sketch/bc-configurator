@@ -24,9 +24,9 @@ function tool() {
 
 // Nachgebautes BC-Fenster: Timer mit Wartezeit, Canvas mit veränderbarem Inhalt, Zähler für Neuzeichnen
 // bilder: Einträge des BC-Bildcaches (DrawImageCache), z. B. { state: 'loading', fertigNach: 300 } (ms Spielzeit bis "loaded")
-function spiel({ aendernBis = 0, bilder = null } = {}) {
-  const z = { refresh: 0, loadCanvas: 0, antworten: [], timers: [], t: 0, bilder: bilder || [], refreshMitOffenen: 0, offenBeiAntwort: null };
-  const offen = () => z.bilder.filter((b) => b.state === 'loading').length;
+function spiel({ aendernBis = 0, bilder = null, glBilder = null } = {}) {
+  const z = { refresh: 0, loadCanvas: 0, antworten: [], timers: [], t: 0, bilder: bilder || [], glBilder: glBilder || [], refreshMitOffenen: 0, offenBeiAntwort: null };
+  const offen = () => z.bilder.concat(z.glBilder).filter((b) => b.state === 'loading').length;
   const px = new Uint8ClampedArray(4 * 8 * 8).fill(10);
   const canvas = () => ({
     width: 8, height: 8,
@@ -50,6 +50,7 @@ function spiel({ aendernBis = 0, bilder = null } = {}) {
     __BCK_popupRef: { postMessage: (m) => { z.offenBeiAntwort = offen(); z.antworten.push(m); } },
   };
   if (bilder) g.DrawImageCache = { forEach: (fn) => z.bilder.forEach((b) => fn(b)) };
+  if (glBilder) g.GLDrawImageCache = { forEach: (fn) => z.glBilder.forEach((b) => fn(b)) };
   g.window = g;
   const ctx = vm.createContext(g);
   return {
@@ -60,7 +61,7 @@ function spiel({ aendernBis = 0, bilder = null } = {}) {
       while (!z.antworten.length && z.timers.length && n++ < 500) {
         const t = z.timers.shift();
         summe += t.ms || 0; z.t += t.ms || 0;
-        z.bilder.forEach((b) => { if (b.state === 'loading' && b.fertigNach != null && z.t >= b.fertigNach) b.state = 'loaded'; });   // BC lädt nebenher
+        z.bilder.concat(z.glBilder).forEach((b) => { if (b.state === 'loading' && b.fertigNach != null && z.t >= b.fertigNach) b.state = 'loaded'; });   // BC lädt nebenher
         t.fn();
       }
       return summe;
@@ -139,6 +140,16 @@ describe('Aufnahme wartet auf ladende Bilder', () => {
     expect(s.z.refreshMitOffenen).toBe(1);            // nur der erste Aufbau beim Anlegen lief mit offenen Bildern, der Prüflauf nicht
   });
 
+  it('nur der WebGL-Bildspeicher lädt noch (der normale ist leer/fertig): es wird trotzdem gewartet – der Fehler aus dem Protokoll', () => {
+    const s = spiel({ bilder: [{ state: 'loaded' }], glBilder: [{ state: 'loading', fertigNach: 400 }, { state: 'loading', fertigNach: 650 }] });
+    s.lauf(aufnahmeCode());
+    const warten = s.bisAntwort();
+    expect(s.z.antworten).toHaveLength(1);
+    expect(s.z.offenBeiAntwort).toBe(0);
+    expect(warten).toBeGreaterThanOrEqual(650);
+    expect(s.z.antworten[0].diag.offenGl).toBe(0);
+  });
+
   it('ein Bild lädt nie fertig: nach SHOT_BILDER_MAX_MS wird trotzdem fotografiert', () => {
     const s = spiel({ bilder: [{ state: 'loading' }] });
     s.lauf(aufnahmeCode());
@@ -174,7 +185,8 @@ describe('Aufnahme wartet auf ladende Bilder', () => {
       expect(lauf.match(/_bilderWarten\(\)/g)).toHaveLength(2);
       expect(lauf.indexOf('_bilderWarten()')).toBeLessThan(lauf.indexOf('CharacterRefresh(Player,false,false)'));
       expect(lauf.lastIndexOf('_bilderWarten()')).toBeGreaterThan(lauf.indexOf('CharacterRefresh(Player,false,false)'));
-      expect(code).toContain('window.DrawImageCache');
+      expect(code).toContain('"DrawImageCache"');
+      expect(code).toContain('"GLDrawImageCache"');     // BC zeichnet über WebGL und lädt die Teile in einen eigenen Bildspeicher
     }
   });
 });

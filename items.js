@@ -10791,10 +10791,13 @@ const SHOT_RUHE_RAUMWECHSEL_MS = 3500; // nach einem Beitritt/Verlassen so lange
 // nächste Neuaufbau gleich (leer) aus – die Aufnahme hatte dann Glatze, keine Kleidung oder kein Gesicht. Darum wartet der Prüflauf,
 // bis kein Bild mehr lädt, und zeichnet erst danach neu und vergleicht. Wirft BC einen Fehler oder gibt es den Cache nicht
 // (alte Version), zählt "nichts offen" – dann gilt weiter nur der Vergleich. Nach SHOT_BILDER_MAX_MS wird trotzdem fotografiert.
+// Zwei Speicher: BC zeichnet die Figur über WebGL und lädt die Teile dort in einen EIGENEN Bildspeicher (GLDrawImageCache); der
+// normale (DrawImageCache) hält nur Masken und den 2D-Weg. Wer nur den normalen prüft, sieht "nichts offen", obwohl die Teile noch laden.
 const SHOT_BILDER_MAX_MS = 6000;
 const _SHOT_BILDER = 'var _bildDl=Date.now()+' + SHOT_BILDER_MAX_MS + ';'
-  + 'function _bilderOffen(){try{var c=window.DrawImageCache;if(!c||typeof c.forEach!=="function")return 0;'
+  + 'function _bilderOffenIn(k){try{var c=window[k];if(!c||typeof c.forEach!=="function")return 0;'
   +   'var n=0;c.forEach(function(im){if(im&&im.state==="loading")n++;});return n;}catch(_e){return 0;}}'
+  + 'function _bilderOffen(){return _bilderOffenIn("DrawImageCache")+_bilderOffenIn("GLDrawImageCache");}'
   + 'function _bilderWarten(){return _bilderOffen()>0&&Date.now()<_bildDl;}';
 
 // ── Diagnose beim Foto ────────────────────────────────────────────────────────────────────────────────────────────
@@ -10806,14 +10809,18 @@ const _SHOT_BILDER = 'var _bildDl=Date.now()+' + SHOT_BILDER_MAX_MS + ';'
 //   ohneTyp    erweiterte Items ohne TypeRecord (typabhängige Layer fehlen; bei Items ohne Archetyp normal)
 //   verdeckt   Items, die BC laut Sichtbarkeitsprüfung nicht zeichnet (z. B. durch Hide anderer Items)
 // "Unvollständig" heißt: fehlt ODER offen (ohneTyp/verdeckt sind nur Hinweise).
+// Emoticons (AFK, Schlafen …) werden vor dem Foto absichtlich entfernt – sie gelten nie als "nicht angelegt".
+const SHOT_ERWARTUNG_OHNE = ['Emoticon'];
 function _shotDiagCode(erwartet) {
-  return 'var _diagT0=Date.now(),_diagErw=' + JSON.stringify(erwartet || null) + ';'
+  const erw = Array.isArray(erwartet) ? erwartet.filter(g => !SHOT_ERWARTUNG_OHNE.includes(g)) : null;
+  return 'var _diagT0=Date.now(),_diagErw=' + JSON.stringify(erw) + ';'
     + 'function _diag(){var d={};try{'
     +   'var app=Player.Appearance||[],da={};'
     +   'app.forEach(function(i){var g=i&&i.Asset&&i.Asset.Group&&i.Asset.Group.Name;if(g&&i.Asset.Name)da[g]=i.Asset.Name;});'
     +   'd.items=Object.keys(da).length;'
     +   'if(_diagErw){d.erwartet=_diagErw.length;d.fehlt=_diagErw.filter(function(g){return !da[g];});}'
-    +   'd.offen=_bilderOffen();d.abgelaufen=d.offen>0&&Date.now()>=_bildDl;d.gewartet=Date.now()-_diagT0;d.checks=_checksDone;'
+    +   'd.offen=_bilderOffen();d.offenGl=_bilderOffenIn("GLDrawImageCache");d.abgelaufen=d.offen>0&&Date.now()>=_bildDl;'
+    +   'd.gewartet=Date.now()-_diagT0;d.checks=_checksDone;d.zeichnen=typeof GLVersion==="string"?GLVersion:"?";'
     +   'd.ohneTyp=app.filter(function(i){return i&&i.Asset&&i.Asset.Name&&i.Asset.Extended&&!(i.Property&&i.Property.TypeRecord);})'
     +     '.map(function(i){return i.Asset.Group.Name;});'
     +   'if(typeof CharacterAppearanceVisible==="function")d.verdeckt=app.filter(function(i){return i&&i.Asset&&i.Asset.Name'
@@ -10834,7 +10841,9 @@ function _bundleGruppen(code) {
 // damit es bleibt). Das Protokoll (nur im Speicher) steht in Einstellungen → Werkzeuge zum Kopieren.
 const SHOT_WIEDERHOLUNGEN = 2;
 const SHOT_PROTOKOLL_MAX = 100;
-const BILD_UNVOLL_KEY = 'BC_BILD_UNVOLLSTAENDIG_v1';
+// v2: Build 788 markierte fälschlich fast jedes Outfit mit Emoticon als unvollständig (Emoticons werden absichtlich entfernt) und prüfte nur
+// den normalen Bildspeicher. Die Markierungen unter _v1 sind unzuverlässig und werden nicht mehr gelesen (bleiben aber in der Datenbank).
+const BILD_UNVOLL_KEY = 'BC_BILD_UNVOLLSTAENDIG_v2';
 const _bildUnvoll = new Set();       // 'lscg:<mk|fp>': zuletzt unvollständig aufgenommen
 _kleinLaden(BILD_UNVOLL_KEY, _bildUnvoll, function () { if (typeof _activeTab !== 'undefined' && _activeTab === 'outfit-scan') _debouncedRenderOutfitScanTab(); });
 const _shotProtokoll = [];           // neueste zuerst
@@ -10872,7 +10881,8 @@ function _shotProtokollText() {
   return _shotProtokoll.map((e) => {
     const d = new Date(e.ts);
     const di = e.diag ? ' | Items ' + e.diag.items + (e.diag.erwartet != null ? '/' + e.diag.erwartet : '') + ', offen ' + e.diag.offen
-      + (e.diag.abgelaufen ? ' (abgelaufen)' : '') + ', ' + e.diag.gewartet + ' ms, Läufe ' + e.diag.checks
+      + (e.diag.offenGl ? ' (WebGL ' + e.diag.offenGl + ')' : '') + (e.diag.abgelaufen ? ' (abgelaufen)' : '')
+      + ', ' + e.diag.gewartet + ' ms, Läufe ' + e.diag.checks + (e.diag.zeichnen ? ', Zeichnen ' + e.diag.zeichnen : '')
       + (e.diag.ohneTyp && e.diag.ohneTyp.length ? ', ohne TypeRecord: ' + e.diag.ohneTyp.join(',') : '')
       + (e.diag.verdeckt && e.diag.verdeckt.length ? ', verdeckt: ' + e.diag.verdeckt.join(',') : '') : '';
     return z(d.getHours()) + ':' + z(d.getMinutes()) + ':' + z(d.getSeconds()) + ' · Build ' + e.build + ' · ' + e.art + ' · ' + e.name
@@ -11349,6 +11359,7 @@ window.testOsOutfit = function(mk, vIdx) {
 
 // ── Gestaffeltes Aufnehmen aller fehlenden Bilder ─────
 function captureAllMissingOsScreenshots() {
+  if (_osCaptureRunning) { osCaptureStop(); return; }   // während einer Serie ist der Knopf der Stopp-Knopf
   if (!_connected) { showStatus('❌ Nicht verbunden mit BC', 'error'); return; }
   if (!_bildExistenzSicher('lscg')) { showStatus('⏳ Die Bilder werden noch geladen – gleich nochmal versuchen', 'info'); return; }
   // Build a queue of {mk, vIdx} pairs that have no screenshot yet
@@ -11370,12 +11381,35 @@ function captureAllMissingOsScreenshots() {
   if (!_osCaptureRunning) _runNextOsCapture();
 }
 
+// Stopp der Serie: die Warteschlange wird geleert, eine gerade laufende Aufnahme wird ignoriert (ihr Ergebnis wird nicht gespeichert, das
+// Spiel stellt dein Aussehen von selbst zurück), und der Ablauf-Abschluss schickt Pose und Aussehen zurück. Gespeicherte Bilder bleiben.
+function osCaptureStop() {
+  if (!_osCaptureRunning && !_osCaptureQueue.length) return;
+  const rest = _osCaptureQueue.length;
+  _osCaptureQueue = [];
+  for (const k of Object.keys(_pendingOsCapture)) delete _pendingOsCapture[k];
+  for (const k of Object.keys(_shotVersuche)) if (k.startsWith('lscg:')) delete _shotVersuche[k];
+  _osCapturePaused = false;
+  _runNextOsCapture();            // leere Warteschlange: beendet den Lauf (und synchronisiert, falls nötig)
+  _osCaptureRunning = false;
+  _updateOsCaptureBtn();
+  showStatus('⏹ Bilderserie gestoppt' + (rest ? ' – ' + rest + ' Bilder nicht aufgenommen' : ''), 'info');
+}
+
+// Der Knopf "Fehlende Bilder" zeigt während der Serie Stop und die Zahl der noch offenen Bilder
+function _updateOsCaptureBtn() {
+  const btn = document.getElementById('osCaptureAllBtn');
+  if (btn) btn.textContent = _osCaptureRunning ? '⏹ Stop (' + _osCaptureQueue.length + ' übrig)' : '📸 Fehlende Bilder';
+}
+
 function _runNextOsCapture() {
   // Pausiert (DC): Queue bleibt stehen, _osCaptureRunning bleibt true → neue
   // Einträge landen nur in der Queue; der Wächter stößt die Serie wieder an.
   if (_osCapturePaused) return;
+  _updateOsCaptureBtn();
   if (!_osCaptureQueue.length) {
     _osCaptureRunning = false;
+    _updateOsCaptureBtn();
     if (_osCaptureNeedSync) {
       _osCaptureNeedSync = false;
       // Alle Captures fertig → Player-Canvas neu laden + Server-Sync
@@ -11398,6 +11432,7 @@ function _runNextOsCapture() {
   _osCaptureRunning = true;
   if (_dcHalt('osCapture')) return;
   const item = _osCaptureQueue.shift();
+  _updateOsCaptureBtn();
   setTimeout(function() {
     if (_osCapturePaused) { _osCaptureQueue.unshift(item); return; }
     captureOsScreenshot(item.mk, item.vIdx);
