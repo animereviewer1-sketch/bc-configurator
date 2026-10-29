@@ -6275,6 +6275,9 @@ function renderCurseTab() {
   // Store for lazy rendering
   Object.values(byOwner).forEach(o => { _curseOwnerData[o.num] = o; });
 
+  // Offene Blöcke merken, BEVOR sie entfernt werden – sonst findet die wasOpen-Abfrage unten nichts
+  // und jedes Neu-Rendern (Suche, Filter, Scan) klappt alle Besitzer wieder zu.
+  const openBlockIds = new Set([...body.querySelectorAll('.curse-owner-block.open')].map(b => b.id));
   // Remove existing owner blocks from body (col-headers live in #curseColHdr, separate element)
   body.querySelectorAll('.curse-owner-block').forEach(b => b.remove());
 
@@ -6299,7 +6302,7 @@ function renderCurseTab() {
 
   Object.entries(byOwner).forEach(([ownerKey, owner]) => {
     const blockId = 'co_' + owner.num;
-    const wasOpen = document.getElementById(blockId)?.classList.contains('open');
+    const wasOpen = openBlockIds.has(blockId);
 
     const block = document.createElement('div');
     block.className = 'curse-owner-block' + (wasOpen ? ' open' : '');

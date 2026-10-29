@@ -1374,7 +1374,7 @@ textarea.outfit-code { width: 100%; min-height: 210px; background: rgba(0,0,0,0.
 
 /* Owner header — like section-head from reference */
 .curse-owner-hdr {
-  display: flex; align-items: center; gap: 10px;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px;
   padding: 11px 16px;
   background: rgba(255,255,255,0.025);
   cursor: pointer; user-select: none;
@@ -1385,7 +1385,7 @@ textarea.outfit-code { width: 100%; min-height: 210px; background: rgba(0,0,0,0.
 
 .curse-owner-name {
   font-size: .875rem; font-weight: 700;
-  color: var(--text); flex: 1;
+  color: var(--text); flex: 1; min-width: 90px;
   letter-spacing: -0.01em;
 }
 .curse-owner-num {
@@ -1434,20 +1434,20 @@ textarea.outfit-code { width: 100%; min-height: 210px; background: rgba(0,0,0,0.
    (~16px) und die Aktions-Buttons lagen über dem Notiz-Feld. Kopf und Zeilen teilen dieselben Maße. */
 #curseBody {
   display: grid;
-  grid-template-columns: 28px 88px 190px 170px 130px 90px 60px minmax(0,1fr) 230px 240px;
+  grid-template-columns: 28px 76px minmax(112px,1.2fr) minmax(120px,1fr) minmax(120px,.9fr) 100px 52px 0 minmax(110px,1.1fr) 176px;
   align-content: start;
   width: 100%;
   padding-top: 8px;
 }
 /* Mindestbreite nur, wenn Spalten da sind – der Leerzustand soll mittig im sichtbaren Bereich stehen */
-#curseColHdr:has(.curse-col-headers), #curseBody:has(.curse-owner-block) { min-width: 1230px; }
+#curseColHdr:has(.curse-col-headers), #curseBody:has(.curse-owner-block) { min-width: 895px; }
 #curseBody:not(:has(.curse-owner-block)) { grid-template-columns: minmax(0, 1fr); }
 
 /* Column header row — child of #curseColHdr (outside scroll) */
 .curse-col-headers {
   display: grid;
-  grid-template-columns: 28px 88px 190px 170px 130px 90px 60px minmax(0,1fr) 230px 240px;
-  min-width: 1230px;
+  grid-template-columns: 28px 76px minmax(112px,1.2fr) minmax(120px,1fr) minmax(120px,.9fr) 100px 52px 0 minmax(110px,1.1fr) 176px;
+  min-width: 895px;
   width: 100%;
   padding: 6px 0 5px;
 }
@@ -1544,7 +1544,7 @@ textarea.outfit-code { width: 100%; min-height: 210px; background: rgba(0,0,0,0.
 .grp-editor-btns button { flex: 1; font-size: .6875rem; padding: 2px 0; border-radius: 4px; cursor: pointer; border: 1px solid; }
 .grp-save-btn { background: rgba(52,211,153,0.12); border-color: rgba(52,211,153,0.35); color: #34d399; }
 .grp-cancel-btn { background: rgba(255,255,255,0.04); border-color: rgba(255,255,255,0.1); color: var(--text3); }
-.cg-flags { white-space: nowrap !important; }
+.cg-flags { display: flex; flex-wrap: wrap; align-content: flex-start; gap: 3px; }
 .cg-lscg  { color: #34d399; font-size: .75rem; white-space: nowrap; }
 .cg-cache { text-align: center !important; white-space: nowrap; }
 .cg-neu   { text-align: center !important; white-space: nowrap; padding: 9px 4px !important; }

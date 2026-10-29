@@ -258,7 +258,16 @@ html[data-ui="nova"] {
     z-index: 120;
   }
   & .topbar-brand { display: none; }
-  & .topbar-right { gap: 8px; }
+  & .topbar-right { gap: 8px; min-width: 0; }
+  /* Der lange Cache-Chip („2268 Items (lokal gecacht) · … modular“) kürzt mit … statt andere Elemente zu verdrängen */
+  & #cacheInfo, & #playerInfo { display: block; min-width: 48px; overflow: hidden; text-overflow: ellipsis; line-height: 28px; }
+}
+/* Schmale Fenster: Der Verbindungsstatus steht schon als Punkt/Text unten in der Seitenleiste, das Chip oben
+   ist dann doppelt. Titel darf etwas schmaler bleiben, damit die Kopfleiste nicht überläuft. */
+@media (max-width: 1100px) {
+  html[data-ui="nova"] #connStatus { display: none; }
+}
+html[data-ui="nova"] {
   & .tbadge {
     font-family: var(--font-mono); font-size: .7rem; font-weight: 500; height: 30px; padding: 0 12px;
     border-radius: 10px; background: #11141d; border: 1px solid #222637; color: var(--text2);
@@ -274,7 +283,10 @@ html[data-ui="nova"] {
   & #statusMsg { display: none !important; }   /* ersetzt durch Toasts */
 }
 
-.nv-crumb { display: flex; align-items: center; gap: 12px; min-width: 0; flex: 1; }
+/* min-width: sonst presst die rechte Chip-Gruppe (bei Verbindung ~980px) den Titel auf 0px zusammen
+   und er liegt unter dem Befehle-Button. Die Chips geben stattdessen nach (siehe #cacheInfo). */
+.nv-crumb { display: flex; align-items: center; gap: 12px; min-width: 200px; flex: 1 1 auto; }
+@media (max-width: 1100px) { .nv-crumb { min-width: 175px; } }
 .nv-crumb-text { min-width: 0; line-height: 1.15; }
 .nv-crumb-group {
   display: flex; align-items: center; gap: 6px; white-space: nowrap;
@@ -307,7 +319,7 @@ html[data-ui="nova"] {
 }
 .nv-top-search:hover { border-color: var(--accent-line); color: var(--text); }
 .nv-top-search svg { width: 14px; height: 14px; }
-@media (max-width: 1100px) { .nv-top-search span, .nv-top-search kbd { display: none; } .nv-top-search { padding: 0 10px; } }
+@media (max-width: 1400px) { .nv-top-search span, .nv-top-search kbd { display: none; } .nv-top-search { padding: 0 10px; } }
 
 /* ══════════════════════════════════════════════════════════
    RAUM-LEISTE
