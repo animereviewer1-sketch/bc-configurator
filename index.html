@@ -2432,7 +2432,8 @@ button { cursor: pointer; }
 <!-- TWEAKS PANEL -->
 <div class="tweaks-panel" id="tweaksPanel" role="dialog" aria-label="Einstellungen">
   <div class="set-head">
-    <div><div class="set-title">Einstellungen</div><div class="set-sub">Darstellung, Daten und Werkzeuge</div></div>
+    <div><div class="set-title">Einstellungen</div><div class="set-sub">Darstellung, Daten und Werkzeuge</div>
+      <div class="set-sub set-version" id="setVersion" onclick="if(typeof bcVersionKopieren==='function')bcVersionKopieren()" title="Anklicken zum Kopieren – so sagst du mir, auf welchem Stand du bist"></div></div>
     <button class="set-close" onclick="toggleTweaksPanel()" title="Schließen (Esc)">✕</button>
   </div>
   <div class="set-tabs" role="tablist">
@@ -2537,6 +2538,15 @@ button { cursor: pointer; }
 
   <!-- ── Werkzeuge ── -->
   <section class="set-page" data-set-page="werkzeuge">
+    <div class="set-card">
+      <div class="set-card-h"><span class="tweaks-section-title">📸 Aufnahme-Protokoll</span>
+        <div class="tweaks-btn-group set-r">
+          <button class="tweaks-btn" onclick="shotProtokollRender()" title="Anzeige aktualisieren">🔄 Aktualisieren</button>
+          <button class="tweaks-btn" onclick="shotProtokollKopieren()" title="Protokoll in die Zwischenablage – zum Einfügen in den Chat">📋 Kopieren</button>
+        </div></div>
+      <div class="set-card-b"><div class="set-hint">Jede Bild-Aufnahme (LSCG, Profil, Wheel) prüft im Spiel-Tab, ob alle Teile des Outfits da sind und BC alle Bilder geladen hat. Unvollständige Bilder werden bis zu zweimal wiederholt, bleiben sie unvollständig, wird nie ein vorhandenes Bild ersetzt; LSCG-Karten bekommen ein ⚠. Das Protokoll gilt für diese Sitzung.</div>
+        <pre class="set-pre" id="shotProtokollBody">Noch keine Aufnahme in dieser Sitzung.</pre></div>
+    </div>
     <div class="set-card">
       <div class="set-card-h"><span class="tweaks-section-title">🔌 Verbindungswächter</span>
         <div class="tweaks-btn-group set-r">
@@ -3302,6 +3312,7 @@ button { cursor: pointer; }
 <script>
 // Cache-Buster: jede Seite lädt immer die aktuelle JS-Version (kein Browser-Cache)
 var _cbv = Date.now();
+document.write('<scr'+'ipt src="version.js?_='+_cbv+'"><\/scr'+'ipt>');
 document.write('<scr'+'ipt src="persistence.js?_='+_cbv+'"><\/scr'+'ipt>');
 document.write('<scr'+'ipt src="bridge.js?_='+_cbv+'"><\/scr'+'ipt>');
 document.write('<scr'+'ipt src="items.js?_='+_cbv+'"><\/scr'+'ipt>');

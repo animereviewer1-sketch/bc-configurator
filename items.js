@@ -3689,7 +3689,7 @@ function openCanvasPreview() {
 function _handleCanvasPreviewData(data) {
   // ── LSCG-Capture (reqId beginnt mit 'os_') ──────────
   if (_pendingOsCapture[data.reqId] !== undefined) {
-    const { mk, fp } = _pendingOsCapture[data.reqId];
+    const { mk, fp, vIdx } = _pendingOsCapture[data.reqId];
     delete _pendingOsCapture[data.reqId];
 
     if (data.err) {
@@ -3707,6 +3707,27 @@ function _handleCanvasPreviewData(data) {
         showStatus('❌ #' + mk + ': ' + data.err, 'error');
       }
     } else if (data.data) {
+      // Vollständig? Sonst bis zu SHOT_WIEDERHOLUNGEN Mal neu aufnehmen; bleibt es unvollständig, ersetzt es nie ein vorhandenes Bild
+      const storeKey = fp ? (mk + '|' + fp) : mk;
+      const flag = 'lscg:' + storeKey;
+      const wer = '#' + mk + (LSCG_DB[mk]?.name ? ' ' + LSCG_DB[mk].name : '') + (typeof vIdx === 'number' ? ' · Version ' + (vIdx + 1) : '');
+      const urteil = _shotDiagUrteil(data.diag);
+      const ent = _shotEntscheiden(flag, urteil, typeof vIdx === 'number');
+      const unvoll = ent.art === 'unvollstaendig';
+      if (ent.art === 'wiederholen') {
+        _shotProtokollEintrag('LSCG', wer, data.diag, urteil, ent.versuch, 'wiederholt');
+        showStatus('⚠️ ' + wer + ': Bild unvollständig (' + urteil.grund + ') – Wiederholung ' + ent.versuch + '/' + SHOT_WIEDERHOLUNGEN, 'error');
+        if (!_osCaptureQueue.some(i => i.mk === mk && i.vIdx === vIdx)) _osCaptureQueue.unshift({ mk, vIdx });
+        _runNextOsCapture();
+        return;
+      }
+      if (unvoll && _hatBild('lscg', storeKey) && !_bildUnvoll.has(flag)) {
+        _shotProtokollEintrag('LSCG', wer, data.diag, urteil, ent.versuch, 'nicht gespeichert – das vorhandene Bild bleibt');
+        showStatus('⚠️ ' + wer + ': auch nach ' + SHOT_WIEDERHOLUNGEN + ' Wiederholungen unvollständig (' + urteil.grund + ') – das vorhandene Bild bleibt', 'error');
+        _runNextOsCapture();
+        return;
+      }
+      _shotProtokollEintrag('LSCG', wer, data.diag, urteil, ent.versuch, unvoll ? 'gespeichert, als unvollständig markiert' : 'gespeichert');
       const imgEl = new Image();
       imgEl.onload = function() {
         const MAX_W = 520, MAX_H = 1040;
@@ -3718,12 +3739,17 @@ function _handleCanvasPreviewData(data) {
         oc.getContext('2d').drawImage(imgEl, 0, 0, w, h);
         const dataUrl = oc.toDataURL('image/jpeg', 0.88);
         // Versionsspezifisch speichern: mk|fp (falls fp bekannt)
-        const storeKey = fp ? (mk + '|' + fp) : mk;
         LSCG_SCREENSHOTS[storeKey] = dataUrl;
         _saveLscgScreenshots();
         _syncLscgScreenshotToProfiles(mk, fp);
+        // Markierung: unvollständig → ⚠ an der Karte; ein vollständiges Bild nimmt sie weg
+        if (unvoll !== _bildUnvoll.has(flag)) {
+          if (unvoll) _bildUnvoll.add(flag); else _bildUnvoll.delete(flag);
+          _kleinSpeichern(BILD_UNVOLL_KEY, _bildUnvoll);
+        }
         if (_activeTab === 'outfit-scan' && !_osBildAktualisieren(storeKey)) _debouncedRenderOutfitScanTab();
-        showStatus('✅ Bild gespeichert', 'success');
+        if (unvoll) showStatus('⚠️ ' + wer + ': Bild gespeichert, aber unvollständig (' + urteil.grund + ') – mit „Bild neu aufnehmen“ wiederholen', 'error');
+        else showStatus('✅ Bild gespeichert', 'success');
         if (_pendingOsTab === mk) {
           _pendingOsTab = null;
           openOsLightbox(mk);
@@ -3759,6 +3785,23 @@ function _handleCanvasPreviewData(data) {
         showStatus('⚠️ Profil-Screenshot "' + name + '": ' + data.err, 'error');
       }
     } else if (data.data) {
+      // Vollständig? Sonst (im Durchlauf) bis zu SHOT_WIEDERHOLUNGEN Mal neu aufnehmen; bleibt es unvollständig, ersetzt es nie ein vorhandenes Bild
+      const wer = 'Profil: ' + name;
+      const urteil = _shotDiagUrteil(data.diag);
+      const ent = _shotEntscheiden('profil:' + name, urteil, _slideshowRunning);
+      const unvoll = ent.art === 'unvollstaendig';
+      if (ent.art === 'wiederholen') {
+        _shotProtokollEintrag('Profil', wer, data.diag, urteil, ent.versuch, 'wiederholt');
+        showStatus('⚠️ ' + wer + ': Bild unvollständig (' + urteil.grund + ') – Wiederholung ' + ent.versuch + '/' + SHOT_WIEDERHOLUNGEN, 'error');
+        if (!_slideshowQueue.includes(name)) _slideshowQueue.unshift(name);   // der schon geplante nächste Lauf nimmt es zuerst
+        return;
+      }
+      if (unvoll && _hatBild('profile', name)) {
+        _shotProtokollEintrag('Profil', wer, data.diag, urteil, ent.versuch, 'nicht gespeichert – das vorhandene Bild bleibt');
+        showStatus('⚠️ ' + wer + ': unvollständig (' + urteil.grund + ') – das vorhandene Bild bleibt', 'error');
+        return;
+      }
+      _shotProtokollEintrag('Profil', wer, data.diag, urteil, ent.versuch, unvoll ? 'gespeichert (unvollständig)' : 'gespeichert');
       const imgEl = new Image();
       imgEl.onload = function() {
         const MAX_W = 520, MAX_H = 1040;
@@ -3772,7 +3815,8 @@ function _handleCanvasPreviewData(data) {
         _saveProfileScreenshots();
         if (!_profilBildAktualisieren(name)) renderProfileList();
         // Im Durchlauf zeigt die Fortschrittszeile den Stand; eine Meldung je Bild würde sie überschreiben
-        if (!_slideshowRunning) showStatus('✅ Screenshot: "' + name + '"', 'success');
+        if (unvoll) showStatus('⚠️ ' + wer + ': gespeichert, aber unvollständig (' + urteil.grund + ')', 'error');
+        else if (!_slideshowRunning) showStatus('✅ Screenshot: "' + name + '"', 'success');
         const mod = document.getElementById('profileModal');
         if (mod?.classList.contains('open') && _profileModalName === name) _renderProfileModal(name);
       };
@@ -10649,7 +10693,7 @@ function captureOsScreenshot(mk, vIdx) {
     + '    ctx2.fillStyle="#000";ctx2.fillRect(0,0,cw,ch);'
     + '    ctx2.drawImage(oc,x0,y0,cw,ch,0,0,cw,ch);'
     + '    var data=cc.toDataURL("image/jpeg",0.88);'
-    + '    window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",reqId:' + J_reqId + ',data:data,width:cw,height:ch},"' + TOOL_ORIGIN + '");'
+    + '    window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",reqId:' + J_reqId + ',data:data,width:cw,height:ch,diag:_diag()},"' + TOOL_ORIGIN + '");'
     + '  }catch(e){'
     + '    window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",reqId:' + J_reqId + ',err:e.message},"' + TOOL_ORIGIN + '");'
     + '  }finally{'
@@ -10662,6 +10706,7 @@ function captureOsScreenshot(mk, vIdx) {
     // vergleichen. Gleich → fertig. Anders → es wurden noch Bilder nachgeladen, nochmal (höchstens _maxChecks).
     // Vorher und nachher: warten, solange BC noch Bilder lädt (siehe _SHOT_BILDER) – sonst fehlen Haare, Kleidung, Gesicht.
     + _SHOT_BILDER
+    + _shotDiagCode(_bundleGruppen(outfitCode))
     + 'function _renderCheck(){'
     + '  if(_bilderWarten()){setTimeout(_renderCheck,50);return;}'
     + '  CharacterRefresh(Player,false,false);'
@@ -10751,6 +10796,101 @@ const _SHOT_BILDER = 'var _bildDl=Date.now()+' + SHOT_BILDER_MAX_MS + ';'
   + 'function _bilderOffen(){try{var c=window.DrawImageCache;if(!c||typeof c.forEach!=="function")return 0;'
   +   'var n=0;c.forEach(function(im){if(im&&im.state==="loading")n++;});return n;}catch(_e){return 0;}}'
   + 'function _bilderWarten(){return _bilderOffen()>0&&Date.now()<_bildDl;}';
+
+// ── Diagnose beim Foto ────────────────────────────────────────────────────────────────────────────────────────────
+// _diag() läuft im Spiel-Tab im Moment des Fotos (VOR dem Zurücksetzen) und kommt als "diag" mit dem Bild zurück. Sie klärt, ob Teile
+// fehlen, weil sie nie angelegt wurden (fehlt), weil BC sie noch lädt (offen/abgelaufen) oder weil BC sie nicht zeichnet (verdeckt):
+//   items      Gruppen mit Item an dir                    erwartet   Gruppen mit Item im Outfit; fehlt = davon nicht an dir
+//   offen      Bilder im Zustand "loading"                abgelaufen Wartezeit (SHOT_BILDER_MAX_MS) vorbei, es lud noch
+//   gewartet   ms vom Anlegen bis zum Foto                checks     Wiederholungsläufe des Prüflaufs
+//   ohneTyp    erweiterte Items ohne TypeRecord (typabhängige Layer fehlen; bei Items ohne Archetyp normal)
+//   verdeckt   Items, die BC laut Sichtbarkeitsprüfung nicht zeichnet (z. B. durch Hide anderer Items)
+// "Unvollständig" heißt: fehlt ODER offen (ohneTyp/verdeckt sind nur Hinweise).
+function _shotDiagCode(erwartet) {
+  return 'var _diagT0=Date.now(),_diagErw=' + JSON.stringify(erwartet || null) + ';'
+    + 'function _diag(){var d={};try{'
+    +   'var app=Player.Appearance||[],da={};'
+    +   'app.forEach(function(i){var g=i&&i.Asset&&i.Asset.Group&&i.Asset.Group.Name;if(g&&i.Asset.Name)da[g]=i.Asset.Name;});'
+    +   'd.items=Object.keys(da).length;'
+    +   'if(_diagErw){d.erwartet=_diagErw.length;d.fehlt=_diagErw.filter(function(g){return !da[g];});}'
+    +   'd.offen=_bilderOffen();d.abgelaufen=d.offen>0&&Date.now()>=_bildDl;d.gewartet=Date.now()-_diagT0;d.checks=_checksDone;'
+    +   'd.ohneTyp=app.filter(function(i){return i&&i.Asset&&i.Asset.Name&&i.Asset.Extended&&!(i.Property&&i.Property.TypeRecord);})'
+    +     '.map(function(i){return i.Asset.Group.Name;});'
+    +   'if(typeof CharacterAppearanceVisible==="function")d.verdeckt=app.filter(function(i){return i&&i.Asset&&i.Asset.Name'
+    +     '&&CharacterAppearanceVisible(Player,i.Asset.Name,i.Asset.Group.Name)===false;}).map(function(i){return i.Asset.Group.Name;});'
+    + '}catch(_e){d.fehler=String(_e&&_e.message||_e);}return d;}';
+}
+// Gruppen mit Item aus einem Outfit-Code (LZString-Bundle); null, wenn er sich nicht lesen lässt
+function _bundleGruppen(code) {
+  try {
+    const b = JSON.parse(LZString.decompressFromBase64(code));
+    return Array.isArray(b) ? [...new Set(b.filter(i => i && i.Group && i.Name).map(i => i.Group))] : null;
+  } catch (e) { return null; }
+}
+
+// ── Auswertung im Tool: Wiederholen, Markieren, Protokoll ───────────────────────────────────────────────────────────
+// Ein unvollständiges Bild wird bis zu SHOT_WIEDERHOLUNGEN Mal neu aufgenommen. Bleibt es unvollständig, wird es nur gespeichert, wenn
+// noch kein Bild da ist (ein vorhandenes wird nie durch ein schlechteres ersetzt), und bei LSCG-Karten mit ⚠ markiert (in der Datenbank,
+// damit es bleibt). Das Protokoll (nur im Speicher) steht in Einstellungen → Werkzeuge zum Kopieren.
+const SHOT_WIEDERHOLUNGEN = 2;
+const SHOT_PROTOKOLL_MAX = 100;
+const BILD_UNVOLL_KEY = 'BC_BILD_UNVOLLSTAENDIG_v1';
+const _bildUnvoll = new Set();       // 'lscg:<mk|fp>': zuletzt unvollständig aufgenommen
+_kleinLaden(BILD_UNVOLL_KEY, _bildUnvoll, function () { if (typeof _activeTab !== 'undefined' && _activeTab === 'outfit-scan') _debouncedRenderOutfitScanTab(); });
+const _shotProtokoll = [];           // neueste zuerst
+const _shotVersuche = {};            // Schlüssel → bisherige Aufnahmen in dieser Runde
+
+function _shotDiagUrteil(diag) {
+  // Keine Diagnose (älterer Code im Spiel-Tab) oder sie selbst fehlgeschlagen: wie bisher speichern
+  if (!diag || typeof diag !== 'object') return { ok: true, grund: '' };
+  if (diag.fehler) return { ok: true, grund: 'Diagnose fehlgeschlagen: ' + diag.fehler };
+  const g = [];
+  if (Array.isArray(diag.fehlt) && diag.fehlt.length) g.push('nicht angelegt: ' + diag.fehlt.join(', '));
+  if (diag.offen > 0) {
+    g.push(diag.offen + (diag.offen === 1 ? ' Bild ' : ' Bilder ')
+      + (diag.abgelaufen ? 'nicht rechtzeitig geladen (' + Math.round((diag.gewartet || 0) / 1000) + ' s)' : 'laden noch'));
+  }
+  return { ok: !g.length, grund: g.join(' · ') };
+}
+// 'ok' | 'wiederholen' | 'unvollstaendig'. kannWiederholen=false (Einzelaufnahme ohne Serie): gleich endgültig.
+function _shotEntscheiden(schluessel, urteil, kannWiederholen) {
+  const n = _shotVersuche[schluessel] = (_shotVersuche[schluessel] || 0) + 1;
+  if (urteil.ok) { delete _shotVersuche[schluessel]; return { art: 'ok', versuch: n }; }
+  if (kannWiederholen && n <= SHOT_WIEDERHOLUNGEN) return { art: 'wiederholen', versuch: n };
+  delete _shotVersuche[schluessel];
+  return { art: 'unvollstaendig', versuch: n };
+}
+function _shotProtokollEintrag(art, name, diag, urteil, versuch, aktion) {
+  _shotProtokoll.unshift({ ts: Date.now(), build: typeof BC_VERSION !== 'undefined' ? BC_VERSION.build : null,
+    art, name, versuch, ok: urteil.ok, grund: urteil.grund, aktion, diag: diag || null });
+  if (_shotProtokoll.length > SHOT_PROTOKOLL_MAX) _shotProtokoll.length = SHOT_PROTOKOLL_MAX;
+  if (!urteil.ok) console.warn('[BCU] Aufnahme unvollständig:', art, name, 'Versuch', versuch, urteil.grund, diag);
+  try { shotProtokollRender(); } catch (e) {}
+}
+function _shotProtokollText() {
+  const z = (n) => String(n).padStart(2, '0');
+  return _shotProtokoll.map((e) => {
+    const d = new Date(e.ts);
+    const di = e.diag ? ' | Items ' + e.diag.items + (e.diag.erwartet != null ? '/' + e.diag.erwartet : '') + ', offen ' + e.diag.offen
+      + (e.diag.abgelaufen ? ' (abgelaufen)' : '') + ', ' + e.diag.gewartet + ' ms, Läufe ' + e.diag.checks
+      + (e.diag.ohneTyp && e.diag.ohneTyp.length ? ', ohne TypeRecord: ' + e.diag.ohneTyp.join(',') : '')
+      + (e.diag.verdeckt && e.diag.verdeckt.length ? ', verdeckt: ' + e.diag.verdeckt.join(',') : '') : '';
+    return z(d.getHours()) + ':' + z(d.getMinutes()) + ':' + z(d.getSeconds()) + ' · Build ' + e.build + ' · ' + e.art + ' · ' + e.name
+      + ' · Versuch ' + e.versuch + ' · ' + (e.ok ? 'vollständig' : 'UNVOLLSTÄNDIG: ' + e.grund) + ' → ' + e.aktion + di;
+  }).join('\n');
+}
+// Einstellungen → Werkzeuge → Aufnahme-Protokoll
+function shotProtokollRender() {
+  const el = document.getElementById('shotProtokollBody');
+  if (!el) return;
+  el.textContent = _shotProtokoll.length ? _shotProtokollText() : 'Noch keine Aufnahme in dieser Sitzung.';
+}
+function shotProtokollKopieren() {
+  const text = _shotProtokoll.length ? _shotProtokollText() : '';
+  if (!text) { showStatus('Das Aufnahme-Protokoll ist noch leer', 'info'); return; }
+  try { navigator.clipboard.writeText(text); showStatus('📋 Aufnahme-Protokoll kopiert (' + _shotProtokoll.length + ' Zeilen)', 'success'); }
+  catch (e) { showStatus('❌ Kopieren nicht möglich: ' + e.message, 'error'); }
+}
 function _shotMitRuhe(code) {
   return '(function(){'
     + 'var _run=function(){' + code + '};'
@@ -10996,7 +11136,7 @@ function captureProfileViaCanvas(name, outfitCode, rawApplyCode) {
     + '    ctx2.drawImage(oc,x0,y0,cw,ch,0,0,cw,ch);'
     + '    var _dat=cc.toDataURL("image/jpeg",0.88);'
     + '    window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",reqId:' + J_reqId + ',data:_dat,'
-    + 't:{a:Math.round(_tA),r:Math.round(_tC0-_t0-_tA),c:Math.round(performance.now()-_tC0)}},"' + TOOL_ORIGIN + '");'
+    + 't:{a:Math.round(_tA),r:Math.round(_tC0-_t0-_tA),c:Math.round(performance.now()-_tC0)},diag:_diag()},"' + TOOL_ORIGIN + '");'
     + '  }catch(e){'
     + '    window.__BCK_popupRef.postMessage({app:"BCKonfigurator",type:"CANVAS_PREVIEW_DATA",reqId:' + J_reqId + ',err:e.message},"' + TOOL_ORIGIN + '");'
     + '  }finally{'
@@ -11008,6 +11148,7 @@ function captureProfileViaCanvas(name, outfitCode, rawApplyCode) {
     // Gleich → fertig. Anders → es wurden noch Bilder nachgeladen, nochmal (höchstens _maxChecks).
     // Vorher und nachher: warten, solange BC noch Bilder lädt (siehe _SHOT_BILDER).
     + _SHOT_BILDER
+    + _shotDiagCode(_bundleGruppen(outfitCode))
     + 'function _renderCheck(){'
     + '  if(_bilderWarten()){setTimeout(_renderCheck,50);return;}'
     + '  CharacterRefresh(Player,false,false);'
@@ -14386,7 +14527,7 @@ function _wheelShotCode(reqId, items, serie) {
     + '    ctx2.fillStyle="#000";ctx2.fillRect(0,0,cw,ch);'
     + '    ctx2.drawImage(oc,x0,y0,cw,ch,0,0,cw,ch);'
     + '    var _dat=cc.toDataURL("image/jpeg",0.88);'
-    + '    ' + antwort('data:_dat,t:{a:Math.round(_tA),r:Math.round(_tC0-_t0-_tA),c:Math.round(performance.now()-_tC0)}')
+    + '    ' + antwort('data:_dat,t:{a:Math.round(_tA),r:Math.round(_tC0-_t0-_tA),c:Math.round(performance.now()-_tC0)},diag:_diag()')
     + '  }catch(e){'
     + '    ' + antwort('err:e.message')
     + '  }finally{'
@@ -14394,6 +14535,9 @@ function _wheelShotCode(reqId, items, serie) {
     + '  }'
     + '}'
     + _SHOT_BILDER
+    // Erwartet: die Gruppen des Wheel-Outfits plus die des Standard-Outfits (die Basis, auf der es angelegt wird)
+    + _shotDiagCode([...new Set((items || []).filter(i => i && i.group && i.asset).map(i => i.group)
+      .concat(CURSE_DEFAULT_OUTFIT_CODE ? (_bundleGruppen(CURSE_DEFAULT_OUTFIT_CODE) || []) : []))])
     + 'function _renderCheck(){'
     + '  if(_bilderWarten()){setTimeout(_renderCheck,50);return;}'
     + '  CharacterRefresh(Player,false,false);'
@@ -14459,6 +14603,28 @@ function _handleWheelShotData(data) {
     _wheelGenWeiter(data.reqId);
     return;
   }
+  // Vollständig? Sonst (in der Serie) bis zu SHOT_WIEDERHOLUNGEN Mal neu aufnehmen; bleibt es unvollständig, ersetzt es nie ein vorhandenes Bild
+  const job = _wheelGenJob;   // _wheelGenWeiter setzt ihn zurück
+  const serie = _wheelGenRunning && !!job && data.reqId === _wheelGenShotReq;
+  const wo = job && _mbsWheelData.find(x => x.memberNumber === job.mn)?.outfits[job.oi];
+  const wer = 'Wheel: ' + (wo?.name || String(fp).slice(0, 8));
+  const urteil = _shotDiagUrteil(data.diag);
+  const ent = _shotEntscheiden('wheel:' + fp, urteil, serie);
+  const unvoll = ent.art === 'unvollstaendig';
+  if (ent.art === 'wiederholen') {
+    _shotProtokollEintrag('Wheel', wer, data.diag, urteil, ent.versuch, 'wiederholt');
+    showStatus('⚠️ ' + wer + ': Bild unvollständig (' + urteil.grund + ') – Wiederholung ' + ent.versuch + '/' + SHOT_WIEDERHOLUNGEN, 'error');
+    _wheelGenQueue.unshift(job);
+    _wheelGenWeiter(data.reqId);
+    return;
+  }
+  if (unvoll && _hat(_mbsWheelShots, fp)) {
+    _shotProtokollEintrag('Wheel', wer, data.diag, urteil, ent.versuch, 'nicht gespeichert – das vorhandene Bild bleibt');
+    showStatus('⚠️ ' + wer + ': unvollständig (' + urteil.grund + ') – das vorhandene Bild bleibt', 'error');
+    _wheelGenWeiter(data.reqId);
+    return;
+  }
+  _shotProtokollEintrag('Wheel', wer, data.diag, urteil, ent.versuch, unvoll ? 'gespeichert (unvollständig)' : 'gespeichert');
   // Das nächste Outfit startet gleich; das Verkleinern und Speichern dieses Bildes läuft nebenher
   _wheelGenWeiter(data.reqId);
   const imgEl = new Image();
@@ -14477,7 +14643,8 @@ function _handleWheelShotData(data) {
     if (!_wheelHoch.has(fp)) { _wheelHoch.add(fp); _kleinSpeichern(WHEEL_HOCH_KEY, _wheelHoch); }
     // Nur die Karten mit diesem Bild austauschen – nicht den ganzen Tab (jedes Bild neu) nach jedem Foto
     if (_activeTab === 'lscg-wheel' && !_wheelBildAktualisieren(fp)) _debouncedRenderMbsWheelTab();
-    showStatus('✅ Wheel-Screenshot gespeichert', 'success');
+    if (unvoll) showStatus('⚠️ ' + wer + ': gespeichert, aber unvollständig (' + urteil.grund + ')', 'error');
+    else showStatus('✅ Wheel-Screenshot gespeichert', 'success');
   };
   imgEl.src = data.data;
 }
@@ -14998,9 +15165,11 @@ function renderOutfitScanTab() {
         : (isBroken
             ? 'openRepairOsCode(\'' + mk + '\',' + realIdx + ')'
             : 'captureOsScreenshot(\'' + mk + '\',' + realIdx + ');showStatus(\'📸 Bild wird aufgenommen…\',\'info\')');
+      const unvollBild = vThumb && _bildUnvoll.has('lscg:' + vKey);
       const metaLabel = isBroken
         ? '<span style="color:#f87171">⚠️ Decode-Fehler</span>'
-        : (hasCode ? itemCnt + ' Items' : '⚠ kein Code');
+        : (hasCode ? itemCnt + ' Items' : '⚠ kein Code')
+          + (unvollBild ? ' <span class="os-card-unvoll" style="color:#fbbf24" title="Beim Aufnehmen fehlten Teile (Details: Einstellungen → Werkzeuge → Aufnahme-Protokoll). Mit „Bild neu aufnehmen“ wiederholen.">⚠ unvollständig</span>' : '');
       const repairBtn = (isBroken && hasCode)
         ? '<button class="os-card-btn warn" onclick="openRepairOsCode(\'' + mk + '\',' + realIdx + ')" title="Korrekten Code einfügen">🔧 Repair</button>'
         : '';

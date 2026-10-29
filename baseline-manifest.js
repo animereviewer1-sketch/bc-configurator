@@ -11,8 +11,8 @@ const BASELINE_MANIFEST = {
   ],
   "identifierPattern": "\\b(Inventory|Character|ChatRoom|Server|Asset|Player|Dialog|Common|Item|Lock|Wardrobe|Pose|Skill|Reputation|Online|Chat)[A-Z]\\w+",
   "counts": {
-    "identifiers": 105,
-    "function": 28,
+    "identifiers": 106,
+    "function": 29,
     "assetGroup": 34,
     "unknown": 43
   },
@@ -77,6 +77,13 @@ const BASELINE_MANIFEST = {
     },
     {
       "name": "CharacterAppearanceSetFromBundle",
+      "kind": "function",
+      "files": [
+        "items.js"
+      ]
+    },
+    {
+      "name": "CharacterAppearanceVisible",
       "kind": "function",
       "files": [
         "items.js"
