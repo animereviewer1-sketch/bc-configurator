@@ -10586,9 +10586,12 @@ function captureOsScreenshot(mk, vIdx) {
     + 'var origApp=Player.Appearance.slice();'
     + _shotApplyUmhuellen(applyPart)
 
-    // ── Stabilisierungs-Loop ────────────────────────────────────
-    // Timeout nach 6 Checks × 150ms = max. ~1 Sekunde.
-    + 'var _prevHash=null,_checksDone=0,_maxChecks=6;'
+    // ── Stabilisierungs-Loop (wie Profil und Wheel) ─────────────
+    // _canvasHash ist als Funktion unten hochgezogen. Erster Vergleichswert = das Bild direkt nach dem Anlegen
+    // (das hat schon gezeichnet). Der Prüflauf zeichnet dann EINMAL neu; ist das Ergebnis gleich, ist das Bild
+    // fertig. Früher: Vergleichswert null, darum immer mindestens zwei Prüfläufe mit je ~100–150 ms Wartezeit
+    // und zweimal Neuzeichnen – LSCG-Bilder brauchten dadurch ein Mehrfaches der Wheel-Bilder.
+    + 'var _prevHash=_canvasHash(Player.Canvas),_checksDone=0,_maxChecks=3;'
 
     // Hilfsfunktion: Original-Appearance wiederherstellen + Server-Sync
     + 'function _restoreAndSync(){'
@@ -10655,23 +10658,21 @@ function captureOsScreenshot(mk, vIdx) {
     + '  }'
     + '}'
 
-    // Render-Check: Refresh + LoadCanvas, dann 100ms warten und Hash vergleichen
+    // Prüflauf: EINMAL neu zeichnen (CharacterRefresh ruft CharacterLoadCanvas selbst auf), Bild mit dem letzten
+    // vergleichen. Gleich → fertig. Anders → es wurden noch Bilder nachgeladen, nochmal (höchstens _maxChecks).
     + 'function _renderCheck(){'
     + '  CharacterRefresh(Player,false,false);'
-    + '  CharacterLoadCanvas(Player);'
-    + '  setTimeout(function(){'
-    + '    var h=_canvasHash(Player.Canvas);'
-    + '    if(h===_prevHash||_checksDone>=_maxChecks){'
-    + '      _sendCapture();'
-    + '    }else{'
-    + '      _prevHash=h;_checksDone++;'
-    + '      setTimeout(_renderCheck,150);'
-    + '    }'
-    + '  },100);'
+    + '  var h=_canvasHash(Player.Canvas);'
+    + '  if(h===_prevHash||_checksDone>=_maxChecks){'
+    + '    _sendCapture();'
+    + '  }else{'
+    + '    _prevHash=h;_checksDone++;'
+    + '    setTimeout(_renderCheck,60);'
+    + '  }'
     + '}'
 
-    // Nach 100ms starten – so früh wie möglich
-    + 'setTimeout(_renderCheck,100);'
+    // So früh wie möglich starten
+    + 'setTimeout(_renderCheck,40);'
     + '})();';
 
   bcSend({ type: 'EXEC', code: _shotMitRuhe(code) }, true);
