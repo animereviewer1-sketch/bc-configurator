@@ -10811,6 +10811,9 @@ const _SHOT_BILDER = 'var _bildDl=Date.now()+' + SHOT_BILDER_MAX_MS + ';'
 // "Unvollständig" heißt: fehlt ODER offen (ohneTyp/verdeckt sind nur Hinweise).
 // Emoticons (AFK, Schlafen …) werden vor dem Foto absichtlich entfernt – sie gelten nie als "nicht angelegt".
 const SHOT_ERWARTUNG_OHNE = ['Emoticon'];
+// Gesicht und Grundkörper: ohne diese Gruppen zeichnet BC eine leere Figur (kein Gesicht). Beim Anlegen bleiben sie, wenn der Outfit-Code
+// sie nicht enthält (_buildApplyCode); die Diagnose meldet, welche am Ende trotzdem fehlen (kernFehlt).
+const SHOT_KERNGRUPPEN = ['BodyUpper', 'BodyLower', 'Head', 'Eyes', 'Eyes2', 'Eyebrows', 'Mouth'];
 function _shotDiagCode(erwartet) {
   const erw = Array.isArray(erwartet) ? erwartet.filter(g => !SHOT_ERWARTUNG_OHNE.includes(g)) : null;
   return 'var _diagT0=Date.now(),_diagErw=' + JSON.stringify(erw) + ';'
@@ -10818,6 +10821,7 @@ function _shotDiagCode(erwartet) {
     +   'var app=Player.Appearance||[],da={};'
     +   'app.forEach(function(i){var g=i&&i.Asset&&i.Asset.Group&&i.Asset.Group.Name;if(g&&i.Asset.Name)da[g]=i.Asset.Name;});'
     +   'd.items=Object.keys(da).length;'
+    +   'd.kernFehlt=' + JSON.stringify(SHOT_KERNGRUPPEN) + '.filter(function(g){return !da[g];});'
     +   'if(_diagErw){d.erwartet=_diagErw.length;d.fehlt=_diagErw.filter(function(g){return !da[g];});}'
     +   'd.offen=_bilderOffen();d.offenGl=_bilderOffenIn("GLDrawImageCache");d.abgelaufen=d.offen>0&&Date.now()>=_bildDl;'
     +   'd.gewartet=Date.now()-_diagT0;d.checks=_checksDone;d.zeichnen=typeof GLVersion==="string"?GLVersion:"?";'
@@ -10883,6 +10887,7 @@ function _shotProtokollText() {
     const di = e.diag ? ' | Items ' + e.diag.items + (e.diag.erwartet != null ? '/' + e.diag.erwartet : '') + ', offen ' + e.diag.offen
       + (e.diag.offenGl ? ' (WebGL ' + e.diag.offenGl + ')' : '') + (e.diag.abgelaufen ? ' (abgelaufen)' : '')
       + ', ' + e.diag.gewartet + ' ms, Läufe ' + e.diag.checks + (e.diag.zeichnen ? ', Zeichnen ' + e.diag.zeichnen : '')
+      + (e.diag.kernFehlt && e.diag.kernFehlt.length ? ', KERN FEHLT: ' + e.diag.kernFehlt.join(',') : '')
       + (e.diag.ohneTyp && e.diag.ohneTyp.length ? ', ohne TypeRecord: ' + e.diag.ohneTyp.join(',') : '')
       + (e.diag.verdeckt && e.diag.verdeckt.length ? ', verdeckt: ' + e.diag.verdeckt.join(',') : '') : '';
     return z(d.getHours()) + ':' + z(d.getMinutes()) + ':' + z(d.getSeconds()) + ' · Build ' + e.build + ' · ' + e.art + ' · ' + e.name
@@ -12606,6 +12611,7 @@ function _buildApplyCode(code, melden) {
     // Nackte Body-Items sichern (leere Asset-Namen = interne BC-Pflicht-Items)
     + 'var nakedItems=Player.Appearance.filter(function(i){return i.Asset&&(!i.Asset.Name||i.Asset.Name==="");});'
     + 'var bundleGroups=new Set(decoded.map(function(i){return i.Group;}));'
+    + 'var _vorher=Player.Appearance.slice();'
     + 'Player.Appearance.splice(0,Player.Appearance.length);'
     // Priorität 1: CharacterAppearanceSetFromBundle (native BC, beste Kompatibilität)
     + 'if(typeof CharacterAppearanceSetFromBundle==="function"){'
@@ -12643,6 +12649,12 @@ function _buildApplyCode(code, melden) {
     // Nackte Items (Arme etc.) zurück einfügen falls nach Apply nicht vorhanden
     + 'var _afterGrps=new Set(Player.Appearance.map(function(a){return a.Asset&&a.Asset.Group?a.Asset.Group.Name:"";}));'
     + 'nakedItems.forEach(function(item){if(!_afterGrps.has(item.Asset.Group.Name))Player.Appearance.push(item);});'
+    // Gesicht und Grundkörper nie verlieren: viele Outfit-Codes enthalten keine Gesichtsgruppen. Das Aussehen wird oben komplett geleert,
+    // also bliebe das Gesicht leer. Fehlt eine Kerngruppe im Code, bleibt die bisherige (wie beim Run-Knopf, der Pflichtgruppen behält).
+    + 'var _kern=' + JSON.stringify(SHOT_KERNGRUPPEN) + ',_hatK={};'
+    + 'Player.Appearance.forEach(function(a){var g=a&&a.Asset&&a.Asset.Group&&a.Asset.Group.Name;if(g&&a.Asset.Name)_hatK[g]=1;});'
+    + '_vorher.forEach(function(a){var g=a&&a.Asset&&a.Asset.Group&&a.Asset.Group.Name;'
+    +   'if(g&&a.Asset.Name&&_kern.indexOf(g)>=0&&!_hatK[g]){Player.Appearance.push(a);_hatK[g]=1;}});'
     // BC zeichnet type-abhängige Layer nur mit Property.TypeRecord (sonst fehlen Teile der Figur).
     // Direkt eingefügte Items haben keins – ExtendedItemInit setzt den Standardtyp, wie beim Laden durch BC/BCX.
     + 'if(typeof ExtendedItemInit==="function")Player.Appearance.forEach(function(_xi){'

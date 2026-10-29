@@ -1,6 +1,6 @@
 // Versionsnummer des Tools (Einstellungen, Kopf des Panels). Wird von tools/stempel.js gepflegt – nicht von Hand ändern:
 // `npm run stempel` zählt die Build-Nummer hoch, sobald sich eine geladene Datei geändert hat.
-var BC_VERSION = { build: 790, stand: '2026-10-29 14:43', quelle: '2d8b1dac' };
+var BC_VERSION = { build: 791, stand: '2026-10-29 14:52', quelle: 'c1e01864' };
 
 function bcVersionText() {
   var s = BC_VERSION.stand || '', t = s.slice(8, 10) + '.' + s.slice(5, 7) + '.' + s.slice(0, 4) + ' ' + s.slice(11);
