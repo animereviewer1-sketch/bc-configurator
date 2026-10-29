@@ -466,6 +466,11 @@ function _oiBuildExecCode(code) {
     // BC erwartet überall ein Property-Objekt (DialogInventoryBuild klont es)
     _baseItems.concat(_incoming).forEach(function(i){ if(i&&i.Property==null) i.Property={}; });
     Player.Appearance=_baseItems.concat(_incoming);
+    // BC zeichnet type-abhängige Layer nur mit Property.TypeRecord (sonst fehlen Teile der Figur).
+    // Direkt eingefügte Items haben keins – ExtendedItemInit setzt den Standardtyp, wie beim Laden durch BC/BCX.
+    if(typeof ExtendedItemInit==="function") Player.Appearance.forEach(function(_xi){
+      try{ if(_xi&&_xi.Asset&&_xi.Asset.Extended) ExtendedItemInit(Player,_xi,false,false); }catch(_xe){}
+    });
     try{
       CharacterRefresh(Player,true,false);
     }catch(_re){

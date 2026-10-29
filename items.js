@@ -12446,6 +12446,11 @@ function _buildApplyCode(code, melden) {
     // Nackte Items (Arme etc.) zurück einfügen falls nach Apply nicht vorhanden
     + 'var _afterGrps=new Set(Player.Appearance.map(function(a){return a.Asset&&a.Asset.Group?a.Asset.Group.Name:"";}));'
     + 'nakedItems.forEach(function(item){if(!_afterGrps.has(item.Asset.Group.Name))Player.Appearance.push(item);});'
+    // BC zeichnet type-abhängige Layer nur mit Property.TypeRecord (sonst fehlen Teile der Figur).
+    // Direkt eingefügte Items haben keins – ExtendedItemInit setzt den Standardtyp, wie beim Laden durch BC/BCX.
+    + 'if(typeof ExtendedItemInit==="function")Player.Appearance.forEach(function(_xi){'
+    + '  try{if(_xi&&_xi.Asset&&_xi.Asset.Extended)ExtendedItemInit(Player,_xi,false,false);}catch(_xe){}'
+    + '});'
     + 'CharacterRefresh(Player,false,false);';
 }
 
